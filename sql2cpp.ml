@@ -13,7 +13,7 @@ module S = String
 module T_SQL_parser = 
   struct 
     type token = Sql_parser.token
-    type result = unit
+    type result = RA.Scheme.t * Stmt.Raw.params
     let rule = Sql_lexer.parse_rule
     let input = Sql_parser.input
   end
@@ -37,7 +37,9 @@ let work filename =
       let parse1 (stmt,props) = 
         try
           print_endline stmt;
-          P.parse_buf_exn (Lexing.from_string stmt)
+          let (s,ps) = P.parse_buf_exn (Lexing.from_string stmt) in
+          RA.Scheme.print s;
+          print_endline (Show.show<Stmt.Raw.params>(ps))
         with
         | exn ->
           begin

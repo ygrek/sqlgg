@@ -26,10 +26,9 @@
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
 
-%start input
-%type <unit>input
+%type <Stmt.Raw.params> expr
 
-%type <Stmt.Raw.param list> expr
+%start <RA.Scheme.t * Stmt.Raw.params> input
 
 %%
 
@@ -43,9 +42,9 @@ collection: statement { [$1] }
 */
 
 statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
-              { Tables.add ($2,$4) }
+              { let () = Tables.add ($2,$4) in ([],[]) }
          | select_core order? maybe_limit
-              { RA.Scheme.print $1 }
+              { $1 }
          /*| insert_cmd IDENT LPAREN columns RPAREN VALUES
               { Raw.Insert (Raw.Cols (List.rev $4)), $2, [] }
          | insert_cmd IDENT VALUES
@@ -55,16 +54,20 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
-select_core: SELECT select_type? results FROM table_list where?
-              { Syntax.resolve $3 $5 } ;
+select_core: SELECT select_type? r=results FROM t=table_list w=loption(where)
+              {
+                let (cols) = r in
+                let (tbls,p2) = t in
+                (Syntax.resolve cols tbls, p2 @ w) 
+              }
 
-table_list: source join_source* { $1::$2 }
-join_source: join_op t=source cols=loption(join_args) { let _ = RA.Scheme.project cols (snd t) in t }
+table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
+join_source: join_op s=source p=loption(join_args) { (s,p) }
 source: IDENT { Tables.get $1 } ;
 join_op: COMMA { }
        | JOIN { } ;
-join_args: ON expr { [] }
-         | USING LPAREN xs=separated_nonempty_list(COMMA,IDENT) RPAREN { xs }
+join_args: ON e=expr { e }
+         | USING LPAREN separated_nonempty_list(COMMA,IDENT) RPAREN { [] }
 
 insert_cmd: INSERT OR conflict_algo INTO {}
           | INSERT INTO {}
@@ -92,7 +95,7 @@ order: ORDER_BY IDENT order_type? { }
 order_type: DESC { }
           | ASC { }
 
-where: WHERE expr { }
+where: WHERE e=expr { e }
 
 results: separated_nonempty_list(COMMA,column1) { $1 } ;
 

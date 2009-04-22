@@ -21,14 +21,10 @@ struct
 
   type columns = column list deriving (Show)
 
-  type param_id = | Named of string
-                  | Numbered of int
-                  | Next
-
-  type param_type = Sql.Type.t option
-
-  type param = param_id * param_type
-
+  type param_id = | Named of string | Numbered of int | Next deriving (Show)
+  type param_type = Sql.Type.t option deriving (Show)
+  type param = param_id * param_type deriving (Show)
+  type params = param list deriving (Show)
   
 (*
   type kind = | Select of column_list
