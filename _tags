@@ -3,3 +3,4 @@ true: use_menhir
 <test_cpp/*>: not_hygienic
 <*.ml>: use_extLib
 <*.{byte,native}>: use_extLib, use_deriving
+<sql_parser.ml>: warn_e

@@ -136,10 +136,8 @@ expr_list: separated_nonempty_list(COMMA,expr) { List.flatten $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-binary_op: PLUS { }
-         | MINUS { }
-         | ASTERISK { }
-         | DIVIDE { } ;
+binary_op: PLUS | MINUS | ASTERISK | DIVIDE | EQUAL { } 
+
 unary_op: EXCL { }
         | PLUS { }
         | MINUS { }
