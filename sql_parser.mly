@@ -16,7 +16,7 @@
 
 %token <int> INTEGER
 %token <string> IDENT COMMENT
-%token <Stmt.Raw.parameter> PARAM
+%token <Stmt.Raw.param_id> PARAM
 %token LPAREN RPAREN COMMA EOF DOT
 %token IGNORE REPLACE ABORT FAIL ROLLBACK
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
@@ -27,7 +27,9 @@
 %token T_INTEGER T_BLOB T_TEXT
 
 %start input
-%type <unit> input
+%type <unit>input
+
+%type <Stmt.Raw.param list> expr
 
 %%
 
@@ -127,7 +129,7 @@ expr:
     | IDENT DOT IDENT { [] }
     | IDENT DOT IDENT DOT IDENT { [] }
     | INTEGER { [] }
-    | PARAM { [$1] }
+    | PARAM { [($1,None)] }
     | FUNCTION LPAREN func_params RPAREN { $3 }
     | expr TEST_NULL { $1 }
     | expr BETWEEN expr AND expr { $1 @ $3 @ $5 }
