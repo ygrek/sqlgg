@@ -101,7 +101,9 @@ ruleMain = parse
 
   | "?" { PARAM Stmt.Raw.Next }
 
-  | "ON" wsp+ "CONFLICT" { ON_CONFLICT }
+  | "ON" { ON }
+  | "CONFLICT" { CONFLICT }
+  | "USING" { USING }
 
   | "IGNORE" { IGNORE }
   | "REPLACE" { REPLACE }

@@ -21,8 +21,8 @@
 %token IGNORE REPLACE ABORT FAIL ROLLBACK
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
        LIMIT ORDER_BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
-       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE
-%token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON_CONFLICT
+       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING
+%token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON CONFLICT
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
 
@@ -41,8 +41,8 @@ collection: statement { [$1] }
 */
 
 statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
-              { Tables.add ($2,List.rev $4) }
-         | select_core maybe_order maybe_limit
+              { Tables.add ($2,$4) }
+         | select_core order? maybe_limit
               { RA.Scheme.print $1 }
          /*| insert_cmd IDENT LPAREN columns RPAREN VALUES
               { Raw.Insert (Raw.Cols (List.rev $4)), $2, [] }
@@ -53,16 +53,16 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
-select_core: SELECT select_type results FROM table_list maybe_where 
+select_core: SELECT select_type? results FROM table_list where?
               { Syntax.resolve $3 $5 } ;
 
-table_list: table { [$1] }
-          | table_list join_op table join_args { $3::$1 } ;
-
-table: IDENT { Tables.get $1 } ;
+table_list: source join_source* { $1::$2 }
+join_source: join_op t=source cols=loption(join_args) { let _ = RA.Scheme.project cols (snd t) in t }
+source: IDENT { Tables.get $1 } ;
 join_op: COMMA { }
        | JOIN { } ;
-join_args: { } ;
+join_args: ON expr { [] }
+         | USING LPAREN xs=separated_nonempty_list(COMMA,IDENT) RPAREN { xs }
 
 insert_cmd: INSERT OR conflict_algo INTO {}
           | INSERT INTO {}
@@ -71,9 +71,7 @@ insert_cmd: INSERT OR conflict_algo INTO {}
 update_cmd: UPDATE {}
           | UPDATE OR conflict_algo {} ;
 
-select_type: /* */  { }
-           | DISTINCT { }
-           | ALL { } ;
+select_type: DISTINCT | ALL { }
 
 maybe_limit: LIMIT PARAM { [Some ("limit",Type.Int)] }
            | LIMIT INTEGER { [None] }
@@ -87,20 +85,14 @@ maybe_limit: LIMIT PARAM { [Some ("limit",Type.Int)] }
            | LIMIT INTEGER OFFSET INTEGER { [None] }
            | /* */ { [None] } ;
 
-maybe_order: ORDER_BY IDENT order_type { }
-           | /* */ { } ;
+order: ORDER_BY IDENT order_type? { }
 
 order_type: DESC { }
           | ASC { }
-          | /* */ { } ;
 
-maybe_where: WHERE IDENT EQUAL PARAM { Some ($2,Type.Int) }
-           | /* */  { None } ;
+where: WHERE expr { }
 
-results: columns { List.rev $1 } ;
-
-columns: column1 { [$1] }
-       | columns COMMA column1 { $3::$1 } ;
+results: separated_nonempty_list(COMMA,column1) { $1 } ;
 
 column1: IDENT { One $1 }
        | IDENT DOT IDENT { OneOf ($3,$1) }
@@ -108,21 +100,15 @@ column1: IDENT { One $1 }
        | ASTERISK { All } ;
 /*        | IDENT LPAREN IDENT RPAREN { $1 } ; */
 
-column_defs: column_def1 { [$1] }
-           | column_defs COMMA column_def1 { $3::$1 } ;
+column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
+column_def1: IDENT sql_type column_def_extra* { RA.Scheme.attr $1 $2 } ;
+column_def_extra: PRIMARY_KEY { Some Constraint.PrimaryKey }
+                | NOT_NULL { Some Constraint.NotNull }
+                | UNIQUE { Some Constraint.Unique }
+                | AUTOINCREMENT { Some Constraint.Autoincrement }
+                | ON CONFLICT conflict_algo { Some (Constraint.OnConflict $3) } ;
+                | DEFAULT INTEGER { None }
 
-column_def1: IDENT sql_type { RA.Scheme.attr $1 $2 }
-           | IDENT sql_type column_def_extra { RA.Scheme.attr $1 $2 } ;
-
-column_def_extra: column_def_extra1 { [$1] }
-                | column_def_extra column_def_extra1 { $2::$1 } ;
-
-column_def_extra1: PRIMARY_KEY { Some Constraint.PrimaryKey }
-                 | NOT_NULL { Some Constraint.NotNull }
-                 | UNIQUE { Some Constraint.Unique }
-                 | AUTOINCREMENT { Some Constraint.Autoincrement }
-                 | ON_CONFLICT conflict_algo { Some (Constraint.OnConflict $2) } ;
-                 | DEFAULT INTEGER { None }
 /*
 set_columns: set_columns1 { Raw.Cols (List.filter_valid (List.rev $1)) } ;
 
@@ -134,25 +120,22 @@ set_column: IDENT EQUAL expr { match $3 with | 1 -> Some $1 | x -> assert (0=x);
 
 expr:
       expr binary_op expr { $1 @ $3 }
-    | expr LIKE_OP expr maybe_escape { $1 @ $3 @ $4 }
+    | expr LIKE_OP expr loption(escape) { $1 @ $3 @ $4 }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
-    | IDENT { [] } 
+    | IDENT { [] }
     | IDENT DOT IDENT { [] }
     | IDENT DOT IDENT DOT IDENT { [] }
     | INTEGER { [] }
     | PARAM { [$1] }
-    | FUNCTION LPAREN func_params RPAREN { $3 } 
+    | FUNCTION LPAREN func_params RPAREN { $3 }
     | expr TEST_NULL { $1 }
     | expr BETWEEN expr AND expr { $1 @ $3 @ $5 }
 ;
-expr_list_rev: expr { [$1] }
-             | expr_list_rev COMMA expr { $3::$1 } ;
-expr_list: expr_list_rev { $1 >> List.rev >> List.flatten } ;
+expr_list: separated_nonempty_list(COMMA,expr) { List.flatten $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
-maybe_escape: { [] } 
-            | ESCAPE expr { $2 } ; 
+escape: ESCAPE expr { $2 }
 binary_op: PLUS { }
          | MINUS { }
          | ASTERISK { }

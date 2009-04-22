@@ -6,7 +6,7 @@ SELECT name,descr FROM test;
 -- [sql2cpp] name=Add
 INSERT INTO test VALUES;
 INSERT INTO test (name,descr) VALUES;
-SELECT * FROM test WHERE LIMIT ?;
+SELECT * FROM test LIMIT ?;
 -- [sql2cpp] name=select_distinct_limit
 SELECT DISTINCT * FROM test ORDER BY id DESC LIMIT ?;
 -- [sql2cpp] name=Delete
