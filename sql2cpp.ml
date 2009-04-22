@@ -5,6 +5,10 @@
 open Printf
 open Operators
 open ListMore
+open ExtString
+
+module L = List
+module S = String
 
 module T_SQL_parser = 
   struct 
@@ -62,7 +66,7 @@ let work filename =
       Gen.process stmts*)
 
 let show_help () =
-  Error.log "SQL to C++ Code Generator Version %s (r%s)" Version.version Version.revision;
+  Error.log "SQL to C++ Code Generator Version %s (%s)" Version.version (Version.revision >> S.explode >> L.take 8 >> S.implode);
   Error.log "";
   Error.log " Usage: %s file_with_statements.sql" (Filename.basename Sys.executable_name);
   Error.log "";
