@@ -69,6 +69,8 @@ ruleMain = parse
   | "*" { ASTERISK }
   | "SET" { SET }
 
+  | "UNION" (wsp+ "ALL")? | "EXCEPT" | "INTERSECT" { COMPOUND_OP }
+
   | "=" { EQUAL }
   | "+" { PLUS }
   | "-" { MINUS }
