@@ -50,7 +50,7 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
 select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_limit 
               { let (s1,p1) = $1 
                 and (s2,p2) = List.split $2 in
-                (s1@(List.flatten s2)),(p1@(List.flatten p2)) } 
+                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)) } 
 
 select_core: SELECT select_type? r=results FROM t=table_list w=loption(where)
               {

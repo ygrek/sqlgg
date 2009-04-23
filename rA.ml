@@ -36,6 +36,12 @@ struct
     
   let cross t1 t2 = t1 @ t2
 
+  let compound t1 t2 = 
+    if t1 <> t2 then
+      raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2)))) 
+    else 
+      t1
+
   let print v = print_endline (Show.show<t>(v))
 
 (*
