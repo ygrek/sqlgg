@@ -25,7 +25,9 @@ struct
   type param_type = Sql.Type.t option deriving (Show)
   type param = param_id * param_type deriving (Show)
   type params = param list deriving (Show)
-  
+ 
+  let to_string ps = Show.show<params>(ps)
+
 (*
   type kind = | Select of column_list
               | Insert of column_list

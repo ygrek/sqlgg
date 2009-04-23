@@ -42,7 +42,8 @@ struct
     else 
       t1
 
-  let print v = print_endline (Show.show<t>(v))
+  let to_string x = Show.show<t>(x)
+  let print x = print_endline (to_string x)
 
 (*
   let of_table t =

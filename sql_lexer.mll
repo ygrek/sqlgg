@@ -26,7 +26,7 @@ let advance_line lexbuf =
 
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
-let ident = (alpha) (alpha | digit | '_' )+
+let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\t']
 let mnot = ("NOT" wsp+)?
 

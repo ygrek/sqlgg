@@ -10,16 +10,6 @@ open ExtString
 module L = List
 module S = String
 
-module T_SQL_parser = 
-  struct 
-    type token = Sql_parser.token
-    type result = RA.Scheme.t * Stmt.Raw.params
-    let rule = Sql_lexer.parse_rule
-    let input = Sql_parser.input
-  end
-
-module P = Parser_utils.Make (T_SQL_parser)
-
 let work filename =
   match
     (try Some (Std.input_file filename) with exn -> None)
@@ -37,7 +27,7 @@ let work filename =
       let parse1 (stmt,props) = 
         try
           print_endline stmt;
-          let (s,ps) = P.parse_buf_exn (Lexing.from_string stmt) in
+          let (s,ps) = Parser.parse_stmt stmt in
           RA.Scheme.print s;
           print_endline (Show.show<Stmt.Raw.params>(ps))
         with
@@ -76,6 +66,7 @@ let show_help () =
 
 let main () =
   match Array.to_list Sys.argv with
+  | _::"-test"::_ -> Test.run ()
   | _::[file] -> work file
   | _ -> show_help ()
 
