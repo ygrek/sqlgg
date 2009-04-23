@@ -1,4 +1,5 @@
 true: use_menhir
+true: dtypes, warn_A, warn_z
 <sql.ml> or <sql2cpp.ml> or <stmt.ml> or <props.ml> or <rA.ml>: pp(deriving), use_deriving
 <test_cpp/*>: not_hygienic
 <*.ml>: use_extLib
