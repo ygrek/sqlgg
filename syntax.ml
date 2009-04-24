@@ -3,6 +3,11 @@
 open Stmt.Raw
 open Operators
 
+type expr = | Value of Sql.Type.t
+            | Param of Stmt.Raw.param
+            | Sub of expr list
+            | Column of Stmt.Raw.column
+
 let resolve columns tables =
   let all = tables >> List.map snd >> List.flatten in
   let scheme name = name >> Tables.get_from tables >> snd in

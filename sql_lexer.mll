@@ -118,7 +118,7 @@ ruleMain = parse
 
   | mnot ("LIKE" | "GLOB" | "REGEXP" | "MATCH") { LIKE_OP }
 
-  | "MAX" | "MIN" { FUNCTION }
+  | "MAX" | "MIN" | "CONCAT" { FUNCTION }
   | "ISNULL" | "NOTNULL" { TEST_NULL }
   | "BETWEEB" { BETWEEN }
   | "AND" { AND }

@@ -97,13 +97,13 @@ order_type: DESC { }
 
 where: WHERE e=expr { e }
 
-results: separated_nonempty_list(COMMA,column1) { $1 } ;
+results: separated_nonempty_list(COMMA,column1) { $1 }
 
 column1: IDENT { One $1 }
        | IDENT DOT IDENT { OneOf ($3,$1) }
        | IDENT DOT ASTERISK { AllOf $1 }
-       | ASTERISK { All } ;
-/*        | IDENT LPAREN IDENT RPAREN { $1 } ; */
+       | ASTERISK { All }
+       | expr { $1 }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: IDENT sql_type column_def_extra* { RA.Scheme.attr $1 $2 } ;
