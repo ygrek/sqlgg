@@ -17,7 +17,7 @@ struct
   | AllOf of string
   | OneOf of string * string (** column,table *)
   | One of string (** column *)
-  | Val 
+  | Val of RA.Scheme.attr
   deriving (Show)
 
   type columns = column list deriving (Show)

@@ -16,6 +16,15 @@ let resolve columns tables =
     | AllOf t -> scheme t
     | OneOf (col,t) -> [ RA.Scheme.find (scheme t) col ]
     | One col -> [ RA.Scheme.find all col ]
-    | Val -> [ RA.Scheme.attr "" Sql.Type.Text ]
+    | Val attr -> [ attr ]
   in
   columns >> List.map resolve1 >> List.flatten
+
+let get_name expr name =
+  let x = match name with
+  | Some x -> x
+  | None -> "" in
+  RA.Scheme.attr x Sql.Type.Text
+(*    match expr with
+    | Column         *)
+    

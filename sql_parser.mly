@@ -21,7 +21,7 @@
 %token IGNORE REPLACE ABORT FAIL ROLLBACK
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
        LIMIT ORDER_BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
-       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP
+       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
 %token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON CONFLICT
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
@@ -101,7 +101,10 @@ column1: IDENT { (One $1,[]) }
        | IDENT DOT IDENT { OneOf ($3,$1), [] }
        | IDENT DOT ASTERISK { AllOf $1, [] }
        | ASTERISK { All, [] }
-       | expr { Val, $1 }
+       | expr maybe_as { Val (Syntax.get_name $1 $2), $1 }
+
+maybe_as: option(AS) name=IDENT { Some name }
+        | { None }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: IDENT sql_type column_def_extra* { RA.Scheme.attr $1 $2 } ;

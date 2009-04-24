@@ -119,6 +119,8 @@ ruleMain = parse
     "JOIN" { JOIN }
 
   | mnot ("LIKE" | "GLOB" | "REGEXP" | "MATCH") { LIKE_OP }
+  
+  | "AS" { AS }
 
   | "MAX" | "MIN" | "CONCAT" { FUNCTION }
   | "ISNULL" | "NOTNULL" { TEST_NULL }
