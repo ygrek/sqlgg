@@ -17,6 +17,7 @@ struct
   | AllOf of string
   | OneOf of string * string (** column,table *)
   | One of string (** column *)
+  | Val 
   deriving (Show)
 
   type columns = column list deriving (Show)

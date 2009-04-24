@@ -16,5 +16,6 @@ let resolve columns tables =
     | AllOf t -> scheme t
     | OneOf (col,t) -> [ RA.Scheme.find (scheme t) col ]
     | One col -> [ RA.Scheme.find all col ]
+    | Val -> [ RA.Scheme.attr "" Sql.Type.Text ]
   in
   columns >> List.map resolve1 >> List.flatten

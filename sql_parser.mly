@@ -47,16 +47,18 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
-select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_limit 
-              { let (s1,p1) = $1 
+select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_limit
+              { let (s1,p1) = $1
                 and (s2,p2) = List.split $2 in
-                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)) } 
+                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)) }
 
-select_core: SELECT select_type? r=results FROM t=table_list w=loption(where)
+select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
+             FROM t=table_list
+             w=loption(where)
               {
-                let (cols) = r in
+                let (cols,p1) = List.split r in
                 let (tbls,p2) = t in
-                (Syntax.resolve cols tbls, p2 @ w) 
+                (Syntax.resolve cols tbls, (List.flatten p1) @ p2 @ w) 
               }
 
 table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
@@ -95,13 +97,11 @@ order_type: DESC { }
 
 where: WHERE e=expr { e }
 
-results: separated_nonempty_list(COMMA,column1) { $1 }
-
-column1: IDENT { One $1 }
-       | IDENT DOT IDENT { OneOf ($3,$1) }
-       | IDENT DOT ASTERISK { AllOf $1 }
-       | ASTERISK { All }
-       | expr { $1 }
+column1: IDENT { (One $1,[]) }
+       | IDENT DOT IDENT { OneOf ($3,$1), [] }
+       | IDENT DOT ASTERISK { AllOf $1, [] }
+       | ASTERISK { All, [] }
+       | expr { Val, $1 }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: IDENT sql_type column_def_extra* { RA.Scheme.attr $1 $2 } ;
