@@ -26,7 +26,7 @@ let advance_line lexbuf =
 
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
-let ident = (alpha) (alpha | digit | '_' )+
+let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\t']
 let mnot = ("NOT" wsp+)?
 
@@ -68,6 +68,8 @@ ruleMain = parse
   | "FROM" { FROM }
   | "*" { ASTERISK }
   | "SET" { SET }
+
+  | "UNION" (wsp+ "ALL")? | "EXCEPT" | "INTERSECT" { COMPOUND_OP }
 
   | "=" { EQUAL }
   | "+" { PLUS }

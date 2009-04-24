@@ -15,13 +15,13 @@
 %}
 
 %token <int> INTEGER
-%token <string> IDENT COMMENT
+%token <string> IDENT
 %token <Stmt.Raw.param_id> PARAM
 %token LPAREN RPAREN COMMA EOF DOT
 %token IGNORE REPLACE ABORT FAIL ROLLBACK
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
        LIMIT ORDER_BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
-       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING
+       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP
 %token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON CONFLICT
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
@@ -34,16 +34,9 @@
 
 input: statement EOF { $1 } ;
 
-/*
-input: collection EOF { List.rev $1 } ;
-
-collection: statement { [$1] }
-          | collection statement { $2::$1 } ;
-*/
-
 statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
               { let () = Tables.add ($2,$4) in ([],[]) }
-         | select_core order? maybe_limit
+         | select_stmt
               { $1 }
          /*| insert_cmd IDENT LPAREN columns RPAREN VALUES
               { Raw.Insert (Raw.Cols (List.rev $4)), $2, [] }
@@ -54,6 +47,11 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
+select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_limit 
+              { let (s1,p1) = $1 
+                and (s2,p2) = List.split $2 in
+                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)) } 
+
 select_core: SELECT select_type? r=results FROM t=table_list w=loption(where)
               {
                 let (cols) = r in
@@ -63,9 +61,9 @@ select_core: SELECT select_type? r=results FROM t=table_list w=loption(where)
 
 table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
 join_source: join_op s=source p=loption(join_args) { (s,p) }
-source: IDENT { Tables.get $1 } ;
-join_op: COMMA { }
-       | JOIN { } ;
+source: IDENT { Tables.get $1 }
+(*       | LPAREN select_core RPAREN { } *)
+join_op: COMMA | JOIN { } ;
 join_args: ON e=expr { e }
          | USING LPAREN separated_nonempty_list(COMMA,IDENT) RPAREN { [] }
 

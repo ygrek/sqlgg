@@ -23,14 +23,13 @@ dispatch begin function
 | After_rules ->
      let extlib_dir = ocamlfind "extlib" in
      let deriving_dir = Myocamlbuild_config.deriving_dir in
-(*     let graph_dir = ocamlfind "ocamlgraph" in*)
+     let ounit_dir = ocamlfind "oUnit" in
 
      ocaml_lib ~extern:true ~dir:extlib_dir "extLib";
      ocaml_lib ~extern:true ~dir:deriving_dir "deriving";
-(*     ocaml_lib ~extern:true ~dir:graph_dir "graph";*)
+     ocaml_lib ~extern:true ~dir:ounit_dir "oUnit";
 
      flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A extlib_dir]);
-(*     flag ["ocaml"; "doc"; "use_graph"] (S[A"-I"; A graph_dir])*)
 
 | _ -> ()
 end

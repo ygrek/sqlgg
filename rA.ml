@@ -36,7 +36,14 @@ struct
     
   let cross t1 t2 = t1 @ t2
 
-  let print v = print_endline (Show.show<t>(v))
+  let compound t1 t2 = 
+    if t1 <> t2 then
+      raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2)))) 
+    else 
+      t1
+
+  let to_string x = Show.show<t>(x)
+  let print x = print_endline (to_string x)
 
 (*
   let of_table t =
