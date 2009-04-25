@@ -17,7 +17,9 @@ type column =
 
 type columns = column list deriving (Show)
 
-let resolve columns tables =
+let collect f l = List.flatten (List.map f l)
+
+let get_scheme columns tables =
   let all = tables >> List.map snd >> List.flatten in
   let scheme name = name >> Tables.get_from tables >> snd in
   let resolve1 = function
@@ -33,5 +35,29 @@ let resolve columns tables =
       let col = Option.map_default (fun n -> {col with RA.Scheme.name = n}) col name in
       [ col ]
   in
-  columns >> List.map resolve1 >> List.flatten
+  collect resolve1 columns
+
+let get_params e =
+  let rec loop acc e =
+    match e with
+    | Param p -> p::acc
+    | Sub l -> List.fold_left loop acc l
+    | _ -> acc
+  in loop [] e
+
+let _ = 
+  let e = Sub [Value Sql.Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Sql.Type.Int);] in
+  e >> get_params >> to_string >> print_endline
+
+let params_of_column = function 
+  | All | AllOf _ -> []
+  | Expr (e,_) -> get_params e
+
+let params_of_columns = collect params_of_column
+
+let get_params_opt = function
+  | Some x -> get_params x
+  | None -> []
+
+let get_params_l = collect get_params
 

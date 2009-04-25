@@ -28,6 +28,7 @@
 %token T_INTEGER T_BLOB T_TEXT
 
 %type <Syntax.expr> expr
+%type <RA.Scheme.t * Stmt.Raw.params> select_core
 
 %start <RA.Scheme.t * Stmt.Raw.params> input
 
@@ -57,18 +58,19 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
              w=option(where)
               {
-(*                 let (cols,p1) = List.split r in *)
+                let p1 = Syntax.params_of_columns r in
+                let p3 = Syntax.get_params_opt w in
                 let (tbls,p2) = t in
-                (Syntax.resolve r tbls, (*(List.flatten p1) @*) p2) 
+                (Syntax.get_scheme r tbls, p1 @ p2 @ p3) 
               }
 
 table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
-join_source: join_op s=source p=loption(join_args) { (s,p) }
+join_source: join_op s=source p=loption(join_args) { (s,Syntax.get_params_l p) }
 source: IDENT { Tables.get $1 }
 (*       | LPAREN select_core RPAREN { } *)
 join_op: COMMA | JOIN { } ;
-join_args: ON e=expr { [] }
-         | USING LPAREN separated_nonempty_list(COMMA,IDENT) RPAREN { [] }
+join_args: ON e=expr { [e] }
+         | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> Column (name,None)) l }
 
 insert_cmd: INSERT OR conflict_algo INTO {}
           | INSERT INTO {}
@@ -92,9 +94,7 @@ maybe_limit: LIMIT PARAM { [Some ("limit",Type.Int)] }
            | /* */ { [None] } ;
 
 order: ORDER_BY IDENT order_type? { }
-
-order_type: DESC { }
-          | ASC { }
+order_type: DESC | ASC { }
 
 where: WHERE e=expr { e }
 
@@ -137,7 +137,7 @@ expr:
     | FUNCTION LPAREN func_params RPAREN { Sub $3 }
 (*     | expr TEST_NULL { $1 } *)
 (*     | expr BETWEEN expr AND expr { $1 @ $3 @ $5 } *)
-;
+
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
