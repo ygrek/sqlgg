@@ -24,13 +24,15 @@ let tt stmt scheme params =
   assert_equal ~printer:print_params params p1
       
 let test () =
-  tt "CREATE TABLE q (id INT, str TEXT)"
+  tt "CREATE TABLE q (id INT, str TEXT, name TEXT)"
      []
      [];
   tt "SELECT str FROM q WHERE id=?"
      [attr "str" Text]
      [Next,None];
-  assert_equal 1 1
+  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM q WHERE id=@id*2) ORDER BY x,x+y LIMIT @lim"
+     [attr "x" Text; attr "z" Text]
+     [Next,None; Named "id", None; Named "lim",Some Int; ]
 
 let run () =
   let tests = 

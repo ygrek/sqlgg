@@ -45,9 +45,11 @@ let get_params e =
     | _ -> acc
   in loop [] e
 
+(*
 let _ = 
   let e = Sub [Value Sql.Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Sql.Type.Int);] in
   e >> get_params >> to_string >> print_endline
+*)
 
 let params_of_column = function 
   | All | AllOf _ -> []

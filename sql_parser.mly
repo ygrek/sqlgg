@@ -1,8 +1,5 @@
 /* 
-  $Id$
-
   Simple SQL parser
-  TODO: simplify, it captures many unnecessary details
 */
 
 
@@ -75,10 +72,10 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
                 (Syntax.get_scheme r tbls, p1 @ p2 @ p3) 
               }
 
-table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
-join_source: join_op s=source p=loption(join_args) { (s,Syntax.get_params_l p) }
-source: IDENT { Tables.get $1 }
-(*       | LPAREN select_core RPAREN { } *)
+table_list: source join_source* { let (s,p) = List.split $2 in (fst $1::s, List.flatten (snd $1::p)) }
+join_source: join_op s=source p=loption(join_args) { (fst s,snd s @ Syntax.get_params_l p) }
+source: IDENT { Tables.get $1,[] }
+      | LPAREN s=select_core RPAREN { let (s,p) = s in ("",s),p }
 join_op: COMMA | JOIN { } ;
 join_args: ON e=expr { [e] }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> Column (name,None)) l }

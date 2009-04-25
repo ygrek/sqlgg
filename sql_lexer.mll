@@ -102,6 +102,8 @@ ruleMain = parse
   | "OFFSET" { OFFSET }
 
   | "?" { PARAM Stmt.Raw.Next }
+  | "?" (digit+ as str) { PARAM (Stmt.Raw.Numbered (int_of_string str)) }
+  | [':' '@'] (ident as str) { PARAM (Stmt.Raw.Named str) }
 
   | "ON" { ON }
   | "CONFLICT" { CONFLICT }
