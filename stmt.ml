@@ -12,16 +12,6 @@ deriving (Show)
 
 module Raw =
 struct
-  type column = 
-  | All 
-  | AllOf of string
-  | OneOf of string * string (** column,table *)
-  | One of string (** column *)
-  | Val of RA.Scheme.attr
-  deriving (Show)
-
-  type columns = column list deriving (Show)
-
   type param_id = | Named of string | Numbered of int | Next deriving (Show)
   type param_type = Sql.Type.t option deriving (Show)
   type param = param_id * param_type deriving (Show)

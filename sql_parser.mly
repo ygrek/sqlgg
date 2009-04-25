@@ -11,6 +11,7 @@
   open Sql
   open ListMore
   open Stmt.Raw
+  open Syntax
   open Operators
 %}
 
@@ -26,7 +27,7 @@
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
 
-%type <Stmt.Raw.params> expr
+%type <Syntax.expr> expr
 
 %start <RA.Scheme.t * Stmt.Raw.params> input
 
@@ -54,11 +55,11 @@ select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_li
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
-             w=loption(where)
+             w=option(where)
               {
-                let (cols,p1) = List.split r in
+(*                 let (cols,p1) = List.split r in *)
                 let (tbls,p2) = t in
-                (Syntax.resolve cols tbls, (List.flatten p1) @ p2 @ w) 
+                (Syntax.resolve r tbls, (*(List.flatten p1) @*) p2) 
               }
 
 table_list: source join_source* { let (s,p) = List.split $2 in ($1::s, List.flatten p) }
@@ -66,7 +67,7 @@ join_source: join_op s=source p=loption(join_args) { (s,p) }
 source: IDENT { Tables.get $1 }
 (*       | LPAREN select_core RPAREN { } *)
 join_op: COMMA | JOIN { } ;
-join_args: ON e=expr { e }
+join_args: ON e=expr { [] }
          | USING LPAREN separated_nonempty_list(COMMA,IDENT) RPAREN { [] }
 
 insert_cmd: INSERT OR conflict_algo INTO {}
@@ -97,11 +98,10 @@ order_type: DESC { }
 
 where: WHERE e=expr { e }
 
-column1: IDENT { (One $1,[]) }
-       | IDENT DOT IDENT { OneOf ($3,$1), [] }
-       | IDENT DOT ASTERISK { AllOf $1, [] }
-       | ASTERISK { All, [] }
-       | expr maybe_as { Val (Syntax.get_name $1 $2), $1 }
+column1:
+       | IDENT DOT ASTERISK { Syntax.AllOf $1 }
+       | ASTERISK { Syntax.All }
+       | expr maybe_as { let e = $1 in Syntax.Expr (e,$2) }
 
 maybe_as: option(AS) name=IDENT { Some name }
         | { None }
@@ -125,20 +125,20 @@ set_column: IDENT EQUAL expr { match $3 with | 1 -> Some $1 | x -> assert (0=x);
 */
 
 expr:
-      expr binary_op expr { $1 @ $3 }
-    | expr LIKE_OP expr loption(escape) { $1 @ $3 @ $4 }
-    | unary_op expr { $2 }
+      expr binary_op expr { Sub [$1;$3] }
+(*     | expr LIKE_OP expr loption(escape) { $1 @ $3 @ $4 } *)
+(*     | unary_op expr { $2 } *)
     | LPAREN expr RPAREN { $2 }
-    | IDENT { [] }
-    | IDENT DOT IDENT { [] }
-    | IDENT DOT IDENT DOT IDENT { [] }
-    | INTEGER { [] }
-    | PARAM { [($1,None)] }
-    | FUNCTION LPAREN func_params RPAREN { $3 }
-    | expr TEST_NULL { $1 }
-    | expr BETWEEN expr AND expr { $1 @ $3 @ $5 }
+    | IDENT { Column ($1,None) }
+    | t=IDENT DOT c=IDENT
+    | IDENT DOT t=IDENT DOT c=IDENT { Column (c,Some t) }
+    | INTEGER { Value Sql.Type.Int }
+    | PARAM { Param ($1,None) }
+    | FUNCTION LPAREN func_params RPAREN { Sub $3 }
+(*     | expr TEST_NULL { $1 } *)
+(*     | expr BETWEEN expr AND expr { $1 @ $3 @ $5 } *)
 ;
-expr_list: separated_nonempty_list(COMMA,expr) { List.flatten $1 }
+expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
