@@ -13,6 +13,15 @@
   open Stmt.Raw
   open Syntax
   open Operators
+
+  let def_param_name name (id,t) = 
+    let name =
+    match id with
+    | Next | Numbered _ -> name
+    | Named x -> x
+    in
+    (Named name,t)
+
 %}
 
 %token <int> INTEGER
@@ -49,10 +58,12 @@ statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
-select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) order? maybe_limit
+select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order) p4=loption(limit)
               { let (s1,p1) = $1
-                and (s2,p2) = List.split $2 in
-                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)) }
+                and (s2,p2) = List.split $2
+                and p3 = Syntax.get_params_l o
+                in
+                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)@p3@p4) }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
@@ -81,19 +92,14 @@ update_cmd: UPDATE {}
 
 select_type: DISTINCT | ALL { }
 
-maybe_limit: LIMIT PARAM { [Some ("limit",Type.Int)] }
-           | LIMIT INTEGER { [None] }
-           | LIMIT PARAM COMMA PARAM { [Some ("offset",Type.Int); Some ("limit",Type.Int)] }
-           | LIMIT INTEGER COMMA PARAM { [Some ("limit",Type.Int)] }
-           | LIMIT PARAM COMMA INTEGER { [Some ("offset",Type.Int)] }
-           | LIMIT INTEGER COMMA INTEGER { [None] }
-           | LIMIT PARAM OFFSET PARAM { [Some ("limit",Type.Int); Some ("offset",Type.Int)] }
-           | LIMIT INTEGER OFFSET PARAM { [Some ("offset",Type.Int)] }
-           | LIMIT PARAM OFFSET INTEGER { [Some ("limit",Type.Int)] }
-           | LIMIT INTEGER OFFSET INTEGER { [None] }
-           | /* */ { [None] } ;
+int_or_param: INTEGER { [] }
+            | PARAM { [($1,Some Sql.Type.Int)] }
 
-order: ORDER_BY IDENT order_type? { }
+limit: LIMIT p=int_or_param { p }
+     | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 }
+     | LIMIT p1=int_or_param OFFSET p2=int_or_param { p1 @ p2 }
+
+order: ORDER_BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
 
 where: WHERE e=expr { e }
