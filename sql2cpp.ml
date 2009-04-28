@@ -10,33 +10,41 @@ open ExtString
 module L = List
 module S = String
 
-let work filename =
-  match
-    (try Some (Std.input_file filename) with exn -> None)
-  with
+let statements s =
+   let lexbuf = Lexing.from_string s in
+   let rec loop l = 
+    match (try Sql_lexer.ruleStatement Props.empty lexbuf with exn -> None) with
+    | Some x -> loop (x::l)
+    | None -> l
+   in
+    List.rev (loop [])
+
+let parse_all s = 
+  let all = statements s in
+  let parse1 (stmt,props) = 
+    try
+      print_endline stmt;
+      let (s,ps) = Parser.parse_stmt stmt in
+      RA.Scheme.print s;
+      print_endline (Show.show<Stmt.Raw.params>(ps))
+    with
+    | exn ->
+      begin
+        print_endline (Printexc.to_string exn)
+      end
+  in
+  List.iter parse1 all
+
+let catch f x = try Some (f x) with _ -> None
+
+let with_file filename f =
+  match catch Std.input_file filename with
   | None -> Error.log "cannot open file : %s" filename
-  | Some s ->
-     let lexbuf = Lexing.from_string s in
-     let rec lines l = 
-      match (try Sql_lexer.ruleStatement Props.empty lexbuf with exn -> None) with
-      | Some x -> lines (x::l)
-      | None -> l
-     in
-      let all = lines [] >> List.rev in
-      (* parse in direct order *)
-      let parse1 (stmt,props) = 
-        try
-          print_endline stmt;
-          let (s,ps) = Parser.parse_stmt stmt in
-          RA.Scheme.print s;
-          print_endline (Show.show<Stmt.Raw.params>(ps))
-        with
-        | exn ->
-          begin
-            print_endline (Printexc.to_string exn)
-          end
-      in
-      List.iter parse1 all
+  | Some s -> f s
+
+let work filename = 
+  with_file filename parse_all
+
 (*
       let stmts =
        List.map 
@@ -50,12 +58,6 @@ let work filename =
       in
       Gen.process (Stmt.resolve stmts)
 *)
-
-(*  match P.parse_file filename with
-  | None -> print_endline "none"
-  | Some stmts -> 
-      Error.logs (Show.show<Stmt.t list> stmts);
-      Gen.process stmts*)
 
 let show_help () =
   Error.log "SQL to C++ Code Generator Version %s (%s)" Version.version (Version.revision >> S.explode >> L.take 8 >> S.implode);
