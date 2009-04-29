@@ -1,4 +1,4 @@
-(* $Id$ *)
+(* C++ code generation *)
 
 open Sql
 open Printf
@@ -16,25 +16,34 @@ struct
     String.concat ", " (List.map (fun (t,n) -> n) x)
 end
 
-let indent = ref 0
-let output s = print_string (String.make !indent ' '); print_endline s
-let out_shr () = indent := !indent + 2
-let out_shl () = indent := !indent - 2
-let open_curly () = output "{"; out_shr ()
-let close_curly s = out_shl (); output ("}" ^ s)
+let (inc_indent,dec_indent,make_indent) = 
+  let v = ref 0 in
+  (fun () -> v := !v + 2),
+  (fun () -> v := !v - 2),
+  (fun () -> String.make !v ' ')
+
+let print_indent () = print_string (make_indent ())
+let print_fmt fmt = Printf.kprintf print_endline fmt
+let print_prefix prefix fmt = print_indent (); print_string prefix; print_fmt fmt
+let empty_line () = print_indent (); print_newline ()
+let output fmt = print_prefix "" fmt
+let comment fmt = print_prefix "// " fmt
+let output_str s = print_indent (); print_endline s
+let open_curly () = output "{"; inc_indent ()
+let close_curly fmt = dec_indent (); print_prefix "}" fmt
 let start_struct name =
-   output (sprintf "struct %s" name);
+   output "struct %s" name;
    open_curly ()
 let end_struct name =
-   close_curly (sprintf "; // struct %s" name);
+   close_curly "; // struct %s" name;
    output ""
-let out_public () = out_shl (); output "public:"; out_shr ()
-let out_private () = out_shl (); output "private:"; out_shr ()
+let out_public () = dec_indent(); output "public:"; inc_indent()
+let out_private () = dec_indent(); output "private:"; inc_indent()
 let in_namespace name f =   
-  output (sprintf "namespace %s" name);
+  output "namespace %s" name;
   open_curly ();
   f ();
-  close_curly (sprintf "; // namespace %s" name);
+  close_curly " // namespace %s" name;
   output ""
 
 let generate_header () = 
@@ -49,46 +58,46 @@ let generate_header () =
 let ns_name table = table.Table.cpp_name
 let item_name _ = "row"
 let prefix_name _ = ""
-
-let binder_code col index =
-  sprintf "Traits::bind_column_%s(stmt, %u, obj.%s);" 
-    (Col.type_to_string col) 
-    index
-    col.Col.cpp_name
-
-let param_binder_code index (name,t) =
-  sprintf "Traits::bind_param_%s(stmt, %s_, %u);"
-    (Type.to_string t) 
-    name
-    index
-
-let binder_code_to col index =
-  if Col.is_primary_key col then
-    sprintf "Traits::bind_param_null(stmt, %u);" index
-  else
-    sprintf "Traits::bind_param_%s(stmt, obj.%s, %u);" 
-      (Col.type_to_string col) 
-      col.Col.cpp_name
-      index
 *)
+
+let set_column_code attr index =
+  sprintf "Traits::set_column_%s(stmt, %u, obj.%s);" 
+    (Type.to_string attr.RA.domain)
+    index
+    attr.RA.name
+
+let get_column_code attr index =
+  sprintf "Traits::get_column_%s(stmt, %u, obj.%s);" 
+    (Type.to_string attr.RA.domain)
+    index
+    attr.RA.name
+
+open Stmt.Raw
+
+let set_param_code param index =
+  let (id,t) = param in
+  sprintf "Traits::set_param_%s(stmt, obj.%s, %u);" 
+    (Option.map_default Type.to_string "Any" t) 
+    (match id with 
+     | Next -> sprintf "_%u" index 
+     | Numbered x -> sprintf "_%u" x
+     | Named s -> s)
+    index
+
 let output_scheme_binder index scheme =
   let name = sprintf "binder_%u" index in
+  output "template <class T>";
   start_struct name;
-(*   output (sprintf "typedef %s value_type;" (item_name table)); *)
-(*
-  output (sprintf "static void of_stmt(sqlite3_stmt* stmt, %s& obj)" (item_name table));
+
+  output "static void of_stmt(sqlite3_stmt* stmt, T& obj)";
   open_curly ();
-  List.iteri
-    (fun index (col,tbl) -> assert(tbl=table); output (binder_code col index)) 
-    columns;
+  List.iteri (fun index attr -> output_str (get_column_code attr index)) scheme;
   close_curly "";
-  output (sprintf "static void to_stmt(sqlite3_stmt* stmt, const %s& obj)" (item_name table));
+
+  output "static void to_stmt(sqlite3_stmt* stmt, const T& obj)";
   open_curly ();
-  List.iteri
-    (fun index (col,tbl) -> assert(tbl=table); output (binder_code_to col (index + 1)))
-    columns;
+  List.iteri (fun index attr -> output_str (set_column_code attr (index + 1))) scheme;
   close_curly "";
-*)
   end_struct name;
   name
 
@@ -164,6 +173,7 @@ let default_name table str index = sprintf "%s%s_%u" (prefix_name table) str ind
 *)
 let generate_select_code index scheme params =
    let scheme_binder_name = output_scheme_binder index scheme in
+   ignore (scheme_binder_name);
 (*    let params_binder_name = output_params_binder index params in *)
 (*
    out_public ();
@@ -237,6 +247,10 @@ let generate_create_code table sql =
   output ""
 *)
 
+let generate_code index stmt =
+  let ((scheme,params),props) = stmt in
+  generate_select_code index scheme params
+
 let process stmts =
 (*
   let generate_code index stmt =
@@ -250,10 +264,6 @@ let process stmts =
     | Stmt.Delete (inputs) -> generate_delete_code table inputs index props sql
   in
 *)
-  let generate_code index stmt =
-    let ((scheme,params),props) = stmt in
-    generate_select_code index scheme params
-  in
   generate_header ();
   output "namespace sql2cpp";
   open_curly ();

@@ -110,7 +110,7 @@ maybe_as: option(AS) name=IDENT { Some name }
         | { None }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
-column_def1: IDENT sql_type column_def_extra* { RA.Scheme.attr $1 $2 } ;
+column_def1: IDENT sql_type column_def_extra* { RA.attr $1 $2 } ;
 column_def_extra: PRIMARY_KEY { Some Constraint.PrimaryKey }
                 | NOT_NULL { Some Constraint.NotNull }
                 | UNIQUE { Some Constraint.Unique }

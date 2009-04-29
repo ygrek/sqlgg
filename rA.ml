@@ -7,14 +7,13 @@ open Operators
 
 module Type = Sql.Type
 
+type attr = {name : string; domain : Type.t;}
+  deriving (Show)
+
+let attr n d = {name=n;domain=d}
+
 module Scheme =
 struct
-
-  type attr = {name : string; domain : Type.t;}
-    deriving (Show)
-
-  let attr n d = {name=n;domain=d}
-
   type t = attr list
     deriving (Show)
 

@@ -1,6 +1,6 @@
 
 open OUnit
-open RA.Scheme
+open RA
 open Sql.Type
 open Stmt.Raw
 

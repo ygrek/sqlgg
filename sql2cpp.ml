@@ -1,5 +1,5 @@
 (* 
-  $Id$ 
+  Main 
 *)
 
 open Printf
@@ -47,20 +47,6 @@ let work filename =
   with_file filename (fun s -> s 
   >> statements >> L.map parse_one >> L.filter_valid 
   >> tee (L.map show_one) >> Gen.process)
-
-(*
-      let stmts =
-       List.map 
-        (fun (str,props) -> match P.parse_string str with 
-             | Some ((k,n,placeholders) as stmt) -> 
-                  (*Error.logs (Show.show<Stmt.Raw.parsed> stmt); *)
-                  Some (k,n,placeholders,props,str)
-             | None -> Error.log "Failed to parse : %s" str; None)
-        all
-       >> List.filter_valid
-      in
-      Gen.process (Stmt.resolve stmts)
-*)
 
 let show_help () =
   Error.log "SQL to C++ Code Generator Version %s (%s)" Version.version (Version.revision >> S.explode >> L.take 8 >> S.implode);

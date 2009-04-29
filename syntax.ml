@@ -30,9 +30,9 @@ let get_scheme columns tables =
       begin match e with
       | Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | Column (name,None) -> RA.Scheme.find all name
-      | _ -> RA.Scheme.attr "" Sql.Type.Text
+      | _ -> RA.attr "" Sql.Type.Text
       end in
-      let col = Option.map_default (fun n -> {col with RA.Scheme.name = n}) col name in
+      let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
   in
   collect resolve1 columns
