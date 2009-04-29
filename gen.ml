@@ -9,14 +9,14 @@ open Stmt.Raw
 
 module Cpp =
 struct
-  type param = string * string
-  type t = param list
+  type value = string * string
+  type t = value list
 
   let to_string x =
-    String.concat ", " (List.map (fun (t,n) -> t ^ " " ^ n) x)
+    String.concat ", " (List.map (fun (n,t) -> t ^ " " ^ n) x)
 
   let inline x = 
-    String.concat ", " (List.map (fun (t,n) -> n) x)
+    String.concat ", " (List.map (fun (n,t) -> n) x)
 
   let quote =String.replace_chars (function '\n' -> "\\\n" | c -> String.make 1 c)
 end
@@ -67,8 +67,6 @@ let item_name _ = "row"
 let prefix_name _ = ""
 *)
 
-let param_type_to_string t = Option.map_default Type.to_string "Any" t
-
 let name_of attr index = 
   match attr.RA.name with
   | "" -> sprintf "_%u" index
@@ -86,15 +84,20 @@ let get_column attr index =
     index
     (name_of attr (index+1))
 
+let param_type_to_string t = Option.map_default Type.to_string "Any" t
+
 let param_name_to_string id index =
   match id with 
   | Next -> sprintf "_%u" index 
   | Numbered x -> sprintf "_%u" x
   | Named s -> s
 
-let set_param_code param index =
+let make_name props default = Option.default default (Props.get props "name")
+let default_name str index = sprintf "%s_%u" str index
+
+let set_param index param =
   let (id,t) = param in
-  sprintf "Traits::set_param_%s(stmt, obj.%s, %u);" 
+  output "Traits::set_param_%s(stmt, obj.%s, %u);" 
     (param_type_to_string t)
     (param_name_to_string id index)
     index
@@ -118,91 +121,62 @@ let output_scheme_binder index scheme =
 
 let output_scheme_binder i s = in_namespace "detail" (fun () -> output_scheme_binder i s)
 
-let make_const_params params = 
-  List.mapi 
-    (fun index (name,t) -> 
-      sprintf "%s const&" (param_type_to_string t),(param_name_to_string name index)) params
+let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, param_type_to_string t)
+let make_const_values = List.map (fun (name,t) -> name, sprintf "%s const&" t)
 
-(*
-let generate_table_code table =
-  out_public ();
-  start_struct (item_name table);
-  List.iter 
-    (fun col -> output (sprintf "%s %s;" (Col.type_to_cpp_string col) col.Col.cpp_name)) 
-    table.Table.cols;
-  end_struct (item_name table)
+let output_value_defs vals =
+  vals >> make_const_values >> List.iter (fun (name,t) -> output "%s %s_;" t name)
 
-let output_extra_param_defs placeholders = 
-  List.iter (fun (name,t) -> output (sprintf "const %s& %s_;" (Type.to_cpp_string t) name)) placeholders
-
-let output_extra_params_init names = 
-  match names with
+let output_value_inits vals = 
+  match vals with
   | [] -> ()
-  | _ -> output (" : " ^ (String.concat "," (List.map (fun name -> sprintf "%s_(%s)" name name) names)))
+  | _ -> 
+    output " : %s" 
+    (String.concat "," (List.map (fun (name,_) -> sprintf "%s_(%s)" name name) vals))
 
-let output_params_binder binder_index cols_binder ofs inputs =
+let output_params_binder index params =
   out_private ();
-  let name = (sprintf "params_binder_%u" binder_index) in
+  let name = default_name "params_binder" index in
   start_struct name;
-  output_extra_param_defs inputs;
-  begin match cols_binder with
-  | Some binder -> output (sprintf "const row& obj_;")
-  | None -> ()
-  end;
-  output "";
-  let params = (match cols_binder with | Some binder -> [sprintf "const row&","obj"] | None -> []) @ 
-               (make_const_params inputs)
-  in
-  output (sprintf "%s(%s)" name (Cpp.to_string params));
-  let names = List.map (fun (name,_) -> name) inputs in
-  let names = (match cols_binder with | Some _ -> "obj"::names | None -> names) in
-  output_extra_params_init names;
+  let values = params_to_values params in
+  output_value_defs values;
+  empty_line ();
+  output "%s(%s)" name (Cpp.to_string (make_const_values values));
+  output_value_inits values;
   open_curly ();
   close_curly "";
-  output "";
-  output (sprintf "void set_params(sqlite3_stmt* stmt)");
+  empty_line ();
+  output "void set_params(sqlite3_stmt* stmt)";
   open_curly ();
-  begin match cols_binder with
-  | Some binder -> output (sprintf "%s::to_stmt(stmt,obj_);" binder)
-  | None -> ()
-  end;
-  List.iteri (fun index param -> output (param_binder_code (index+1+ofs) param)) inputs;
+  List.iteri set_param params;
   close_curly "";
-  output "";
+  empty_line ();
   end_struct name;
   name
 
-let output_params_binder index table cols inputs =
-  let binder_name = (match cols with
-                     | [] -> None
-                     | _ -> Some (output_scheme_binder table cols index))
-  in
-  match binder_name,inputs with
-  | None,[] -> "typename Traits::no_params"
-  | _,_ -> output_params_binder index binder_name (List.length cols) inputs
-*)
-
-let output_params_binder index params = "FIXME"
-
-let make_name props default = Option.default default (Props.get props "name")
-let default_name str index = sprintf "%s_%u" str index
+let output_params_binder index params =
+  match params with
+  | [] -> "typename Traits::no_params"
+  | _ -> output_params_binder index params
 
 let generate_select_code index scheme params props =
    let scheme_binder_name = output_scheme_binder index scheme in
    let params_binder_name = output_params_binder index params in
    out_public ();
    output "template<class T>";
+   let values = params_to_values params in
    let all_params = Cpp.to_string
-     (["sqlite3*","db"; "T&","result"] @ (make_const_params params)) 
+     (["sqlite3*","db"; "T&","result"] @ (make_const_values values)) 
    in
    let name = make_name props (default_name "select" index) in
    let sql = Props.get props "sql" >> Option.get >> Cpp.quote in
    output "static bool %s(%s)" name all_params;
    open_curly ();
    output "return Traits::do_select(db,result,_T(\"%s\"),%s(),%s(%s));" 
-          sql scheme_binder_name params_binder_name (Cpp.inline (make_const_params params));
+          sql scheme_binder_name params_binder_name (Cpp.inline (make_const_values values));
    close_curly "";
    empty_line ()
+
 (*
 let generate_insert_code columns table index (placeholders,props) sql =
       out_public ();
