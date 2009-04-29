@@ -63,17 +63,22 @@ let item_name _ = "row"
 let prefix_name _ = ""
 *)
 
+let name_of attr index = 
+  match attr.RA.name with
+  | "" -> sprintf "_%u" index
+  | s -> s
+
 let set_column attr index =
   output "Traits::set_column_%s(stmt, %u, obj.%s);" 
     (Type.to_string attr.RA.domain)
     index
-    attr.RA.name
+    (name_of attr index)
 
 let get_column attr index =
   output "Traits::get_column_%s(stmt, %u, obj.%s);" 
     (Type.to_string attr.RA.domain)
     index
-    attr.RA.name
+    (name_of attr (index+1))
 
 open Stmt.Raw
 
