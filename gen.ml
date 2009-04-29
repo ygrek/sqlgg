@@ -3,6 +3,8 @@
 open Sql
 open Printf
 open ExtList
+open ExtString
+open Operators
 
 module Cpp =
 struct
@@ -23,20 +25,21 @@ let (inc_indent,dec_indent,make_indent) =
   (fun () -> String.make !v ' ')
 
 let print_indent () = print_string (make_indent ())
-let print_fmt fmt = Printf.kprintf print_endline fmt
-let print_prefix prefix fmt = print_indent (); print_string prefix; print_fmt fmt
-let empty_line () = print_indent (); print_newline ()
-let output fmt = print_prefix "" fmt
-let comment fmt = print_prefix "// " fmt
-let output_str s = print_indent (); print_endline s
+let indent s = print_indent (); print_string s
+let indent_endline s = print_indent (); print_endline s
+let empty_line () = print_newline ()
+let output fmt = Printf.kprintf indent_endline fmt
+let print fmt = Printf.kprintf print_endline fmt
+let quote_comment_inline = String.replace_chars (function '\n' -> "\n// " | c -> String.make 1 c)
+let comment fmt = Printf.kprintf (indent_endline & quote_comment_inline & (^) "// ") fmt
 let open_curly () = output "{"; inc_indent ()
-let close_curly fmt = dec_indent (); print_prefix "}" fmt
+let close_curly fmt = dec_indent (); indent "}"; print fmt
 let start_struct name =
    output "struct %s" name;
    open_curly ()
 let end_struct name =
    close_curly "; // struct %s" name;
-   output ""
+   empty_line ()
 let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
 let in_namespace name f =   
@@ -44,7 +47,7 @@ let in_namespace name f =
   open_curly ();
   f ();
   close_curly " // namespace %s" name;
-  output ""
+  empty_line ()
 
 let generate_header () = 
     output "// DO NOT EDIT MANUALLY";
@@ -60,14 +63,14 @@ let item_name _ = "row"
 let prefix_name _ = ""
 *)
 
-let set_column_code attr index =
-  sprintf "Traits::set_column_%s(stmt, %u, obj.%s);" 
+let set_column attr index =
+  output "Traits::set_column_%s(stmt, %u, obj.%s);" 
     (Type.to_string attr.RA.domain)
     index
     attr.RA.name
 
-let get_column_code attr index =
-  sprintf "Traits::get_column_%s(stmt, %u, obj.%s);" 
+let get_column attr index =
+  output "Traits::get_column_%s(stmt, %u, obj.%s);" 
     (Type.to_string attr.RA.domain)
     index
     attr.RA.name
@@ -91,12 +94,12 @@ let output_scheme_binder index scheme =
 
   output "static void of_stmt(sqlite3_stmt* stmt, T& obj)";
   open_curly ();
-  List.iteri (fun index attr -> output_str (get_column_code attr index)) scheme;
+  List.iteri (fun index attr -> get_column attr index) scheme;
   close_curly "";
 
   output "static void to_stmt(sqlite3_stmt* stmt, const T& obj)";
   open_curly ();
-  List.iteri (fun index attr -> output_str (set_column_code attr (index + 1))) scheme;
+  List.iteri (fun index attr -> set_column attr (index + 1)) scheme;
   close_curly "";
   end_struct name;
   name
@@ -249,6 +252,10 @@ let generate_create_code table sql =
 
 let generate_code index stmt =
   let ((scheme,params),props) = stmt in
+  begin match Props.get props "sql" with
+  | Some s -> comment "%s" s
+  | None -> ()
+  end;
   generate_select_code index scheme params
 
 let process stmts =

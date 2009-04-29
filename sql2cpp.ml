@@ -22,7 +22,7 @@ let statements s =
 let parse_one (stmt,props) = 
   try
     print_endline stmt;
-    Some ((Parser.parse_stmt stmt), props)
+    Some ((Parser.parse_stmt stmt), Props.set props "sql" stmt)
   with
   | exn ->
     begin
@@ -46,7 +46,7 @@ let tee f x = f x; x
 let work filename = 
   with_file filename (fun s -> s 
   >> statements >> L.map parse_one >> L.filter_valid 
-  >> tee (L.map show_one) >> Gen.process)
+  >> tee (L.iter show_one) >> Gen.process)
 
 let show_help () =
   Error.log "SQL to C++ Code Generator Version %s (%s)" Version.version (Version.revision >> S.explode >> L.take 8 >> S.implode);

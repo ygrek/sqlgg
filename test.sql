@@ -8,7 +8,8 @@ SELECT name,descr FROM test;
 --INSERT INTO test (name,descr) VALUES;
 SELECT * FROM test WHERE name = ? LIMIT ?;
 -- [sql2cpp] name=select_distinct_limit
-SELECT DISTINCT * FROM test ORDER BY id DESC LIMIT ?;
+SELECT DISTINCT * 
+FROM test ORDER BY id DESC LIMIT ?;
 -- [sql2cpp] name=Delete
 --DELETE FROM test WHERE id = ?;
 
