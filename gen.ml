@@ -6,17 +6,14 @@ open ExtList
 
 module Cpp =
 struct
-  module Params =
-  struct
-    type param = string * string
-    type t = param list
+  type param = string * string
+  type t = param list
 
-    let to_string x =
-      String.concat ", " (List.map (fun (t,n) -> t ^ " " ^ n) x)
+  let to_string x =
+    String.concat ", " (List.map (fun (t,n) -> t ^ " " ^ n) x)
 
-    let inline x = 
-      String.concat ", " (List.map (fun (t,n) -> n) x)
-  end
+  let inline x = 
+    String.concat ", " (List.map (fun (t,n) -> n) x)
 end
 
 let indent = ref 0
@@ -33,6 +30,12 @@ let end_struct name =
    output ""
 let out_public () = out_shl (); output "public:"; out_shr ()
 let out_private () = out_shl (); output "private:"; out_shr ()
+let in_namespace name f =   
+  output (sprintf "namespace %s" name);
+  open_curly ();
+  f ();
+  close_curly (sprintf "; // namespace %s" name);
+  output ""
 
 let generate_header () = 
     output "// DO NOT EDIT MANUALLY";
@@ -42,6 +45,7 @@ let generate_header () =
     output "#pragma once"; 
     output ""
 
+(*
 let ns_name table = table.Table.cpp_name
 let item_name _ = "row"
 let prefix_name _ = ""
@@ -66,13 +70,12 @@ let binder_code_to col index =
       (Col.type_to_string col) 
       col.Col.cpp_name
       index
-
-(** naive *)
-let output_columns_binder table columns binder_index =
-  let name = sprintf "binder_%u" binder_index in
-  out_private ();
+*)
+let output_scheme_binder index scheme =
+  let name = sprintf "binder_%u" index in
   start_struct name;
-  output (sprintf "typedef %s value_type;" (item_name table));
+(*   output (sprintf "typedef %s value_type;" (item_name table)); *)
+(*
   output (sprintf "static void of_stmt(sqlite3_stmt* stmt, %s& obj)" (item_name table));
   open_curly ();
   List.iteri
@@ -85,9 +88,12 @@ let output_columns_binder table columns binder_index =
     (fun index (col,tbl) -> assert(tbl=table); output (binder_code_to col (index + 1)))
     columns;
   close_curly "";
+*)
   end_struct name;
   name
 
+let output_scheme_binder i s = in_namespace "detail" (fun () -> output_scheme_binder i s)
+(*
 let generate_table_code table =
   out_public ();
   start_struct (item_name table);
@@ -120,7 +126,7 @@ let output_params_binder binder_index cols_binder ofs inputs =
   let params = (match cols_binder with | Some binder -> [sprintf "const row&","obj"] | None -> []) @ 
                (make_const_params inputs)
   in
-  output (sprintf "%s(%s)" name (Cpp.Params.to_string params));
+  output (sprintf "%s(%s)" name (Cpp.to_string params));
   let names = List.map (fun (name,_) -> name) inputs in
   let names = (match cols_binder with | Some _ -> "obj"::names | None -> names) in
   output_extra_params_init names;
@@ -139,10 +145,10 @@ let output_params_binder binder_index cols_binder ofs inputs =
   end_struct name;
   name
 
-let make_params_binder index table cols inputs =
+let output_params_binder index table cols inputs =
   let binder_name = (match cols with
                      | [] -> None
-                     | _ -> Some (output_columns_binder table cols index))
+                     | _ -> Some (output_scheme_binder table cols index))
   in
   match binder_name,inputs with
   | None,[] -> "typename Traits::no_params"
@@ -155,9 +161,11 @@ let make_name props default =
 
 let default_name table str index = sprintf "%s%s_%u" (prefix_name table) str index
 
-let generate_select_code table inputs outputs index props sql =
-   let binder_name = output_columns_binder table outputs index in
-   let params_binder_name = make_params_binder index table [] inputs in
+*)
+let generate_select_code index scheme params =
+   let scheme_binder_name = output_scheme_binder index scheme in
+(*    let params_binder_name = output_params_binder index params in *)
+(*
    out_public ();
    output "template<class T>";
    let params = Cpp.Params.to_string
@@ -171,6 +179,7 @@ let generate_select_code table inputs outputs index props sql =
      (sprintf "return Traits::do_select(db,result,_T(\"%s\"),%s(),%s(%s));" 
               sql binder_name params_binder_name (Cpp.Params.inline (make_const_params inputs)));
    close_curly "";
+*)
    output ""
 (*
 let generate_insert_code columns table index (placeholders,props) sql =
@@ -183,13 +192,14 @@ let generate_insert_code columns table index (placeholders,props) sql =
       output ""
   *)
 
+(*
 let generate_modify_code table cols inputs index props sql =
   (* if there is only one input column - do not require full object as a param *)
   let (cols,inputs) = match cols with
   | [(x,_)] -> [],(x.Sql.Col.name,x.Sql.Col.sqltype)::inputs
   | _ -> cols,inputs
   in
-  let params_binder_name = make_params_binder index table cols inputs in
+  let params_binder_name = output_params_binder index table cols inputs in
   out_public ();
   let data_params = make_const_params inputs in
   let data_params = (match cols with
@@ -201,12 +211,12 @@ let generate_modify_code table cols inputs index props sql =
   output (sprintf "static int %s(%s)" name params);
   open_curly ();
   output (sprintf "return Traits::do_execute(db,\"%s\",%s(%s));" sql 
-      params_binder_name (Cpp.Params.inline data_params));
+      params_binder_name (Cpp.inline data_params));
   close_curly "";
   output ""
 
 let generate_delete_code table inputs index props sql =
-  let params_binder_name = make_params_binder index table [] inputs in
+  let params_binder_name = output_params_binder index table [] inputs in
   out_public ();
   let data_params = make_const_params inputs in
   let params = Cpp.Params.to_string (("sqlite3*","db") :: data_params) in
@@ -225,9 +235,10 @@ let generate_create_code table sql =
   output (sprintf "return Traits::do_execute(db,\"%s\",typename Traits::no_params());" sql);
   close_curly "";
   output ""
+*)
 
 let process stmts =
-  generate_header ();
+(*
   let generate_code index stmt =
     let (kind,table,props,sql) = stmt in
     match kind with
@@ -238,18 +249,13 @@ let process stmts =
     | Stmt.Modify (cols,inputs) -> generate_modify_code table cols inputs index props sql
     | Stmt.Delete (inputs) -> generate_delete_code table inputs index props sql
   in
-  let rec do_process stmts =
-    match stmts with
-    | [] -> ()
-    | (_,t,_,_)::_ ->
-        let (some, other) = List.partition (fun (_,table,_,_) -> table = t) stmts in
-        output "template<class Traits>";
-        start_struct (ns_name t);
-        List.iteri generate_code some;
-        end_struct (ns_name t);
-        do_process other
+*)
+  let generate_code index stmt =
+    let ((scheme,params),props) = stmt in
+    generate_select_code index scheme params
   in
-    output "namespace sql2cpp";
-    open_curly ();
-    do_process stmts;
-    close_curly " // namespace sql2cpp"
+  generate_header ();
+  output "namespace sql2cpp";
+  open_curly ();
+  List.iteri generate_code stmts;
+  close_curly " // namespace sql2cpp"

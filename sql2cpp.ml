@@ -19,21 +19,20 @@ let statements s =
    in
     List.rev (loop [])
 
-let parse_all s = 
-  let all = statements s in
-  let parse1 (stmt,props) = 
-    try
-      print_endline stmt;
-      let (s,ps) = Parser.parse_stmt stmt in
-      RA.Scheme.print s;
-      print_endline (Show.show<Stmt.Raw.params>(ps))
-    with
-    | exn ->
-      begin
-        print_endline (Printexc.to_string exn)
-      end
-  in
-  List.iter parse1 all
+let parse_one (stmt,props) = 
+  try
+    print_endline stmt;
+    Some ((Parser.parse_stmt stmt), props)
+  with
+  | exn ->
+    begin
+      print_endline (Printexc.to_string exn);
+      None
+    end
+
+let show_one ((s,p),props) =
+  RA.Scheme.print s;
+  print_endline (Show.show<Stmt.Raw.params>(p))
 
 let catch f x = try Some (f x) with _ -> None
 
@@ -42,8 +41,12 @@ let with_file filename f =
   | None -> Error.log "cannot open file : %s" filename
   | Some s -> f s
 
+let tee f x = f x; x
+
 let work filename = 
-  with_file filename parse_all
+  with_file filename (fun s -> s 
+  >> statements >> L.map parse_one >> L.filter_valid 
+  >> tee (L.map show_one) >> Gen.process)
 
 (*
       let stmts =
