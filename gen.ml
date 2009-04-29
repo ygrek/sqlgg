@@ -18,7 +18,7 @@ struct
   let inline x = 
     String.concat ", " (List.map (fun (n,t) -> n) x)
 
-  let quote =String.replace_chars (function '\n' -> "\\\n" | c -> String.make 1 c)
+  let quote = String.replace_chars (function '\n' -> "\\\n" | c -> String.make 1 c)
 end
 
 let (inc_indent,dec_indent,make_indent) = 
@@ -103,7 +103,8 @@ let set_param index param =
     index
 
 let output_scheme_binder index scheme =
-  let name = sprintf "binder_%u" index in
+  out_private ();
+  let name = default_name "output" index in
   output "template <class T>";
   start_struct name;
 
@@ -119,7 +120,10 @@ let output_scheme_binder index scheme =
   end_struct name;
   name
 
-let output_scheme_binder i s = in_namespace "detail" (fun () -> output_scheme_binder i s)
+let output_scheme_binder index scheme =
+  match scheme with
+  | [] -> "typename Traits::no_output"
+  | _ -> output_scheme_binder index scheme
 
 let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, param_type_to_string t)
 let make_const_values = List.map (fun (name,t) -> name, sprintf "%s const&" t)
@@ -136,7 +140,7 @@ let output_value_inits vals =
 
 let output_params_binder index params =
   out_private ();
-  let name = default_name "params_binder" index in
+  let name = default_name "params" index in
   start_struct name;
   let values = params_to_values params in
   output_value_defs values;
@@ -166,7 +170,7 @@ let generate_select_code index scheme params props =
    output "template<class T>";
    let values = params_to_values params in
    let all_params = Cpp.to_string
-     (["sqlite3*","db"; "T&","result"] @ (make_const_values values)) 
+     (["db","sqlite3*"; "result","T&"] @ (make_const_values values)) 
    in
    let name = make_name props (default_name "select" index) in
    let sql = Props.get props "sql" >> Option.get >> Cpp.quote in
@@ -255,7 +259,7 @@ let process stmts =
   in
 *)
   generate_header ();
-  output "namespace sql2cpp";
-  open_curly ();
+  output "template <class Traits>";
+  start_struct "sql2cpp";
   List.iteri generate_code stmts;
-  close_curly " // namespace sql2cpp"
+  end_struct "sql2cpp"
