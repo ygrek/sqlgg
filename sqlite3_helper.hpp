@@ -19,15 +19,16 @@ struct sqlite3_traits
 
   typedef int Int;
   typedef std::basic_string<TCHAR> Text;
+  typedef Text Any;
 
   template<class T>
-  static void bind_column_Int(sqlite3_stmt* stmt, int index, T& val)
+  static void get_column_Int(sqlite3_stmt* stmt, int index, T& val)
   {
      val = sqlite3_column_int(stmt, index);
   }
 
   template<class T>
-  static void bind_column_Text(sqlite3_stmt* stmt, int index, T& val)
+  static void get_column_Text(sqlite3_stmt* stmt, int index, T& val)
   {
   #if defined(_UNICODE) || defined(UNICODE)
      val = (const TCHAR*)sqlite3_column_text16(stmt, index);
@@ -36,13 +37,13 @@ struct sqlite3_traits
   #endif   
   }
 
-  static void bind_param_null(sqlite3_stmt* stmt, int index)
+  static void get_param_null(sqlite3_stmt* stmt, int index)
   {
       int nResult = sqlite3_bind_null(stmt, index);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void bind_param_Text(sqlite3_stmt* stmt, const Text& val, int index)
+  static void set_param_Text(sqlite3_stmt* stmt, const Text& val, int index)
   {
   #if defined(_UNICODE) || defined(UNICODE)
       int nResult = sqlite3_bind_text16(stmt, index, val.c_str(), -1, SQLITE_TRANSIENT);
@@ -52,7 +53,7 @@ struct sqlite3_traits
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void bind_param_Int(sqlite3_stmt* stmt, const Int& val, int index)
+  static void set_param_Int(sqlite3_stmt* stmt, const Int& val, int index)
   {
       int nResult = sqlite3_bind_int(stmt, index, val);
       ATLASSERT(SQLITE_OK == nResult);
@@ -83,7 +84,7 @@ struct sqlite3_traits
 
       while(SQLITE_ROW == sqlite3_step(stmt)) //Iterate all objects
       {
-          result.push_back(typename Binder::value_type());
+          result.push_back(typename Container::value_type());
           binder.of_stmt(stmt,result.back());
       }
 

@@ -8,7 +8,7 @@
 
 using namespace std;
 
-typedef sql2cpp::test<sqlite3_traits> table;
+typedef sql2cpp<sqlite3_traits> gen;
 /*
 void to_console(const wchar_t* s)
 {
@@ -35,30 +35,32 @@ int main()
   nResult = sqlite3_exec(db,"DROP TABLE test;",NULL,NULL,NULL);
   cout << "drop : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
-  nResult = table::create(db);
+  nResult = gen::create(db);
   cout << "create : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
-  table::row t;
+/*
+  gen::data_1 t;
   t.name="c++";
   t.descr="ugly";
-  nResult = table::Add(db,t);
+  nResult = gen::Add(db,t);
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
   t.name="c";
   t.descr="hard";
-  nResult = table::Add(db,t);
+  nResult = gen::Add(db,t);
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
   t.name="ocaml";
   t.descr="wonderful";
-  nResult = table::Add(db,t);
+  nResult = gen::Add(db,t);
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+*/
 
-  std::vector<table::row> all;
-  nResult = table::select_all(db,all);
+  std::vector<gen::data_1> all;
+  nResult = gen::select_all(db,all);
   cout << "select : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
-  BOOST_FOREACH(const table::row& q, all)
+  BOOST_FOREACH(gen::data_1 const& q, all)
   {
      std::cout << q.id << ") " << q.name << " is " << q.descr << std::endl;
   }

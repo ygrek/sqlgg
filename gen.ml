@@ -85,6 +85,7 @@ let get_column attr index =
     (name_of attr (index+1))
 
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
+let param_type_to_cpp_string t = "typename Traits::" ^ (param_type_to_string t)
 
 let param_name_to_string id index =
   match id with 
@@ -97,7 +98,7 @@ let default_name str index = sprintf "%s_%u" str index
 
 let set_param index param =
   let (id,t) = param in
-  output "Traits::set_param_%s(stmt, obj.%s, %u);" 
+  output "Traits::set_param_%s(stmt, %s, %u);" 
     (param_type_to_string t)
     (param_name_to_string id index)
     index
@@ -118,32 +119,41 @@ let output_scheme_binder index scheme =
   List.iteri (fun index attr -> set_column attr (index + 1)) scheme;
   close_curly "";
   end_struct name;
-  name
+  name 
 
 let output_scheme_binder index scheme =
   match scheme with
-  | [] -> "typename Traits::no_output"
-  | _ -> output_scheme_binder index scheme
+  | [] -> None
+  | _ -> Some (output_scheme_binder index scheme)
 
-let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, param_type_to_string t)
+let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, param_type_to_cpp_string t)
 let make_const_values = List.map (fun (name,t) -> name, sprintf "%s const&" t)
 
 let output_value_defs vals =
-  vals >> make_const_values >> List.iter (fun (name,t) -> output "%s %s_;" t name)
+  vals >> List.iter (fun (name,t) -> output "%s %s;" t name)
+
+let scheme_to_values = List.mapi (fun i attr -> name_of attr i, Type.to_cpp_string attr.RA.domain)
+
+let output_scheme_data index scheme =
+  out_public ();
+  let name = default_name "data" index in
+  start_struct name;
+  scheme >> scheme_to_values >> output_value_defs;
+  end_struct name
 
 let output_value_inits vals = 
   match vals with
   | [] -> ()
   | _ -> 
     output " : %s" 
-    (String.concat "," (List.map (fun (name,_) -> sprintf "%s_(%s)" name name) vals))
+    (String.concat "," (List.map (fun (name,_) -> sprintf "%s(%s)" name name) vals))
 
 let output_params_binder index params =
   out_private ();
   let name = default_name "params" index in
   start_struct name;
   let values = params_to_values params in
-  output_value_defs values;
+  values >> make_const_values >> output_value_defs;
   empty_line ();
   output "%s(%s)" name (Cpp.to_string (make_const_values values));
   output_value_inits values;
@@ -166,18 +176,24 @@ let output_params_binder index params =
 let generate_select_code index scheme params props =
    let scheme_binder_name = output_scheme_binder index scheme in
    let params_binder_name = output_params_binder index params in
+   if (Option.is_some scheme_binder_name) then output_scheme_data index scheme;
    out_public ();
-   output "template<class T>";
+   if (Option.is_some scheme_binder_name) then output "template<class T>";
    let values = params_to_values params in
+   let result = match scheme_binder_name with None -> [] | Some _ -> ["result","T&"] in
    let all_params = Cpp.to_string
-     (["db","sqlite3*"; "result","T&"] @ (make_const_values values)) 
+     (["db","sqlite3*"] @ result @ (make_const_values values)) 
    in
    let name = make_name props (default_name "select" index) in
    let sql = Props.get props "sql" >> Option.get >> Cpp.quote in
+   let inline_params = Cpp.inline (make_const_values values) in
    output "static bool %s(%s)" name all_params;
    open_curly ();
-   output "return Traits::do_select(db,result,_T(\"%s\"),%s(),%s(%s));" 
-          sql scheme_binder_name params_binder_name (Cpp.inline (make_const_values values));
+   begin match scheme_binder_name with
+   | None -> output "return Traits::do_execute(db,_T(\"%s\"),%s(%s));" sql params_binder_name inline_params
+   | Some scheme_name ->output "return Traits::do_select(db,result,_T(\"%s\"),%s(),%s(%s));" 
+          sql (scheme_name ^ "<typename T::value_type>") params_binder_name inline_params
+   end;
    close_curly "";
    empty_line ()
 

@@ -1,4 +1,4 @@
-
+-- [sql2cpp] name=create
 CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
 -- [sql2cpp] name=select_all
 SELECT * FROM test;
