@@ -9,6 +9,7 @@
 using namespace std;
 
 typedef sql2cpp<sqlite3_traits> gen;
+
 /*
 void to_console(const wchar_t* s)
 {
@@ -24,19 +25,24 @@ void to_console(const std::wstring& s)
 }
 */
 
+void explain(char const* msg, sqlite3* db)
+{
+  cout << msg << " : " /*<< sqlite3_errcode(db) << " "*/ << sqlite3_errmsg(db) << endl;
+}
+
 int main()
 {
   sqlite3* db = NULL;
   int nResult = SQLITE_OK;
 
   nResult = sqlite3_open("test.db", &db);
-  cout << "open : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("open",db);
 
   nResult = sqlite3_exec(db,"DROP TABLE test;",NULL,NULL,NULL);
-  cout << "drop : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("drop",db);
 
   nResult = gen::create(db);
-  cout << "create : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("create",db);
 
 /*
   gen::data_1 t;
@@ -46,17 +52,17 @@ int main()
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 */
   nResult = gen::Add(db,"c++","ugly");
-  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("insert",db);
 
   nResult = gen::Add(db,"c","hard");
-  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("insert",db);
 
   nResult = gen::Add(db,"ocaml","wonderful");
-  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("insert",db);
 
   std::vector<gen::data_1> all;
   nResult = gen::select_all(db,all);
-  cout << "select : " << nResult << " " << sqlite3_errmsg(db) << endl;
+  explain("select",db);
 
   BOOST_FOREACH(gen::data_1 const& q, all)
   {
