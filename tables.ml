@@ -15,6 +15,10 @@ let get_from tables name =
 let get name = get_from !all name
 let get_scheme name = snd (get name)
 
-let add v = all := v :: !all
+let add v =
+  let (name,scheme) = v in
+  match List.find_all (fun (n,_) -> n = name) !all with
+  | [] -> all := v :: !all
+  | _ -> failwith (sprintf "table %s already exists" name)
 
 let print () = List.iter RA.print_table !all
