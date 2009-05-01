@@ -79,6 +79,7 @@ ruleMain = parse
   | "!" { EXCL }
   | "~" { TILDE }
   | "NOT" { NOT }
+  | "||" { CONCAT_OP }
 
   (* column-constraint *)
   | "NOT" wsp+ "NULL" { NOT_NULL }
@@ -126,22 +127,26 @@ ruleMain = parse
 
   | "MAX" | "MIN" | "CONCAT" { FUNCTION }
   | "ISNULL" | "NOTNULL" { TEST_NULL }
-  | "BETWEEB" { BETWEEN }
+  | "BETWEEN" { BETWEEN }
   | "AND" { AND }
   | "ESCAPE" { ESCAPE }
+
+  | '\'' { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | ['x' 'X'] '\'' { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { IDENT (str) }
   | digit+ as str { INTEGER (int_of_string str) }
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
 and 
-(*ruleInQuotes = parse
-  | '"'	        { TEXT (!curStr) }
-  | eof	        { error lexbuf "no terminating quote"; }
-  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote"; }
-  | [^'"' '\n']+  { store (Lexing.lexeme lexbuf); ruleInQuotes lexbuf; }
-  | _		{ error lexbuf "ruleInQuotes"; }
-and*)
+ruleInSingleQuotes acc = parse
+  | '\''	      { acc }
+  | eof	        { error lexbuf "no terminating quote" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote" }
+  | "''"        { ruleInSingleQuotes (acc ^ "'") lexbuf }
+  | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInSingleQuotes" }
+and
 ruleComment = parse
   | '\n'	      { advance_line lexbuf; !curStr }
   | eof	        { !curStr }

@@ -22,13 +22,14 @@
 %}
 
 %token <int> INTEGER
-%token <string> IDENT
+%token <string> IDENT TEXT BLOB
 %token <Stmt.Raw.param_id> PARAM
 %token LPAREN RPAREN COMMA EOF DOT
 %token IGNORE REPLACE ABORT FAIL ROLLBACK
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
        LIMIT ORDER_BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
+       CONCAT_OP
 %token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON CONFLICT
 %token PLUS MINUS DIVIDE PERCENT
 %token T_INTEGER T_BLOB T_TEXT
@@ -52,9 +53,15 @@ statement: CREATE_TABLE name=IDENT LPAREN scheme=column_defs RPAREN
          | insert_cmd t=IDENT VALUES
               { let p = Tables.get_scheme t >> Syntax.scheme_as_params in
                 [],p,Insert }
-         /*| UPDATE IDENT SET set_columns maybe_where
-              { Raw.Update $4, $2, List.filter_valid [$5] }
-         | DELETE_FROM IDENT maybe_where
+         | UPDATE table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=option(where)
+              { 
+                let p2 = get_params_opt w in
+                let (cols,exprs) = List.split assignments in
+                let _ = RA.Scheme.project cols (Tables.get_scheme table) in (* validates columns *)
+                let p1 = Syntax.get_params_l exprs in
+                [], p1 @ p2, Update
+              }
+         /*| DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
 
 select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order) p4=loption(limit)
@@ -118,14 +125,7 @@ column_def_extra: PRIMARY_KEY { Some Constraint.PrimaryKey }
                 | ON CONFLICT conflict_algo { Some (Constraint.OnConflict $3) } ;
                 | DEFAULT INTEGER { None }
 
-/*
-set_columns: set_columns1 { Raw.Cols (List.filter_valid (List.rev $1)) } ;
-
-set_columns1: set_column { [$1] }
-           | set_columns1 COMMA set_column { $3::$1 } ;
-
-set_column: IDENT EQUAL expr { match $3 with | 1 -> Some $1 | x -> assert (0=x); None } ;
-*/
+set_column: name=IDENT EQUAL e=expr { name,e }
 
 expr:
       expr binary_op expr { Sub [$1;$3] }
@@ -136,6 +136,8 @@ expr:
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { Column (c,Some t) }
     | INTEGER { Value Sql.Type.Int }
+    | TEXT { Value Sql.Type.Text }
+    | BLOB { Value Sql.Type.Blob }
     | PARAM { Param ($1,None) }
     | FUNCTION LPAREN func_params RPAREN { Sub $3 }
 (*     | expr TEST_NULL { $1 } *)
@@ -145,7 +147,7 @@ expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-binary_op: PLUS | MINUS | ASTERISK | DIVIDE | EQUAL { } 
+binary_op: PLUS | MINUS | ASTERISK | DIVIDE | EQUAL | CONCAT_OP { } 
 
 unary_op: EXCL { }
         | PLUS { }

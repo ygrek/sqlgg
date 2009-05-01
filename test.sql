@@ -12,6 +12,8 @@ SELECT DISTINCT *
 FROM test ORDER BY id DESC LIMIT ?;
 -- [sql2cpp] name=Delete
 --DELETE FROM test WHERE id = ?;
+-- [sql2cpp] name=Exaggerate
+UPDATE test SET descr='really ' || descr;
 
 CREATE TABLE loc (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, test_id INTEGER);
 SELECT test.id FROM test JOIN loc ON test_id = id;

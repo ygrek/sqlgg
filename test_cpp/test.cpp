@@ -60,6 +60,9 @@ int main()
   nResult = gen::Add(db,"ocaml","wonderful");
   explain("insert",db);
 
+  nResult = gen::Exaggerate(db);
+  explain("update",db);
+
   std::vector<gen::data_1> all;
   nResult = gen::select_all(db,all);
   explain("select",db);
