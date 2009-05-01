@@ -1,6 +1,6 @@
 //
 
-#include "sqlite3.h"
+#include <sqlite3.h>
 //#include <tchar.h>
 //#include <atlbase.h>
 #define ATLASSERT assert
@@ -98,38 +98,6 @@ struct sqlite3_traits
       return true;
   }
 
-  template<class Binder>
-  static bool do_insert(sqlite3* db, const typename Binder::value_type& val, const TCHAR* sql)
-  {
-      sqlite3_stmt *stmt;
-      int nResult;
-      const TCHAR *pszTail;
-  #if defined(_UNICODE) || defined(UNICODE)
-      nResult = sqlite3_prepare16(db, sql, -1, &stmt, (void const**)&pszTail);
-  #else
-      nResult = sqlite3_prepare(db, sql, -1, &stmt, &pszTail);
-  #endif
-      ATLASSERT(SQLITE_OK == nResult);
-      if (SQLITE_OK != nResult)
-      {
-          return false;
-      }
-
-      Binder::to_stmt(stmt,val);
-      //Execute the command
-      nResult = sqlite3_step(stmt);
-      ATLASSERT(SQLITE_DONE == nResult);
-
-      //Destroy the command
-      nResult = sqlite3_finalize(stmt);
-      if (SQLITE_OK != nResult)
-      {
-          return false;
-      }
-
-      return true;
-  }
-
   struct no_params
   {
     void set_params(sqlite3_stmt*) {}
@@ -141,7 +109,11 @@ struct sqlite3_traits
       sqlite3_stmt *stmt;
       int nResult;
       const char *pszTail;
+  #if defined(_UNICODE) || defined(UNICODE)
+      nResult = sqlite3_prepare16(db, sql, -1, &stmt, (void const**)&pszTail);
+  #else
       nResult = sqlite3_prepare(db, sql, -1, &stmt, &pszTail);
+  #endif
       //ATLASSERT(SQLITE_OK == nResult);
       if (SQLITE_OK != nResult)
       {

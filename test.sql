@@ -3,9 +3,9 @@ CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
 -- [sql2cpp] name=select_all
 SELECT * FROM test;
 SELECT name,descr FROM test;
+INSERT INTO test VALUES;
 -- [sql2cpp] name=Add
---INSERT INTO test VALUES;
---INSERT INTO test (name,descr) VALUES;
+INSERT INTO test (name,descr) VALUES;
 SELECT * FROM test WHERE name = ? LIMIT ?;
 -- [sql2cpp] name=select_distinct_limit
 SELECT DISTINCT * 

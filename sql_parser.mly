@@ -36,21 +36,23 @@
 %type <Syntax.expr> expr
 %type <RA.Scheme.t * Stmt.Raw.params> select_core
 
-%start <RA.Scheme.t * Stmt.Raw.params> input
+%start <RA.Scheme.t * Stmt.Raw.params * Stmt.Raw.kind> input
 
 %%
 
 input: statement EOF { $1 } ;
 
-statement: CREATE_TABLE IDENT LPAREN column_defs RPAREN
-              { let () = Tables.add ($2,$4) in ([],[]) }
+statement: CREATE_TABLE name=IDENT LPAREN scheme=column_defs RPAREN
+              { let () = Tables.add (name,scheme) in ([],[],Create) }
          | select_stmt
-              { $1 }
-         /*| insert_cmd IDENT LPAREN columns RPAREN VALUES
-              { Raw.Insert (Raw.Cols (List.rev $4)), $2, [] }
-         | insert_cmd IDENT VALUES
-              { Raw.Insert Raw.All, $2, [] }
-         | UPDATE IDENT SET set_columns maybe_where
+              { let (s,p) = $1 in s,p,Select }
+         | insert_cmd t=IDENT LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN VALUES
+              { let p = RA.Scheme.project cols (Tables.get_scheme t) >> Syntax.scheme_as_params in
+                [],p,Insert }
+         | insert_cmd t=IDENT VALUES
+              { let p = Tables.get_scheme t >> Syntax.scheme_as_params in
+                [],p,Insert }
+         /*| UPDATE IDENT SET set_columns maybe_where
               { Raw.Update $4, $2, List.filter_valid [$5] }
          | DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
@@ -80,9 +82,7 @@ join_op: COMMA | JOIN { } ;
 join_args: ON e=expr { [e] }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> Column (name,None)) l }
 
-insert_cmd: INSERT OR conflict_algo INTO {}
-          | INSERT INTO {}
-          | REPLACE INTO {} ;
+insert_cmd: INSERT OR conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 
 update_cmd: UPDATE {}
           | UPDATE OR conflict_algo {} ;

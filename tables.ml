@@ -13,6 +13,7 @@ let get_from tables name =
   with Not_found -> failwith (sprintf "no such table %s" name)
 
 let get name = get_from !all name
+let get_scheme name = snd (get name)
 
 let add v = all := v :: !all
 

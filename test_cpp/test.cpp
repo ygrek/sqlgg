@@ -44,17 +44,15 @@ int main()
   t.descr="ugly";
   nResult = gen::Add(db,t);
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
-
-  t.name="c";
-  t.descr="hard";
-  nResult = gen::Add(db,t);
-  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
-
-  t.name="ocaml";
-  t.descr="wonderful";
-  nResult = gen::Add(db,t);
-  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 */
+  nResult = gen::Add(db,"c++","ugly");
+  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+
+  nResult = gen::Add(db,"c","hard");
+  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
+
+  nResult = gen::Add(db,"ocaml","wonderful");
+  cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 
   std::vector<gen::data_1> all;
   nResult = gen::select_all(db,all);

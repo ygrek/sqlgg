@@ -1,2 +1,2 @@
 ../sql2cpp.byte ../test.sql > test.hpp
-g++ -o test test.cpp -lsqlite3
+g++ -g -o test test.cpp -lsqlite3

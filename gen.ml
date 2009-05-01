@@ -101,7 +101,7 @@ let set_param index param =
   output "Traits::set_param_%s(stmt, %s, %u);" 
     (param_type_to_string t)
     (param_name_to_string id index)
-    index
+    (index+1) (* FIXME sqlite3 specific *)
 
 let output_scheme_binder index scheme =
   out_private ();
@@ -114,10 +114,6 @@ let output_scheme_binder index scheme =
   List.iteri (fun index attr -> get_column attr index) scheme;
   close_curly "";
 
-  output "static void to_stmt(sqlite3_stmt* stmt, const T& obj)";
-  open_curly ();
-  List.iteri (fun index attr -> set_column attr (index + 1)) scheme;
-  close_curly "";
   end_struct name;
   name 
 
@@ -173,7 +169,7 @@ let output_params_binder index params =
   | [] -> "typename Traits::no_params"
   | _ -> output_params_binder index params
 
-let generate_select_code index scheme params props =
+let generate_code index scheme params kind props =
    let scheme_binder_name = output_scheme_binder index scheme in
    let params_binder_name = output_params_binder index params in
    if (Option.is_some scheme_binder_name) then output_scheme_data index scheme;
@@ -184,8 +180,13 @@ let generate_select_code index scheme params props =
    let all_params = Cpp.to_string
      (["db","sqlite3*"] @ result @ (make_const_values values)) 
    in
-   let name = make_name props (default_name "select" index) in
-   let sql = Props.get props "sql" >> Option.get >> Cpp.quote in
+   let name = make_name props (default_name (Show.show<Stmt.Raw.kind>(kind) >> String.lowercase) index) in
+   let sql = Props.get props "sql" >> Option.get in
+   let sql = match kind with
+             | Insert -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
+             | _ -> sql
+   in
+   let sql = Cpp.quote sql in
    let inline_params = Cpp.inline (make_const_values values) in
    output "static bool %s(%s)" name all_params;
    open_curly ();
@@ -197,83 +198,15 @@ let generate_select_code index scheme params props =
    close_curly "";
    empty_line ()
 
-(*
-let generate_insert_code columns table index (placeholders,props) sql =
-      out_public ();
-      let name = make_name props (default_name table "insert" index) in
-      output (sprintf "static bool %s(sqlite3* db, const %s& val)" name (item_name table));
-      open_curly ();
-      output (sprintf "return Traits::do_insert<binder_%s>(db,val,_T(\"%s\"));" (item_name table) sql);
-      close_curly "";
-      output ""
-  *)
-
-(*
-let generate_modify_code table cols inputs index props sql =
-  (* if there is only one input column - do not require full object as a param *)
-  let (cols,inputs) = match cols with
-  | [(x,_)] -> [],(x.Sql.Col.name,x.Sql.Col.sqltype)::inputs
-  | _ -> cols,inputs
-  in
-  let params_binder_name = output_params_binder index table cols inputs in
-  out_public ();
-  let data_params = make_const_params inputs in
-  let data_params = (match cols with
-    | [] -> data_params
-    | _ -> ((sprintf "const %s&" (item_name table)),"val")::data_params)
-  in
-  let params = Cpp.Params.to_string (("sqlite3*","db") :: data_params) in
-  let name = make_name props (default_name table "modify" index) in
-  output (sprintf "static int %s(%s)" name params);
-  open_curly ();
-  output (sprintf "return Traits::do_execute(db,\"%s\",%s(%s));" sql 
-      params_binder_name (Cpp.inline data_params));
-  close_curly "";
-  output ""
-
-let generate_delete_code table inputs index props sql =
-  let params_binder_name = output_params_binder index table [] inputs in
-  out_public ();
-  let data_params = make_const_params inputs in
-  let params = Cpp.Params.to_string (("sqlite3*","db") :: data_params) in
-  let name = make_name props (default_name table "delete" index) in
-  output (sprintf "static int %s(%s)" name params);
-  open_curly ();
-  output (sprintf "return Traits::do_execute(db,\"%s\",%s(%s));" sql 
-      params_binder_name (Cpp.Params.inline data_params));
-  close_curly "";
-  output ""
-
-let generate_create_code table sql =
-  out_public ();
-  output (sprintf "static int %screate(sqlite3* db)" (prefix_name table));
-  open_curly ();
-  output (sprintf "return Traits::do_execute(db,\"%s\",typename Traits::no_params());" sql);
-  close_curly "";
-  output ""
-*)
-
 let generate_code index stmt =
-  let ((scheme,params),props) = stmt in
+  let ((scheme,params,kind),props) = stmt in
   begin match Props.get props "sql" with
   | Some s -> comment "%s" s
   | None -> ()
   end;
-  generate_select_code index scheme params props
+  generate_code index scheme params kind props
 
 let process stmts =
-(*
-  let generate_code index stmt =
-    let (kind,table,props,sql) = stmt in
-    match kind with
-    | Stmt.Create -> generate_table_code table; 
-                     generate_create_code table sql
-    | Stmt.Select (outputs,exprs,inputs) -> 
-        generate_select_code table inputs outputs index props sql
-    | Stmt.Modify (cols,inputs) -> generate_modify_code table cols inputs index props sql
-    | Stmt.Delete (inputs) -> generate_delete_code table inputs index props sql
-  in
-*)
   generate_header ();
   output "template <class Traits>";
   start_struct "sql2cpp";

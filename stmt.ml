@@ -19,14 +19,14 @@ struct
  
   let to_string ps = Show.show<params>(ps)
 
-(*
-  type kind = | Select of column_list
-              | Insert of column_list
-              | Create of Sql.Table.t
-              | Update of column_list
+  type kind = | Select
+              | Insert
+              | Create
+              | Update
               | Delete
        deriving (Show)
 
+(*
   type parsed = kind 
                 * string  (** table name as string *)
                 * values  (** placeholders for input parameters *)

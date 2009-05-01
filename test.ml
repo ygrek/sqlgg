@@ -14,7 +14,7 @@ SELECT name,descr FROM test;
 let tt stmt scheme params =
   let print_scheme = RA.Scheme.to_string in
   let print_params = Stmt.Raw.to_string in
-  let (s1,p1) =
+  let (s1,p1,_) =
     try
       Parser.parse_stmt stmt
     with

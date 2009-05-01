@@ -63,3 +63,4 @@ let get_params_opt = function
 
 let get_params_l = collect get_params
 
+let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
