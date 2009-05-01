@@ -18,7 +18,8 @@ struct
   let inline x = 
     String.concat ", " (List.map (fun (n,t) -> n) x)
 
-  let quote = String.replace_chars (function '\n' -> "\\\n" | c -> String.make 1 c)
+  let quote = String.replace_chars (function '\n' -> "\\\n" | '"' -> "\\\"" | c -> String.make 1 c)
+  let quote s = "\"" ^ quote s ^ "\""
 end
 
 let (inc_indent,dec_indent,make_indent) = 
@@ -184,15 +185,15 @@ let generate_code index scheme params kind props =
    let sql = Props.get props "sql" >> Option.get in
    let sql = match kind with
              | Insert -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
-             | _ -> sql
+             | Select | Update | Delete | Create -> sql
    in
    let sql = Cpp.quote sql in
    let inline_params = Cpp.inline (make_const_values values) in
    output "static bool %s(%s)" name all_params;
    open_curly ();
    begin match scheme_binder_name with
-   | None -> output "return Traits::do_execute(db,_T(\"%s\"),%s(%s));" sql params_binder_name inline_params
-   | Some scheme_name ->output "return Traits::do_select(db,result,_T(\"%s\"),%s(),%s(%s));" 
+   | None -> output "return Traits::do_execute(db,_T(%s),%s(%s));" sql params_binder_name inline_params
+   | Some scheme_name ->output "return Traits::do_select(db,result,_T(%s),%s(),%s(%s));" 
           sql (scheme_name ^ "<typename T::value_type>") params_binder_name inline_params
    end;
    close_curly "";
