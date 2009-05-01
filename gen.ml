@@ -170,6 +170,17 @@ let output_params_binder index params =
   | [] -> "typename Traits::no_params"
   | _ -> output_params_binder index params
 
+let choose_name props kind index =
+(*   let name = default_name (Show.show<Stmt.Raw.kind>(kind) >> String.lowercase) index in *)
+  let name = match kind with
+  | Create t -> sprintf "create_%s" t
+  | Update t -> sprintf "update_%s_%u" t index
+  | Insert t -> sprintf "insert_%s_%u" t index
+  | Delete t -> sprintf "delete_%s_%u" t index
+  | Select   -> sprintf "select_%u" index
+  in
+  make_name props name
+
 let generate_code index scheme params kind props =
    let scheme_binder_name = output_scheme_binder index scheme in
    let params_binder_name = output_params_binder index params in
@@ -181,11 +192,12 @@ let generate_code index scheme params kind props =
    let all_params = Cpp.to_string
      (["db","sqlite3*"] @ result @ (make_const_values values)) 
    in
-   let name = make_name props (default_name (Show.show<Stmt.Raw.kind>(kind) >> String.lowercase) index) in
+   let name = choose_name props kind index in
    let sql = Props.get props "sql" >> Option.get in
+   (* fill VALUES *)
    let sql = match kind with
-             | Insert -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
-             | Select | Update | Delete | Create -> sql
+             | Insert _ -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
+             | Select | Update _ | Delete _ | Create _ -> sql
    in
    let sql = Cpp.quote sql in
    let inline_params = Cpp.inline (make_const_values values) in

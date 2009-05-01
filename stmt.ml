@@ -1,14 +1,16 @@
-(* $Id$ *)
+(** *)
 
 open Printf
 open ExtString
 open ListMore
 
+(*
 type value_t = string * Sql.Type.t (** name and type *)
      deriving (Show)
 
 type values = value_t list 
 deriving (Show)
+*)
 
 module Raw =
 struct
@@ -20,10 +22,10 @@ struct
   let to_string ps = Show.show<params>(ps)
 
   type kind = | Select
-              | Insert
-              | Create
-              | Update
-              | Delete
+              | Insert of string (** table name *)
+              | Create of string (** table name *)
+              | Update of string (** table name *)
+              | Delete of string (** table name *)
        deriving (Show)
 
 (*

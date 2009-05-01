@@ -44,22 +44,22 @@
 input: statement EOF { $1 } ;
 
 statement: CREATE_TABLE name=IDENT LPAREN scheme=column_defs RPAREN
-              { let () = Tables.add (name,scheme) in ([],[],Create) }
+              { let () = Tables.add (name,scheme) in ([],[],Create name) }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
          | insert_cmd t=IDENT LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN VALUES
               { let p = RA.Scheme.project cols (Tables.get_scheme t) >> Syntax.scheme_as_params in
-                [],p,Insert }
+                [],p,Insert t }
          | insert_cmd t=IDENT VALUES
               { let p = Tables.get_scheme t >> Syntax.scheme_as_params in
-                [],p,Insert }
+                [],p,Insert t }
          | UPDATE table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=option(where)
               { 
                 let p2 = get_params_opt w in
                 let (cols,exprs) = List.split assignments in
                 let _ = RA.Scheme.project cols (Tables.get_scheme table) in (* validates columns *)
                 let p1 = Syntax.get_params_l exprs in
-                [], p1 @ p2, Update
+                [], p1 @ p2, Update table
               }
          /*| DELETE_FROM IDENT maybe_where
               { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
