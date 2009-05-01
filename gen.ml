@@ -102,7 +102,7 @@ let set_param index param =
   output "Traits::set_param_%s(stmt, %s, %u);" 
     (param_type_to_string t)
     (param_name_to_string id index)
-    (index+1) (* FIXME sqlite3 specific *)
+    index
 
 let output_scheme_binder index scheme =
   out_private ();

@@ -37,25 +37,30 @@ struct sqlite3_traits
   #endif   
   }
 
-  static void get_param_null(sqlite3_stmt* stmt, int index)
+  static void set_param_null(sqlite3_stmt* stmt, int index)
   {
-      int nResult = sqlite3_bind_null(stmt, index);
+      int nResult = sqlite3_bind_null(stmt, index + 1);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
   static void set_param_Text(sqlite3_stmt* stmt, const Text& val, int index)
   {
   #if defined(_UNICODE) || defined(UNICODE)
-      int nResult = sqlite3_bind_text16(stmt, index, val.c_str(), -1, SQLITE_TRANSIENT);
+      int nResult = sqlite3_bind_text16(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
   #else
-      int nResult = sqlite3_bind_text(stmt, index, val.c_str(), -1, SQLITE_TRANSIENT);
+      int nResult = sqlite3_bind_text(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
   #endif     
       ATLASSERT(SQLITE_OK == nResult);
   }
 
+  static void set_param_Any(sqlite3_stmt* stmt, const Any& val, int index)
+  {
+    set_param_Text(stmt,val,index);
+  }
+
   static void set_param_Int(sqlite3_stmt* stmt, const Int& val, int index)
   {
-      int nResult = sqlite3_bind_int(stmt, index, val);
+      int nResult = sqlite3_bind_int(stmt, index + 1, val);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
