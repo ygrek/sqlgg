@@ -11,7 +11,7 @@ SELECT * FROM test WHERE name = @name LIMIT @limit;
 SELECT DISTINCT * 
 FROM test ORDER BY id DESC LIMIT ?;
 -- [sql2cpp] name=Delete
---DELETE FROM test WHERE id = ?;
+DELETE FROM test WHERE id = ?;
 -- [sql2cpp] name=Exaggerate
 UPDATE test SET descr = @extra || ' ' || descr;
 
@@ -19,4 +19,7 @@ CREATE TABLE loc (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, test_id INTEG
 SELECT test.id FROM test JOIN loc ON test_id = id;
 SELECT test.id FROM test WHERE id = ? UNION SELECT test.id FROM test WHERE id = ?;
 SELECT id+test_id AS x,? FROM loc ORDER BY id,?/test_id LIMIT ?,100;
+SELECT x,z FROM (SELECT name AS x, 
+  city || ' ' || descr as y, 
+  max(length(city),random(*)) as z FROM test LEFT JOIN loc) WHERE x > @xlo & z < @zhi;
 

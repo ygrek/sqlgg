@@ -24,14 +24,14 @@
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
 %token <Stmt.Raw.param_id> PARAM
-%token LPAREN RPAREN COMMA EOF DOT
-%token IGNORE REPLACE ABORT FAIL ROLLBACK
+%token LPAREN RPAREN COMMA EOF DOT NULL
+%token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
-       LIMIT ORDER_BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
+       LIMIT ORDER BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
-       CONCAT_OP
-%token NOT_NULL UNIQUE PRIMARY_KEY AUTOINCREMENT ON CONFLICT
-%token PLUS MINUS DIVIDE PERCENT
+       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE
+%token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
+%token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT
 
 %type <Syntax.expr> expr
@@ -85,14 +85,14 @@ table_list: source join_source* { let (s,p) = List.split $2 in (fst $1::s, List.
 join_source: join_op s=source p=loption(join_args) { (fst s,snd s @ Syntax.get_params_l p) }
 source: IDENT { Tables.get $1,[] }
       | LPAREN s=select_core RPAREN { let (s,p) = s in ("",s),p }
-join_op: COMMA | JOIN { } ;
+join_op: COMMA | NATURAL? JOIN_TYPE1? JOIN_TYPE2? JOIN { } ;
 join_args: ON e=expr { [e] }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> Column (name,None)) l }
 
-insert_cmd: INSERT OR conflict_algo INTO | INSERT INTO | REPLACE INTO { }
+insert_cmd: INSERT OR CONFLICT_ALGO INTO | INSERT INTO | REPLACE INTO { }
 
 update_cmd: UPDATE {}
-          | UPDATE OR conflict_algo {} ;
+          | UPDATE OR CONFLICT_ALGO {} ;
 
 select_type: DISTINCT | ALL { }
 
@@ -103,7 +103,7 @@ limit: LIMIT p=int_or_param { p }
      | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 }
      | LIMIT p1=int_or_param OFFSET p2=int_or_param { p1 @ p2 }
 
-order: ORDER_BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
+order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
 
 where: WHERE e=expr { e }
@@ -118,18 +118,20 @@ maybe_as: option(AS) name=IDENT { Some name }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: IDENT sql_type column_def_extra* { RA.attr $1 $2 } ;
-column_def_extra: PRIMARY_KEY { Some Constraint.PrimaryKey }
-                | NOT_NULL { Some Constraint.NotNull }
+column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
+                | NOT NULL { Some Constraint.NotNull }
                 | UNIQUE { Some Constraint.Unique }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
-                | ON CONFLICT conflict_algo { Some (Constraint.OnConflict $3) } ;
+                | ON CONFLICT CONFLICT_ALGO { None } ;
                 | DEFAULT INTEGER { None }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
 
+(* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
+
 expr:
       expr binary_op expr { Sub [$1;$3] }
-(*     | expr LIKE_OP expr loption(escape) { $1 @ $3 @ $4 } *)
+(*     | expr NOT? LIKE_OP expr loption(escape) { $1 @ $3 @ $4 } *)
 (*     | unary_op expr { $2 } *)
     | LPAREN expr RPAREN { $2 }
     | IDENT { Column ($1,None) }
@@ -147,19 +149,13 @@ expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-binary_op: PLUS | MINUS | ASTERISK | DIVIDE | EQUAL | CONCAT_OP { } 
+binary_op: EQUAL | PLUS | MINUS | ASTERISK | AND | OR | NUM_BINARY_OP | CONCAT_OP { } 
 
 unary_op: EXCL { }
         | PLUS { }
         | MINUS { }
         | TILDE { }
         | NOT { } ;
-
-conflict_algo: IGNORE { Constraint.Ignore } 
-             | REPLACE { Constraint.Replace }
-             | ABORT { Constraint.Abort }
-             | FAIL { Constraint.Fail } 
-             | ROLLBACK { Constraint.Rollback } ;
 
 sql_type: T_INTEGER  { Type.Int }
         | T_BLOB { Type.Blob }

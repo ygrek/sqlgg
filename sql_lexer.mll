@@ -22,13 +22,60 @@ let advance_line_pos pos =
 
 let advance_line lexbuf = 
   lexbuf.Lexing.lex_curr_p <- advance_line_pos lexbuf.Lexing.lex_curr_p
+
+(* use Map or Hashtbl ? *)
+let keywords = 
+  let k = ref [ 
+   "as",AS;
+   "on",ON;
+   "conflict",CONFLICT;
+   "using",USING;
+   "natural",NATURAL;
+   "join",JOIN;
+   "isnull",TEST_NULL;
+   "notnull",TEST_NULL;
+   "between",BETWEEN;
+   "and",AND;
+   "escape",ESCAPE;
+   "not",NOT;
+   "null",NULL;
+   "unique",UNIQUE;
+   "primary",PRIMARY;
+   "key",KEY;
+   "autoincrement",AUTOINCREMENT;
+   "default",DEFAULT;
+   "text",T_TEXT;
+   "integer",T_INTEGER;
+   "int",T_INTEGER;
+   "blob",T_BLOB;
+   "distinct",DISTINCT;
+   "all",ALL;
+   "order",ORDER;
+   "by",BY;
+   "limit",LIMIT;
+   "desc",DESC;
+   "asc",ASC;
+   "offset",OFFSET;
+  ] in
+  let all token l = k := !k @ List.map (fun x -> x,token) l in
+  all FUNCTION ["max"; "min"; "concat"; "length"; "random";];
+  all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback";];
+  all JOIN_TYPE1 ["left";"right";"full"];
+  all JOIN_TYPE2 ["inner";"outer";"cross"];
+  all LIKE_OP ["like";"glob";"regexp";"match"];
+  !k 
+
+let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords
+
+let get_ident str =
+  let str = String.lowercase str in
+  try List.assoc str keywords with Not_found -> IDENT str 
 }
 
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
 let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\t']
-let mnot = ("NOT" wsp+)?
 
 rule ruleStatement props = parse
   | ['\n' ' ' '\t']+ { ruleStatement props lexbuf }
@@ -72,69 +119,23 @@ ruleMain = parse
   | "UNION" (wsp+ "ALL")? | "EXCEPT" | "INTERSECT" { COMPOUND_OP }
 
   | "=" { EQUAL }
-  | "+" { PLUS }
-  | "-" { MINUS }
-  | "/" { DIVIDE }
-  | "%" { PERCENT }
   | "!" { EXCL }
   | "~" { TILDE }
   | "NOT" { NOT }
   | "||" { CONCAT_OP }
+  | "+" { PLUS }
+  | "-" { MINUS }
 
-  (* column-constraint *)
-  | "NOT" wsp+ "NULL" { NOT_NULL }
-  | "UNIQUE" { UNIQUE }
-  | "PRIMARY" wsp+ "KEY" { PRIMARY_KEY }
-  | "AUTOINCREMENT" { AUTOINCREMENT }
-  | "DEFAULT" { DEFAULT }
-
-  | "TEXT" { T_TEXT }
-  | "INTEGER" { T_INTEGER }
-  | "INT" { T_INTEGER }
-  | "BLOB" { T_BLOB }
-
-  | "DISTINCT" { DISTINCT }
-  | "ALL" { ALL }
-
-  | "ORDER" wsp+ "BY" { ORDER_BY }
-  | "LIMIT" { LIMIT }
-  | "DESC" { DESC }
-  | "ASC" { ASC }
-  | "OFFSET" { OFFSET }
+  | "/" | "%" | ">" | ">=" | "<=" | "<" | "&" | "|" { NUM_BINARY_OP }
 
   | "?" { PARAM Stmt.Raw.Next }
   | "?" (digit+ as str) { PARAM (Stmt.Raw.Numbered (int_of_string str)) }
   | [':' '@'] (ident as str) { PARAM (Stmt.Raw.Named str) }
 
-  | "ON" { ON }
-  | "CONFLICT" { CONFLICT }
-  | "USING" { USING }
+  | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
-  | "IGNORE" { IGNORE }
-  | "REPLACE" { REPLACE }
-  | "ABORT" { ABORT }
-  | "FAIL" { FAIL }
-  | "ROLLBACK" { ROLLBACK }
-
-  | ("NATURAL" wsp+)? 
-    (("LEFT"|"RIGHT"|"FULL") wsp+)? 
-    (("INNER"|"OUTER"|"CROSS") wsp+)? 
-    "JOIN" { JOIN }
-
-  | mnot ("LIKE" | "GLOB" | "REGEXP" | "MATCH") { LIKE_OP }
-  
-  | "AS" { AS }
-
-  | "MAX" | "MIN" | "CONCAT" { FUNCTION }
-  | "ISNULL" | "NOTNULL" { TEST_NULL }
-  | "BETWEEN" { BETWEEN }
-  | "AND" { AND }
-  | "ESCAPE" { ESCAPE }
-
-  | '\'' { TEXT (ruleInSingleQuotes "" lexbuf) }
-  | ['x' 'X'] '\'' { BLOB (ruleInSingleQuotes "" lexbuf) }
-
-  | ident as str { IDENT (str) }
+  | ident as str { get_ident str }
   | digit+ as str { INTEGER (int_of_string str) }
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
