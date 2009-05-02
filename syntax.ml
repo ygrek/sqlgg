@@ -9,6 +9,8 @@ type expr = | Value of Sql.Type.t
             | Column of string * string option (** name, table *)
             deriving (Show)
 
+let expr_to_string = Show.show<expr>
+
 type column = 
   | All 
   | AllOf of string
@@ -43,7 +45,7 @@ let get_params e =
     | Param p -> p::acc
     | Sub l -> List.fold_left loop acc l
     | _ -> acc
-  in loop [] e
+  in loop [] e >> List.rev
 
 (*
 let _ = 
