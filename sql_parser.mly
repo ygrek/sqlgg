@@ -53,13 +53,17 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
               }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
-         | insert_cmd t=IDENT LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN VALUES
-              { let p = RA.Scheme.project cols (Tables.get_scheme t) >> Syntax.scheme_as_params in
-                [],p,Insert t }
-         | insert_cmd t=IDENT VALUES
-              { let p = Tables.get_scheme t >> Syntax.scheme_as_params in
-                [],p,Insert t }
-         | UPDATE table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=option(where)
+         | insert_cmd table=IDENT cols=columns_list? VALUES
+              { 
+                let s = Tables.get_scheme table in
+                let s = match cols with
+                  | Some cols -> RA.Scheme.project cols s
+                  | None -> s
+                in
+                let p = Syntax.scheme_as_params s in
+                [],p,Insert table
+              }
+         | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=option(where)
               { 
                 let p2 = get_params_opt w in
                 let (cols,exprs) = List.split assignments in
@@ -72,6 +76,8 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
                 let p = get_params_opt w in
                 [], p, Delete table
               }
+              
+columns_list: LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN { cols }
 
 select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order) p4=loption(limit)
               { let (s1,p1) = $1
@@ -140,7 +146,7 @@ set_column: name=IDENT EQUAL e=expr { name,e }
 
 expr:
       expr binary_op expr { Sub [$1;$3] }
-(*     | expr NOT? LIKE_OP expr loption(escape) { $1 @ $3 @ $4 } *)
+(*     | expr NOT? LIKE_OP expr (*escape?*) { Sub [$1;$4] } *)
 (*     | unary_op expr { $2 } *)
     | LPAREN expr RPAREN { $2 }
     | IDENT { Column ($1,None) }
@@ -151,8 +157,8 @@ expr:
     | BLOB { Value Sql.Type.Blob }
     | PARAM { Param ($1,None) }
     | FUNCTION LPAREN func_params RPAREN { Sub $3 }
-(*     | expr TEST_NULL { $1 } *)
-(*     | expr BETWEEN expr AND expr { $1 @ $3 @ $5 } *)
+    | expr TEST_NULL { $1 }
+    | expr BETWEEN expr AND expr { Sub [$1;$3;$5] }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
