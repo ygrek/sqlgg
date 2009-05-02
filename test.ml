@@ -2,7 +2,7 @@
 open OUnit
 open RA
 open Sql.Type
-open Stmt.Raw
+open Stmt
 
 (*
 CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
@@ -13,7 +13,7 @@ SELECT name,descr FROM test;
 
 let tt stmt scheme params =
   let print_scheme = RA.Scheme.to_string in
-  let print_params = Stmt.Raw.to_string in
+  let print_params = Stmt.params_to_string in
   let (s1,p1,_) =
     try
       Parser.parse_stmt stmt

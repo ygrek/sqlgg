@@ -1,10 +1,10 @@
 (* SQL syntax and RA *)
 
-open Stmt.Raw
+open Stmt
 open Operators
 
 type expr = | Value of Sql.Type.t
-            | Param of Stmt.Raw.param
+            | Param of param
             | Sub of expr list
             | Column of string * string option (** name, table *)
             deriving (Show)

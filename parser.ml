@@ -2,7 +2,7 @@
 module T_SQL_parser = 
   struct 
     type token = Sql_parser.token
-    type result = RA.Scheme.t * Stmt.Raw.params * Stmt.Raw.kind
+    type result = RA.Scheme.t * Stmt.params * Stmt.kind
     let rule = Sql_lexer.parse_rule
     let input = Sql_parser.input
   end

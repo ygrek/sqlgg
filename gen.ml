@@ -5,7 +5,7 @@ open Printf
 open ExtList
 open ExtString
 open Operators
-open Stmt.Raw
+open Stmt
 
 module Cpp =
 struct

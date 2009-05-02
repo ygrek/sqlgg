@@ -32,7 +32,7 @@ let parse_one (stmt,props) =
 
 let show_one ((s,p),props) =
   RA.Scheme.print s;
-  print_endline (Show.show<Stmt.Raw.params>(p))
+  print_endline (Stmt.params_to_string p)
 
 let catch f x = try Some (f x) with _ -> None
 

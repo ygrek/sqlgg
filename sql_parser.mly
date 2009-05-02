@@ -7,7 +7,7 @@
   open Printf
   open Sql
   open ListMore
-  open Stmt.Raw
+  open Stmt
   open Syntax
   open Operators
 
@@ -23,7 +23,7 @@
 
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
-%token <Stmt.Raw.param_id> PARAM
+%token <Stmt.param_id> PARAM
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
@@ -35,9 +35,9 @@
 %token T_INTEGER T_BLOB T_TEXT
 
 %type <Syntax.expr> expr
-%type <RA.Scheme.t * Stmt.Raw.params> select_core
+%type <RA.Scheme.t * Stmt.params> select_core
 
-%start <RA.Scheme.t * Stmt.Raw.params * Stmt.Raw.kind> input
+%start <RA.Scheme.t * Stmt.params * Stmt.kind> input
 
 %%
 

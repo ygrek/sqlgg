@@ -128,9 +128,9 @@ ruleMain = parse
 
   | "/" | "%" | ">" | ">=" | "<=" | "<" | "&" | "|" { NUM_BINARY_OP }
 
-  | "?" { PARAM Stmt.Raw.Next }
-  | "?" (digit+ as str) { PARAM (Stmt.Raw.Numbered (int_of_string str)) }
-  | [':' '@'] (ident as str) { PARAM (Stmt.Raw.Named str) }
+  | "?" { PARAM Stmt.Next }
+  | "?" (digit+ as str) { PARAM (Stmt.Numbered (int_of_string str)) }
+  | [':' '@'] (ident as str) { PARAM (Stmt.Named str) }
 
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
