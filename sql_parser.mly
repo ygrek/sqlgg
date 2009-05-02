@@ -45,6 +45,12 @@ input: statement EOF { $1 } ;
 
 statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
+         | CREATE TABLE name=IDENT AS select=select_stmt
+              { 
+                let (s,p) = select in
+                Tables.add (name,s);
+                ([],p,Create name)
+              }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
          | insert_cmd t=IDENT LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN VALUES

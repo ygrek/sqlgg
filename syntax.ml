@@ -32,7 +32,7 @@ let get_scheme columns tables =
       begin match e with
       | Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | Column (name,None) -> RA.Scheme.find all name
-      | _ -> RA.attr "" Sql.Type.Text
+      | _ -> RA.attr "" Sql.Type.Text (* some expression *)
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
