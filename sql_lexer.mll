@@ -56,6 +56,14 @@ let keywords =
    "desc",DESC;
    "asc",ASC;
    "offset",OFFSET;
+   "select",SELECT;
+   "create",CREATE;
+   "table",TABLE;
+   "insert",INSERT;
+   "replace",REPLACE;
+   "update",UPDATE;
+   "delete",DELETE;
+   "from",FROM;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all FUNCTION ["max"; "min"; "concat"; "length"; "random";];
@@ -100,13 +108,6 @@ ruleMain = parse
 
   | "--" { store ""; ignore (ruleComment lexbuf); ruleMain lexbuf }
 (*  | '"' { store ""; ruleInQuotes lexbuf } *)
-
-  | "SELECT" { SELECT }
-  | "CREATE" wsp+ "TABLE" { CREATE_TABLE }
-  | "INSERT" { INSERT }
-  | "REPLACE" { REPLACE }
-  | "UPDATE" { UPDATE }
-  | "DELETE" wsp+ "FROM" { DELETE_FROM }
 
   | "OR" { OR }
   | "INTO" { INTO }

@@ -26,8 +26,8 @@
 %token <Stmt.param_id> PARAM
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
-%token SELECT INSERT OR INTO CREATE_TABLE UPDATE TABLE VALUES WHERE FROM ASTERISK DISTINCT ALL 
-       LIMIT ORDER BY DESC ASC EQUAL DELETE_FROM DEFAULT OFFSET SET JOIN LIKE_OP
+%token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL 
+       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
@@ -43,7 +43,7 @@
 
 input: statement EOF { $1 } ;
 
-statement: CREATE_TABLE name=IDENT LPAREN scheme=column_defs RPAREN
+statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
@@ -61,8 +61,11 @@ statement: CREATE_TABLE name=IDENT LPAREN scheme=column_defs RPAREN
                 let p1 = Syntax.get_params_l exprs in
                 [], p1 @ p2, Update table
               }
-         /*| DELETE_FROM IDENT maybe_where
-              { Raw.Delete, $2, List.filter_valid [$3] }*/ ;
+         | DELETE FROM table=IDENT w=where?
+              { 
+                let p = get_params_opt w in
+                [], p, Delete table
+              }
 
 select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order) p4=loption(limit)
               { let (s1,p1) = $1
@@ -73,7 +76,7 @@ select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
-             w=option(where)
+             w=where?
               {
                 let p1 = Syntax.params_of_columns r in
                 let p3 = Syntax.get_params_opt w in
