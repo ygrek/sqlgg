@@ -1,0 +1,51 @@
+(* 
+  Main 
+*)
+
+open Printf
+open Operators
+open ListMore
+open ExtString
+
+module L = List
+module S = String
+
+let statements s =
+   let lexbuf = Lexing.from_string s in
+   let rec loop l = 
+    match (try Sql_lexer.ruleStatement Props.empty lexbuf with exn -> None) with
+    | Some x -> loop (x::l)
+    | None -> l
+   in
+    L.rev (loop [])
+
+let parse_one (stmt,props) = 
+  try
+(*     print_endline stmt; *)
+    Some ((Parser.parse_stmt stmt), Props.set props "sql" stmt)
+  with
+  | exn ->
+    begin
+      prerr_endline (Printexc.to_string exn);
+      None
+    end
+
+let show_one ((s,p),props) =
+  RA.Scheme.print s;
+  print_endline (Stmt.params_to_string p)
+
+let catch f x = try Some (f x) with _ -> None
+
+let tee f x = f x; x
+
+let parse_sql s =
+  s >> statements >> L.map parse_one 
+  >> L.filter_valid 
+(*   >> tee (L.iter show_one)  *)
+  >> Gen.process
+
+let with_file filename f =
+  match catch Std.input_file filename with
+  | None -> Error.log "cannot open file : %s" filename
+  | Some s -> f s
+
