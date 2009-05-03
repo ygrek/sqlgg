@@ -94,7 +94,9 @@ Details
 This is work in progress and there is plenty of room for improvement. 
 The generator is already used for some simple database-access code. It uses
 [sqlite3](http://sqlite.org) as a database and implements suitable `sqlite3_traits`
-helper.
+helper. 
+
+Online version will be made available soon.
 
 TODO
 ----
