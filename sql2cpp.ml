@@ -19,6 +19,7 @@ let show_help () =
 let main () =
   match Array.to_list Sys.argv with
   | _::"-test"::_ -> Test.run ()
+  | _::["-"] -> Main.parse_sql (Std.input_all stdin)
   | _::[file] -> work file
   | _ -> show_help ()
 
