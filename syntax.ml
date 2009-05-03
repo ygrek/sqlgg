@@ -28,8 +28,8 @@ let get_scheme columns tables =
     | All -> all
     | AllOf t -> scheme t
     | Expr (e,name) -> 
-      let col = 
-      begin match e with
+      let col = begin 
+      match e with
       | Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | Column (name,None) -> RA.Scheme.find all name
       | _ -> RA.attr "" Sql.Type.Text (* some expression *)
@@ -44,8 +44,9 @@ let get_params e =
     match e with
     | Param p -> p::acc
     | Sub l -> List.fold_left loop acc l
-    | _ -> acc
-  in loop [] e >> List.rev
+    | Column _ | Value _ -> acc
+  in
+  loop [] e >> List.rev
 
 (*
 let _ = 
@@ -66,3 +67,29 @@ let get_params_opt = function
 let get_params_l = collect get_params
 
 let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
+
+(** replace every Column with Value of corresponding type *)
+let rebuild expr tables =
+  let all = tables >> List.map snd >> List.flatten in
+  let scheme name = name >> Tables.get_from tables >> snd in
+  let rec each e =
+    match e with
+    | Value _ -> e
+    | Column (name,x) -> 
+      let attr = RA.Scheme.find (Option.map_default scheme all x) name in
+      Value attr.RA.domain
+    | Param _ -> e
+    | Sub l -> Sub (List.map each l)
+  in
+  each expr
+
+(** assign types to parameters where possible *)
+let assign_types expr =
+  let rec typeof e =
+    match e with
+    | Column _ -> assert false; None
+    | Value t -> Some t
+    | Sub l -> 
+        let l = List.map typeof l in
+        List.fold_left 
+
