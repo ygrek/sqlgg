@@ -21,14 +21,17 @@ struct sqlite3_traits
   typedef std::basic_string<TCHAR> Text;
   typedef Text Any;
 
+  typedef sqlite3_stmt* statement;
+  typedef sqlite3* connection;
+
   template<class T>
-  static void get_column_Int(sqlite3_stmt* stmt, int index, T& val)
+  static void get_column_Int(statement stmt, int index, T& val)
   {
      val = sqlite3_column_int(stmt, index);
   }
 
   template<class T>
-  static void get_column_Text(sqlite3_stmt* stmt, int index, T& val)
+  static void get_column_Text(statement stmt, int index, T& val)
   {
   #if defined(_UNICODE) || defined(UNICODE)
      val = (const TCHAR*)sqlite3_column_text16(stmt, index);
@@ -37,13 +40,13 @@ struct sqlite3_traits
   #endif   
   }
 
-  static void set_param_null(sqlite3_stmt* stmt, int index)
+  static void set_param_null(statement stmt, int index)
   {
       int nResult = sqlite3_bind_null(stmt, index + 1);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void set_param_Text(sqlite3_stmt* stmt, const Text& val, int index)
+  static void set_param_Text(statement stmt, const Text& val, int index)
   {
   #if defined(_UNICODE) || defined(UNICODE)
       int nResult = sqlite3_bind_text16(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
@@ -53,19 +56,19 @@ struct sqlite3_traits
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void set_param_Any(sqlite3_stmt* stmt, const Any& val, int index)
+  static void set_param_Any(statement stmt, const Any& val, int index)
   {
     set_param_Text(stmt,val,index);
   }
 
-  static void set_param_Int(sqlite3_stmt* stmt, const Int& val, int index)
+  static void set_param_Int(statement stmt, const Int& val, int index)
   {
       int nResult = sqlite3_bind_int(stmt, index + 1, val);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
   template<class Container, class Binder, class Params>
-  static bool do_select(sqlite3* db, Container& result, const TCHAR* sql, Binder binder, Params params)
+  static bool do_select(connection db, Container& result, const TCHAR* sql, Binder binder, Params params)
   {
       sqlite3_stmt *stmt;
       const TCHAR *pszTail;
@@ -105,11 +108,11 @@ struct sqlite3_traits
 
   struct no_params
   {
-    void set_params(sqlite3_stmt*) {}
+    void set_params(statement) {}
   };
 
   template<class Params>
-  static int do_execute(sqlite3* db, const char* sql, Params params)
+  static int do_execute(connection db, const char* sql, Params params)
   {
       sqlite3_stmt *stmt;
       int nResult;

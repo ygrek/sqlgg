@@ -110,7 +110,7 @@ let output_scheme_binder index scheme =
   output "template <class T>";
   start_struct name;
 
-  output "static void of_stmt(sqlite3_stmt* stmt, T& obj)";
+  output "static void of_stmt(typename Traits::statement stmt, T& obj)";
   open_curly ();
   List.iteri (fun index attr -> get_column attr index) scheme;
   close_curly "";
@@ -157,7 +157,7 @@ let output_params_binder index params =
   open_curly ();
   close_curly "";
   empty_line ();
-  output "void set_params(sqlite3_stmt* stmt)";
+  output "void set_params(typename Traits::statement stmt)";
   open_curly ();
   List.iteri set_param params;
   close_curly "";
@@ -190,7 +190,7 @@ let generate_code index scheme params kind props =
    let values = params_to_values params in
    let result = match scheme_binder_name with None -> [] | Some _ -> ["result","T&"] in
    let all_params = Cpp.to_string
-     (["db","sqlite3*"] @ result @ (make_const_values values)) 
+     (["db","typename Traits::connection"] @ result @ (make_const_values values)) 
    in
    let name = choose_name props kind index in
    let sql = Props.get props "sql" >> Option.get in
