@@ -18,6 +18,18 @@ REQUIRE DateTime>PAD ~ygrek/lib/spec/unixdate.f
 REQUIRE FileLines=> ~ygrek/lib/filelines.f
 REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
 
+: (sys) ( az -- x )
+  (()) fork ?DUP 
+  IF
+    NIP
+    1 <( 0 0 )) waitpid
+  ELSE
+    \ FIXME
+    DUP 2 <( 0 )) execlp \ no return
+  THEN ;
+
+: sys ( a u -- ) DROP (sys) DROP ;
+
 : BACKSTRFREE ( s --> s \ <-- ) PRO BACK STRFREE TRACKING RESTB CONT ;
 : SEVALUATE BACKSTRFREE STR@ EVALUATE ;
 \ append s1 to s
@@ -59,7 +71,9 @@ ALSO XHTML
 : GetParamInt ( `str -- n ) GetParam NUMBER NOT IF 0 THEN ;
 
 : process ( a u -- ) 
-  `p tag TYPE ;
+  `p tag 
+  
+  TYPE ;
 
 : main ( -- )
   S" Main" <page>
