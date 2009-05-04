@@ -35,7 +35,7 @@ Queries:
 
     CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
     -- [sql2cpp] name=Add
-    INSERT INTO test(name,descr) VALUES (?,?);
+    INSERT INTO test(name,descr) VALUES;
     SELECT name,descr FROM test WHERE name = @name LIMIT @limit;
     SELECT name,z FROM 
       (SELECT name,
@@ -64,12 +64,6 @@ Generated code (with some boilerplate omitted):
       }
 
       // INSERT INTO test(name,descr) VALUES
-    private:
-      struct params_1
-      {
-        [...]
-      }; // struct params_1
-
     public:
       static bool Add(typename Traits::connection db, typename Traits::Text const& name, typename Traits::Text const& descr)
       {
@@ -87,12 +81,6 @@ Generated code (with some boilerplate omitted):
           Traits::get_column_Text(stmt, 1, obj.descr);
         }
       }; // struct output_2
-
-    private:
-      struct params_2
-      {
-        [...]
-      }; // struct params_2
 
     public:
       struct data_2
@@ -122,26 +110,20 @@ Generated code (with some boilerplate omitted):
         static void of_stmt(typename Traits::statement stmt, T& obj)
         {
           Traits::get_column_Text(stmt, 0, obj.name);
-          Traits::get_column_Text(stmt, 1, obj.z);
+          Traits::get_column_Int(stmt, 1, obj.z);
         }
       }; // struct output_3
-
-    private:
-      struct params_3
-      {
-        [...]
-      }; // struct params_3
 
     public:
       struct data_3
       {
         typename Traits::Text name;
-        typename Traits::Text z;
+        typename Traits::Int z;
       }; // struct data_3
 
     public:
       template<class T>
-      static bool select_3(typename Traits::connection db, T& result, typename Traits::Any const& delim, typename Traits::Int const& id, typename Traits::Text const& level)
+      static bool select_3(typename Traits::connection db, T& result, typename Traits::Any const& delim, typename Traits::Int const& id, typename Traits::Int const& level)
       {
         return Traits::do_select(db,result,_T("SELECT name,z FROM \
       (SELECT name,\
@@ -170,8 +152,8 @@ Things to note above:
     satisfying the requirements for output type is generated alongside the function, `data_2` in
     this particular case, so `std::vector<data_2>` for `result` is fine.
 4. The types of parameters for `select_2` were inferred correctly (`limit` is `Int` and `name` is
-    `Text`. For now the type-inferrer is rather primitive and will handle only simple expressions
-    (see parameter types in `select_3`). It is being worked on.
+    `Text`. SQL is not a statically-typed language so the inferred types are based on some
+    reasonable assumptions.
 5. Statement of arbitrary depth across many tables should be supported.
 6. Statements are checked for correctness as far as generator is concerned, so it will detect
 		syntax errors, non-existant columns in expressions, mismatched rowsets in compound statements,
@@ -180,29 +162,33 @@ Things to note above:
 Details
 -------
 
-This is work in progress and there is plenty of room for improvement. 
-The generator is already used for some simple database-access code. It uses
-[sqlite3](http://sqlite.org) as a database and implements suitable `sqlite3_traits`
-helper. 
+The idea is that the generator should take care only of semantic binding between SQL and code sides,
+being as unobtrusive as possible. So the choice of the specific database and API is a programmer's 
+choice. Similarly, queries to the database are expressed in plain SQL, so that the generator can be
+easily plugged in any existing project -- just move all SQL statements used in the code to separate
+file and feed it to generator.
+
+This is work in progress and there is plenty of room for improvement. For now the status of this
+project is *works for me* .  It is used for some simple database-access code with
+[sqlite3](http://sqlite.org) engine (using suitable `sqlite3_traits` helper).
 
 Online version will be made available soon.
 
 TODO
 ----
 
-* type check expressions, infer type for parameters
-* validate expressions with regard to scheme in their scope
 * detect statements on single tables and group the corresponding generated code in one class
 * check names (functions and bindings) for uniqueness
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
+* type check expressions
 
 ----
-2009-05-03
+2009-05-04
 
 <style>
-code { font-family: monospace; font-style: italic; }
-pre { background-color: #eee; color: black; border: 1px dashed #0c5; }
-/*body { padding-bottom: 200px; }*/
+code { font-family: monospace; }
+pre { background-color: #eee; border: 1px solid #0f0; }
+:not(pre) > code { font-size: 1em; }
 </style>
