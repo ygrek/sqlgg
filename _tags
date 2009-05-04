@@ -4,5 +4,5 @@ true: dtypes, warn_A, warn_z
 <test_cpp/*>: not_hygienic
 <*.ml>: use_extLib
 <test.ml>: use_oUnit
-<*.{byte,native}>: use_extLib, use_deriving, use_oUnit
+<*.{byte,native}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit
 <sql_parser.ml>: warn_e
