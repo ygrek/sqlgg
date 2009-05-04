@@ -85,10 +85,10 @@ let get_ident str =
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
 let ident = (alpha) (alpha | digit | '_' )*
-let wsp = [' ' '\t']
+let wsp = [' ' '\r' '\t']
 
 rule ruleStatement props = parse
-  | ['\n' ' ' '\t']+ { ruleStatement props lexbuf }
+  | ['\n' ' ' '\r' '\t']+ { ruleStatement props lexbuf }
 (* fixme strings *)
   | "--" wsp* "[sql2cpp]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' 
       { 
