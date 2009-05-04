@@ -6,6 +6,7 @@
 %{
   open Printf
   open Sql
+  open Sql.Type
   open ListMore
   open Stmt
   open Syntax
@@ -24,11 +25,12 @@
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
 %token <Stmt.param_id> PARAM
+%token <Sql.Type.t option> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL 
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
-       EXCL TILDE NOT FUNCTION TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
+       EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
@@ -152,26 +154,28 @@ set_column: name=IDENT EQUAL e=expr { name,e }
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
 expr:
-      expr binary_op expr { `Sub [$1;$3] }
+     expr numeric_bin_op expr { `Func ((Some Int),[$1;$3]) }
+    | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
 (*     | expr NOT? LIKE_OP expr (*escape?*) { Sub [$1;$4] } *)
 (*     | unary_op expr { $2 } *)
     | LPAREN expr RPAREN { $2 }
     | IDENT { `Column ($1,None) }
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
-    | INTEGER { `Value Sql.Type.Int }
-    | TEXT { `Value Sql.Type.Text }
-    | BLOB { `Value Sql.Type.Blob }
+    | INTEGER { `Value Int }
+(*     | FLOAT { `Value Float } *)
+    | TEXT { `Value Text }
+    | BLOB { `Value Blob }
     | PARAM { `Param ($1,None) }
-    | FUNCTION LPAREN func_params RPAREN { `Sub $3 }
+    | FUNCTION LPAREN func_params RPAREN { `Func ($1,$3) }
     | expr TEST_NULL { $1 }
-    | expr BETWEEN expr AND expr { `Sub [$1;$3;$5] }
+    | expr BETWEEN expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-binary_op: EQUAL | PLUS | MINUS | ASTERISK | AND | OR | NUM_BINARY_OP | CONCAT_OP { } 
+numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | AND | OR | NUM_BINARY_OP { } 
 
 unary_op: EXCL { }
         | PLUS { }

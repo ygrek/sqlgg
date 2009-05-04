@@ -4,6 +4,7 @@
 
 {
   open Sql_parser
+  module T = Sql.Type
 
   let curStr = ref ""
   let store str = curStr := str
@@ -66,7 +67,8 @@ let keywords =
    "from",FROM;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all FUNCTION ["max"; "min"; "concat"; "length"; "random";];
+  all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";];
+  all (FUNCTION (Some T.Text)) ["concat";];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback";];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer";"cross"];

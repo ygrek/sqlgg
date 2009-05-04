@@ -4,9 +4,9 @@ open Stmt
 open Operators
 open ListMore
 
-type expr = [ `Value of Sql.Type.t
+type expr = [ `Value of Sql.Type.t (** literal value *)
             | `Param of param
-            | `Sub of expr list
+            | `Func of Sql.Type.t option * expr list (** return type, parameters *)
             | `Column of string * string option (** name, table *)
             ]
             deriving (Show)
@@ -23,6 +23,48 @@ type columns = column list deriving (Show)
 
 let collect f l = List.flatten (List.map f l)
 
+let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
+
+(** replace every Column with Value of corresponding type *)
+let resolve_columns tables expr =
+  let all = tables >> List.map snd >> List.flatten in
+  let scheme name = name >> Tables.get_from tables >> snd in
+  let rec each e =
+    match e with
+    | `Value x -> `Value x
+    | `Column (name,x) ->
+      let attr = RA.Scheme.find (Option.map_default scheme all x) name in
+      `Value attr.RA.domain
+    | `Param x -> `Param x
+    | `Func (r,l) -> `Func (r,(List.map each l))
+  in
+  each expr
+
+(** assign types to parameters where possible *)
+let assign_types expr =
+  let rec typeof e = (* FIXME simplify *)
+    match e with
+    | `Value t -> e, Some t
+    | `Func (ret,l) -> 
+(** Assumption: sql functions/operators have type scheme 'a -> 'a -> 'b
+    i.e. all parameters of some equal type *)
+        let t = match l >> List.map typeof >> List.map snd >> List.filter_valid with
+        | [] -> None
+        | h::t -> if List.for_all ((=) h) t then Some h else None
+        in
+        let assign = function
+        | `Param (n,None) -> `Param (n,t)
+        | x -> x
+        in
+        let ret = if Option.is_some ret then ret else t in
+        `Func (ret,(List.map assign l)),ret
+    | `Param (_,t) -> e, t
+  in
+  typeof expr
+
+let resolve_types tables expr =
+  expr >> resolve_columns tables >> assign_types
+
 let get_scheme columns tables =
   let all = tables >> List.map snd >> List.flatten in
   let scheme name = name >> Tables.get_from tables >> snd in
@@ -34,61 +76,24 @@ let get_scheme columns tables =
       match e with
       | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | `Column (name,None) -> RA.Scheme.find all name
-      | _ -> RA.attr "" Sql.Type.Text (* some expression *)
+      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
   in
   collect resolve1 columns
 
-let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
-
-(** replace every Column with Value of corresponding type *)
-let rebuild tables expr =
-  let all = tables >> List.map snd >> List.flatten in
-  let scheme name = name >> Tables.get_from tables >> snd in
-  let rec each e =
-    match e with
-    | `Value x -> `Value x
-    | `Column (name,x) ->
-      let attr = RA.Scheme.find (Option.map_default scheme all x) name in
-      `Value attr.RA.domain
-    | `Param x -> `Param x
-    | `Sub l -> `Sub (List.map each l)
-  in
-  each expr
-
-(** assign types to parameters where possible *)
-let assign_types expr =
-  let rec typeof e =
-    match e with
-    | `Value t -> e, Some t
-    | `Sub l -> 
-        let t = match l >> List.map typeof >> List.map snd >> List.filter_valid with
-        | [] -> None
-        | h::t -> if List.for_all ((=) h) t then Some h else None
-        in
-        let assign = function
-        | `Param (n,None) -> `Param (n,t)
-        | x -> x
-        in
-        `Sub (List.map assign l), t
-    | `Param (_,t) -> e, t
-  in
-  typeof expr >> fst
-
 let get_params e =
   let rec loop acc e =
     match e with
     | `Param p -> p::acc
-    | `Sub l -> List.fold_left loop acc l
-    | `Column _ | `Value _ -> acc
+    | `Func (_,l) -> List.fold_left loop acc l
+    | `Value _ -> acc
   in
   loop [] e >> List.rev
 
 let get_params tables e = 
-  get_params (assign_types (rebuild tables e))
-(*   e >> rebuild tables >> assign_types >> get_params *)
+  e >> resolve_types tables >> fst >> get_params
 
 (*
 let _ = 
