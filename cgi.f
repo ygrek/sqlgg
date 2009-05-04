@@ -1,9 +1,9 @@
-#! /home/ygrek/work/forth/spf/spf4
-\ #! /usr/bin/spf4
+#! /usr/bin/spf4
+\ #! /home/ygrek/work/forth/spf/spf4
 
 REQUIRE ATTACH ~pinka/samples/2005/lib/append-file.f
 REQUIRE USER-TYPE ~ygrek/lib/typestr.f
-\ :NONAME S" wiki.err" ATTACH ; TO USER-TYPE \ no stdout
+\ :NONAME 2DROP ; TO USER-TYPE \ no stdout
 
 REQUIRE XSLTmm ~ac/lib/lin/xml/xslt.f
 REQUIRE XHTML ~ygrek/lib/xhtml/core.f
@@ -13,10 +13,10 @@ REQUIRE NOT ~profit/lib/logic.f
 REQUIRE cat ~ygrek/lib/cat.f
 REQUIRE ALLOCATED ~pinka/lib/ext/basics.f
 REQUIRE NUMBER ~ygrek/lib/parse.f
-REQUIRE [env] ~ygrek/lib/env.f
 REQUIRE DateTime>PAD ~ygrek/lib/spec/unixdate.f
 REQUIRE FileLines=> ~ygrek/lib/filelines.f
 REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
+\ REQUIRE CREATE-ANON-PIPE ~ygrek/lib/sys/pipe.f
 
 : (sys) ( az -- x )
   (()) fork ?DUP 
@@ -25,7 +25,8 @@ REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
     1 <( 0 0 )) waitpid
   ELSE
     \ FIXME
-    DUP 2 <( 0 )) execlp \ no return
+    >R
+    S" /bin/sh" DROP DUP 2 <( S" -c" DROP R> 0 )) execlp \ no return
   THEN ;
 
 : sys ( a u -- ) DROP (sys) DROP ;
@@ -70,14 +71,28 @@ ALSO XHTML
 
 : GetParamInt ( `str -- n ) GetParam NUMBER NOT IF 0 THEN ;
 
+20 1024 * CONSTANT limit
+
 : process ( a u -- ) 
   `p tag 
-  
-  TYPE ;
+  DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
+  << `pre tag
+  2DUP TYPE
+  >>
+  hrule
+  (( 0 )) tmpnam ASCIIZ> >STR (( 0 )) tmpnam ASCIIZ> >STR 
+  { src dst }
+  \ src STR@ TYPE CR dst STR@ TYPE CR
+  src STR@ OCCUPY
+  dst STR@ src STR@ " ./sql2cpp {s} > {s}" STR@ 2DUP TYPE CR sys
+  dst STR@ FILE 
+  << `pre tag TYPE >>
+  hrule ;
 
 : main ( -- )
   S" Main" <page>
   `content GetParam DUP 0= IF 2DROP S" " render-edit ELSE process THEN
+  \ S" CREATE TABLE x (z INT);" process
 ;
 
 PREVIOUS
@@ -169,7 +184,7 @@ WINAPI: GetEnvironmentStrings KERNEL32.DLL
 
 \ ' TYPE1 TO USER-TYPE
 
-: save ['] index MAINX ! `test.cgi SAVE ; 
-\ save BYE
+: save ['] index MAINX ! `sql.cgi SAVE ; 
+ save BYE
 
 index
