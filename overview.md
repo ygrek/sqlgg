@@ -6,8 +6,8 @@ Problem
 
 Writing database layer code is usually tedious and error-prone, due to the mix of different
 languages. SQL queries constructed dynamically need to bind external data (from application), and
-the resulting rowset must be decomposed into application native data.  Data crossing these
-database-application boundaries is what causes troubles. One can factor out all common database
+the resulting rowset must be decomposed into application native data. Data crossing these
+application-to-database boundaries is what causes troubles. One can factor out all common database
 communication code, hide the database under some application-specific abstraction, but one always
 needs to manully specify correspondence between SQL query binding slots (or resulting rowset
 columns) and code variables. This mapping should be updated manually every time SQL query is
@@ -17,14 +17,16 @@ Solution
 --------
 
 SQL parser and code generator which ensures that application code and database queries are in sync.
-It analyzes SQL query and determines from it the set of input parameters (values for INSERT,
-run-time substitution parameters) and the set of resulting columns (from SELECT). Then it generates
-the C++ code which structures input and output values together and assignes corresponding native data
-types. So basically you provide an SQL query and get a C++ function which takes the set of
-parameters as required to fill slots in a query, combines them with your query and executes it.
-SELECT statements additionally return the collection of structures with fields representing columns
-of resulting rowset. So if you modify the query and forget to update the code -- the compiler will point 
-on errorneous parts.
+It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
+substitution parameters) and the set of resulting columns (for SELECT). Then it generates the C++
+code which structures input and output values together as function parameters and assignes
+corresponding native data types. So basically you provide an SQL query and generator creates a C++
+function which takes the set of typed parameters as required to fill slots in a query. Generated
+code binds provided parameters into query and executes it. SELECT statements additionally return the
+collection of structures with fields representing columns of resulting rowset. The most fruitful
+consequence of such approach is that the C++ compiler itself guarantees that SQL query will have all
+parameters bound with correct types. So if you modify the query and forget to update the code -- the
+compiler will point on errorneous parts.
 
 Example
 -------
