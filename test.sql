@@ -26,6 +26,6 @@ SELECT x,z FROM (SELECT name AS x,
 -- FIXME id is ambigous, should be detected
 CREATE TABLE zuzu AS SELECT test.id,@text || city AS city, name FROM loc JOIN test ON test_id=id;
 
-SELECT name,z FROM (SELECT name,
+SELECT x,z FROM (SELECT name as x,
   city || ' ' || descr as y,
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
