@@ -4,12 +4,6 @@ open Stmt
 open Operators
 open ListMore
 
-type expr_q = [ `Value of Sql.Type.t
-              | `Param of param
-              | `Sub of expr_q list
-              ]
-              deriving (Show)
-
 type expr = [ `Value of Sql.Type.t
             | `Param of param
             | `Sub of expr list
@@ -92,7 +86,7 @@ let get_params e =
   in
   loop [] e >> List.rev
 
-let get_params tables (e:expr) = 
+let get_params tables e = 
   get_params (assign_types (rebuild tables e))
 (*   e >> rebuild tables >> assign_types >> get_params *)
 
