@@ -76,15 +76,13 @@ ALSO XHTML
 : process ( a u -- ) 
   `p tag 
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
-  << `pre tag
-  2DUP TYPE
-  >>
+  << `pre tag 2DUP TYPE >>
   hrule
   (( 0 )) tmpnam ASCIIZ> >STR (( 0 )) tmpnam ASCIIZ> >STR 
   { src dst }
   \ src STR@ TYPE CR dst STR@ TYPE CR
   src STR@ OCCUPY
-  dst STR@ src STR@ " ./sql2cpp {s} > {s}" STR@ 2DUP TYPE CR sys
+  dst STR@ src STR@ " ./sql2cpp {s} > {s}" STR@ sys
   dst STR@ FILE 
   << `pre tag TYPE >>
   hrule ;
