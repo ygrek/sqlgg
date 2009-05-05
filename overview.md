@@ -170,9 +170,9 @@ file and feed it to generator.
 
 This is work in progress and there is plenty of room for improvement. For now the status of this
 project is *works for me* .  It is used for some simple database-access code with
-[sqlite3](http://sqlite.org) engine (using suitable `sqlite3_traits` helper).
+[sqlite3](http://sqlite.org) engine (using suitable [sqlite3_traits](sqlite3_helper.hpp) helper).
 
-Online version will be made available soon.
+Try it [online](sql.cgi).
 
 TODO
 ----

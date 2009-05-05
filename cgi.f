@@ -78,8 +78,10 @@ ALSO XHTML
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
   << `pre tag 2DUP TYPE >>
   hrule
-  (( 0 )) tmpnam ASCIIZ> >STR (( 0 )) tmpnam ASCIIZ> >STR 
-  { src dst }
+  \ (( 0 )) tmpnam ASCIIZ> >STR
+  \	(( 0 )) tmpnam ASCIIZ> >STR
+	(( S" sql" DROP 0x1FF )) mkdir DROP
+	ms@ DUP " sql/{n}.in" SWAP " sql/{n}.out" { src dst }
   \ src STR@ TYPE CR dst STR@ TYPE CR
   src STR@ OCCUPY
   dst STR@ src STR@ " ./sql2cpp {s} > {s}" STR@ sys
@@ -88,7 +90,8 @@ ALSO XHTML
   hrule ;
 
 : main ( -- )
-  S" Main" <page>
+  S" SQL to C++ code generator" 2DUP <page>
+	<< `h1 tag TYPE >>
   `content GetParam DUP 0= IF 2DROP S" " render-edit ELSE process THEN
   \ S" CREATE TABLE x (z INT);" process
 ;
