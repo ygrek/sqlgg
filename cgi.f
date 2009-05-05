@@ -91,7 +91,7 @@ ALSO XHTML
 
 : main ( -- )
   S" SQL to C++ code generator" 2DUP <page>
-	<< `h1 tag TYPE >>
+	<< `h1 tag `/p/sql_to_cpp.html link-text >>
   `content GetParam DUP 0= IF 2DROP S" " render-edit ELSE process THEN
   \ S" CREATE TABLE x (z INT);" process
 ;
