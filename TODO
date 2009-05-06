@@ -8,5 +8,4 @@
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
-* SQL (as understood by sqlite3 at least) is really too permissive, decide what to do
 * type check expressions
