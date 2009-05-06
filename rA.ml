@@ -22,8 +22,8 @@ struct
   let find t name =
     match List.find_all (fun attr -> attr.name = name) t with
     | [x] -> x
-    | [] -> raise (Error (t,"missing attribute " ^ name))
-    | _ -> raise (Error (t,"duplicate attribute " ^ name))
+    | [] -> raise (Error (t,"missing attribute : " ^ name))
+    | _ -> raise (Error (t,"duplicate attribute : " ^ name))
 
   let project names t = List.map (find t) names
 

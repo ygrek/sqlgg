@@ -1,3 +1,4 @@
+* distinguish predicates and expressions (research)
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * resolve conflics in grammar, check precedences

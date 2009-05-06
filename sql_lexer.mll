@@ -65,6 +65,13 @@ let keywords =
    "update",UPDATE;
    "delete",DELETE;
    "from",FROM;
+   "or",OR;
+   "into",INTO;
+   "values",VALUES;
+   "where",WHERE;
+   "from",FROM;
+   "not",NOT;
+   "set",SET;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";];
@@ -111,20 +118,12 @@ ruleMain = parse
   | "--" { store ""; ignore (ruleComment lexbuf); ruleMain lexbuf }
 (*  | '"' { store ""; ruleInQuotes lexbuf } *)
 
-  | "OR" { OR }
-  | "INTO" { INTO }
-  | "VALUES" { VALUES }
-  | "WHERE" { WHERE }
-  | "FROM" { FROM }
-  | "*" { ASTERISK }
-  | "SET" { SET }
-
   | "UNION" (wsp+ "ALL")? | "EXCEPT" | "INTERSECT" { COMPOUND_OP }
 
+  | "*" { ASTERISK }
   | "=" { EQUAL }
   | "!" { EXCL }
   | "~" { TILDE }
-  | "NOT" { NOT }
   | "||" { CONCAT_OP }
   | "+" { PLUS }
   | "-" { MINUS }

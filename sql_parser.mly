@@ -113,8 +113,14 @@ join_source: join_op s=source p=loption(join_args)
       (* FIXME more tables in scope *)
       (fst s,snd s @ Syntax.get_params_l [fst s] p)
     }
-source: IDENT { Tables.get $1,[] }
-      | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
+source1: IDENT { Tables.get $1,[] }
+       | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
+source: src=source1 alias=preceded(AS,IDENT)? 
+    {
+      match alias with
+      | Some name -> let ((n,s),p) = src in ((name,s),p)
+      | None -> src
+    }
 join_op: COMMA | NATURAL? JOIN_TYPE1? JOIN_TYPE2? JOIN { } ;
 join_args: ON e=expr { [e] }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> `Column (name,None)) l }
@@ -143,7 +149,7 @@ column1:
        | ASTERISK { Syntax.All }
        | expr maybe_as { let e = $1 in Syntax.Expr (e,$2) }
 
-maybe_as: option(AS) name=IDENT { Some name }
+maybe_as: AS? name=IDENT { Some name }
         | { None }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
