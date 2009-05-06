@@ -36,6 +36,12 @@
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT
 
+%left AND OR
+%nonassoc EQUAL
+%nonassoc NUM_BINARY_OP
+%left PLUS MINUS
+%left ASTERISK
+
 %type <Syntax.expr> expr
 
 %start <RA.Scheme.t * Stmt.params * Stmt.kind> input
@@ -154,7 +160,8 @@ set_column: name=IDENT EQUAL e=expr { name,e }
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
 expr:
-     expr numeric_bin_op expr { `Func ((Some Int),[$1;$3]) }
+     expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { `Func ((Some Int),[$1;$3]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
 (*     | expr NOT? LIKE_OP expr (*escape?*) { Sub [$1;$4] } *)
 (*     | unary_op expr { $2 } *)
@@ -175,7 +182,8 @@ expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | AND | OR | NUM_BINARY_OP { } 
+numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | NUM_BINARY_OP { } 
+boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }
         | PLUS { }

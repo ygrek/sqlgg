@@ -74,7 +74,7 @@ let assign_types expr =
   in
   typeof expr
 
-let show_e e = Show.show<expr> (e:>expr) >> print_endline
+let show_e e = Show.show<expr_q> (e) >> print_endline
 
 let resolve_types tables expr =
   expr 
