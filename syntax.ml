@@ -3,11 +3,18 @@
 open Stmt
 open Operators
 open ListMore
+open Apply
 
 type expr = [ `Value of Sql.Type.t (** literal value *)
             | `Param of param
             | `Func of Sql.Type.t option * expr list (** return type, parameters *)
             | `Column of string * string option (** name, table *)
+            ]
+            deriving (Show)
+
+type expr_q = [ `Value of Sql.Type.t (** literal value *)
+            | `Param of param
+            | `Func of Sql.Type.t option * expr_q list (** return type, parameters *)
             ]
             deriving (Show)
 
@@ -48,10 +55,15 @@ let assign_types expr =
     | `Func (ret,l) -> 
 (** Assumption: sql functions/operators have type scheme 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
-        let t = match l >> List.map typeof >> List.map snd >> List.filter_valid with
+        let (l,t) = l >> List.map typeof >> List.split in
+        let t = match List.filter_valid t with
         | [] -> None
         | h::t -> if List.for_all ((=) h) t then Some h else None
         in
+(*
+        print_endline (Show.show<expr_q list>(l));
+        print_endline (Show.show<Sql.Type.t option>(t));
+*)
         let assign = function
         | `Param (n,None) -> `Param (n,t)
         | x -> x
@@ -62,8 +74,13 @@ let assign_types expr =
   in
   typeof expr
 
+let show_e e = Show.show<expr> (e:>expr) >> print_endline
+
 let resolve_types tables expr =
-  expr >> resolve_columns tables >> assign_types
+  expr 
+  >> resolve_columns tables 
+(*   >> tee show_e  *)
+  >> assign_types
 
 let get_scheme columns tables =
   let all = tables >> List.map snd >> List.flatten in

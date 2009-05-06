@@ -6,6 +6,7 @@ open Printf
 open Operators
 open ListMore
 open ExtString
+open Apply
 
 module L = List
 module S = String
@@ -33,10 +34,6 @@ let parse_one (stmt,props) =
 let show_one ((s,p),props) =
   RA.Scheme.print s;
   print_endline (Stmt.params_to_string p)
-
-let catch f x = try Some (f x) with _ -> None
-
-let tee f x = f x; x
 
 let parse_sql s =
   s >> statements >> L.map parse_one 
