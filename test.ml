@@ -29,10 +29,10 @@ let test () =
      [];
   tt "SELECT str FROM q WHERE id=?"
      [attr "str" Text]
-     [Next,None];
+     [Next,Some Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM q WHERE id=@id*2) ORDER BY x,x+y LIMIT @lim"
-     [attr "x" Text; attr "z" Text]
-     [Next,None; Named "id", None; Named "lim",Some Int; ]
+     [attr "x" Text; attr "z" Int]
+     [Next,Some Int; Named "id", Some Int; Named "lim",Some Int; ]
 
 let run () =
   let tests = 
