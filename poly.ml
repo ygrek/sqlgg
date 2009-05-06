@@ -1,4 +1,3 @@
-
 type t = [`A of int | `B of string | `Z of t]
 
 let rec use_t = function
@@ -32,5 +31,4 @@ let final x =
 let final x = use_narrow (make_narrow (tee show_t x))
 
 let final x = 
-  use_narrow (tee (fun z -> show_t z) (make_narrow x))
-
+  use_narrow (tee (fun (z:[`A of int| `Z of 'a] as 'a) -> show_t (z:>t)) (make_narrow x))
