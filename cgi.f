@@ -75,24 +75,39 @@ ALSO XHTML
 
 : process ( a u -- ) 
   `p tag 
+  << `h2 tag S" Input" TYPE >>
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
   << `pre tag 2DUP TYPE >>
   hrule
-  \ (( 0 )) tmpnam ASCIIZ> >STR
-  \	(( 0 )) tmpnam ASCIIZ> >STR
 	(( S" sql" DROP 0x1FF )) mkdir DROP
-	ms@ DUP " sql/{n}.in" SWAP " sql/{n}.out" { src dst }
-  \ src STR@ TYPE CR dst STR@ TYPE CR
+	ms@ { tick | src dst err }
+  tick " sql/{n}.in" -> src
+  tick " sql/{n}.out" -> dst
+  tick " sql/{n}.err" -> err
+  \ src STR@ TYPE CR dst STR@ TYPE CR err STR@ TYPE CR
   src STR@ OCCUPY
-  dst STR@ src STR@ " ./sql2cpp {s} > {s}" STR@ sys
-  dst STR@ FILE 
+  err STR@ dst STR@ src STR@ " ./sql2cpp {s} > {s} 2> {s}" STR@ sys
+  dst STR@ FILE
+  << `h2 tag S" Output" TYPE >>
   << `pre tag TYPE >>
-  hrule ;
+  hrule
+  err STR@ FILE DUP 0= IF 2DROP EXIT THEN
+  << `h2 tag S" Errors" TYPE >>
+  << `pre tag TYPE >>
+  hrule
+  ;
+
+: ask-input 
+  << `p tag
+    S" Input SQL statements terminated with semicolon (;) each. " TYPE
+    S" Use ? or @name for binding slots" TYPE
+  >>
+  S" " render-edit ;
 
 : main ( -- )
   S" SQL to C++ code generator" 2DUP <page>
 	<< `h1 tag `/p/sql_to_cpp.html link-text >>
-  `content GetParam DUP 0= IF 2DROP S" " render-edit ELSE process THEN
+  `content GetParam DUP 0= IF 2DROP ask-input ELSE process THEN
   \ S" CREATE TABLE x (z INT);" process
 ;
 
