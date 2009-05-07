@@ -49,6 +49,9 @@ let keywords =
    "integer",T_INTEGER;
    "int",T_INTEGER;
    "blob",T_BLOB;
+(*    CHARACTER, CHARACTER VARYING, BIT, BIT VARYING, NUMERIC, DECIMAL,
+         INTEGER, SMALLINT, FLOAT, REAL, DOUBLE PRECISION, DATE, TIME,
+         TIMESTAMP, and INTERVAL.*)
    "distinct",DISTINCT;
    "all",ALL;
    "order",ORDER;
