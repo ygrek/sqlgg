@@ -118,6 +118,7 @@ let output_scheme_binder index scheme =
   | _ -> Some (output_scheme_binder index scheme)
 
 let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, param_type_to_cpp_string t)
+let params_to_values = List.unique & params_to_values
 let make_const_values = List.map (fun (name,t) -> name, sprintf "%s const&" t)
 
 let output_value_defs vals =
@@ -146,7 +147,7 @@ let output_params_binder index params =
   let values = params_to_values params in
   values >> make_const_values >> output_value_defs;
   empty_line ();
-  output "%s(%s)" name (Cpp.to_string (make_const_values values));
+  output "%s(%s)" name (values >> make_const_values >> Cpp.to_string);
   output_value_inits values;
   open_curly ();
   close_curly "";

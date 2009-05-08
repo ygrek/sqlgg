@@ -195,11 +195,7 @@ expr:
         let l = List.map (fun x -> `Param x) p in
         `Func (None,e1::l)
       }
-    | e1=expr IN table=IDENT 
-    {
-      Tables.check(table);
-      e1
-    }
+    | e1=expr IN table=IDENT { Tables.check(table); e1 }
 (*     | FLOAT { `Value Float } *)
     | TEXT { `Value Text }
     | BLOB { `Value Blob }
