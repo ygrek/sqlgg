@@ -2,17 +2,17 @@
 
  select * 
  from codeTable
- where locat not in (30, 50)
+ where locat not in (@lim1, @lim2)
  and code not in
    (
     select code
     from 
-      (select code, descript     // gets unique code-and-descript combos
+      (select code, descript
        from codeTable
-       where locat not in (30, 50)
+       where locat not in (@lim1, @lim2)
        group by code, descript
       )
     group by code
-    having count(*) > 1     // (error? should be "="?)
+    having count(*) > @x
    )
  order by code, locat;
