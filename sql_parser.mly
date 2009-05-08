@@ -31,14 +31,16 @@
 %token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL 
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
-       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE
+       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE IN GROUP HAVING
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT
 
+%left TEST_NULL
 %left AND OR
 %nonassoc EQUAL
 %nonassoc NUM_BINARY_OP
+%left MATCH
 %left PLUS MINUS
 %left ASTERISK
 
@@ -96,11 +98,15 @@ select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
              w=where?
+             g=loption(group)
+             h=having?
               {
                 let (tbls,p2) = t in
                 let p1 = Syntax.params_of_columns tbls r in
                 let p3 = Syntax.get_params_opt tbls w in
-                (Syntax.get_scheme r tbls, p1 @ p2 @ p3, tbls)
+                let p4 = Syntax.get_params_l tbls g in
+                let p5 = Syntax.get_params_opt tbls h in
+                (Syntax.get_scheme r tbls, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
 table_list: source join_source* 
@@ -143,6 +149,8 @@ order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { 
 order_type: DESC | ASC { }
 
 where: WHERE e=expr { e }
+group: GROUP BY l=separated_nonempty_list(COMMA,expr) { l }
+having: HAVING e=expr { e }
 
 column1:
        | IDENT DOT ASTERISK { Syntax.AllOf $1 }
@@ -165,17 +173,33 @@ set_column: name=IDENT EQUAL e=expr { name,e }
 
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
+mnot(X): NOT x = X | x = X { x }
+
 expr:
      expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
     | expr boolean_bin_op expr %prec AND { `Func ((Some Int),[$1;$3]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
-(*     | expr NOT? LIKE_OP expr (*escape?*) { Sub [$1;$4] } *)
-(*     | unary_op expr { $2 } *)
+    | e1=expr mnot(LIKE_OP) e2=expr (*escape?*) %prec MATCH { `Func (None,[e1;e2]) }
+    | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
     | IDENT { `Column ($1,None) }
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
     | INTEGER { `Value Int }
+    | e1=expr mnot(IN) LPAREN l=separated_nonempty_list(COMMA,expr) RPAREN { `Func (None,e1::l) }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN 
+      { 
+        let (s,p) = select in
+        if (List.length s <> 1) then
+          raise (RA.Scheme.Error (s,"only one column allowed for IN operator"));
+        let l = List.map (fun x -> `Param x) p in
+        `Func (None,e1::l)
+      }
+    | e1=expr IN table=IDENT 
+    {
+      Tables.check(table);
+      e1
+    }
 (*     | FLOAT { `Value Float } *)
     | TEXT { `Value Text }
     | BLOB { `Value Blob }
@@ -195,7 +219,7 @@ unary_op: EXCL { }
         | PLUS { }
         | MINUS { }
         | TILDE { }
-        | NOT { } ;
+        | NOT { }
 
 sql_type: T_INTEGER  { Type.Int }
         | T_BLOB { Type.Blob }

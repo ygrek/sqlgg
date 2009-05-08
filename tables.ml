@@ -14,6 +14,7 @@ let get_from tables name =
 
 let get name = get_from !all name
 let get_scheme name = snd (get name)
+let check name = ignore (get name)
 
 let add v =
   let (name,scheme) = v in
