@@ -1,6 +1,3 @@
-(*
-  $Id$ 
-*)
 
 {
   open Sql_parser
@@ -16,10 +13,10 @@ let error buf callerID =
 
 let advance_line_pos pos = 
   let module L = Lexing in
-  {L.pos_fname=pos.L.pos_fname;
+  {L.pos_fname = pos.L.pos_fname;
    pos_lnum = pos.L.pos_lnum + 1;
-   pos_bol = 0;
-   pos_cnum = pos.L.pos_cnum}
+   pos_bol = pos.L.pos_cnum;
+   pos_cnum = pos.L.pos_cnum;}
 
 let advance_line lexbuf = 
   lexbuf.Lexing.lex_curr_p <- advance_line_pos lexbuf.Lexing.lex_curr_p
@@ -73,8 +70,10 @@ let keywords =
    "values",VALUES;
    "where",WHERE;
    "from",FROM;
-   "not",NOT;
    "set",SET;
+   "in",IN;
+   "group",GROUP;
+   "having",HAVING;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";];
@@ -83,7 +82,7 @@ let keywords =
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer";"cross"];
   all LIKE_OP ["like";"glob";"regexp";"match"];
-  !k 
+  !k
 
 let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords
 
