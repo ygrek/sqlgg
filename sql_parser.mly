@@ -40,7 +40,6 @@
 %left AND OR
 %nonassoc EQUAL
 %nonassoc NUM_BINARY_OP
-%left MATCH
 %left PLUS MINUS
 %left ASTERISK
 
@@ -179,7 +178,8 @@ expr:
      expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
     | expr boolean_bin_op expr %prec AND { `Func ((Some Int),[$1;$3]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
-    | e1=expr mnot(LIKE_OP) e2=expr (*escape?*) %prec MATCH { `Func (None,[e1;e2]) }
+    | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
+      { `Func (None,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
     | IDENT { `Column ($1,None) }
