@@ -86,7 +86,7 @@ ALSO XHTML
   tick " sql/{n}.err" -> err
   \ src STR@ TYPE CR dst STR@ TYPE CR err STR@ TYPE CR
   src STR@ OCCUPY
-  err STR@ dst STR@ src STR@ " ./sql2cpp {s} > {s} 2> {s}" STR@ sys
+  err STR@ dst STR@ src STR@ " ./sqlgg.native {s} > {s} 2> {s}" STR@ sys
   dst STR@ FILE
   << `h2 tag S" Output" TYPE >>
   << `pre tag TYPE >>

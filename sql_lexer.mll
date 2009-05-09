@@ -100,7 +100,7 @@ let wsp = [' ' '\r' '\t']
 rule ruleStatement props = parse
   | ['\n' ' ' '\r' '\t']+ { ruleStatement props lexbuf }
 (* fixme strings *)
-  | "--" wsp* "[sql2cpp]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' 
+  | "--" wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' 
       { 
         ruleStatement (Props.set props n v) lexbuf
       }
