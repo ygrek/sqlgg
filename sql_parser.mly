@@ -160,12 +160,12 @@ maybe_as: AS? name=IDENT { Some name }
         | { None }
 
 column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
-column_def1: IDENT sql_type column_def_extra* { RA.attr $1 $2 } ;
+column_def1: name=IDENT t=sql_type? column_def_extra* { RA.attr name (match t with Some t -> t | None -> Type.Int) }
 column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | NOT NULL { Some Constraint.NotNull }
                 | UNIQUE { Some Constraint.Unique }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
-                | ON CONFLICT CONFLICT_ALGO { None } ;
+                | ON CONFLICT CONFLICT_ALGO { None }
                 | DEFAULT INTEGER { None }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
@@ -217,8 +217,14 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
-sql_type: T_INTEGER  { Type.Int }
-        | T_BLOB { Type.Blob }
-        | T_TEXT { Type.Text } ;
+sql_type_flavor: T_INTEGER  { Type.Int }
+               | T_BLOB { Type.Blob }
+               | T_TEXT { Type.Text }
+
+sql_type: t=sql_type_flavor
+        | t=sql_type_flavor LPAREN INTEGER RPAREN
+        | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
+        { t }
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
+
