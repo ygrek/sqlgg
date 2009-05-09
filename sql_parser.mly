@@ -226,12 +226,10 @@ sql_type_flavor: T_INTEGER  { Type.Int }
                | T_BLOB { Type.Blob }
                | T_TEXT { Type.Text }
 
-sql_type: t=sql_type_flavor { t }
-(*
+sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER RPAREN
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
-*)
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 
