@@ -34,7 +34,7 @@
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE IN GROUP HAVING
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
-%token T_INTEGER T_BLOB T_TEXT
+%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
 
 %left TEST_NULL
 %left AND OR
@@ -225,6 +225,8 @@ unary_op: EXCL { }
 sql_type_flavor: T_INTEGER  { Type.Int }
                | T_BLOB { Type.Blob }
                | T_TEXT { Type.Text }
+               | T_FLOAT { Type.Float }
+               | T_BOOLEAN { Type.Bool }
 
 sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER RPAREN

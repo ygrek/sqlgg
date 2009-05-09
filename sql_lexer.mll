@@ -42,13 +42,23 @@ let keywords =
    "key",KEY;
    "autoincrement",AUTOINCREMENT;
    "default",DEFAULT;
-   "text",T_TEXT;
-   "integer",T_INTEGER;
-   "int",T_INTEGER;
-   "blob",T_BLOB;
-(*    CHARACTER, CHARACTER VARYING, BIT, BIT VARYING, NUMERIC, DECIMAL,
-         INTEGER, SMALLINT, FLOAT, REAL, DOUBLE PRECISION, DATE, TIME,
-         TIMESTAMP, and INTERVAL.*)
+   "text",T_TEXT; (* sqlite specific? *)
+   "blob",T_BLOB; (* same *)
+(* standard built-in types 
+      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT, 
+      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
+      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT, 
+      FLOAT, REAL, DOUBLE PRECISION, 
+      BOOLEAN,
+      DATE, TIME, TIMESTAMP, INTERVAL
+    *)
+   "character",T_TEXT;
+   "char",T_TEXT;
+   "varchar",T_TEXT;
+   "binary",T_BLOB;
+   "float",T_FLOAT;
+   "real",T_FLOAT;
+   "boolean",T_BOOLEAN;
    "distinct",DISTINCT;
    "all",ALL;
    "order",ORDER;
@@ -85,6 +95,7 @@ let keywords =
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer";"cross"];
   all LIKE_OP ["like";"glob";"regexp";"match"];
+  all T_INTEGER ["integer";"int";"smallint";"bigint";"numeric";"decimal";];
   !k
 
 let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords

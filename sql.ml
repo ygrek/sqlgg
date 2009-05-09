@@ -4,7 +4,7 @@ open Printf
 
 module Type =
 struct
-  type t = | Int | Text | Blob 
+  type t = | Int | Text | Blob | Float | Bool
         deriving (Show)
 
   let to_string = Show.show<t>
