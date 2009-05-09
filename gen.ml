@@ -18,7 +18,7 @@ struct
   let inline x = 
     String.concat ", " (List.map (fun (n,t) -> n) x)
 
-  let quote = String.replace_chars (function '\n' -> "\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
+  let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
   let quote s = "\"" ^ quote s ^ "\""
 end
 
