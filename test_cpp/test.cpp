@@ -8,7 +8,7 @@
 
 using namespace std;
 
-typedef sql2cpp<sqlite3_traits> gen;
+typedef sqlgg<sqlite3_traits> gen;
 
 /*
 void to_console(const wchar_t* s)

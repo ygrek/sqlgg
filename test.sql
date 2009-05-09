@@ -1,18 +1,18 @@
--- [sql2cpp] name=create
+-- [sqlgg] name=create
 CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
--- [sql2cpp] name=select_all
+-- [sqlgg] name=select_all
 SELECT * FROM test;
 SELECT name,descr FROM test;
 INSERT INTO test VALUES;
--- [sql2cpp] name=Add
+-- [sqlgg] name=Add
 INSERT INTO test (name,descr) VALUES;
 SELECT * FROM test WHERE name = @name LIMIT @limit;
--- [sql2cpp] name=select_distinct_limit
+-- [sqlgg] name=select_distinct_limit
 SELECT DISTINCT * 
 FROM test ORDER BY id DESC LIMIT ?;
--- [sql2cpp] name=Delete
+-- [sqlgg] name=Delete
 DELETE FROM test WHERE id = ?;
--- [sql2cpp] name=Exaggerate
+-- [sqlgg] name=Exaggerate
 UPDATE test SET descr = @extra || ' ' || descr;
 
 CREATE TABLE loc (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, test_id INTEGER);

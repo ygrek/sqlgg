@@ -4,13 +4,6 @@ open RA
 open Sql.Type
 open Stmt
 
-(*
-CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
--- [sql2cpp] name=select_all
-SELECT * FROM test;
-SELECT name,descr FROM test;
-*)
-
 let tt stmt scheme params =
   let print_scheme = RA.Scheme.to_string in
   let print_params = Stmt.params_to_string in
