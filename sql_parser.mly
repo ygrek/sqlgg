@@ -20,6 +20,15 @@
     in
     (Named name,t)
 
+  (* FIXME order of columns *)
+  (* FIXME explicitly qualified columns in ON clause *)
+  (* FIXME reduce scheme according to NATURAL JOIN or USING *)
+  let do_join (tables,params) ((table1,params1),el) =
+(*     let (name1,scheme1) = table1 in *)
+    let tables = table1::tables in
+    let p = Syntax.get_params_l tables el in
+(*     let scheme = RA.Scheme.cross scheme scheme1 in *)
+    tables,params @ params1 @ p
 %}
 
 %token <int> INTEGER
@@ -35,6 +44,12 @@
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
+
+(*
+%left COMMA_JOIN
+%left JOIN_JOIN
+*)
+(* FIXME precedence of COMMA and JOIN *)
 
 %left TEST_NULL
 %left AND OR
@@ -113,16 +128,12 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
                 (Syntax.get_scheme r tbls, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
-table_list: source join_source* 
-    { 
-      let (s,p) = List.split $2 in 
-      (fst $1::s, List.flatten (snd $1::p))
-    }
-join_source: join_op s=source p=loption(join_args) 
-    { 
-      (* FIXME more tables in scope *)
-      (fst s,snd s @ Syntax.get_params_l [fst s] p)
-    }
+table_list: src=source joins=join_source* 
+  { 
+    let (t,p) = src in 
+    List.fold_left do_join ([t],p) joins 
+  }
+join_source: join_op src=source el=loption(join_args) { src,el }
 source1: IDENT { Tables.get $1,[] }
        | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
 source: src=source1 alias=preceded(AS,IDENT)? 
@@ -131,7 +142,7 @@ source: src=source1 alias=preceded(AS,IDENT)?
       | Some name -> let ((n,s),p) = src in ((name,s),p)
       | None -> src
     }
-join_op: COMMA | NATURAL? JOIN_TYPE1? JOIN_TYPE2? JOIN { } ;
+join_op: COMMA | NATURAL? JOIN_TYPE1? JOIN_TYPE2? JOIN { }
 join_args: ON e=expr { [e] }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> `Column (name,None)) l }
 

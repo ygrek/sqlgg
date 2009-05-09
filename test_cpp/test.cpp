@@ -40,6 +40,10 @@ int main()
 
   nResult = sqlite3_exec(db,"DROP TABLE test;",NULL,NULL,NULL);
   explain("drop",db);
+  nResult = sqlite3_exec(db,"DROP TABLE loc;",NULL,NULL,NULL);
+  explain("drop",db);
+  nResult = sqlite3_exec(db,"DROP TABLE zuzu;",NULL,NULL,NULL);
+  explain("drop",db);
 
   nResult = gen::create(db);
   explain("create",db);
@@ -75,8 +79,8 @@ int main()
   gen::create_loc(db);
   explain("create_loc",db);
 
-  //nResult = gen::create_zuzu(db,"qq");
-  //explain("create_zuzu",db);
+  nResult = gen::create_zuzu(db,"qq");
+  explain("create_zuzu",db);
 
   nResult = sqlite3_close(db);
   cout << "close : " << nResult << endl;

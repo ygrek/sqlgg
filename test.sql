@@ -17,12 +17,12 @@ UPDATE test -- comment
 SET descr = @extra || ' ' || descr;
 
 CREATE TABLE loc (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, test_id INTEGER);
-SELECT test.id FROM test JOIN loc ON test_id = id;
+SELECT test.id FROM test JOIN loc ON test_id = test.id;
 SELECT test.id FROM test WHERE id = ? UNION SELECT test.id FROM test WHERE id = ?;
 SELECT id+test_id AS x,? FROM loc ORDER BY id,?/test_id LIMIT ?,100;
 
--- FIXME id is ambigous, should be detected
-CREATE TABLE zuzu AS SELECT test.id,@text || city AS city, name FROM loc JOIN test ON test_id=id;
+CREATE TABLE zuzu AS 
+  SELECT test.id,@text || city AS city, name FROM loc JOIN test ON test_id=test.id;
 
 SELECT x,z FROM (SELECT name as x,
   city || ' ' || descr as y,
