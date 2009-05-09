@@ -30,7 +30,7 @@
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL 
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
-       EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING COMPOUND_OP AS
+       EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE IN GROUP HAVING
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
@@ -88,7 +88,7 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
               
 columns_list: LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN { cols }
 
-select_stmt: select_core list(preceded(COMPOUND_OP,select_core)) o=loption(order) p4=loption(limit)
+select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
               { let (s1,p1,tbls) = $1 in
                 let (s2,p2) = List.split (List.map (fun (s,p,_) -> s,p) $2) in (* ignore tables in compound statements - they cannot be used in ORDER BY *)
                 let p3 = Syntax.get_params_l tbls o in
@@ -221,3 +221,4 @@ sql_type: T_INTEGER  { Type.Int }
         | T_BLOB { Type.Blob }
         | T_TEXT { Type.Text } ;
 
+compound_op: UNION ALL? | EXCEPT | INTERSECT { }

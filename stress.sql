@@ -27,8 +27,8 @@
 	nvl(lc_aggregate.lc_aggregate,0)		LC_aggregate,	
 	r.r_xoynx_RTG					xoynxS_RATING,	
 	r.r_grrrr_RTG					grrrr_RATING	
- FROM	(SELECT lyy.xx_rec_id,	
-	 	SUM(lyy.l_count)			agreement_aggregate	
+ FROM	(SELECT yy.xx_rec_id,	
+	 	SUM(yy.l_count)			agreement_aggregate	
 	FROM	target			yy,	
 		promise_agreement	zz, 
 		promise_unit		aa,	
@@ -56,10 +56,10 @@
 	rating			r, 
 	promise_unit		cs 
  WHERE 	zz.yy_rec_id = yy.yy_rec_id AND
-	r.yy_rec_id(+) = yy.yy_rec_id AND
+	r.yy_rec_id = yy.yy_rec_id AND
 	xx.ca_rec_id = zz.ca_rec_id AND
-	lc_aggregate.xx_rec_id(+) = xx.xx_rec_id AND
-	agreement_aggegate.xx_rec_id(+)	= xx.xx_rec_id AND
+	lc_aggregate.xx_rec_id = xx.xx_rec_id AND
+	agreement_aggegate.xx_rec_id	= xx.xx_rec_id AND
 	xx.xx_indicator_id = 1 AND
 	zz.ca_indicator_id = 1 AND
 	(	r.r_indicator_id = 1 OR 

@@ -74,6 +74,9 @@ let keywords =
    "in",IN;
    "group",GROUP;
    "having",HAVING;
+   "union",UNION;
+   "except",EXCEPT;
+   "intersect",INTERSECT;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count"];
@@ -117,10 +120,7 @@ ruleMain = parse
   | ','   { COMMA }
   | '.'   { DOT }
 
-  | "--" { store ""; ignore (ruleComment lexbuf); ruleMain lexbuf }
-(*  | '"' { store ""; ruleInQuotes lexbuf } *)
-
-  | "UNION" (wsp+ "ALL")? | "EXCEPT" | "INTERSECT" { COMPOUND_OP }
+  | "--" | "//" { store ""; ignore (ruleComment lexbuf); ruleMain lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
