@@ -1,26 +1,27 @@
 (** command-line *)
 
-open ListMore
-open ExtString
-open Operators
+open Printf
 
-let work filename = 
-  Main.with_file filename Main.parse_sql
+let work = function
+  | "-" -> Main.parse_sql (Std.input_all stdin)
+  | filename -> Main.with_file filename Main.parse_sql
 
-let show_help () =
-  Error.log "SQL to C++ Code Generator Version %s" Config.version;
-  Error.log "";
-  Error.log " Usage: %s file_with_statements.sql" (Filename.basename Sys.executable_name);
-  Error.log "";
-  Error.log " Parse given file (treating content as SQL statements) and emit corresponding code to stdout"
+let usage_msg =
+  let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
+  let s2 = sprintf "Usage: %s <options> <file.sql>\n" (Filename.basename Sys.executable_name) in
+  let s3 = "Options are:" in
+  s1 ^ s2 ^ s3
+
+let show_version () = print_endline Config.version
 
 let main () =
-  match Array.to_list Sys.argv with
-  | _::"-test"::_ -> Test.run ()
-  | _::"-version"::_ -> print_endline Config.version
-  | _::"-"::_ -> Main.parse_sql (Std.input_all stdin)
-  | _::file::_ -> work file
-  | _ -> show_help ()
+  let args = 
+  [
+    "-version", Arg.Unit show_version, " Show version";
+    "-test", Arg.Unit Test.run, " Run unit tests";
+  ]
+  in
+  Arg.parse (Arg.align args) work usage_msg
 
 let _ = Printexc.print main ()
 
