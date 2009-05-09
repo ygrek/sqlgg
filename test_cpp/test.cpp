@@ -75,8 +75,8 @@ int main()
   gen::create_loc(db);
   explain("create_loc",db);
 
-  nResult = gen::create_zuzu(db,"qq");
-  explain("create_zuzu",db);
+  //nResult = gen::create_zuzu(db,"qq");
+  //explain("create_zuzu",db);
 
   nResult = sqlite3_close(db);
   cout << "close : " << nResult << endl;

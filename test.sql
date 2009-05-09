@@ -13,7 +13,8 @@ FROM test ORDER BY id DESC LIMIT ?;
 -- [sqlgg] name=Delete
 DELETE FROM test WHERE id = ?;
 -- [sqlgg] name=Exaggerate
-UPDATE test SET descr = @extra || ' ' || descr;
+UPDATE test -- comment
+SET descr = @extra || ' ' || descr;
 
 CREATE TABLE loc (id INTEGER PRIMARY KEY AUTOINCREMENT, city TEXT, test_id INTEGER);
 SELECT test.id FROM test JOIN loc ON test_id = id;
