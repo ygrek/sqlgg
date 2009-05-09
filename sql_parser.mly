@@ -89,10 +89,15 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
 columns_list: LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN { cols }
 
 select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
-              { let (s1,p1,tbls) = $1 in
-                let (s2,p2) = List.split (List.map (fun (s,p,_) -> s,p) $2) in (* ignore tables in compound statements - they cannot be used in ORDER BY *)
+              { 
+                let (s1,p1,tbls) = $1 in
+                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in 
+                (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let p3 = Syntax.get_params_l tbls o in
-                List.fold_left RA.Scheme.compound s1 s2,(p1@(List.flatten p2)@p3@p4) }
+                let scheme = List.fold_left RA.Scheme.compound s1 s2l in
+                RA.Scheme.check_unique scheme;
+                scheme,(p1@(List.flatten p2l)@p3@p4) 
+              }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list
@@ -221,10 +226,12 @@ sql_type_flavor: T_INTEGER  { Type.Int }
                | T_BLOB { Type.Blob }
                | T_TEXT { Type.Text }
 
-sql_type: t=sql_type_flavor
+sql_type: t=sql_type_flavor { t }
+(*
         | t=sql_type_flavor LPAREN INTEGER RPAREN
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
+*)
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 

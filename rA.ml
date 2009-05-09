@@ -1,7 +1,8 @@
 (*
+ Relational Algebra
 *)
 
-(*open ListMore*)
+open ListMore
 open Printf
 open Operators
 
@@ -24,6 +25,10 @@ struct
     | [x] -> x
     | [] -> raise (Error (t,"missing attribute : " ^ name))
     | _ -> raise (Error (t,"duplicate attribute : " ^ name))
+
+  let check_unique t = 
+    let t1 = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name) t in
+    if (List.length t1 <> List.length t) then raise (Error (t,"duplicate attributes"))
 
   let project names t = List.map (find t) names
 
