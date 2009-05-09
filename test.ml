@@ -11,7 +11,7 @@ let tt stmt scheme params =
     try
       Parser.parse_stmt stmt
     with
-    | _ -> assert_failure "parsing failed"
+    | _ -> assert_failure "tt failed"
   in
   assert_equal ~printer:print_scheme scheme s1;
   assert_equal ~printer:print_params params p1
@@ -26,8 +26,8 @@ let test () =
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+y LIMIT @lim"
      [attr "x" Text; attr "z" Int]
      [Next,Some Int; Named "id", Some Int; Named "lim",Some Int; ];
-  tt "select test.name,other.name from test, test as other where test.id=other.id + @delta"
-     [attr "name" Text; attr "name" Text]
+  tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
+     [attr "name" Text; attr "other_name" Text]
      [Named "delta", Some Int];
   tt "select test.name from test where test.id = @x + ? or test.id = @x - ?"
      [attr "name" Text;]
