@@ -1,5 +1,5 @@
-SQL to C++ code generator
-=========================
+sqlgg: SQL Guided (code) Generator
+==================================
 
 Problem
 -------
@@ -177,11 +177,11 @@ choice. Similarly, queries to the database are expressed in plain SQL, so that t
 easily plugged in any existing project -- just move all SQL statements used in the code to separate
 file and feed it to generator.
 
-Ditinguishing feature of this generator is that it starts off with SQL queries, not object models
+Ditinguishing feature of **sqlgg** is that it starts off with SQL queries, not object models
 or SQL table descriptions.
 
 This is work in progress and there is plenty of room for improvement. For now the status of this
-project is *works for me* .  It is used for some simple database-access code with
+project is **works for me** .  I use it for some simple database-access code with
 [sqlite3](http://sqlite.org) engine (using suitable [sqlite3_traits](sqlite3_helper.hpp) helper).
 This project was started when I found myself editing existing code with tons of C++ wrappers for SQL
 queries, each binding several parameters and decomposing results.
@@ -207,7 +207,7 @@ TODO
 * type check expressions
 
 ----
-2009-05-07
+2009-05-09
 
 <style>
 code { font-family: monospace; }
