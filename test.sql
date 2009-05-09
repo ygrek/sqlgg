@@ -23,8 +23,6 @@ SELECT id+test_id AS x,? FROM loc ORDER BY id,?/test_id LIMIT ?,100;
 -- FIXME id is ambigous, should be detected
 CREATE TABLE zuzu AS SELECT test.id,@text || city AS city, name FROM loc JOIN test ON test_id=id;
 
-select test.name,other.name from test,test as other where test.id=other.id + @delta;
-
 SELECT x,z FROM (SELECT name as x,
   city || ' ' || descr as y,
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
