@@ -20,8 +20,8 @@ type expr_q = [ `Value of Sql.Type.t (** literal value *)
 
 let expr_to_string = Show.show<expr>
 
-type column = 
-  | All 
+type column =
+  | All
   | AllOf of string
   | Expr of expr * string option (** name *)
   deriving (Show)
@@ -52,7 +52,7 @@ let assign_types expr =
   let rec typeof e = (* FIXME simplify *)
     match e with
     | `Value t -> e, Some t
-    | `Func (ret,l) -> 
+    | `Func (ret,l) ->
 (** Assumption: sql functions/operators have type scheme 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
         let (l,t) = l >> List.map typeof >> List.split in
@@ -77,8 +77,8 @@ let assign_types expr =
 let show_e e = Show.show<expr_q> (e) >> print_endline
 
 let resolve_types tables expr =
-  expr 
-  >> resolve_columns tables 
+  expr
+  >> resolve_columns tables
 (*   >> tee show_e  *)
   >> assign_types
 
@@ -88,8 +88,8 @@ let get_scheme columns tables =
   let resolve1 = function
     | All -> all
     | AllOf t -> scheme t
-    | Expr (e,name) -> 
-      let col = begin 
+    | Expr (e,name) ->
+      let col = begin
       match e with
       | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | `Column (name,None) -> RA.Scheme.find all name
@@ -109,16 +109,16 @@ let get_params e =
   in
   loop [] e >> List.rev
 
-let get_params tables e = 
+let get_params tables e =
   e >> resolve_types tables >> fst >> get_params
 
 (*
-let _ = 
+let _ =
   let e = Sub [Value Sql.Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Sql.Type.Int);] in
   e >> get_params >> to_string >> print_endline
 *)
 
-let params_of_column tables = function 
+let params_of_column tables = function
   | All | AllOf _ -> []
   | Expr (e,_) -> get_params tables e
 

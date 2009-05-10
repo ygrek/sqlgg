@@ -1,4 +1,4 @@
-/* 
+/*
   Simple SQL parser
 */
 
@@ -12,7 +12,7 @@
   open Syntax
   open Operators
 
-  let def_param_name name (id,t) = 
+  let def_param_name name (id,t) =
     let name =
     match id with
     | Next | Numbered _ -> name
@@ -37,7 +37,7 @@
 %token <Sql.Type.t option> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
-%token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL 
+%token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE IN GROUP HAVING
@@ -69,7 +69,7 @@ input: statement EOF { $1 } ;
 statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
          | CREATE TABLE name=IDENT AS select=select_stmt
-              { 
+              {
                 let (s,p) = select in
                 Tables.add (name,s);
                 ([],p,Create name)
@@ -77,7 +77,7 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
          | insert_cmd table=IDENT cols=columns_list? VALUES
-              { 
+              {
                 let s = Tables.get_scheme table in
                 let s = match cols with
                   | Some cols -> RA.Scheme.project cols s
@@ -87,7 +87,7 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
                 [],p,Insert table
               }
          | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=where?
-              { 
+              {
                 let t = Tables.get table in
                 let p2 = get_params_opt [t] w in
                 let (cols,exprs) = List.split assignments in
@@ -96,22 +96,22 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
                 [], p1 @ p2, Update table
               }
          | DELETE FROM table=IDENT w=where?
-              { 
+              {
                 let p = get_params_opt [Tables.get table] w in
                 [], p, Delete table
               }
-              
+
 columns_list: LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN { cols }
 
 select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
-              { 
+              {
                 let (s1,p1,tbls) = $1 in
-                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in 
+                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let p3 = Syntax.get_params_l tbls o in
                 let scheme = List.fold_left RA.Scheme.compound s1 s2l in
                 RA.Scheme.check_unique scheme;
-                scheme,(p1@(List.flatten p2l)@p3@p4) 
+                scheme,(p1@(List.flatten p2l)@p3@p4)
               }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
@@ -136,7 +136,7 @@ table_list: src=source joins=join_source*
 join_source: join_op src=source el=loption(join_args) { src,el }
 source1: IDENT { Tables.get $1,[] }
        | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
-source: src=source1 alias=preceded(AS,IDENT)? 
+source: src=source1 alias=preceded(AS,IDENT)?
     {
       match alias with
       | Some name -> let ((n,s),p) = src in ((name,s),p)
@@ -203,8 +203,8 @@ expr:
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
     | INTEGER { `Value Int }
     | e1=expr mnot(IN) LPAREN l=separated_nonempty_list(COMMA,expr) RPAREN { `Func (None,e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN 
-      { 
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
+      {
         let (s,p) = select in
         if (List.length s <> 1) then
           raise (RA.Scheme.Error (s,"only one column allowed for IN operator"));
@@ -224,7 +224,7 @@ expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | NUM_BINARY_OP { } 
+numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | NUM_BINARY_OP { }
 boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }
