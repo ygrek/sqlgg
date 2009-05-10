@@ -28,6 +28,7 @@
     let p = Syntax.get_params_l tables el in
 (*     let scheme = RA.Scheme.cross scheme scheme1 in *)
     tables,params @ params1 @ p
+
 %}
 
 %token <int> INTEGER
@@ -119,31 +120,36 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              g=loption(group)
              h=having?
               {
-                let (tbls,p2) = t in
+                let (tbls,p2,joined_scheme) = Syntax.join t in
                 let p1 = Syntax.params_of_columns tbls r in
                 let p3 = Syntax.get_params_opt tbls w in
                 let p4 = Syntax.get_params_l tbls g in
                 let p5 = Syntax.get_params_opt tbls h in
-                (Syntax.get_scheme r tbls, p1 @ p2 @ p3 @ p4 @ p5, tbls)
+                (Syntax.infer_scheme r tbls joined_scheme, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
-table_list: src=source joins=join_source* 
-  { 
-    let (t,p) = src in 
-    List.fold_left do_join ([t],p) joins
-  }
-join_source: join_op src=source el=loption(join_args) { src,el }
+(* FIXME JOIN and COMMA precedence *)
+table_list: src=source joins=join_source* { (src,joins) }
+
+join_source: NATURAL JOIN_TYPE? JOIN src=source { src,`Natural } 
+           | CROSS JOIN src=source { src,`Cross }
+           | qualified_join src=source cond=join_cond { src,cond }
+
+qualified_join: COMMA | JOIN_TYPE? JOIN { }
+
+join_cond: ON e=expr { `Search e }
+         | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { `Using l }
+         | (* *) { `Default }
+
 source1: IDENT { Tables.get $1,[] }
        | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
+
 source: src=source1 alias=preceded(AS,IDENT)?
     {
       match alias with
       | Some name -> let ((n,s),p) = src in ((name,s),p)
       | None -> src
     }
-join_op: COMMA | NATURAL? JOIN_TYPE1? JOIN_TYPE2? JOIN { }
-join_args: ON e=expr { [e] }
-         | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { List.map (fun name -> `Column (name,None)) l }
 
 insert_cmd: INSERT OR CONFLICT_ALGO INTO | INSERT INTO | REPLACE INTO { }
 

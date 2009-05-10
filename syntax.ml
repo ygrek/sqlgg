@@ -82,23 +82,26 @@ let resolve_types tables expr =
 (*   >> tee show_e  *)
   >> assign_types
 
-let get_scheme columns tables =
+let infer_scheme columns tables joined_scheme =
   let all = tables >> List.map snd >> List.flatten in
   let scheme name = name >> Tables.get_from tables >> snd in
   let resolve1 = function
-    | All -> all
+    | All -> joined_scheme
     | AllOf t -> scheme t
     | Expr (e,name) ->
       let col = begin
       match e with
       | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
-      | `Column (name,None) -> RA.Scheme.find all name
+      | `Column (name,None) -> RA.Scheme.find all name (* FIXME `all` or `joined_scheme` ? *)
       | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
   in
   collect resolve1 columns
+
+let join (src,joins) =
+  (tables,params,
 
 let get_params e =
   let rec loop acc e =
