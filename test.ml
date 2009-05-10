@@ -34,13 +34,18 @@ let test () =
      [Named "x", Some Int; Next, Some Int; Named "x", Some Int; Next, Some Int;];
   ()
 
-(* From MySQL 5.4 refman: 12.2.8.1. JOIN Syntax *)
+(*
+  see MySQL 5.4 refman -- 12.2.8.1. JOIN Syntax
+  see SQL:2008 -- 7.7 <joined table>
+*)
 let test_join_result_cols () =
   Tables.reset ();
+  let ints = List.map (fun name -> attr name Int) in
   tt "CREATE TABLE t1 (i INT, j INT)" [] [];
   tt "CREATE TABLE t2 (k INT, j INT)" [] [];
-  tt ~msg:"natural" "SELECT * FROM t1 NATURAL JOIN t2" [attr "j" Int; attr "i" Int; attr "k" Int;] [];
-  tt ~msg:"using" "SELECT * FROM t1 JOIN t2 USING (j)" [attr "j" Int; attr "i" Int; attr "k" Int;] [];
+  tt "SELECT * FROM t1 JOIN t2 ON i=t1.j" (ints ["i";"j";"k";"j"]) [];
+  tt ~msg:"natural" "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
+  tt ~msg:"using" "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
   ()
 
 let run () =

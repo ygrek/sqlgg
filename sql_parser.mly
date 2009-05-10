@@ -21,11 +21,10 @@
     (Named name,t)
 
   (* FIXME order of columns *)
-  (* FIXME explicitly qualified columns in ON clause *)
   (* FIXME reduce scheme according to NATURAL JOIN or USING *)
   let do_join (tables,params) ((table1,params1),el) =
 (*     let (name1,scheme1) = table1 in *)
-    let tables = table1::tables in
+    let tables = tables @ [table1] in
     let p = Syntax.get_params_l tables el in
 (*     let scheme = RA.Scheme.cross scheme scheme1 in *)
     tables,params @ params1 @ p
@@ -110,7 +109,7 @@ select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let p3 = Syntax.get_params_l tbls o in
                 let scheme = List.fold_left RA.Scheme.compound s1 s2l in
-                RA.Scheme.check_unique scheme;
+(*                 RA.Scheme.check_unique scheme; *)
                 scheme,(p1@(List.flatten p2l)@p3@p4)
               }
 
@@ -131,7 +130,7 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
 table_list: src=source joins=join_source* 
   { 
     let (t,p) = src in 
-    List.fold_left do_join ([t],p) joins 
+    List.fold_left do_join ([t],p) joins
   }
 join_source: join_op src=source el=loption(join_args) { src,el }
 source1: IDENT { Tables.get $1,[] }
