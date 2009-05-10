@@ -48,11 +48,23 @@ let test_join_result_cols () =
   tt ~msg:"using" "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
   ()
 
+let test_misc () =
+  let test =
+    let printer = Show.show<int list> in
+    fun x y z -> assert_equal ~printer (RA.Scheme.natural x y) z
+  in
+  test [1;2;3;4] [1;2;5;6] [1;2;3;4;5;6];
+  test [1;2;3;4] [4;3;2;1] [1;2;3;4];
+  test [1;2;3;4] [5;4;3;7;5;7] [3;4;1;2;5;7;5;7];
+  test [1;2;3;4] [5;2;2] [2;1;3;4;5]; (* ?! *)
+  ()
+
 let run () =
   let tests =
   [
     "simple" >:: test;
     "JOIN result columns" >:: test_join_result_cols;
+    "misc" >:: test_misc;
   ]
   in
   let test_suite = "main" >::: tests in

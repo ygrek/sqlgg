@@ -33,17 +33,22 @@ struct
   let project names t = List.map (find t) names
 
   let rename t before after =
-    List.map (fun attr -> 
+    List.map (fun attr ->
       match attr.name with
       | x when x = before -> { attr with name=after }
       | _ -> attr ) t
-    
+
   let cross t1 t2 = t1 @ t2
 
-  let compound t1 t2 = 
+  let natural t1 t2 =
+    let (common,t1only) = List.partition (fun x -> List.mem x t2) t1 in
+    let t2only = List.filter (fun x -> not (List.mem x common)) t2 in
+    common @ t1only @ t2only
+
+  let compound t1 t2 =
     if t1 <> t2 then
-      raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2)))) 
-    else 
+      raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2))))
+    else
       t1
 
   let to_string x = Show.show<t>(x)
