@@ -6,10 +6,10 @@ type table = RA.table
 
 let all : table list ref = ref []
 
-(** @raise Error when no such table *) 
-let get_from tables name = 
-  try 
-    List.find (fun (n,_) -> n = name) tables 
+(** @raise Error when no such table *)
+let get_from tables name =
+  try
+    List.find (fun (n,_) -> n = name) tables
   with Not_found -> failwith (sprintf "no such table %s" name)
 
 let get name = get_from !all name
@@ -23,3 +23,5 @@ let add v =
   | _ -> failwith (sprintf "table %s already exists" name)
 
 let print () = List.iter RA.print_table !all
+
+let reset () = all := []

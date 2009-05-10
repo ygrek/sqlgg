@@ -4,7 +4,7 @@ open RA
 open Sql.Type
 open Stmt
 
-let tt stmt scheme params =
+let tt ?msg stmt scheme params =
   let print_scheme = RA.Scheme.to_string in
   let print_params = Stmt.params_to_string in
   let (s1,p1,_) =
@@ -13,9 +13,9 @@ let tt stmt scheme params =
     with
     | _ -> assert_failure "tt failed"
   in
-  assert_equal ~printer:print_scheme scheme s1;
-  assert_equal ~printer:print_params params p1
-      
+  assert_equal ?msg ~printer:print_scheme scheme s1;
+  assert_equal ?msg ~printer:print_params params p1
+
 let test () =
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)"
      []
@@ -34,10 +34,20 @@ let test () =
      [Named "x", Some Int; Next, Some Int; Named "x", Some Int; Next, Some Int;];
   ()
 
+(* From MySQL 5.4 refman: 12.2.8.1. JOIN Syntax *)
+let test_join_result_cols () =
+  Tables.reset ();
+  tt "CREATE TABLE t1 (i INT, j INT)" [] [];
+  tt "CREATE TABLE t2 (k INT, j INT)" [] [];
+  tt ~msg:"natural" "SELECT * FROM t1 NATURAL JOIN t2" [attr "j" Int; attr "i" Int; attr "k" Int;] [];
+  tt ~msg:"using" "SELECT * FROM t1 JOIN t2 USING (j)" [attr "j" Int; attr "i" Int; attr "k" Int;] [];
+  ()
+
 let run () =
-  let tests = 
+  let tests =
   [
-    "test" >:: test ;
+    "simple" >:: test;
+    "JOIN result columns" >:: test_join_result_cols;
   ]
   in
   let test_suite = "main" >::: tests in
