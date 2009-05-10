@@ -87,13 +87,14 @@ let keywords =
    "union",UNION;
    "except",EXCEPT;
    "intersect",INTERSECT;
+   "cross",CROSS;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count"];
   all (FUNCTION (Some T.Text)) ["concat";];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback";];
   all JOIN_TYPE1 ["left";"right";"full"];
-  all JOIN_TYPE2 ["inner";"outer";"cross"];
+  all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["like";"glob";"regexp";"match"];
   all T_INTEGER ["integer";"int";"smallint";"bigint";"numeric";"decimal";];
   !k

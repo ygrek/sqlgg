@@ -20,15 +20,6 @@
     in
     (Named name,t)
 
-  (* FIXME order of columns *)
-  (* FIXME reduce scheme according to NATURAL JOIN or USING *)
-  let do_join (tables,params) ((table1,params1),el) =
-(*     let (name1,scheme1) = table1 in *)
-    let tables = tables @ [table1] in
-    let p = Syntax.get_params_l tables el in
-(*     let scheme = RA.Scheme.cross scheme scheme1 in *)
-    tables,params @ params1 @ p
-
 %}
 
 %token <int> INTEGER
@@ -40,7 +31,7 @@
 %token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
-       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL REPLACE IN GROUP HAVING
+       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
 %token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
@@ -128,14 +119,13 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
                 (Syntax.infer_scheme r tbls joined_scheme, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
-(* FIXME JOIN and COMMA precedence *)
 table_list: src=source joins=join_source* { (src,joins) }
 
-join_source: NATURAL JOIN_TYPE? JOIN src=source { src,`Natural } 
+join_source: NATURAL maybe_join_type JOIN src=source { src,`Natural }
            | CROSS JOIN src=source { src,`Cross }
            | qualified_join src=source cond=join_cond { src,cond }
 
-qualified_join: COMMA | JOIN_TYPE? JOIN { }
+qualified_join: COMMA | maybe_join_type JOIN { }
 
 join_cond: ON e=expr { `Search e }
          | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { `Using l }
@@ -251,3 +241,4 @@ sql_type: t=sql_type_flavor
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 
+maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }

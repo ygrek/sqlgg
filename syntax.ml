@@ -100,9 +100,6 @@ let infer_scheme columns tables joined_scheme =
   in
   collect resolve1 columns
 
-let join (src,joins) =
-  (tables,params,
-
 let get_params e =
   let rec loop acc e =
     match e with
@@ -132,4 +129,22 @@ let get_params_opt tables = function
   | None -> []
 
 let get_params_l tables l = collect (get_params tables) l
+
+(* FIXME order of columns *)
+let do_join (tables,params) ((table1,params1),kind) =
+(*     let (name1,scheme1) = table1 in *)
+  let tables = tables @ [table1] in
+  let p = match kind with
+  | `Cross -> []
+  | `Default -> []
+  | `Natural -> []
+  | `Using l -> []
+  | `Search e -> get_params tables e
+  in
+  tables,params @ params1 @ p
+
+let join ((t0,p0),joins) =
+  let (tables,params) = List.fold_left do_join ([t0],p0) joins in
+  let joined_scheme = tables >> List.map snd >> List.flatten in
+  (tables,params,joined_scheme)
 
