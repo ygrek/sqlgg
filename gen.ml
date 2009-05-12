@@ -208,11 +208,14 @@ let generate_code index scheme params kind props =
 
 let generate_code index stmt =
   let ((scheme,params,kind),props) = stmt in
-  begin match Props.get props "sql" with
-  | Some s -> comment "%s" s
-  | None -> ()
-  end;
-  generate_code index scheme params kind props
+  let sql = Props.get props "sql" >> Option.default "" in
+  comment "%s" sql;
+  if not (RA.Scheme.is_unique scheme) then
+    Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql
+  else
+  begin
+    generate_code index scheme params kind props
+  end
 
 let process stmts =
   generate_header ();
