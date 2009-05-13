@@ -23,7 +23,7 @@ let test () =
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
      [Next,Some Int];
-  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+y LIMIT @lim"
+  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr "x" Text; attr "z" Int]
      [Next,Some Int; Named "id", Some Int; Named "lim",Some Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
