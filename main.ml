@@ -27,7 +27,7 @@ let parse_one (stmt,props) =
   with
   | exn ->
     begin
-      prerr_endline (Printexc.to_string exn);
+      Error.log "==> %s" stmt;
       None
     end
 
