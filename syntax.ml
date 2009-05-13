@@ -139,7 +139,7 @@ let do_join (tables,params,scheme) ((table1,params1),kind) =
   | `Cross
   | `Default -> RA.Scheme.cross scheme scheme1
   | `Natural -> RA.Scheme.natural scheme scheme1
-  | `Using l -> RA.Scheme.cross scheme scheme1
+  | `Using l -> RA.Scheme.join_using l scheme scheme1
   | `Search e -> begin p := get_params tables e; RA.Scheme.cross scheme scheme1 end
   in
   tables,params @ params1 @ !p,scheme

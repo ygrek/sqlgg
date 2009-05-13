@@ -42,11 +42,26 @@ struct
 
   let cross t1 t2 = t1 @ t2
 
+  (** [contains t attr] tests whether schema [t] contains attribute [attr] *)
+  let contains t attr = find t attr.name = attr
+
+  let check_contains t attr =
+    if not (contains t attr) then
+      raise (Error (t,"type mismatch for attribute " ^ attr.name))
+
+  let sub l a = List.filter (fun x -> not (List.mem x a)) l
+
   let natural t1 t2 =
     let (common,t1only) = List.partition (fun x -> List.mem x t2) t1 in
-    let t2only = List.filter (fun x -> not (List.mem x common)) t2 in
+    let t2only = sub t2 common in
     common @ t1only @ t2only
 
+  let join_using l t1 t2 =
+    let common = List.map (find t1) l in
+    List.iter (check_contains t2) common;
+    common @ sub t1 common @ sub t2 common
+
+  (* FIXME? should be less strict -- check only types *)
   let compound t1 t2 =
     if t1 <> t2 then
       raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2))))
@@ -56,10 +71,6 @@ struct
   let to_string x = Show.show<t>(x)
   let print x = print_endline (to_string x)
 
-(*
-  let of_table t =
-    List.map (fun col -> {Attr.name = None; orig = Some (col,t); domain = col.Col.sqltype}) t.Table.cols
-*)
 end
 
 type table = string * Scheme.t deriving (Show)
