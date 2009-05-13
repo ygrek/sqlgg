@@ -33,14 +33,13 @@ let collect f l = List.flatten (List.map f l)
 let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
 
 (** replace every Column with Value of corresponding type *)
-let resolve_columns tables expr =
-  let all = tables >> List.map snd >> List.flatten in
+let resolve_columns tables joined_scheme expr =
   let scheme name = name >> Tables.get_from tables >> snd in
   let rec each e =
     match e with
     | `Value x -> `Value x
     | `Column (name,x) ->
-      let attr = RA.Scheme.find (Option.map_default scheme all x) name in
+      let attr = RA.Scheme.find (Option.map_default scheme joined_scheme x) name in
       `Value attr.RA.domain
     | `Param x -> `Param x
     | `Func (r,l) -> `Func (r,(List.map each l))
@@ -53,7 +52,7 @@ let assign_types expr =
     match e with
     | `Value t -> e, Some t
     | `Func (ret,l) ->
-(** Assumption: sql functions/operators have type scheme 'a -> 'a -> 'b
+(** Assumption: sql functions/operators have type scheme 'a -> ... -> 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
         let (l,t) = l >> List.map typeof >> List.split in
         let t = match List.filter_valid t with
@@ -76,9 +75,9 @@ let assign_types expr =
 
 let show_e e = Show.show<expr_q> (e) >> print_endline
 
-let resolve_types tables expr =
+let resolve_types tables joined_scheme expr =
   expr
-  >> resolve_columns tables
+  >> resolve_columns tables joined_scheme
 (*   >> tee show_e  *)
   >> assign_types
 
@@ -93,7 +92,7 @@ let infer_scheme columns tables joined_scheme =
       match e with
       | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
       | `Column (name,None) -> RA.Scheme.find joined_scheme name
-      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables e >> snd))
+      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables joined_scheme e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
@@ -109,8 +108,8 @@ let get_params e =
   in
   loop [] e >> List.rev
 
-let get_params tables e =
-  e >> resolve_types tables >> fst >> get_params
+let get_params tables joined_scheme e =
+  e >> resolve_types tables joined_scheme >> fst >> get_params
 
 (*
 let _ =
@@ -118,19 +117,18 @@ let _ =
   e >> get_params >> to_string >> print_endline
 *)
 
-let params_of_column tables = function
+let params_of_column tables j_s = function
   | All | AllOf _ -> []
-  | Expr (e,_) -> get_params tables e
+  | Expr (e,_) -> get_params tables j_s e
 
-let params_of_columns tables = collect (params_of_column tables)
+let params_of_columns tables j_s = collect (params_of_column tables j_s)
 
-let get_params_opt tables = function
-  | Some x -> get_params tables x
+let get_params_opt tables j_s = function
+  | Some x -> get_params tables j_s x
   | None -> []
 
-let get_params_l tables l = collect (get_params tables) l
+let get_params_l tables j_s l = collect (get_params tables j_s) l
 
-(* FIXME order of columns *)
 let do_join (tables,params,scheme) ((table1,params1),kind) =
   let (_,scheme1) = table1 in
   let tables = tables @ [table1] in
@@ -140,7 +138,7 @@ let do_join (tables,params,scheme) ((table1,params1),kind) =
   | `Default -> RA.Scheme.cross scheme scheme1
   | `Natural -> RA.Scheme.natural scheme scheme1
   | `Using l -> RA.Scheme.join_using l scheme scheme1
-  | `Search e -> begin p := get_params tables e; RA.Scheme.cross scheme scheme1 end
+  | `Search e -> begin p := get_params tables scheme e; RA.Scheme.cross scheme scheme1 end
   in
   tables,params @ params1 @ !p,scheme
 

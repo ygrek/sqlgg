@@ -80,15 +80,16 @@ statement: CREATE TABLE name=IDENT LPAREN scheme=column_defs RPAREN
          | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=where?
               {
                 let t = Tables.get table in
-                let p2 = get_params_opt [t] w in
+                let p2 = get_params_opt [t] (snd t) w in
                 let (cols,exprs) = List.split assignments in
                 let _ = RA.Scheme.project cols (snd t) in (* validates columns *)
-                let p1 = Syntax.get_params_l [t] exprs in
+                let p1 = Syntax.get_params_l [t] (snd t) exprs in
                 [], p1 @ p2, Update table
               }
          | DELETE FROM table=IDENT w=where?
               {
-                let p = get_params_opt [Tables.get table] w in
+                let t = Tables.get table in
+                let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
 
@@ -99,8 +100,8 @@ select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order
                 let (s1,p1,tbls) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-                let p3 = Syntax.get_params_l tbls o in
                 let scheme = List.fold_left RA.Scheme.compound s1 s2l in
+                let p3 = Syntax.get_params_l tbls scheme o in
 (*                 RA.Scheme.check_unique scheme; *)
                 scheme,(p1@(List.flatten p2l)@p3@p4)
               }
@@ -112,10 +113,10 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              h=having?
               {
                 let (tbls,p2,joined_scheme) = Syntax.join t in
-                let p1 = Syntax.params_of_columns tbls r in
-                let p3 = Syntax.get_params_opt tbls w in
-                let p4 = Syntax.get_params_l tbls g in
-                let p5 = Syntax.get_params_opt tbls h in
+                let p1 = Syntax.params_of_columns tbls joined_scheme r in
+                let p3 = Syntax.get_params_opt tbls joined_scheme w in
+                let p4 = Syntax.get_params_l tbls joined_scheme g in
+                let p5 = Syntax.get_params_opt tbls joined_scheme h in
                 (Syntax.infer_scheme r tbls joined_scheme, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
