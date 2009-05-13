@@ -83,7 +83,7 @@ let resolve_types tables expr =
   >> assign_types
 
 let infer_scheme columns tables joined_scheme =
-  let all = tables >> List.map snd >> List.flatten in
+(*   let all = tables >> List.map snd >> List.flatten in *)
   let scheme name = name >> Tables.get_from tables >> snd in
   let resolve1 = function
     | All -> joined_scheme
@@ -92,7 +92,7 @@ let infer_scheme columns tables joined_scheme =
       let col = begin
       match e with
       | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
-      | `Column (name,None) -> RA.Scheme.find all name (* FIXME `all` or `joined_scheme` ? *)
+      | `Column (name,None) -> RA.Scheme.find joined_scheme name
       | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in

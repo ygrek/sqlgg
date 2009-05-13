@@ -44,8 +44,18 @@ let test_join_result_cols () =
   tt "CREATE TABLE t1 (i INT, j INT)" [] [];
   tt "CREATE TABLE t2 (k INT, j INT)" [] [];
   tt "SELECT * FROM t1 JOIN t2 ON i=t1.j" (ints ["i";"j";"k";"j"]) [];
-  tt ~msg:"natural" "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
-  tt ~msg:"using" "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
+  tt ~msg:"NATURAL JOIN" 
+    "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
+  tt ~msg:"JOIN USING" 
+    "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
+  tt ~msg:"NATURAL JOIN with common column in WHERE"
+    "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x" 
+    (ints ["j";"i";"k"]) 
+    [Named "x",Some Int];
+  tt ~msg:"NATURAL JOIN with common column qualified in WHERE"
+    "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x" 
+    (ints ["j";"i";"k"]) 
+    [Named "x",Some Int];
   ()
 
 let test_misc () =
