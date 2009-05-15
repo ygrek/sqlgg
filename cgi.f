@@ -16,10 +16,11 @@ REQUIRE NUMBER ~ygrek/lib/parse.f
 REQUIRE DateTime>PAD ~ygrek/lib/spec/unixdate.f
 REQUIRE FileLines=> ~ygrek/lib/filelines.f
 REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
+REQUIRE BACKSTRFREE ~ygrek/lib/backstr.f
 \ REQUIRE CREATE-ANON-PIPE ~ygrek/lib/sys/pipe.f
 
 : (sys) ( az -- x )
-  (()) fork ?DUP 
+  (()) fork ?DUP
   IF
     NIP
     1 <( 0 0 )) waitpid
@@ -30,11 +31,6 @@ REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
   THEN ;
 
 : sys ( a u -- ) DROP (sys) DROP ;
-
-: BACKSTRFREE ( s --> s \ <-- ) PRO BACK STRFREE TRACKING RESTB CONT ;
-: SEVALUATE BACKSTRFREE STR@ EVALUATE ;
-\ append s1 to s
-: SAPPEND ( s s1 -- s' ) OVER S+ ;
 
 ALSO XMLSAFE
 ALSO XHTML
@@ -59,6 +55,13 @@ ALSO XHTML
 : render-edit ( a u -- )
   \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
   %[ `POST `method $$ S" " `action $$ ]% `form atag
+  <<
+  `div tag
+    S" Generate " TYPE %[ `gen `name $$ ]% `select atag
+    << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
+    << %[ `cxx `value $$ `true `selected $$ ]% `option atag `C++ TYPE >>
+  >>
+
   `div tag
 
   <<
@@ -73,20 +76,21 @@ ALSO XHTML
 
 20 1024 * CONSTANT limit
 
-: process ( a u -- ) 
-  `p tag 
+: process ( a u -- )
+  `p tag
   << `h2 tag S" Input" TYPE >>
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
   << `pre tag 2DUP TYPE >>
   hrule
 	(( S" sql" DROP 0x1FF )) mkdir DROP
-	ms@ { tick | src dst err }
+	ms@ { tick | src dst err gen }
+  `gen GetParam S" caml" CEQUAL IF S" caml" ELSE S" cxx" THEN >STR TO gen
   tick " sql/{n}.in" -> src
   tick " sql/{n}.out" -> dst
   tick " sql/{n}.err" -> err
   \ src STR@ TYPE CR dst STR@ TYPE CR err STR@ TYPE CR
   src STR@ OCCUPY
-  err STR@ dst STR@ src STR@ " ./sqlgg.native {s} > {s} 2> {s}" STR@ sys
+  err STR@ dst STR@ src STR@ gen STR@ " ./sqlgg.native -gen {s} {s} > {s} 2> {s}" STR@ sys
   dst STR@ FILE
   << `h2 tag S" Output" TYPE >>
   << `pre tag TYPE >>
