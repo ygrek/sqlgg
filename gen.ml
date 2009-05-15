@@ -7,7 +7,7 @@ open ExtString
 open Operators
 open Stmt
 
-module Cpp =
+module Cxx =
 struct
   type value = string * string
   type t = value list
@@ -147,7 +147,7 @@ let output_params_binder index params =
   let values = params_to_values params in
   values >> make_const_values >> output_value_defs;
   empty_line ();
-  output "%s(%s)" name (values >> make_const_values >> Cpp.to_string);
+  output "%s(%s)" name (values >> make_const_values >> Cxx.to_string);
   output_value_inits values;
   open_curly ();
   close_curly "";
@@ -184,7 +184,7 @@ let generate_code index scheme params kind props =
    if (Option.is_some scheme_binder_name) then output "template<class T>";
    let values = params_to_values params in
    let result = match scheme_binder_name with None -> [] | Some _ -> ["result","T&"] in
-   let all_params = Cpp.to_string
+   let all_params = Cxx.to_string
      (["db","typename Traits::connection"] @ result @ (make_const_values values)) 
    in
    let name = choose_name props kind index in
@@ -194,8 +194,8 @@ let generate_code index scheme params kind props =
              | Insert _ -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
              | Select | Update _ | Delete _ | Create _ -> sql
    in
-   let sql = Cpp.quote sql in
-   let inline_params = Cpp.inline (make_const_values values) in
+   let sql = Cxx.quote sql in
+   let inline_params = Cxx.inline (make_const_values values) in
    output "static bool %s(%s)" name all_params;
    open_curly ();
    begin match scheme_binder_name with
