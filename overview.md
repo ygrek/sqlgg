@@ -9,9 +9,9 @@ languages. SQL queries constructed dynamically need to bind external data (from 
 the resulting rowset must be decomposed into application native data. Data crossing these
 application-to-database boundaries is what causes troubles. One can factor out all common database
 communication code, hide the database under some application-specific abstraction, but one always
-needs to manully specify correspondence between SQL query binding slots (or resulting rowset
+needs to manually specify correspondence between SQL query binding slots (or resulting rowset
 columns) and code variables. This mapping should be updated manually every time SQL query is
-modified. 
+modified.
 
 Solution
 --------
@@ -19,14 +19,14 @@ Solution
 SQL parser and code generator which ensures that application code and database queries are in sync.
 It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
 substitution parameters) and the set of resulting columns (for SELECT). Then it generates the C++
-code which structures input and output values together as function parameters and assignes
+code which structures input and output values together as function parameters and assigns
 corresponding native data types. So basically you provide an SQL query and generator creates a C++
 function which takes the set of typed parameters as required to fill slots in a query. Generated
 code binds provided parameters into query and executes it. SELECT statements additionally return the
 collection of structures with fields representing columns of resulting rowset. The most fruitful
 consequence of such approach is that the C++ compiler itself guarantees that SQL query will have all
 parameters bound with correct types. So if you modify the query and forget to update the code -- the
-compiler will point on errorneous parts.
+compiler will point on erroneous parts.
 
 Example
 -------
@@ -165,19 +165,19 @@ Things to note above:
     reasonable assumptions.
 5. Statement of arbitrary depth across many tables should be supported.
 6. Statements are checked for correctness as far as generator is concerned, so it will detect
-		syntax errors, non-existant columns in expressions, mismatched rowsets in compound statements,
-		ambigous column names etc.
+		syntax errors, non-existent columns in expressions, mismatched columns in compound statements,
+		ambiguous column names etc.
 
 Details
 -------
 
 The idea is that the generator should take care only of semantic binding between SQL and code sides,
-being as unobtrusive as possible. So the choice of the specific database and API is a programmer's 
+being as unobtrusive as possible. So the choice of the specific database and API is a programmer's
 choice. Similarly, queries to the database are expressed in plain SQL, so that the generator can be
 easily plugged in any existing project -- just move all SQL statements used in the code to separate
 file and feed it to generator.
 
-Ditinguishing feature of **sqlgg** is that it starts off with SQL queries, not object models
+Distinguishing feature of **sqlgg** is that it starts off with SQL queries, not object models
 or SQL table descriptions.
 
 This is work in progress and there is plenty of room for improvement. For now the status of this
@@ -197,8 +197,8 @@ TODO
 * distinguish predicates and expressions (research)
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
-* resolve conflics in grammar, check precedences
-* type-inferrer is too primitive
+* resolve conflicts in grammar, check precedences
+* type-inference is too primitive
 * detect statements on single tables and group the corresponding generated code in one class
 * check names (functions and bindings) for uniqueness
 * support/test other SQL engines
