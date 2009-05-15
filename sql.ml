@@ -1,6 +1,4 @@
-(* $Id$ *)
-
-open Printf
+(** *)
 
 module Type =
 struct
@@ -8,8 +6,6 @@ struct
         deriving (Show)
 
   let to_string = Show.show<t>
-(*   let to_string = function | Int -> "Int" | Text -> "Text" | Blob -> "Blob" *)
-  let to_cpp_string x = "typename Traits::" ^ (to_string x)
 end
 
 module Constraint =
