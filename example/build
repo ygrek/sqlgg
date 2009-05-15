@@ -2,4 +2,4 @@
 g++ -g -o test_cxx test_cxx.cpp -lsqlite3
 
 ../sqlgg.byte -gen caml ../test.sql > test_caml_gen.ml
-ocamlc -g -w As -o test_caml -I +sqlite3 sqlite3.cma test_caml.ml 
+ocamlc -w Ase -g -o test_caml -I .. -I +sqlite3 sqlite3.cma ../sqlgg_sqlite3.ml ../sqlgg_traits.ml test_caml_gen.ml test_caml.ml 

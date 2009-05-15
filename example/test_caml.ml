@@ -2,7 +2,7 @@
 open Printf
 open Sqlite3
 
-(* module G = Sqlgg(Sqlgg_sqlite3) *)
+module G = Test_caml_gen.Sqlgg(Sqlgg_sqlite3)
 
 let explain msg db = printf "%s : %s\n" msg (errmsg db)
 
@@ -17,7 +17,6 @@ let main () =
   exec db "DROP TABLE zuzu;";
   explain "drop" db;
 
-(*
   G.create db;
   explain "create" db;
 
@@ -33,7 +32,7 @@ let main () =
   G.exaggerate db "really";
   explain "update" db;
 
-  G.select_all db (fun id name descr -> printf "%u) %s is %s\n" id name descr);
+  G.select_all db (fun id name descr -> printf "%Lu) %s is %s\n" id name descr);
   explain "select" db;
 
   G.create_loc db;
@@ -41,7 +40,6 @@ let main () =
 
   G.create_zuzu db "qq";
   explain "create_zuzu" db;
-*)
 
   let ok = db_close db in
   printf "close: %B\n" ok;

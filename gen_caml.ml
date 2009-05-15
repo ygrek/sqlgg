@@ -35,10 +35,10 @@ let param_type_to_string t = Option.map_default Type.to_string "Any" t
 
 let set_param index param =
   let (id,t) = param in
-  output "T.set_param_%s stmt %s %u;"
+  output "T.set_param_%s stmt %u %s;"
     (param_type_to_string t)
-    (param_name_to_string id index)
     index
+    (param_name_to_string id index)
 
 let output_scheme_binder index scheme =
   let name = "invoke_callback" in
@@ -93,7 +93,7 @@ let generate_code index scheme params kind props =
   empty_line ()
 
 let start_output () =
-  output "module Sqlgg (T : Sqlgg_traits) = struct";
+  output "module Sqlgg (T : Sqlgg_traits.M) = struct";
   empty_line ();
   inc_indent ()
 
