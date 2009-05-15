@@ -148,13 +148,7 @@ let generate_code index scheme params kind props =
      (["db","typename Traits::connection"] @ result @ (make_const_values values)) 
    in
    let name = choose_name props kind index in
-   let sql = Props.get props "sql" >> Option.get in
-   (* fill VALUES *)
-   let sql = match kind with
-             | Insert _ -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
-             | Select | Update _ | Delete _ | Create _ -> sql
-   in
-   let sql = quote sql in
+   let sql = quote (get_sql props kind params) in
    let inline_params =Values.inline (make_const_values values) in
    output "static bool %s(%s)" name all_params;
    open_curly ();

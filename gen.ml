@@ -43,6 +43,13 @@ let choose_name props kind index =
   in
   make_name props name
 
+let get_sql props kind params =
+  let sql = Props.get props "sql" >> Option.get in
+  (* fill VALUES *)
+  match kind with
+  | Insert _ -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
+  | Select | Update _ | Delete _ | Create _ -> sql
+
 module type Lang = sig
   val generate_code : int -> RA.Scheme.t -> Stmt.params -> Stmt.kind -> Props.t -> unit
   val start_output : unit -> unit
