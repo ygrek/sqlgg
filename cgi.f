@@ -54,22 +54,25 @@ ALSO XHTML
 
 : render-edit ( a u -- )
   \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
-  %[ `POST `method $$ S" " `action $$ ]% `form atag
+  %[ `post `method $$ S" " `action $$ ]% `form atag
   <<
-  `div tag
-    S" Generate " TYPE %[ `gen `name $$ ]% `select atag
-    << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
-    << %[ `cxx `value $$ `true `selected $$ ]% `option atag `C++ TYPE >>
+   `div tag
+
+   %[ `content `name $$ `25 `rows $$ `80 `cols $$ ]% `textarea atag
+   ( a u ) TYPE
   >>
 
-  `div tag
-
   <<
-    %[ `content `name $$ `25 `rows $$ `80 `cols $$ ]% `textarea atag
-    ( a u ) TYPE
-  >>
+   `div tag
+   CR
+   <<
+   %[ `gen `name $$ ]% `select atag
+   << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
+   << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
+   >>
 
-  `save `button `submit input
+   S" generate code " `button `submit input
+  >>
 ;
 
 : GetParamInt ( `str -- n ) GetParam NUMBER NOT IF 0 THEN ;
@@ -78,6 +81,7 @@ ALSO XHTML
 
 : process ( a u -- )
   `p tag
+  hrule
   << `h2 tag S" Input" TYPE >>
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
   << `pre tag 2DUP TYPE >>
@@ -101,7 +105,7 @@ ALSO XHTML
   hrule
   ;
 
-: ask-input 
+: ask-input
   << `p tag
     S" Input SQL statements terminated with semicolon (;) each. " TYPE
     S" Use ? or @name for binding slots" TYPE
@@ -109,7 +113,7 @@ ALSO XHTML
   S" " render-edit ;
 
 : main ( -- )
-  S" SQL to C++ code generator" 2DUP <page>
+  S" SQL Guided (code) generator" 2DUP <page>
 	<< `h1 tag `/p/sqlgg.html link-text >>
   `content GetParam DUP 0= IF 2DROP ask-input ELSE process THEN
   \ S" CREATE TABLE x (z INT);" process
