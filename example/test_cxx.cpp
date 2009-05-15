@@ -1,7 +1,7 @@
 //
 
 #include "../sqlite3_helper.hpp"
-#include "test.hpp"
+#include "test_cxx_gen.hpp"
 #include <boost/foreach.hpp>
 #include <iostream>
 #include <vector>

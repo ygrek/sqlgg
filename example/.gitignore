@@ -1,0 +1,5 @@
+*_gen.*
+test_caml
+test_cxx
+test.db
+*.cm?

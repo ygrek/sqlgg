@@ -1,2 +1,0 @@
-../sqlgg.byte ../test.sql > test.hpp
-g++ -g -o test test.cpp -lsqlite3

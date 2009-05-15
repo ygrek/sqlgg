@@ -1,0 +1,5 @@
+../sqlgg.byte -gen cxx ../test.sql > test_cxx_gen.hpp
+g++ -g -o test_cxx test_cxx.cpp -lsqlite3
+
+../sqlgg.byte -gen caml ../test.sql > test_caml_gen.ml
+ocamlc -g -w As -o test_caml -I +sqlite3 sqlite3.cma test_caml.ml 
