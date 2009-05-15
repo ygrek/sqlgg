@@ -7,30 +7,12 @@ REQUIRE USER-TYPE ~ygrek/lib/typestr.f
 
 REQUIRE XSLTmm ~ac/lib/lin/xml/xslt.f
 REQUIRE XHTML ~ygrek/lib/xhtml/core.f
-REQUIRE DumpParams ~ac/lib/string/get_params.f
-REQUIRE EQUAL ~pinka/spf/string-equal.f
 REQUIRE NOT ~profit/lib/logic.f
-REQUIRE cat ~ygrek/lib/cat.f
-REQUIRE ALLOCATED ~pinka/lib/ext/basics.f
-REQUIRE NUMBER ~ygrek/lib/parse.f
 REQUIRE DateTime>PAD ~ygrek/lib/spec/unixdate.f
 REQUIRE FileLines=> ~ygrek/lib/filelines.f
-REQUIRE READ-FILE-EXACT ~pinka/lib/files-ext.f
 REQUIRE BACKSTRFREE ~ygrek/lib/backstr.f
-\ REQUIRE CREATE-ANON-PIPE ~ygrek/lib/sys/pipe.f
-
-: (sys) ( az -- x )
-  (()) fork ?DUP
-  IF
-    NIP
-    1 <( 0 0 )) waitpid
-  ELSE
-    \ FIXME
-    >R
-    S" /bin/sh" DROP DUP 2 <( S" -c" DROP R> 0 )) execlp \ no return
-  THEN ;
-
-: sys ( a u -- ) DROP (sys) DROP ;
+REQUIRE StartAppWait ~ygrek/lib/linux/process.f
+REQUIRE content:html ~ygrek/lib/net/cgi.f
 
 ALSO XMLSAFE
 ALSO XHTML
@@ -75,8 +57,6 @@ ALSO XHTML
   >>
 ;
 
-: GetParamInt ( `str -- n ) GetParam NUMBER NOT IF 0 THEN ;
-
 20 1024 * CONSTANT limit
 
 : process ( a u -- )
@@ -94,7 +74,8 @@ ALSO XHTML
   tick " sql/{n}.err" -> err
   \ src STR@ TYPE CR dst STR@ TYPE CR err STR@ TYPE CR
   src STR@ OCCUPY
-  err STR@ dst STR@ src STR@ gen STR@ " ./sqlgg.native -gen {s} {s} > {s} 2> {s}" STR@ sys
+  err STR@ dst STR@ src STR@ gen STR@
+  " ./sqlgg.native -gen {s} {s} > {s} 2> {s}" STR@ StartAppWait DROP
   dst STR@ FILE
   << `h2 tag S" Output" TYPE >>
   << `pre tag TYPE >>
@@ -122,58 +103,13 @@ ALSO XHTML
 PREVIOUS
 PREVIOUS
 
-: content:html S" Content-type: text/html" TYPE CR ;
-: content:xhtml S" Content-type: application/xhtml+xml" TYPE CR ;
-: content-length " Content-Length: {n}" STYPE CR ;
-
-\ : comment PRO ." <!-- " CONT ." -->" ;
-
-: get_post_params
-  S" CONTENT_LENGTH" ENVIRONMENT? NOT IF EXIT THEN
-  NUMBER NOT IF EXIT THEN
-  ALLOCATED 2DUP H-STDIN READ-FILE-EXACT IF 2DROP ELSE GetParamsFromString THEN ;
-  \ ALLOCATED 2DUP H-STDIN READ-FILE . NIP 2DUP TYPE CR GetParamsFromString ;
-
-: get_get_params
-  S" QUERY_STRING" ENVIRONMENT? IF GetParamsFromString THEN ;
-
-: get_params
-  `REQUEST_METHOD ENVIRONMENT? NOT IF EXIT THEN
-   2DUP `POST CEQUAL IF 2DROP get_post_params EXIT THEN
-   2DUP `GET  CEQUAL IF 2DROP get_get_params EXIT THEN
-   2DROP ;
-
-[UNDEFINED] WINAPI: [IF]
-: environ 
-  S" environ" symbol-lookup symbol-address @
-  BEGIN
-   DUP @
-  WHILE
-   DUP @ ASCIIZ> TYPE CR
-   CELL+
-  REPEAT
-  DROP ;
-[ELSE]
-
-WINAPI: GetEnvironmentStrings KERNEL32.DLL
-
-: environ
-  GetEnvironmentStrings 
-  BEGIN
-   DUP B@
-  WHILE
-   ASCIIZ> 2DUP TYPE CR
-   + 1+
-  REPEAT 
-  DROP ;
-
-[THEN]
-
 : env ENVIRONMENT? NOT IF S" " THEN ;
 
 : TAB 0x09 EMIT ;
 
-: log_request 
+ALSO CGI
+
+: log_request
   LAMBDA{
   TIME&DATE DateTime>PAD TYPE TAB
   `REMOTE_ADDR env TYPE TAB
@@ -183,23 +119,25 @@ WINAPI: GetEnvironmentStrings KERNEL32.DLL
   `HTTP_USER_AGENT env TYPE
   } TYPE>STR BACKSTRFREE STR@ `request.log ATTACH-LINE-CATCH DROP ;
 
-: headers  
-  content:xhtml 
-\  S" Cache-Control: no-cache" TYPE CR 
+: headers
+  content:xhtml
+\  S" Cache-Control: no-cache" TYPE CR
 ;
 
 : content
   log_request
-  get_params
+  get-params
   main
   CR ;
 
 : index
   headers
-  ['] content TYPE>STR DUP STRLEN content-length 
+  ['] content TYPE>STR DUP STRLEN content-length
   CR
   STYPE
   BYE ;
+
+PREVIOUS
 
 \ : index headers CR content ;
 
@@ -208,7 +146,7 @@ WINAPI: GetEnvironmentStrings KERNEL32.DLL
 
 \ ' TYPE1 TO USER-TYPE
 
-: save ['] index MAINX ! `sql.cgi SAVE ; 
+: save ['] index MAINX ! `sql.cgi SAVE ;
  save BYE
 
 index
