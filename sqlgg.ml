@@ -8,14 +8,14 @@ module Caml = Gen.Make(Gen_caml)
 
 let generate = ref Cxx.process
 
-let set_out s = 
+let set_out s =
   generate :=
   match s with
   | "cxx" -> Cxx.process
   | "caml" -> Caml.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
-let work = 
+let work =
   let f s = s >> Main.parse_sql >> !generate in
   function
   | "-" -> f (Std.input_all stdin)
@@ -30,10 +30,10 @@ let usage_msg =
 let show_version () = print_endline Config.version
 
 let main () =
-  let args = 
+  let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-out", Arg.String set_out, "cxx|caml Set output language";
+    "-gen", Arg.String set_out, "cxx|caml Set output language";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in
