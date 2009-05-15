@@ -132,15 +132,18 @@ let get_params_l tables j_s l = collect (get_params tables j_s) l
 let do_join (tables,params,scheme) ((table1,params1),kind) =
   let (_,scheme1) = table1 in
   let tables = tables @ [table1] in
-  let p = ref [] in
   let scheme = match kind with
   | `Cross
+  | `Search _
   | `Default -> RA.Scheme.cross scheme scheme1
   | `Natural -> RA.Scheme.natural scheme scheme1
   | `Using l -> RA.Scheme.join_using l scheme scheme1
-  | `Search e -> begin p := get_params tables scheme e; RA.Scheme.cross scheme scheme1 end
   in
-  tables,params @ params1 @ !p,scheme
+  let p = match kind with
+  | `Cross | `Default | `Natural | `Using _ -> []
+  | `Search e -> get_params tables scheme e
+  in
+  tables,params @ params1 @ p , scheme
 
 let join ((t0,p0),joins) =
   let (tables,params,joined_scheme) = List.fold_left do_join ([t0],p0,snd t0) joins in

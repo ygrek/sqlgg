@@ -69,7 +69,7 @@ struct
       t1
 
   let to_string x = Show.show<t>(x)
-  let print x = print_endline (to_string x)
+  let print x = prerr_endline (to_string x)
 
 end
 
