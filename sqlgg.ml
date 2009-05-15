@@ -1,10 +1,25 @@
 (** command-line *)
 
 open Printf
+open Operators
 
-let work = function
-  | "-" -> Main.parse_sql (Std.input_all stdin)
-  | filename -> Main.with_file filename Main.parse_sql
+module Cxx = Gen.Make(Gen_cxx)
+module Caml = Gen.Make(Gen_caml)
+
+let generate = ref Cxx.process
+
+let set_out s = 
+  generate :=
+  match s with
+  | "cxx" -> Cxx.process
+  | "caml" -> Caml.process
+  | _ -> failwith (sprintf "Unknown output language: %s" s)
+
+let work = 
+  let f s = s >> Main.parse_sql >> !generate in
+  function
+  | "-" -> f (Std.input_all stdin)
+  | filename -> Main.with_file filename f
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
@@ -18,6 +33,7 @@ let main () =
   let args = 
   [
     "-version", Arg.Unit show_version, " Show version";
+    "-out", Arg.String set_out, "cxx|caml Set output language";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in

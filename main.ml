@@ -35,13 +35,11 @@ let show_one ((s,p),props) =
   RA.Scheme.print s;
   print_endline (Stmt.params_to_string p)
 
-module Cxx = Gen.Make(Gen_cxx)
-
 let parse_sql s =
+(* Tables.reset (); *)
   s >> statements >> L.map parse_one 
   >> L.filter_valid 
 (*   >> tee (L.iter show_one)  *)
-  >> Cxx.process
 
 let with_file filename f =
   match catch Std.input_file filename with
