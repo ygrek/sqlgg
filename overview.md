@@ -18,15 +18,16 @@ Solution
 
 SQL parser and code generator which ensures that application code and database queries are in sync.
 It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
-substitution parameters) and the set of resulting columns (for SELECT). Then it generates the C++
-code which structures input and output values together as function parameters and assigns
-corresponding native data types. So basically you provide an SQL query and generator creates a C++
+substitution parameters) and the set of resulting columns (for SELECT). Then it generates the
+code in host language, matching query input and output to function parameters and return values with
+corresponding native data types. So basically you provide an SQL query and generator creates a
 function which takes the set of typed parameters as required to fill slots in a query. Generated
 code binds provided parameters into query and executes it. SELECT statements additionally return the
-collection of structures with fields representing columns of resulting rowset. The most fruitful
-consequence of such approach is that the C++ compiler itself guarantees that SQL query will have all
-parameters bound with correct types. So if you modify the query and forget to update the code -- the
-compiler will point on erroneous parts.
+collection of structures with fields representing columns of resulting rowset (or pass those
+structures to callback-function). The most fruitful consequence of such approach is that
+the host language compiler will itself check that functions generated from SQL queries will be
+called correctly (i.e. all parameters bound with correct types). So if you modify the query and
+forget to update the code -- the compiler will point on erroneous parts.
 
 Example
 -------
@@ -186,6 +187,13 @@ project is **works for me** .  I use it for some simple database-access code wit
 This project was started when I found myself editing existing code with tons of C++ wrappers for SQL
 queries, each binding several parameters and decomposing results.
 
+For now it can generate C++ and OCaml code. Generated C++ code is parametrized with template class
+for database specific code. Generated OCaml code is a functor
+`module Sqlgg (T:`[Sqlgg\_traits.M](sqlgg_traits.ml)`)` (sample [sqlgg\_sqlite3](sqlgg_sqlite3.ml) 
+for [OCaml-SQLite3][]).
+
+[OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
+
 A framework should be a tool to save writing repetitive code, rather than a tool you use to avoid
 understanding 'what lies beneath'. <http://c2.com/cgi/wiki?PerniciousIngrownSql>
 
@@ -207,7 +215,7 @@ TODO
 * type check expressions
 
 ----
-2009-05-09
+2009-05-16
 
 <style>
 code { font-family: monospace; }
