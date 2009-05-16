@@ -57,7 +57,7 @@ let get_column attr index =
   output "Traits::get_column_%s(stmt, %u, obj.%s);" 
     (Type.to_string attr.RA.domain)
     index
-    (name_of attr (index+1))
+    (name_of attr index)
 
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let as_cxx_type str = "typename Traits::" ^ str
