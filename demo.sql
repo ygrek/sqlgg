@@ -1,11 +1,13 @@
-CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
--- [sqlgg] name=Add
-INSERT INTO test(name,descr) VALUES;
-SELECT name,descr FROM test WHERE name = @name LIMIT @limit;
-SELECT name,z FROM 
-  (SELECT name,
-          city || @delim || descr as y,
-          max(length(city),random(*)) as z 
-   FROM test 
-   LEFT JOIN (SELECT name AS city FROM test WHERE id=@id))
-WHERE z < @level;
+-- @create_person
+CREATE TABLE person (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,surname TEXT);
+-- @add_person
+INSERT INTO person (name,surname) VALUES;
+
+-- @create_money
+CREATE TABLE money (src INTEGER, dst INTEGER, amount INTEGER);
+-- @add_money
+INSERT INTO money VALUES;
+
+-- @calc_debit
+SELECT name || ' ' || surname AS fullname, SUM(amount) as debit FROM person JOIN money ON src = id GROUP BY id;
+

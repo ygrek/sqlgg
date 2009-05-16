@@ -1,0 +1,6 @@
+demo_cxx
+*_gen.*
+demo.db
+# symlinks
+sqlgg_traits.ml
+sqlgg_sqlite3.ml
