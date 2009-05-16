@@ -13,10 +13,7 @@ typedef long long int64;
 int main()
 {
   sqlite3* db = NULL;
-  sqlite3_open("demo.db", &db);
-
-  // clean start
-  sqlite3_exec(db,"DROP TABLE person; DROP table money;",NULL,NULL,NULL);
+  sqlite3_open(":memory:", &db);
 
   // create tables
   gen::create_person(db);

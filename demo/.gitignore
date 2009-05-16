@@ -1,6 +1,7 @@
 demo_cxx
+demo_caml
 *_gen.*
-demo.db
+*.cm?
 # symlinks
 sqlgg_traits.ml
 sqlgg_sqlite3.ml
