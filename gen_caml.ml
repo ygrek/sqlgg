@@ -74,9 +74,11 @@ let output_params_binder index params =
   | [] -> "(fun _ -> ())"
   | _ -> output_params_binder index params
 
+let prepend prefix = function s -> prefix ^ s
+
 let generate_code index scheme params kind props =
   let name = choose_name props kind index >> String.uncapitalize in
-  let values = params_to_values params >> inline_values in
+  let values = params_to_values params >> List.map (prepend "~") >> inline_values in
   let all_params = match scheme with [] -> values | _ -> "callback " ^ values in
   output "let %s db %s =" name all_params;
   inc_indent ();
