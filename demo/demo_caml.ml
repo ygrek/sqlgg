@@ -27,7 +27,12 @@ let main () =
   G.add_money db sancho ivan 300L;
 
   (* summarize by person and output *)
+  print_endline "Total transfers:";
   G.calc_total db (printf "%s = %Lu\n");
+
+  (* list donors *)
+  print_endline "Donors:";
+  G.list_donors db print_endline "petrov";
 
   (* properly close database *)
   db_close(db);

@@ -34,14 +34,26 @@ int main()
   gen::add_money(db,sancho,ivan,300);
 
   // summarize by person
-  typedef std::vector<gen::data_4> collection;
+  typedef vector<gen::data_4> collection;
   collection all;
   gen::calc_total(db,all);
 
   // output
+  cout << "Total transfers:" << endl;
   for (collection::const_iterator i = all.begin(), end = all.end(); i != end; ++i)
   {
-     std::cout << i->fullname << " = " << i->total << std::endl;
+     cout << i->fullname << " = " << i->total << endl;
+  }
+
+  // list donors
+  typedef vector<gen::data_5> people;
+  people p;
+  gen::list_donors(db,p,"petrov");
+
+  cout << "Donors:" << endl;
+  for (people::const_iterator i = p.begin(), end = p.end(); i != end; ++i)
+  {
+    cout << i->surname << endl;
   }
 
   // properly close database
