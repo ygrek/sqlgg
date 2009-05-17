@@ -96,8 +96,8 @@ Generate the binding C++ code (boilerplate omitted, only function prototypes sho
 
 Things to note above:
 
-2. Syntax. All queries are written in plain SQL. Every statement should be terminated wit h
-    semicolon. There is no need to write (?,?) after VALUES in INSERT statemen. The annotation
+2. Syntax. All queries are written in plain SQL. Every statement should be terminated with
+    semicolon. There is no need to write (?,?) after VALUES in INSERT statement. The annotation
     `[sqlgg] name=function_name` (or simply `@function_name`) before the query specifies the name
     of the generated function (this annotation optional but very convenient).
 1. The generated code is parametrized by database-specific class `Traits`. It specifies the
