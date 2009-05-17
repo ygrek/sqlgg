@@ -3,3 +3,5 @@ test_caml
 test_cxx
 test.db
 *.cm?
+sqlgg_traits.ml
+sqlgg_sqlite3.ml
