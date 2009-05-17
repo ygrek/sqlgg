@@ -1,6 +1,13 @@
 sqlgg: SQL Guided (code) Generator
 ==================================
 
+* [Problem](#problem)
+* [Solution](#solution)
+* [Complete example](#example)
+* [Details](#details)
+* [TODO](#todo)
+
+<a id="problem"/>
 Problem
 -------
 
@@ -13,6 +20,7 @@ needs to manually specify correspondence between SQL query binding slots (or res
 columns) and code variables. This mapping should be updated manually every time SQL query is
 modified.
 
+<a id="solution"/>
 Solution
 --------
 
@@ -29,6 +37,7 @@ the host language compiler will itself check that functions generated from SQL q
 called correctly (i.e. all parameters bound with correct types). So if you modify the query and
 forget to update the code -- the compiler will point on erroneous parts.
 
+<a id="example"/>
 Complete example
 ----------------
 
@@ -195,6 +204,7 @@ table (e.g. timestamp of transfer). Compilation rightfully fails:
     Traits::connection, const typename Traits::Int&, const typename Traits::Int&, const typename
     Traits::Int&, const typename Traits::Int&) [with Traits = sqlite3_traits]
 
+<a id="details"/>
 Details
 -------
 
@@ -222,6 +232,7 @@ for [OCaml-SQLite3][]).
 
 Try it [online](sql.cgi).
 
+<a id="todo"/>
 TODO
 ----
 
