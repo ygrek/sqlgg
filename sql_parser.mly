@@ -20,6 +20,12 @@
     in
     (Named name,t)
 
+  let select_value select =
+    let (s,p) = select in
+    if (List.length s <> 1) then
+      raise (RA.Scheme.Error (s,"only one column allowed for SELECT operator in this expression"));
+    List.map (fun x -> `Param x) p
+
 %}
 
 %token <int> INTEGER
@@ -201,13 +207,13 @@ expr:
     | e1=expr mnot(IN) LPAREN l=separated_nonempty_list(COMMA,expr) RPAREN { `Func (None,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
-        let (s,p) = select in
-        if (List.length s <> 1) then
-          raise (RA.Scheme.Error (s,"only one column allowed for IN operator"));
-        let l = List.map (fun x -> `Param x) p in
-        `Func (None,e1::l)
+        `Func (None,e1::select_value select)
       }
     | e1=expr IN table=IDENT { Tables.check(table); e1 }
+    | LPAREN select=select_stmt RPAREN
+      {
+        `Func (None,select_value select)
+      }
 (*     | FLOAT { `Value Float } *)
     | TEXT { `Value Text }
     | BLOB { `Value Blob }
