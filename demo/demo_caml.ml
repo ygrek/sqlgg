@@ -32,7 +32,7 @@ let main () =
 
   (* list donors *)
   print_endline "Donors:";
-  G.list_donors db print_endline "petrov";
+  G.list_donors db print_endline "petrov" 100L;
 
   (* properly close database *)
   db_close(db);

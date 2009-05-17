@@ -48,7 +48,7 @@ int main()
   // list donors
   typedef vector<gen::data_5> people;
   people p;
-  gen::list_donors(db,p,"petrov");
+  gen::list_donors(db,p,"petrov",100);
 
   cout << "Donors:" << endl;
   for (people::const_iterator i = p.begin(), end = p.end(); i != end; ++i)

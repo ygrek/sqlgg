@@ -11,5 +11,5 @@ INSERT INTO money VALUES;
 -- @calc_total
 SELECT name || ' ' || surname AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id;
 -- @list_donors
-SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @surname);
+SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @surname) LIMIT @limit;
 
