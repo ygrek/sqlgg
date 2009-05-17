@@ -36,12 +36,12 @@ int main()
   // summarize by person
   typedef std::vector<gen::data_4> collection;
   collection all;
-  gen::calc_debit(db,all);
+  gen::calc_total(db,all);
 
   // output
   for (collection::const_iterator i = all.begin(), end = all.end(); i != end; ++i)
   {
-     std::cout << i->fullname << " = " << i->debit << std::endl;
+     std::cout << i->fullname << " = " << i->total << std::endl;
   }
 
   // properly close database

@@ -27,7 +27,7 @@ let main () =
   G.add_money db sancho ivan 300L;
 
   (* summarize by person and output *)
-  G.calc_debit db (printf "%s = %Lu\n");
+  G.calc_total db (printf "%s = %Lu\n");
 
   (* properly close database *)
   db_close(db);
