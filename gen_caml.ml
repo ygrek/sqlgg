@@ -24,7 +24,7 @@ let quote_comment_inline str =
   replace_all ~str ~sub:"(*" ~by:"( *"
 
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
-let comment fmt = Printf.kprintf (indent_endline & make_comment) fmt
+let comment () fmt = Printf.kprintf (indent_endline & make_comment) fmt
 
 let get_column attr index =
   output "(T.get_column_%s stmt %u)"
@@ -76,7 +76,11 @@ let output_params_binder index params =
 
 let prepend prefix = function s -> prefix ^ s
 
-let generate_code index scheme params kind props =
+type t = unit
+
+let start () = ()
+
+let generate_code () index scheme params kind props =
   let name = choose_name props kind index >> String.uncapitalize in
   let values = params_to_values params >> List.map (prepend "~") >> inline_values in
   let all_params = match scheme with [] -> values | _ -> "callback " ^ values in
