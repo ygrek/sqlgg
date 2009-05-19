@@ -39,7 +39,7 @@
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
-       PRECISION UNSIGNED ZEROFILL
+       PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
 
@@ -237,10 +237,18 @@ unary_op: EXCL { }
         | NOT { }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Type.Int }
-               | T_BLOB { Type.Blob }
-               | T_TEXT { Type.Text }
+               | binary { Type.Blob }
+               | NATIONAL? text VARYING? charset? collate? { Type.Text }
                | T_FLOAT PRECISION? { Type.Float }
                | T_BOOLEAN { Type.Bool }
+
+binary: T_BLOB | BINARY | BINARY VARYING { }
+text: T_TEXT | CHARACTER { }
+
+either(X,Y): X | Y { }
+
+charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
+collate: COLLATE IDENT { }
 
 sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER RPAREN

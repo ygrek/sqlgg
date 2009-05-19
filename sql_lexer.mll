@@ -41,22 +41,16 @@ let keywords =
    "primary",PRIMARY;
    "key",KEY;
    "default",DEFAULT;
-   "text",T_TEXT; (* sqlite specific? *)
-   "blob",T_BLOB; (* same *)
-(* standard built-in types 
-      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT, 
-      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
-      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT, 
-      FLOAT, REAL, DOUBLE PRECISION, 
-      BOOLEAN,
-      DATE, TIME, TIMESTAMP, INTERVAL
-    *)
    "precision",PRECISION;
-   "character",T_TEXT;
-   "char",T_TEXT;
-   "varchar",T_TEXT;
-   "binary",T_BLOB;
+   "varying",VARYING;
+   "charset",CHARSET;
+   "collate",COLLATE;
+   "national",NATIONAL;
+   "ascii",ASCII;
+   "unicode",UNICODE;
    "distinct",DISTINCT;
+   "character",CHARACTER;
+   "binary",BINARY;
    "all",ALL;
    "order",ORDER;
    "by",BY;
@@ -93,12 +87,27 @@ let keywords =
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["like";"glob";"regexp";"match"];
+  all AUTOINCREMENT ["autoincrement";"auto_increment"];
+(* standard built-in types
+      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT,
+      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
+      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT,
+      FLOAT, REAL, DOUBLE PRECISION,
+      BOOLEAN,
+      DATE, TIME, TIMESTAMP, INTERVAL
+    *)
   all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint"];
   all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double"];
-  all AUTOINCREMENT ["autoincrement";"auto_increment"];
+  all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
+  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
   !k
+
+(*
+  Q: Why not convert all input to lowercase before lexing?
+  A: Sometimes SQL is case-sensitive, also string contents should be preserved
+*)
 
 let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords
 
