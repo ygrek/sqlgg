@@ -9,74 +9,18 @@ open Stmt
 open Gen
 open Sql
 
-let inline_values = String.concat " "
+(* let escape = String.replace_chars (function '\n' -> "&#x0A;" | '\r' -> "" | '"' -> "&amp;" | c -> String.make 1 c) *)
+let escape x = x
 
-let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
-let quote s = "\"" ^ quote s ^ "\""
-
-let rec replace_all ~str ~sub ~by =
-  match String.replace ~str ~sub ~by with
-  | (true,s) -> replace_all ~str:s ~sub ~by
-  | (false,s) -> s
-
-let quote_comment_inline str =
-  let str = replace_all ~str ~sub:"*)" ~by:"* )" in
-  replace_all ~str ~sub:"(*" ~by:"( *"
-
-let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
 let comment x fmt = Printf.ksprintf (ignore) fmt
 
-let get_column attr index =
-  output "(T.get_column_%s stmt %u)"
-    (Type.to_string attr.RA.domain)
-    index
+let value n t = Xml.Element ("value",["name",n; "type",t;],[])
 
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
-
-let set_param index param =
-  let (id,t) = param in
-  output "T.set_param_%s stmt %u %s;"
-    (param_type_to_string t)
-    index
-    (param_name_to_string id index)
-
-let output_scheme_binder index scheme =
-  let name = "invoke_callback" in
-  output "let %s stmt =" name;
-  inc_indent ();
-  output "callback";
-  inc_indent ();
-  List.iteri (fun index attr -> get_column attr index) scheme;
-  dec_indent ();
-  dec_indent ();
-  output "in";
-  name
-
-let output_scheme_binder index scheme =
-  match scheme with
-  | [] -> None
-  | _ -> Some (output_scheme_binder index scheme)
-
-(*
-let params_to_values = List.mapi (fun i (n,_) -> param_name_to_string n i)
+let params_to_values = List.mapi (fun i (n,t) -> value (param_name_to_string n i) (param_type_to_string t))
 let params_to_values = List.unique & params_to_values
-*)
 
-let output_params_binder index params =
-  output "let set_params stmt =";
-  inc_indent ();
-  List.iteri set_param params;
-  output "()";
-  dec_indent ();
-  output "in";
-  "set_params"
-
-let output_params_binder index params =
-  match params with
-  | [] -> "(fun _ -> ())"
-  | _ -> output_params_binder index params
-
-let prepend prefix = function s -> prefix ^ s
+let scheme_to_values = List.map (fun attr -> value "" (Type.to_string attr.RA.domain))
 
 type t = Xml.xml list ref
 
@@ -84,28 +28,14 @@ let start () = ref []
 
 let generate_code x index scheme params kind props =
   let name = choose_name props kind index in
-  x:= Xml.Element (name,[],[]) :: !x
-(*
-  let values = params_to_values params >> List.map (prepend "~") >> inline_values in
-  let all_params = match scheme with [] -> values | _ -> "callback " ^ values in
-  output "let %s db %s =" name all_params;
-  inc_indent ();
-  let sql = quote (get_sql props kind params) in
-  let scheme_binder_name = output_scheme_binder index scheme in
-  let params_binder_name = output_params_binder index params in
-  begin match scheme_binder_name with
-  | None ->
-      output "T.execute db %s %s" sql params_binder_name
-  | Some scheme_binder_name ->
-      output "T.select db %s %s %s" sql scheme_binder_name params_binder_name
-  end;
-  dec_indent ();
-  empty_line ()
-*)
+  let input = Xml.Element ("in",[],params_to_values params) in
+  let output = Xml.Element ("out",[],scheme_to_values scheme) in
+  let sql = escape (get_sql props kind params) in
+  x:= Xml.Element ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
 
 let start_output x = ()
 
 let finish_output x =
-  Xml.Element ("root",[],!x) >> Xml.to_string_fmt >> print_endline;
+  Xml.Element ("sqlgg",[],!x) >> Xml.to_string_fmt >> print_endline;
   x := []
 
