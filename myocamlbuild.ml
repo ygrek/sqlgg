@@ -24,10 +24,12 @@ dispatch begin function
      let extlib_dir = ocamlfind "extlib" in
      let deriving_dir = Myocamlbuild_config.deriving_dir in
      let ounit_dir = ocamlfind "oUnit" in
+     let xml_dir = ocamlfind "xml-light" in
 
      ocaml_lib ~extern:true ~dir:extlib_dir "extLib";
      ocaml_lib ~extern:true ~dir:deriving_dir "deriving";
      ocaml_lib ~extern:true ~dir:ounit_dir "oUnit";
+     ocaml_lib ~extern:true ~dir:xml_dir "xml-light";
 
      flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A extlib_dir]);
 
