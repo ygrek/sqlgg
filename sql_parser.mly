@@ -38,7 +38,8 @@
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
-%token UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
+       UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
+       PRECISION UNSIGNED ZEROFILL
 %token NUM_BINARY_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
 
@@ -235,10 +236,10 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
-sql_type_flavor: T_INTEGER  { Type.Int }
+sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Type.Int }
                | T_BLOB { Type.Blob }
                | T_TEXT { Type.Text }
-               | T_FLOAT { Type.Float }
+               | T_FLOAT PRECISION? { Type.Float }
                | T_BOOLEAN { Type.Bool }
 
 sql_type: t=sql_type_flavor
