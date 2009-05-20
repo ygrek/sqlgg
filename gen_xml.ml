@@ -70,7 +70,7 @@ let generate_code (x,_) index scheme params kind props =
 let start_output (x,pre) = pre := !x; x := []
 
 let finish_output (x,pre) =
-  List.iter (fun z -> z >> xml_to_string >> print_endline) !pre;
+  List.iter (fun z -> z >> xml_to_string >> print_endline) (List.rev !pre);
   Node ("sqlgg",[],List.rev !x) >> xml_to_string >> print_endline;
   x := [];
   pre := []

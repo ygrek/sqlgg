@@ -13,6 +13,7 @@ REQUIRE FileLines=> ~ygrek/lib/filelines.f
 REQUIRE BACKSTRFREE ~ygrek/lib/backstr.f
 REQUIRE StartAppWait ~ygrek/lib/linux/process.f
 REQUIRE content:html ~ygrek/lib/net/cgi.f
+REQUIRE XHTML-EXTRA ~ygrek/lib/xhtml/extra.f
 
 ALSO XMLSAFE
 ALSO XHTML
@@ -32,11 +33,9 @@ ALSO XHTML
    `body tag
    CONT ;
 
-: input ( `value `name `type -- ) %[ `type $$ `name $$ `value $$ ]% `input /atag ;
-
 : render-edit ( a u -- )
   \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
-  %[ `post `method $$ S" " `action $$ ]% `form atag
+  S" " form-post
   <<
    `div tag
 
@@ -51,6 +50,7 @@ ALSO XHTML
    %[ `gen `name $$ ]% `select atag
    << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
    << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
+   << %[ `xml `value $$ ]% `option atag `XML TYPE >>
    >>
 
    S" generate code " `button `submit input
@@ -58,6 +58,11 @@ ALSO XHTML
 ;
 
 20 1024 * CONSTANT limit
+
+: gen-param ( `s -- `s2 )
+  2DUP `caml CEQUAL IF EXIT THEN
+  2DUP `xml  CEQUAL IF EXIT THEN
+  2DROP `cxx ;
 
 : process ( a u -- )
   `p tag
@@ -68,7 +73,7 @@ ALSO XHTML
   hrule
 	(( S" sql" DROP 0x1FF )) mkdir DROP
 	ms@ { tick | src dst err gen }
-  `gen GetParam S" caml" CEQUAL IF S" caml" ELSE S" cxx" THEN >STR TO gen
+  `gen GetParam gen-param >STR TO gen
   tick " sql/{n}.in" -> src
   tick " sql/{n}.out" -> dst
   tick " sql/{n}.err" -> err
