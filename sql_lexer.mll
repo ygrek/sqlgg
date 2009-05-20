@@ -152,6 +152,7 @@ ruleMain = parse
   | "?" (digit+ as str) { PARAM (Stmt.Numbered (int_of_string str)) }
   | [':' '@'] (ident as str) { PARAM (Stmt.Named str) }
 
+  | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
@@ -160,10 +161,18 @@ ruleMain = parse
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
 and 
-ruleInSingleQuotes acc = parse
-  | '\''	      { acc }
+ruleInQuotes acc = parse
+  | '"'	        { acc }
   | eof	        { error lexbuf "no terminating quote" }
   | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote" }
+  | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf }
+  | [^'"' '\n']+  { ruleInQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInQuotes" }
+and
+ruleInSingleQuotes acc = parse
+  | '\''	      { acc }
+  | eof	        { error lexbuf "no terminating single quote" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating single quote" }
   | "''"        { ruleInSingleQuotes (acc ^ "'") lexbuf }
   | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInSingleQuotes" }

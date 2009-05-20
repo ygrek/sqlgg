@@ -159,7 +159,7 @@ int_or_param: INTEGER { [] }
             | PARAM { [($1,Some Sql.Type.Int)] }
 
 limit: LIMIT p=int_or_param { p }
-     | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 }
+     | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 } (* Named? *)
      | LIMIT p1=int_or_param OFFSET p2=int_or_param { p1 @ p2 }
 
 order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
