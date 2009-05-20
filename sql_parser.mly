@@ -41,7 +41,7 @@
        UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
 %token NUM_BINARY_OP PLUS MINUS
-%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN
+%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
 (*
 %left COMMA_JOIN
@@ -241,6 +241,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Type.Int }
                | NATIONAL? text VARYING? charset? collate? { Type.Text }
                | T_FLOAT PRECISION? { Type.Float }
                | T_BOOLEAN { Type.Bool }
+               | T_DATETIME { Type.Datetime }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
