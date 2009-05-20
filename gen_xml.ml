@@ -36,7 +36,7 @@ let xml_to_string xml =
         | [] -> bprintf b "/>"
         | _ -> bprintf b ">"; List.iter fold children; bprintf b "</%s>" name
         end
-    | Comment text -> bprintf b "\n<!-- %s -->" (Gen_caml.replace_all text "--" "&mdash;")
+    | Comment text -> bprintf b "\n<!-- %s -->" (Gen_caml.replace_all ~str:text ~sub:"--" ~by:"&mdash;")
   in
   fold xml;
   Buffer.contents b
@@ -54,7 +54,7 @@ let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let params_to_values = List.mapi (fun i (n,t) -> value (param_name_to_string n i) (param_type_to_string t))
 let params_to_values = List.unique & params_to_values
 
-let scheme_to_values = List.map (fun attr -> value "" (Type.to_string attr.RA.domain))
+let scheme_to_values = List.map (fun attr -> value attr.RA.name (Type.to_string attr.RA.domain))
 
 type t = xml list ref * xml list ref
 
