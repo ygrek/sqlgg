@@ -25,5 +25,5 @@ CREATE TABLE zuzu AS
   SELECT test.id,@text || city AS city, name FROM loc JOIN test ON test_id=test.id;
 
 SELECT x,z FROM (SELECT name as x,
-  city || ' ' || descr as y,
+  city || ' ' || descr as "y""",
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
