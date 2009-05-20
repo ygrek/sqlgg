@@ -47,6 +47,7 @@ let _ =
 *)
 
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
+let empty_line _ = ()
 
 let value n t = Node ("value",["name",n; "type",t;],[])
 

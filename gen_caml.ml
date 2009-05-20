@@ -26,6 +26,8 @@ let quote_comment_inline str =
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
 let comment () fmt = Printf.kprintf (indent_endline & make_comment) fmt
 
+let empty_line () = print_newline ()
+
 let get_column attr index =
   output "(T.get_column_%s stmt %u)"
     (Type.to_string attr.RA.domain)

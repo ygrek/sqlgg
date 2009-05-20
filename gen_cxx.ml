@@ -24,6 +24,7 @@ let quote s = "\"" ^ quote s ^ "\""
 
 let quote_comment_inline = String.replace_chars (function '\n' -> "\n// " | c -> String.make 1 c)
 let comment () fmt = Printf.kprintf (indent_endline & quote_comment_inline & (^) "// ") fmt
+let empty_line () = print_newline ()
 let open_curly () = output "{"; inc_indent ()
 let close_curly fmt = dec_indent (); indent "}"; print fmt
 let start_struct name =
