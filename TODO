@@ -1,12 +1,11 @@
-* distinguish predicates and expressions
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
-* resolve conflicts in grammar, check precedences
 * enhance error reporting
 * type-inferrer is too primitive
-* detect statements on single tables and group the corresponding generated code in one class
-* check names (functions and bindings) for uniqueness
+* detect statements on single tables and group the corresponding generated code together
+* check function names for uniqueness
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
+* distinguish predicates and expressions
 * type check expressions

@@ -215,7 +215,8 @@ generator can be easily plugged in any existing project -- just move all SQL sta
 code to separate file and feed it to generator.
 
 Distinguishing feature of **sqlgg** is that it starts off with actual SQL queries, not object models
-or SQL table descriptions.
+or SQL table descriptions. Ideally, it generates {meta,template,abstract,generic} code which is later
+specialized for actual database/environment (if the target language provides such ability).
 
 This is work in progress and there is plenty of room for improvement. For now the status of this
 project is **works for me** .  I use it for some simple database-access code with
@@ -223,10 +224,13 @@ project is **works for me** .  I use it for some simple database-access code wit
 This project was started when I found myself editing existing code with tons of C++ wrappers for SQL
 queries, each binding several parameters and decomposing results.
 
-For now it can generate C++ and OCaml code. Generated C++ code is parametrized with template class
-for database specific code. Generated OCaml code is a functor
-`module Sqlgg (T:`[Sqlgg\_traits.M](sqlgg_traits.ml)`)` (sample [sqlgg\_sqlite3](sqlgg_sqlite3.ml) 
-for [OCaml-SQLite3][]).
+Available ouput languages:
+
+* **C++**: code is parametrized with template class for database specific code.
+* **OCaml**: functor `module Sqlgg (T:`[Sqlgg\_traits.M](sqlgg_traits.ml)`)` (sample [sqlgg\_sqlite3](sqlgg_sqlite3.ml)
+	for [OCaml-SQLite3][]).
+* **XML**: input parameters and rowset schema with types and names -- everything needed to generate
+	code in some other language (e.g. with XSLT).
 
 [OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
 
@@ -236,20 +240,20 @@ Try it [online](sql.cgi).
 TODO
 ----
 
-* distinguish predicates and expressions (research)
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
-* resolve conflicts in grammar, check precedences
-* type-inference is too primitive
-* detect statements on single tables and group the corresponding generated code in one class
-* check names (functions and bindings) for uniqueness
+* enhance error reporting
+* type-inferrer is too primitive
+* detect statements on single tables and group the corresponding generated code together
+* check function names for uniqueness
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
+* distinguish predicates and expressions
 * type check expressions
 
 ----
-2009-05-17
+2009-05-20
 
 <style>
 code { font-family: monospace; }
