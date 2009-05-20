@@ -5,6 +5,5 @@ true: dtypes, warn_A, warn_z
 <demo/*>: not_hygienic
 <*.ml>: use_extLib
 <test.ml>: use_oUnit
-<gen_xml.ml>: use_xml-light
-<*.{byte,native}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit, use_xml-light
+<*.{byte,native}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit
 <sql_parser.ml>: warn_e
