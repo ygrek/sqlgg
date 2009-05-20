@@ -23,7 +23,7 @@ let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' 
 let quote s = "\"" ^ quote s ^ "\""
 
 let quote_comment_inline = String.replace_chars (function '\n' -> "\n// " | c -> String.make 1 c)
-let comment fmt = Printf.kprintf (indent_endline & quote_comment_inline & (^) "// ") fmt
+let comment () fmt = Printf.kprintf (indent_endline & quote_comment_inline & (^) "// ") fmt
 let open_curly () = output "{"; inc_indent ()
 let close_curly fmt = dec_indent (); indent "}"; print fmt
 let start_struct name =
@@ -136,7 +136,11 @@ let output_params_binder index params =
   | [] -> "typename Traits::no_params"
   | _ -> output_params_binder index params
 
-let generate_code index scheme params kind props =
+type t = unit
+
+let start () = ()
+
+let generate_code () index scheme params kind props =
    let scheme_binder_name = output_scheme_binder index scheme in
    let params_binder_name = output_params_binder index params in
    if (Option.is_some scheme_binder_name) then output_scheme_data index scheme;

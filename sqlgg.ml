@@ -5,6 +5,7 @@ open Operators
 
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml)
+module Xml_gen = Gen.Make(Gen_xml)
 
 let generate = ref Cxx.process
 
@@ -13,6 +14,7 @@ let set_out s =
   match s with
   | "cxx" -> Cxx.process
   | "caml" -> Caml.process
+  | "xml" -> Xml_gen.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let work =
@@ -33,7 +35,7 @@ let main () =
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml Set output language";
+    "-gen", Arg.String set_out, "cxx|caml|xml Set output language";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in

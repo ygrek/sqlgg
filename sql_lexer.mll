@@ -11,19 +11,19 @@ let error buf callerID =
 (*	update_pos buf;*)
 	raise Parsing.Parse_error
 
-let advance_line_pos pos = 
+let advance_line_pos pos =
   let module L = Lexing in
   {L.pos_fname = pos.L.pos_fname;
    pos_lnum = pos.L.pos_lnum + 1;
    pos_bol = pos.L.pos_cnum;
    pos_cnum = pos.L.pos_cnum;}
 
-let advance_line lexbuf = 
+let advance_line lexbuf =
   lexbuf.Lexing.lex_curr_p <- advance_line_pos lexbuf.Lexing.lex_curr_p
 
 (* use Map or Hashtbl ? *)
-let keywords = 
-  let k = ref [ 
+let keywords =
+  let k = ref [
    "as",AS;
    "on",ON;
    "conflict",CONFLICT;
@@ -40,26 +40,17 @@ let keywords =
    "unique",UNIQUE;
    "primary",PRIMARY;
    "key",KEY;
-   "autoincrement",AUTOINCREMENT;
    "default",DEFAULT;
-   "text",T_TEXT; (* sqlite specific? *)
-   "blob",T_BLOB; (* same *)
-(* standard built-in types 
-      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT, 
-      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
-      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT, 
-      FLOAT, REAL, DOUBLE PRECISION, 
-      BOOLEAN,
-      DATE, TIME, TIMESTAMP, INTERVAL
-    *)
-   "character",T_TEXT;
-   "char",T_TEXT;
-   "varchar",T_TEXT;
-   "binary",T_BLOB;
-   "float",T_FLOAT;
-   "real",T_FLOAT;
-   "boolean",T_BOOLEAN;
+   "precision",PRECISION;
+   "varying",VARYING;
+   "charset",CHARSET;
+   "collate",COLLATE;
+   "national",NATIONAL;
+   "ascii",ASCII;
+   "unicode",UNICODE;
    "distinct",DISTINCT;
+   "character",CHARACTER;
+   "binary",BINARY;
    "all",ALL;
    "order",ORDER;
    "by",BY;
@@ -91,19 +82,38 @@ let keywords =
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum"];
-  all (FUNCTION (Some T.Text)) ["concat";];
-  all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback";];
+  all (FUNCTION (Some T.Text)) ["concat"];
+  all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["like";"glob";"regexp";"match"];
-  all T_INTEGER ["integer";"int";"smallint";"bigint";"numeric";"decimal";];
+  all AUTOINCREMENT ["autoincrement";"auto_increment"];
+(* standard built-in types
+      CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT,
+      BINARY, BINARY VARYING, BINARY LARGE OBJECT,
+      NUMERIC, DECIMAL, INTEGER, SMALLINT, BIGINT,
+      FLOAT, REAL, DOUBLE PRECISION,
+      BOOLEAN,
+      DATE, TIME, TIMESTAMP, INTERVAL
+    *)
+  all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint"];
+  all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
+  all T_BOOLEAN ["bool";"boolean"];
+  all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
+  all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
+  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
   !k
+
+(*
+  Q: Why not convert all input to lowercase before lexing?
+  A: Sometimes SQL is case-sensitive, also string contents should be preserved
+*)
 
 let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords
 
 let get_ident str =
   let str = String.lowercase str in
-  try List.assoc str keywords with Not_found -> IDENT str 
+  try List.assoc str keywords with Not_found -> IDENT str
 }
 
 let digit = ['0'-'9']
