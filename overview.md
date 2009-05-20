@@ -24,7 +24,7 @@ modified.
 Solution
 --------
 
-SQL parser and code generator which ensures that application code and database queries are in sync.
+SQL query parser and code generator which ensures that application code and database queries are in sync.
 It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
 substitution parameters) and the set of resulting columns (for SELECT). Then it generates the
 code in host language, matching query input and output to function parameters and return values with
@@ -117,7 +117,7 @@ Things to note above:
     names and types).
 3. `calc_total()` returns data via `result` parameter. Under the scenes it will
     bind columns of resulting rowset to the fields of `T::value_type`, which should provide fields
-    `fullname` of type `Traits::Text` and 
+    `fullname` of type `Traits::Text` and
     `total` of type `Traits::Int` (otherwise it will fail to compile). For convenience a structure
     satisfying the requirements for output type is generated alongside the function, `data_4` in
     this particular case, so `std::vector<data_4>` for `result` is fine.
@@ -194,7 +194,7 @@ Then manually-written C++ code boils down to:
     }
 
 The code is straightforward and free of any SQL-specific details. More importantly it is statically
-checked by the compiler -- suppose we change the database scheme and add one more field to `money`
+checked by the compiler -- suppose we change the database schema and add one more field to `money`
 table (e.g. timestamp of transfer). Compilation rightfully fails:
 
     demo_cxx.cpp: In function `int main()':
@@ -220,19 +220,32 @@ specialized for actual database/environment (if the target language provides suc
 
 This is work in progress and there is plenty of room for improvement. For now the status of this
 project is **works for me** .  I use it for some simple database-access code with
-[sqlite3](http://sqlite.org) engine (using suitable [sqlite3_traits](sqlite3_helper.hpp) helper).
+[sqlite3](http://sqlite.org) engine (using suitable [sqlite3_traits.hpp][sqlite3_cxx] helper).
 This project was started when I found myself editing existing code with tons of C++ wrappers for SQL
 queries, each binding several parameters and decomposing results.
 
-Available ouput languages:
+**Sqlgg** understands the subset of the standard SQL language with arbitrary database-specific
+extensions. The goal is to cover as much SQL as possible in order to accept most of the real-world
+SQL statements unmodified.
 
-* **C++**: code is parametrized with template class for database specific code.
-* **OCaml**: functor `module Sqlgg (T:`[Sqlgg\_traits.M](sqlgg_traits.ml)`)` (sample [sqlgg\_sqlite3](sqlgg_sqlite3.ml)
-	for [OCaml-SQLite3][]).
-* **XML**: input parameters and rowset schema with types and names -- everything needed to generate
-	code in some other language (e.g. with XSLT).
+Available output languages:
+
+* **C++**: code is parametrized with template class for database specific code
+	([sqlite3 traits][sqlite3_cxx], [demo generated code][demo_cxx_gen], [usage example][demo_cxx]).
+* **OCaml**: functor parametrized with module for database specific code
+	[Sqlgg\_traits.M](sqlgg_traits.ml) ([OCaml-SQLite3 traits][sqlite3_caml],
+	[demo generated code][demo_caml_gen], [usage example][demo_caml]).
+* **XML**: input parameters and rowset schema with types and names -- everything needed to further generate
+	code (e.g. using XSLT) in some other language ([demo generated xml][demo_xml_gen])
 
 [OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
+[sqlite3_cxx]:	impl/sqlite3_traits.hpp
+[demo_cxx_gen]:	demo/demo_cxx_gen.hpp
+[demo_cxx]:	demo/demo_cxx.cpp
+[sqlite3_caml]: impl/sqlgg_sqlite3.ml
+[demo_caml_gen]: demo/demo_caml_gen.ml
+[demo_caml]: demo/demo_caml.ml
+[demo_xml_gen]: demo/demo_xml_gen.xml
 
 Try it [online](sql.cgi).
 
