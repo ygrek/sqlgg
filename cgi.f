@@ -152,6 +152,6 @@ PREVIOUS
 \ ' TYPE1 TO USER-TYPE
 
 : save ['] index MAINX ! `sql.cgi SAVE ;
- save BYE
+ save `sql.cgi.o DELETE-FILE DROP BYE
 
 index
