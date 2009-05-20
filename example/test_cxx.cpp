@@ -1,6 +1,4 @@
-//
-
-#include "../sqlite3_helper.hpp"
+#include "../impl/sqlite3_traits.hpp"
 #include "test_cxx_gen.hpp"
 #include <boost/foreach.hpp>
 #include <iostream>
