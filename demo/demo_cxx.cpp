@@ -1,4 +1,4 @@
-#include "../sqlite3_helper.hpp" // sqlite3 traits
+#include "../impl/sqlite3_traits.hpp" // sqlite3 traits
 #include "demo_cxx_gen.hpp" // generated
 #include <iostream>
 #include <vector>
