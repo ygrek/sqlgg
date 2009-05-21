@@ -6,6 +6,7 @@ open Operators
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml)
 module Xml_gen = Gen.Make(Gen_xml)
+module Java = Gen.Make(Gen_java)
 
 let generate = ref Cxx.process
 
@@ -15,6 +16,7 @@ let set_out s =
   | "cxx" -> Cxx.process
   | "caml" -> Caml.process
   | "xml" -> Xml_gen.process
+  | "java" -> Java.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let work =
