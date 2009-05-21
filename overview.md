@@ -233,7 +233,7 @@ Available output languages:
 * **C++**: code is parametrized with template class for database specific code
 	([sqlite3 traits][sqlite3_cxx], [demo generated code][demo_cxx_gen], [usage example][demo_cxx]).
 * **OCaml**: functor parametrized with module for database specific code
-	[Sqlgg\_traits.M](sqlgg_traits.ml) ([OCaml-SQLite3 traits][sqlite3_caml],
+	[Sqlgg\_traits.M][sqlgg_caml] ([OCaml-SQLite3 traits][sqlite3_caml],
 	[demo generated code][demo_caml_gen], [usage example][demo_caml]).
 * **XML**: input parameters and rowset schema with types and names -- everything needed to further generate
 	code (e.g. using XSLT) in some other language ([demo generated xml][demo_xml_gen])
@@ -246,6 +246,7 @@ Available output languages:
 [demo_caml_gen]: demo/demo_caml_gen.ml
 [demo_caml]: demo/demo_caml.ml
 [demo_xml_gen]: demo/demo_xml_gen.xml
+[sqlgg_caml]: impl/sqlgg_traits.ml
 
 Try it [online](sql.cgi).
 
