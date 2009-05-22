@@ -11,3 +11,4 @@ ocamlc -w Alse -g -o demo_caml -I +sqlite3 -I ../impl sqlite3.cma ../impl/sqlgg_
 
 ../sqlgg.byte -gen xml demo.sql > demo_xml_gen.xml
 
+g++ -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmysqlclient
