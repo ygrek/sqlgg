@@ -1,5 +1,5 @@
 -- @create_person
-CREATE TABLE person (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,surname TEXT);
+CREATE TABLE IF NOT EXISTS person (id INTEGER PRIMARY KEY,name TEXT,surname TEXT);
 -- @add_person
 INSERT INTO person (name,surname) VALUES;
 

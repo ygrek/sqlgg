@@ -41,13 +41,21 @@ int main()
 
   // create tables
   gen::create_person(db);
-  //gen::create_money(db);
+  gen::create_money(db);
+
+  // add all person records
+  gen::add_person(db,"John","Black");
+  int64 john = mysql_insert_id(db);
+  gen::add_person(db,"Ivan","Petrov");
+  int64 ivan = mysql_insert_id(db);
+  gen::add_person(db,"Sancho","Alvares");
+  int64 sancho = mysql_insert_id(db);
 
   // add money relations
-  //gen::add_money(db,john,ivan,200);
-  //gen::add_money(db,john,sancho,100);
-  //gen::add_money(db,john,sancho,250);
-  //gen::add_money(db,sancho,ivan,300);
+  gen::add_money(db,john,ivan,200);
+  gen::add_money(db,john,sancho,100);
+  gen::add_money(db,john,sancho,250);
+  gen::add_money(db,sancho,ivan,300);
 
   // summarize by person
   //typedef vector<gen::data_4> collection;

@@ -79,6 +79,9 @@ let keywords =
    "except",EXCEPT;
    "intersect",INTERSECT;
    "cross",CROSS;
+   "temporary",TEMPORARY;
+   "if",IF;
+   "exists",EXISTS;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum"];
