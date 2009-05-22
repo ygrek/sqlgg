@@ -76,6 +76,9 @@ let output_scheme_binder index scheme =
   output "template <class T>";
   start_struct name;
 
+  output "enum { count = %u };" (List.length scheme);
+  empty_line ();
+
   output "static void of_stmt(typename Traits::statement stmt, T& obj)";
   open_curly ();
   List.iteri (fun index attr -> get_column attr index) scheme;
@@ -123,6 +126,8 @@ let output_params_binder index params =
   output_value_inits values;
   open_curly ();
   close_curly "";
+  empty_line ();
+  output "enum { count = %u };" (List.length values);
   empty_line ();
   output "void set_params(typename Traits::statement stmt)";
   open_curly ();
