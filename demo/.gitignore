@@ -1,4 +1,5 @@
 demo_cxx
+demo_cxx_mysql
 demo_caml
 *_gen.*
 *.cm?
