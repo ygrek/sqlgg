@@ -12,6 +12,7 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
 
 struct mysql_traits
 {
@@ -76,6 +77,7 @@ struct mysql_traits
   {
     MYSQL_BIND& bind = r.bind[index];
 
+    data = 0;
     bind.buffer_type = MYSQL_TYPE_LONG;
     bind.buffer = (void*)&data;
     bind.is_null = &r.is_null[index];
@@ -119,11 +121,33 @@ struct mysql_traits
     bind.buffer = (void*)&val;
   }
 
+class mysql_stmt
+{
+public:
+  mysql_stmt(MYSQL_STMT* stmt) : stmt(stmt)
+  {
+  }
+
+  virtual ~mysql_stmt()
+  {
+    if (stmt) mysql_stmt_close(stmt);
+    stmt = NULL;
+  }
+
+  operator MYSQL_STMT*()
+  {
+    return stmt;
+  }
+
+private:
+  MYSQL_STMT* stmt;
+};
+
 // FIXME destroy stmt on error
 template<class Container, class Binder, class Params>
 static bool do_select(connection db, Container& result, const TCHAR* sql, Binder binder, Params params)
 {
-  MYSQL_STMT* stmt = mysql_stmt_init(db);
+  mysql_stmt stmt(mysql_stmt_init(db));
   if (!stmt)
   {
     fprintf(stderr, " mysql_stmt_init(), out of memory\n");
@@ -167,19 +191,23 @@ static bool do_select(connection db, Container& result, const TCHAR* sql, Binder
   typename Container::value_type val;
   binder.bind(r,val);
 
-  result.clear();
-  while (0 == mysql_stmt_fetch(stmt))
+  if (0 != Binder::count)
   {
-    binder.get(r,val);
-    result.push_back(val);
+    if (mysql_stmt_bind_result(stmt, r.bind))
+    {
+      fprintf(stderr, " mysql_stmt_bind_result() failed\n");
+      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+      return false;
+    }
   }
 
-  //Destroy the command
-  if (mysql_stmt_close(stmt))
+  result.clear();
+  while (true)
   {
-    fprintf(stderr, " failed while closing the statement\n");
-    fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
-    return false;
+    int res = mysql_stmt_fetch(stmt);
+    if (0 != res && MYSQL_DATA_TRUNCATED != res) break;
+    binder.get(r,val);
+    result.push_back(val);
   }
 
   return true;

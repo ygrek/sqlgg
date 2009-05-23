@@ -3,7 +3,7 @@
 set -e -u
 
 ../sqlgg.byte -gen cxx demo.sql > demo_cxx_gen.hpp
-g++ -g -o demo_cxx demo_cxx.cpp -lsqlite3
+g++ -Wall -g -o demo_cxx demo_cxx.cpp -lsqlite3
 
 ../sqlgg.byte -gen caml demo.sql > demo_caml_gen.ml
 #ocamlc -w Ase ../impl/database.ml -i demo_caml_gen.ml > demo_caml_gen.i
@@ -11,4 +11,4 @@ ocamlc -w Alse -g -o demo_caml -I +sqlite3 -I ../impl sqlite3.cma ../impl/sqlgg_
 
 ../sqlgg.byte -gen xml demo.sql > demo_xml_gen.xml
 
-g++ -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmysqlclient
+g++ -Wall -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmysqlclient
