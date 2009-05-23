@@ -129,7 +129,7 @@ Things to note above:
 		syntax errors, non-existent columns in expressions, mismatched columns in compound statements,
 		ambiguous column names etc.
 
-Then manually-written C++ code boils down to:
+Then manually-written C++ code boils down to (without error-checking):
 
     #include "../sqlite3_helper.hpp" // sqlite3 traits
     #include "demo_cxx_gen.hpp" // generated

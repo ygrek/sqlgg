@@ -1,23 +1,17 @@
 #include <mysql/mysql.h>
-//#if defined(_UNICODE)
-//#define TCHAR wchar_t
-//#define _T(x) L##x
-//#else
-#define TCHAR char
-#define _T(x) x
-//#endif
+#define SQLGG_STR(x) x
+
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 
 #include <string>
 #include <vector>
-#include <iostream>
 
 struct mysql_traits
 {
   typedef int Int;
-  typedef std::basic_string<TCHAR> Text;
+  typedef std::string Text;
   typedef Text Any;
 
   struct row_t
@@ -121,118 +115,132 @@ struct mysql_traits
     bind.buffer = (void*)&val;
   }
 
-class mysql_stmt
-{
-public:
-  mysql_stmt(MYSQL_STMT* stmt) : stmt(stmt)
+  class mysql_stmt
   {
-  }
-
-  virtual ~mysql_stmt()
-  {
-    if (stmt) mysql_stmt_close(stmt);
-    stmt = NULL;
-  }
-
-  operator MYSQL_STMT*()
-  {
-    return stmt;
-  }
-
-private:
-  MYSQL_STMT* stmt;
-};
-
-// FIXME destroy stmt on error
-template<class Container, class Binder, class Params>
-static bool do_select(connection db, Container& result, const TCHAR* sql, Binder binder, Params params)
-{
-  mysql_stmt stmt(mysql_stmt_init(db));
-  if (!stmt)
-  {
-    fprintf(stderr, " mysql_stmt_init(), out of memory\n");
-    return false;
-  }
-  if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
-  {
-    fprintf(stderr, " mysql_stmt_prepare(), SELECT failed\n");
-    fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
-    return false;
-  }
-  if (Params::count != mysql_stmt_param_count(stmt))
-  {
-    fprintf(stderr, " wrong params count\n");
-    return false;
-  }
-  if (Binder::count != mysql_stmt_field_count(stmt))
-  {
-    fprintf(stderr, " wrong number of columns\n");
-    return false;
-  }
-
-  row_t r_params(stmt,Params::count);
-  params.set_params(r_params);
-
-  if (mysql_stmt_bind_param(stmt, r_params.bind))
-  {
-    fprintf(stderr, " mysql_stmt_bind_param() failed\n");
-    fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
-    return false;
-  }
-
-  if (mysql_stmt_execute(stmt))
-  {
-    fprintf(stderr, " mysql_stmt_execute(), failed\n");
-    fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
-    return false;
-  }
-
-  row_t r(stmt,Binder::count);
-  typename Container::value_type val;
-  binder.bind(r,val);
-
-  if (0 != Binder::count)
-  {
-    if (mysql_stmt_bind_result(stmt, r.bind))
+  public:
+    mysql_stmt(MYSQL_STMT* stmt) : stmt(stmt)
     {
-      fprintf(stderr, " mysql_stmt_bind_result() failed\n");
-      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+    }
+
+    virtual ~mysql_stmt()
+    {
+      if (stmt) mysql_stmt_close(stmt);
+      stmt = NULL;
+    }
+
+    operator MYSQL_STMT*()
+    {
+      return stmt;
+    }
+
+  private:
+    MYSQL_STMT* stmt;
+  };
+
+  // FIXME destroy stmt on error
+  template<class Container, class Binder, class Params>
+  static bool do_select(connection db, Container& result, const char* sql, Binder binder, Params params)
+  {
+    mysql_stmt stmt(mysql_stmt_init(db));
+    if (!stmt)
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " mysql_stmt_init(), out of memory\n");
+#endif
       return false;
     }
+    if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " mysql_stmt_prepare(), SELECT failed\n");
+      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+#endif
+      return false;
+    }
+    if (Params::count != mysql_stmt_param_count(stmt))
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " wrong params count\n");
+#endif
+      return false;
+    }
+    if (Binder::count != mysql_stmt_field_count(stmt))
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " wrong number of columns\n");
+#endif
+      return false;
+    }
+
+    row_t r_params(stmt,Params::count);
+    params.set_params(r_params);
+
+    if (mysql_stmt_bind_param(stmt, r_params.bind))
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " mysql_stmt_bind_param() failed\n");
+      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+#endif
+      return false;
+    }
+
+    if (mysql_stmt_execute(stmt))
+    {
+#if defined(SQLGG_DEBUG)
+      fprintf(stderr, " mysql_stmt_execute(), failed\n");
+      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+#endif
+      return false;
+    }
+
+    row_t r(stmt,Binder::count);
+    typename Container::value_type val;
+    binder.bind(r,val);
+
+    if (0 != Binder::count)
+    {
+      if (mysql_stmt_bind_result(stmt, r.bind))
+      {
+#if defined(SQLGG_DEBUG)
+        fprintf(stderr, " mysql_stmt_bind_result() failed\n");
+        fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+#endif
+        return false;
+      }
+    }
+
+    result.clear();
+    while (true)
+    {
+      int res = mysql_stmt_fetch(stmt);
+      if (0 != res && MYSQL_DATA_TRUNCATED != res) break;
+      binder.get(r,val);
+      result.push_back(val);
+    }
+
+    return true;
   }
 
-  result.clear();
-  while (true)
+  struct no_params
   {
-    int res = mysql_stmt_fetch(stmt);
-    if (0 != res && MYSQL_DATA_TRUNCATED != res) break;
-    binder.get(r,val);
-    result.push_back(val);
+    void set_params(row) {}
+    enum { count = 0 };
+  };
+
+  template<class T>
+  struct no_binder
+  {
+    void get(row,T&) {}
+    void bind(row,T&) {}
+    enum { count = 0 };
+  };
+
+  template<class Params>
+  static bool do_execute(connection db, const char* sql, Params params)
+  {
+    std::vector<int> z;
+    return do_select(db,z,sql,no_binder<int>(),params);
   }
-
-  return true;
-}
-
-struct no_params
-{
-  void set_params(row) {}
-  enum { count = 0 };
-};
-
-template<class T>
-struct no_binder
-{
-  void get(row,T&) {}
-  void bind(row,T&) {}
-  enum { count = 0 };
-};
-
-template<class Params>
-static bool do_execute(connection db, const char* sql, Params params)
-{
-  std::vector<int> z;
-  return do_select(db,z,sql,no_binder<int>(),params);
-}
 
 }; // mysql_traits
 

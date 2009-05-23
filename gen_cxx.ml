@@ -168,8 +168,8 @@ let generate_code () index schema params kind props =
    output "static bool %s(%s)" name all_params;
    open_curly ();
    begin match schema_binder_name with
-   | None -> output "return Traits::do_execute(db,_T(%s),%s(%s));" sql params_binder_name inline_params
-   | Some schema_name ->output "return Traits::do_select(db,result,_T(%s),%s(),%s(%s));"
+   | None -> output "return Traits::do_execute(db,SQLGG_STR(%s),%s(%s));" sql params_binder_name inline_params
+   | Some schema_name ->output "return Traits::do_select(db,result,SQLGG_STR(%s),%s(),%s(%s));"
           sql (schema_name ^ "<typename T::value_type>") params_binder_name inline_params
    end;
    close_curly "";

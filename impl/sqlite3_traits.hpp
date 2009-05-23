@@ -6,10 +6,10 @@
 #define ATLASSERT assert
 #if defined(_UNICODE)
 #define TCHAR wchar_t
-#define _T(x) L##x
+#define SQLGG_STR(x) L##x
 #else
 #define TCHAR char
-#define _T(x) x
+#define SQLGG_STR(x) x
 #endif
 #include <assert.h>
 #include <string>
@@ -69,12 +69,15 @@ struct sqlite3_traits
   #else
       nResult = sqlite3_prepare(db, sql, -1, &stmt, &pszTail);
   #endif
-      ATLASSERT(SQLITE_OK == nResult);
-      //printf("%u\n%S\n%s\n",nResult,sql,sqlite3_errmsg(db));
+
       if (SQLITE_OK != nResult)
       {
-          //log_sqlite(sql,instDB);
-          return false;
+#if defined(SQLGG_DEBUG)
+        printf("sqlite3_prepare error (%u):%s\n%s\n",nResult,sqlite3_errmsg(db),sql);
+#endif
+        //log_sqlite(sql,instDB);
+        ATLASSERT(false);
+        return false;
       }
 
       params.set_params(stmt);
