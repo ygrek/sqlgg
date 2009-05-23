@@ -1,3 +1,4 @@
+* reuse prepared statements
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting

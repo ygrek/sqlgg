@@ -231,7 +231,9 @@ SQL statements unmodified.
 Available output languages:
 
 * **C++**: code is parametrized with template class for database specific code
-	([sqlite3 traits][sqlite3_cxx], [demo generated code][demo_cxx_gen], [usage example][demo_cxx]).
+	([sqlite3 traits][sqlite3_cxx], [demo generated code][demo_cxx_gen],
+	[usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx],
+	[usage example (mysql)][demo_cxx_mysql]).
 * **OCaml**: functor parametrized with module for database specific code
 	[Sqlgg\_traits.M][sqlgg_caml] ([OCaml-SQLite3 traits][sqlite3_caml],
 	[demo generated code][demo_caml_gen], [usage example][demo_caml]).
@@ -241,7 +243,9 @@ Available output languages:
 [OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
 [sqlite3_cxx]:	impl/sqlite3_traits.hpp
 [demo_cxx_gen]:	demo/demo_cxx_gen.hpp
-[demo_cxx]:	demo/demo_cxx.cpp
+[demo_cxx_sqlite3]:	demo/demo_cxx.cpp
+[mysql_cxx]: impl/mysql_traits.hpp
+[demo_cxx_mysql]: demo/demo_cxx_mysql.cpp
 [sqlite3_caml]: impl/sqlgg_sqlite3.ml
 [demo_caml_gen]: demo/demo_caml_gen.ml
 [demo_caml]: demo/demo_caml.ml
@@ -254,6 +258,7 @@ Try it [online](sql.cgi).
 TODO
 ----
 
+* reuse prepared statements
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
@@ -267,7 +272,7 @@ TODO
 * type check expressions
 
 ----
-2009-05-20
+2009-05-23
 
 <style>
 code { font-family: monospace; }
