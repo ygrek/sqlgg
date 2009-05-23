@@ -39,6 +39,9 @@ int main()
   MYSQL* db = connect();
   if (!db) return 1;
 
+  mysql_query(db,"DROP TABLE person");
+  mysql_query(db,"DROP TABLE money");
+
   // create tables
   gen::create_person(db);
   gen::create_money(db);

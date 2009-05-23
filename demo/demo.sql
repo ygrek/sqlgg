@@ -1,5 +1,5 @@
 -- @create_person
-CREATE TABLE IF NOT EXISTS person (id INTEGER PRIMARY KEY,name TEXT,surname TEXT);
+CREATE TABLE person (id INTEGER PRIMARY KEY AUTO_INCREMENT,name TEXT,surname TEXT);
 -- @add_person
 INSERT INTO person (name,surname) VALUES;
 
@@ -9,7 +9,7 @@ CREATE TABLE money (src INTEGER, dst INTEGER, amount INTEGER);
 INSERT INTO money VALUES;
 
 -- @calc_total
-SELECT name || ' ' || surname AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id;
+SELECT CONCAT(name,' ',surname) AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id;
 -- @list_donors
-SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @surname) LIMIT @limit;
+SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE ?) LIMIT ?;
 

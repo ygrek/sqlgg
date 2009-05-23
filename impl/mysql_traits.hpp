@@ -95,28 +95,29 @@ struct mysql_traits
     bind.error = &r.error[index];
   }
 
-  /*
-     static void set_param_Text(row r, const Text& val, int index)
-     {
-#if defined(_UNICODE) || defined(UNICODE)
-int nResult = sqlite3_bind_text16(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
-#else
-int nResult = sqlite3_bind_text(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
-#endif
-ATLASSERT(SQLITE_OK == nResult);
-}
+  static void set_param_Text(row r, const Text& val, int index)
+  {
+    MYSQL_BIND& bind = r.bind[index];
 
-static void set_param_Any(row r, const Any& val, int index)
-{
-set_param_Text(stmt,val,index);
-}
+    r.length[index] = val.size();
+    bind.length = &r.length[index];
+    bind.buffer_length = val.size();
+    bind.buffer_type = MYSQL_TYPE_STRING;
+    bind.buffer = (void*)val.c_str();
+  }
 
-static void set_param_Int(row r, const Int& val, int index)
-{
-int nResult = sqlite3_bind_int(stmt, index + 1, val);
-ATLASSERT(SQLITE_OK == nResult);
-}
-*/
+  static void set_param_Any(row r, const Any& val, int index)
+  {
+    set_param_Text(r,val,index);
+  }
+
+  static void set_param_Int(row r, const Int& val, int index)
+  {
+    MYSQL_BIND& bind = r.bind[index];
+
+    bind.buffer_type = MYSQL_TYPE_LONG;
+    bind.buffer = (void*)&val;
+  }
 
 // FIXME destroy stmt on error
 template<class Container, class Binder, class Params>
@@ -145,7 +146,16 @@ static bool do_select(connection db, Container& result, const TCHAR* sql, Binder
     return false;
   }
 
-  //params.set_params(stmt);
+  row_t r_params(stmt,Params::count);
+  params.set_params(r_params);
+
+  if (mysql_stmt_bind_param(stmt, r_params.bind))
+  {
+    fprintf(stderr, " mysql_stmt_bind_param() failed\n");
+    fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+    return false;
+  }
+
   if (mysql_stmt_execute(stmt))
   {
     fprintf(stderr, " mysql_stmt_execute(), failed\n");
