@@ -16,54 +16,45 @@
 
 struct sqlite3_traits
 {
-
   typedef int Int;
   typedef std::basic_string<TCHAR> Text;
   typedef Text Any;
 
-  typedef sqlite3_stmt* statement;
+  typedef sqlite3_stmt* row;
   typedef sqlite3* connection;
 
-  template<class T>
-  static void get_column_Int(statement stmt, int index, T& val)
+  static void get_column(row r, int index, Int& val)
   {
-     val = sqlite3_column_int(stmt, index);
+     val = sqlite3_column_int(r, index);
   }
 
-  template<class T>
-  static void get_column_Text(statement stmt, int index, T& val)
+  static void get_column(row r, int index, Text& val)
   {
   #if defined(_UNICODE) || defined(UNICODE)
-     val = (const TCHAR*)sqlite3_column_text16(stmt, index);
-  #else   
-     val = (const TCHAR*)sqlite3_column_text(stmt, index);
-  #endif   
-  }
-
-  static void set_param_null(statement stmt, int index)
-  {
-      int nResult = sqlite3_bind_null(stmt, index + 1);
-      ATLASSERT(SQLITE_OK == nResult);
-  }
-
-  static void set_param_Text(statement stmt, const Text& val, int index)
-  {
-  #if defined(_UNICODE) || defined(UNICODE)
-      int nResult = sqlite3_bind_text16(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
+     val = (const TCHAR*)sqlite3_column_text16(r, index);
   #else
-      int nResult = sqlite3_bind_text(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
-  #endif     
+     val = (const TCHAR*)sqlite3_column_text(r, index);
+  #endif
+  }
+
+  static void set_param_Text(row r, const Text& val, int index)
+  {
+  #if defined(_UNICODE) || defined(UNICODE)
+      int nResult = sqlite3_bind_text16(r, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
+  #else
+      int nResult = sqlite3_bind_text(r, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
+  #endif
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void set_param_Any(statement stmt, const Any& val, int index)
+  static void set_param_Any(row r, const Any& val, int index)
   {
-    set_param_Text(stmt,val,index);
+    set_param_Text(r,val,index);
   }
 
-  static void set_param_Int(statement stmt, const Int& val, int index)
+  static void set_param_Int(row r, const Int& val, int index)
   {
-      int nResult = sqlite3_bind_int(stmt, index + 1, val);
+      int nResult = sqlite3_bind_int(r, index + 1, val);
       ATLASSERT(SQLITE_OK == nResult);
   }
 
@@ -93,7 +84,7 @@ struct sqlite3_traits
       while(SQLITE_ROW == sqlite3_step(stmt)) //Iterate all objects
       {
           result.push_back(typename Container::value_type());
-          binder.of_stmt(stmt,result.back());
+          binder.get(stmt,result.back());
       }
 
       //Destroy the command
@@ -108,7 +99,7 @@ struct sqlite3_traits
 
   struct no_params
   {
-    void set_params(statement) {}
+    void set_params(row) {}
   };
 
   template<class Params>

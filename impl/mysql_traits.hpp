@@ -7,8 +7,11 @@
 #define _T(x) x
 //#endif
 #include <assert.h>
-#include <string>
 #include <string.h>
+#include <stdlib.h>
+
+#include <string>
+#include <vector>
 
 struct mysql_traits
 {
@@ -16,93 +19,99 @@ struct mysql_traits
   typedef std::basic_string<TCHAR> Text;
   typedef Text Any;
 
-  template<size_t count>
-  struct rowT
+  struct row_t
   {
-    rowT(MYSQL_STMT* stmt) : stmt(stmt)
+    template<class T> T* alloc(size_t const count) { return (T*)calloc(count,sizeof(T)); }
+
+    row_t(MYSQL_STMT* stmt, size_t count) : count(count), stmt(stmt)
     {
-      memset(bind,0,sizeof(bind));
-      memset(length,0,sizeof(length));
-      memset(error,0,sizeof(error));
-      memset(is_null,0,sizeof(is_null));
+      bind = alloc<MYSQL_BIND>(count);
+      error = alloc<my_bool>(count);
+      length = alloc<unsigned long>(count);
+      is_null = alloc<my_bool>(count);
     }
 
-    MYSQL_STMT* stmt;
-    MYSQL_BIND bind[count];
-    unsigned long length[count];
-    my_bool error[count];
-    my_bool is_null[count];
-  }
+    ~row_t()
+    {
+      free(bind);
+      free(error);
+      free(length);
+      free(is_null);
+    }
 
-  typedef row& row;
+    const size_t count;
+    MYSQL_STMT* stmt;
+
+    MYSQL_BIND* bind;
+    unsigned long* length;
+    my_bool* error;
+    my_bool* is_null;
+  };
+
+  typedef row_t& row;
   typedef MYSQL* connection;
 
-  template<class T>
-  static void get_column(statement stmt, int index, T& data)
+  static void get_column(row r, int index, Int& data)
   {
     // nothing
   }
 
-  template<>
-  static void get_column(statement stmt, int index, Text& data)
+  static void get_column(row r, int index, Text& data)
   {
-    unsigned long const& length = stmt.length[index];
-    MYSQL_BIND& bind = stmt.bind[index];
+    unsigned long const& length = r.length[index];
+    MYSQL_BIND& bind = r.bind[index];
 
     if (length > 0)
     {
       data.resize(length);
-      bind.buffer = data.c_str();
-  bind.buffer_length = length;
-  mysql_stmt_fetch_column(stmt, stmt.bind, index, 0);
-}
+      bind.buffer = (void*)(data.c_str());
+      bind.buffer_length = length;
+      mysql_stmt_fetch_column(r.stmt, r.bind, index, 0);
+    }
 
-    data.resize(stmt.length[index])
+    //data.resize(length);
   }
 
-  static void bind_column(statement stmt, int index, Int& data)
+  static void bind_column(row r, int index, Int& data)
   {
-    MYSQL_BIND& bind = stmt.bind[index];
+    MYSQL_BIND& bind = r.bind[index];
 
     bind.buffer_type = MYSQL_TYPE_LONG;
     bind.buffer = (void*)&data;
-    bind.is_null = &stmt.is_null[index];
-    bind.length = &stmt.length[index];
-    bind.error = &stmt.error[index];
+    bind.is_null = &r.is_null[index];
+    bind.length = &r.length[index];
+    bind.error = &r.error[index];
   }
 
-  static void bind_column(statement stmt, int index, Text& data)
+  static void bind_column(row r, int index, Text& data)
   {
-    // FIXME
-    data.resize(1024);
-
-    MYSQL_BIND& bind = stmt[index];
+    MYSQL_BIND& bind = r.bind[index];
 
     bind.buffer_type = MYSQL_TYPE_STRING;
-    bind.buffer = data.c_str();
-    bind.buffer_length = 1024;
-    bind.is_null = &stmt.is_null[index];
-    bind.length = &stmt.length[index];
-    bind.error = &stmt.error[index];
+    bind.buffer = 0;
+    bind.buffer_length = 0;
+    bind.is_null = &r.is_null[index];
+    bind.length = &r.length[index];
+    bind.error = &r.error[index];
   }
 
   /*
-     static void set_param_Text(statement stmt, const Text& val, int index)
+     static void set_param_Text(row r, const Text& val, int index)
      {
 #if defined(_UNICODE) || defined(UNICODE)
 int nResult = sqlite3_bind_text16(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
 #else
 int nResult = sqlite3_bind_text(stmt, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
-#endif     
+#endif
 ATLASSERT(SQLITE_OK == nResult);
 }
 
-static void set_param_Any(statement stmt, const Any& val, int index)
+static void set_param_Any(row r, const Any& val, int index)
 {
 set_param_Text(stmt,val,index);
 }
 
-static void set_param_Int(statement stmt, const Int& val, int index)
+static void set_param_Int(row r, const Int& val, int index)
 {
 int nResult = sqlite3_bind_int(stmt, index + 1, val);
 ATLASSERT(SQLITE_OK == nResult);
@@ -144,14 +153,14 @@ static bool do_select(connection db, Container& result, const TCHAR* sql, Binder
     return false;
   }
 
-  row<Binder::count> data;
-  Container::value_type val;
-  binder.bind(data,val);
+  row_t r(stmt,Binder::count);
+  typename Container::value_type val;
+  binder.bind(r,val);
 
   result.clear();
   while (0 == mysql_stmt_fetch(stmt))
   {
-    binder.get(data,val);
+    binder.get(r,val);
     result.push_back(val);
   }
 
@@ -168,15 +177,24 @@ static bool do_select(connection db, Container& result, const TCHAR* sql, Binder
 
 struct no_params
 {
-  void set_params(statement) {}
+  void set_params(row) {}
+  enum { count = 0 };
+};
+
+template<class T>
+struct no_binder
+{
+  void get(row,T&) {}
+  void bind(row,T&) {}
   enum { count = 0 };
 };
 
 template<class Params>
 static bool do_execute(connection db, const char* sql, Params params)
 {
-  no_params z;
-  return do_select(db,z,sql,z,params);
+  std::vector<int> z;
+  return do_select(db,z,sql,no_binder<int>(),params);
 }
 
-}; // sqlite3_traits
+}; // mysql_traits
+

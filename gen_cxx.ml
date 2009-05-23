@@ -14,7 +14,7 @@ module Values = struct
 let to_string x =
   String.concat ", " (List.map (fun (n,t) -> t ^ " " ^ n) x)
 
-let inline x = 
+let inline x =
   String.concat ", " (List.map (fun (n,t) -> n) x)
 
 end
@@ -35,7 +35,7 @@ let end_struct name =
    empty_line ()
 let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
-let in_namespace name f =   
+let in_namespace name f =
   output "namespace %s" name;
   open_curly ();
   let result = f () in
@@ -43,29 +43,29 @@ let in_namespace name f =
   empty_line ();
   result
 
-let name_of attr index = 
+let name_of attr index =
   match attr.RA.name with
   | "" -> sprintf "_%u" index
   | s -> s
 
-let set_column attr index =
-  output "Traits::set_column_%s(stmt, %u, obj.%s);" 
-    (Type.to_string attr.RA.domain)
+let column_action action attr index =
+  output "Traits::%s_column(row, %u, obj.%s);"
+    action
+(*     (Type.to_string attr.RA.domain) *)
     index
     (name_of attr index)
 
-let get_column attr index =
-  output "Traits::get_column_%s(stmt, %u, obj.%s);" 
-    (Type.to_string attr.RA.domain)
-    index
-    (name_of attr index)
+(*
+let get_column = column_action "get"
+let bind_column = column_action "bind"
+*)
 
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let as_cxx_type str = "typename Traits::" ^ str
 
 let set_param index param =
   let (id,t) = param in
-  output "Traits::set_param_%s(stmt, %s, %u);" 
+  output "Traits::set_param_%s(row, %s, %u);"
     (param_type_to_string t)
     (param_name_to_string id index)
     index
@@ -79,13 +79,18 @@ let output_scheme_binder index scheme =
   output "enum { count = %u };" (List.length scheme);
   empty_line ();
 
-  output "static void of_stmt(typename Traits::statement stmt, T& obj)";
-  open_curly ();
-  List.iteri (fun index attr -> get_column attr index) scheme;
-  close_curly "";
+  let mthd action =
+    output "static void %s(typename Traits::row row, T& obj)" action;
+    open_curly ();
+    List.iteri (fun index attr -> column_action action attr index) scheme;
+    close_curly ""
+  in
+
+  mthd "get";
+  mthd "bind";
 
   end_struct name;
-  name 
+  name
 
 let output_scheme_binder index scheme =
   match scheme with
@@ -129,7 +134,7 @@ let output_params_binder index params =
   empty_line ();
   output "enum { count = %u };" (List.length values);
   empty_line ();
-  output "void set_params(typename Traits::statement stmt)";
+  output "void set_params(typename Traits::row row)";
   open_curly ();
   List.iteri set_param params;
   close_curly "";
