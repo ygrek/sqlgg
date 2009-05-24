@@ -3,9 +3,6 @@
   open Sql_parser
   module T = Sql.Type
 
-  let curStr = ref ""
-  let store str = curStr := str
-
 let error buf callerID =
   Error.report "Lexer error : %s" callerID;
 (*	update_pos buf;*)
@@ -124,19 +121,20 @@ let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
 let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\r' '\t']
+let cmnt = "--" | "//" | "#"
 
 rule ruleStatement props = parse
   | ['\n' ' ' '\r' '\t']+ { ruleStatement props lexbuf }
 (* fixme strings *)
-  | "--" wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n'
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n'
       {
         ruleStatement (Props.set props n v) lexbuf
       }
-  | "--" wsp* "@" (ident+ as name) [^'\n']* '\n'
+  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n'
       {
         ruleStatement (Props.set props "name" name) lexbuf
       }
-  | "--" { store ""; ignore (ruleComment lexbuf); ruleStatement props lexbuf }
+  | cmnt { ignore (ruleComment "" lexbuf); ruleStatement props lexbuf }
   | alpha [^ ';']+ as stmt ';' { Some (stmt,props) }
   | _ { None }
 and
@@ -150,7 +148,7 @@ ruleMain = parse
   | ','   { COMMA }
   | '.'   { DOT }
 
-  | "--" | "//" { store ""; ignore (ruleComment lexbuf); ruleMain lexbuf }
+  | cmnt { ignore (ruleComment "" lexbuf); ruleMain lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -191,10 +189,10 @@ ruleInSingleQuotes acc = parse
   | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInSingleQuotes" }
 and
-ruleComment = parse
-  | '\n'	      { advance_line lexbuf; !curStr }
-  | eof	        { !curStr }
-  | [^'\n']+    { store (Lexing.lexeme lexbuf); ruleComment lexbuf; }
+ruleComment acc = parse
+  | '\n'	      { advance_line lexbuf; acc }
+  | eof	        { acc }
+  | [^'\n']+    { let s = Lexing.lexeme lexbuf in ruleComment (acc ^ s) lexbuf; }
   | _		{ error lexbuf "ruleComment"; }
 
 {
