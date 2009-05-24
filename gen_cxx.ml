@@ -65,8 +65,8 @@ let as_cxx_type str = "typename Traits::" ^ str
 
 let set_param index param =
   let (id,t) = param in
-  output "Traits::set_param_%s(row, %s, %u);"
-    (param_type_to_string t)
+  output "Traits::set_param(x, %s, %u);"
+(*     (param_type_to_string t) *)
     (param_name_to_string id index)
     index
 
@@ -134,7 +134,8 @@ let output_params_binder index params =
   empty_line ();
   output "enum { count = %u };" (List.length values);
   empty_line ();
-  output "void set_params(typename Traits::row row)";
+  output "template <class T>";
+  output "void set_params(T& x)";
   open_curly ();
   List.iteri set_param params;
   close_curly "";

@@ -91,7 +91,7 @@ struct mysql_traits
     bind.error = &r.error[index];
   }
 
-  static void set_param_Text(row r, const Text& val, int index)
+  static void set_param(row r, const Text& val, int index)
   {
     MYSQL_BIND& bind = r.bind[index];
 
@@ -102,12 +102,7 @@ struct mysql_traits
     bind.buffer = (void*)val.c_str();
   }
 
-  static void set_param_Any(row r, const Any& val, int index)
-  {
-    set_param_Text(r,val,index);
-  }
-
-  static void set_param_Int(row r, const Int& val, int index)
+  static void set_param(row r, const Int& val, int index)
   {
     MYSQL_BIND& bind = r.bind[index];
 

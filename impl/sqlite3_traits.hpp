@@ -37,7 +37,7 @@ struct sqlite3_traits
   #endif
   }
 
-  static void set_param_Text(row r, const Text& val, int index)
+  static void set_param(row r, const Text& val, int index)
   {
   #if defined(_UNICODE) || defined(UNICODE)
       int nResult = sqlite3_bind_text16(r, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
@@ -47,12 +47,7 @@ struct sqlite3_traits
       ATLASSERT(SQLITE_OK == nResult);
   }
 
-  static void set_param_Any(row r, const Any& val, int index)
-  {
-    set_param_Text(r,val,index);
-  }
-
-  static void set_param_Int(row r, const Int& val, int index)
+  static void set_param(row r, const Int& val, int index)
   {
       int nResult = sqlite3_bind_int(r, index + 1, val);
       ATLASSERT(SQLITE_OK == nResult);
