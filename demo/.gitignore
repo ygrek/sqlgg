@@ -3,6 +3,5 @@ demo_cxx_mysql
 demo_caml
 *_gen.*
 *.cm?
-# symlinks
-sqlgg_traits.ml
-sqlgg_sqlite3.ml
+demo_mysql.sql
+demo_sqlite3.sql
