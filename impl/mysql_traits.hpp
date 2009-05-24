@@ -132,7 +132,6 @@ struct mysql_traits
     MYSQL_STMT* stmt;
   };
 
-  // FIXME destroy stmt on error
   template<class Container, class Binder, class Params>
   static bool do_select(connection db, Container& result, const char* sql, Binder binder, Params params)
   {
