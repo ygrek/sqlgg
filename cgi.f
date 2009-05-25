@@ -49,6 +49,7 @@ ALSO XHTML
    <<
    %[ `gen `name $$ ]% `select atag
    << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
+   << %[ `java `value $$ ]% `option atag `Java TYPE >>
    << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
    << %[ `xml `value $$ ]% `option atag `XML TYPE >>
    >>
@@ -62,6 +63,7 @@ ALSO XHTML
 : gen-param ( `s -- `s2 )
   2DUP `caml CEQUAL IF EXIT THEN
   2DUP `xml  CEQUAL IF EXIT THEN
+  2DUP `java CEQUAL IF EXIT THEN
   2DROP `cxx ;
 
 : process ( a u -- )
@@ -100,7 +102,7 @@ ALSO XHTML
 
 : main ( -- )
   S" SQL Guided (code) generator" 2DUP <page>
-	<< `h1 tag `/p/sqlgg.html link-text >>
+	<< `h1 tag `/p/sqlgg/ link-text >>
   `content GetParam DUP 0= IF 2DROP ask-input ELSE process THEN
   \ S" CREATE TABLE x (z INT);" process
 ;
