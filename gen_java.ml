@@ -20,7 +20,7 @@ let start_ cls =
    G.open_curly ()
    in
    let f2 name =
-   G.close_curly " // class %s" name;
+   G.close_curly " // %s %s" cls name;
    empty_line ()
    in
    f1,f2

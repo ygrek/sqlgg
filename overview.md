@@ -232,13 +232,15 @@ Available output languages:
 
 * **C++**: code is parametrized with template class for database specific code
   ([generated code example][demo_cxx_gen], [sqlite3 traits][sqlite3_cxx],
-  [usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx], 
+  [usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx],
   [usage example (mysql)][demo_cxx_mysql]).
+* **Java**: code for JDBC ([generated code example][demo_java_gen],
+	[usage example (mysql)][demo_java_mysql]).
 * **OCaml**: functor parametrized with module for database specific code
 	[Sqlgg\_traits.M][sqlgg_caml] ([generated code example][demo_caml_gen],
   [OCaml-SQLite3 traits][sqlite3_caml],	[usage example][demo_caml_sqlite3]).
-* **XML**: input parameters and rowset schema with types and names -- everything needed 
-  to further generate code (e.g. using XSLT) in some other language 
+* **XML**: input parameters and rowset schema with types and names -- everything needed
+  to further generate code (e.g. using XSLT) in some other language
   ([generated xml example][demo_xml_gen])
 
 [OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
@@ -251,10 +253,12 @@ Available output languages:
 [demo_cxx_gen]:	demo/demo_cxx_gen.hpp
 [demo_caml_gen]: demo/demo_caml_gen.ml
 [demo_xml_gen]: demo/demo_xml_gen.xml
+[demo_java_gen]: demo/demo_java_gen.java
 
 [demo_cxx_sqlite3]:	demo/demo_cxx.cpp
 [demo_cxx_mysql]: demo/demo_cxx_mysql.cpp
 [demo_caml_sqlite3]: demo/demo_caml.ml
+[demo_java_mysql]: demo/demo_java.java
 
 Try it [online](sql.cgi).
 
@@ -263,6 +267,7 @@ TODO
 ----
 
 * reuse prepared statements
+* query parameter placeholders are specific to database API, decide what to do
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
@@ -276,7 +281,7 @@ TODO
 * type check expressions
 
 ----
-2009-05-23
+2009-05-25
 
 <style>
 code { font-family: monospace; }
