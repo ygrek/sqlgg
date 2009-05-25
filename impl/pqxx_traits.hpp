@@ -11,6 +11,7 @@
 
 #if defined(SQLGG_DEBUG)
 #include <iostream>
+using namespace std;
 #endif
 
 struct pqxx_traits
@@ -53,11 +54,17 @@ struct pqxx_traits
   static bool do_select(connection db, Container& result, const char* sql, Binder binder, Params params)
   {
     const char* name = "sqlgg_stmt";
-    params.set_params(db.conn().prepare(name,sql));
+    cout << "start prepare" << endl;
+    pqxx::prepare::declaration decl = db.conn().prepare(name,sql);
+    params.set_params(decl);
 
+    cout << "start invoke" << endl;
     pqxx::prepare::invocation call = db.prepared(name);
+    cout << "set params" << endl;
     params.set_params(call);
+    cout << "exec" << endl;
     result = call.exec();
+    cout << "execed" << endl;
 
     db.conn().unprepare(name);
 
