@@ -231,26 +231,30 @@ SQL statements unmodified.
 Available output languages:
 
 * **C++**: code is parametrized with template class for database specific code
-	([sqlite3 traits][sqlite3_cxx], [demo generated code][demo_cxx_gen],
-	[usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx],
-	[usage example (mysql)][demo_cxx_mysql]).
+  ([generated code example][demo_cxx_gen], [sqlite3 traits][sqlite3_cxx],
+  [usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx], 
+  [usage example (mysql)][demo_cxx_mysql]).
 * **OCaml**: functor parametrized with module for database specific code
-	[Sqlgg\_traits.M][sqlgg_caml] ([OCaml-SQLite3 traits][sqlite3_caml],
-	[demo generated code][demo_caml_gen], [usage example][demo_caml]).
-* **XML**: input parameters and rowset schema with types and names -- everything needed to further generate
-	code (e.g. using XSLT) in some other language ([demo generated xml][demo_xml_gen])
+	[Sqlgg\_traits.M][sqlgg_caml] ([generated code example][demo_caml_gen],
+  [OCaml-SQLite3 traits][sqlite3_caml],	[usage example][demo_caml_sqlite3]).
+* **XML**: input parameters and rowset schema with types and names -- everything needed 
+  to further generate code (e.g. using XSLT) in some other language 
+  ([generated xml example][demo_xml_gen])
 
 [OCaml-SQLite3]:	http://caml.inria.fr/cgi-bin/hump.en.cgi?contrib=471
+
 [sqlite3_cxx]:	impl/sqlite3_traits.hpp
-[demo_cxx_gen]:	demo/demo_cxx_gen.hpp
-[demo_cxx_sqlite3]:	demo/demo_cxx.cpp
 [mysql_cxx]: impl/mysql_traits.hpp
-[demo_cxx_mysql]: demo/demo_cxx_mysql.cpp
 [sqlite3_caml]: impl/sqlgg_sqlite3.ml
-[demo_caml_gen]: demo/demo_caml_gen.ml
-[demo_caml]: demo/demo_caml.ml
-[demo_xml_gen]: demo/demo_xml_gen.xml
 [sqlgg_caml]: impl/sqlgg_traits.ml
+
+[demo_cxx_gen]:	demo/demo_cxx_gen.hpp
+[demo_caml_gen]: demo/demo_caml_gen.ml
+[demo_xml_gen]: demo/demo_xml_gen.xml
+
+[demo_cxx_sqlite3]:	demo/demo_cxx.cpp
+[demo_cxx_mysql]: demo/demo_cxx_mysql.cpp
+[demo_caml_sqlite3]: demo/demo_caml.ml
 
 Try it [online](sql.cgi).
 

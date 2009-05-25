@@ -39,6 +39,7 @@ let main () =
     "-version", Arg.Unit show_version, " Show version";
     "-gen", Arg.String set_out, "cxx|caml|xml Set output language";
     "-test", Arg.Unit Test.run, " Run unit tests";
+    "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
   ]
   in
   Arg.parse (Arg.align args) work usage_msg
