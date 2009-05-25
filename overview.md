@@ -1,10 +1,13 @@
 sqlgg: SQL Guided (code) Generator
 ==================================
 
+*SQL query parser and binding code generator for C++, Java, OCaml.*
+
 * [Problem](#problem)
 * [Solution](#solution)
 * [Complete example](#example)
 * [Details](#details)
+* [Download](#download)
 * [TODO](#todo)
 
 <a id="problem"/>
@@ -193,7 +196,7 @@ Then manually-written C++ code boils down to (without error-checking):
       return 0;
     }
 
-The code is straightforward and free of any SQL-specific details. More importantly it is statically
+The code is straightforward and free of SQL-specific details. More importantly it is statically
 checked by the compiler -- suppose we change the database schema and add one more field to `money`
 table (e.g. timestamp of transfer). Compilation rightfully fails:
 
@@ -260,6 +263,11 @@ Available output languages:
 [demo_caml_sqlite3]: demo/demo_caml.ml
 [demo_java_mysql]: demo/demo_java.java
 
+<a id="download"/>
+Download
+--------
+
+No download for now.
 Try it [online](sql.cgi).
 
 <a id="todo"/>
