@@ -5,3 +5,4 @@ demo_caml
 *.cm?
 demo_mysql.sql
 demo_sqlite3.sql
+*.class

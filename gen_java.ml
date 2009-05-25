@@ -47,7 +47,7 @@ let set_param index param =
   let (id,t) = param in
   output "pstmt.set%s(%u, %s);"
     (t >> param_type_to_string >> String.capitalize)
-    index
+    (index+1)
     (param_name_to_string id index)
 
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_java_type)
@@ -141,7 +141,7 @@ let generate_code () index schema params kind props =
 let start_output () =
   output "import java.sql.*;";
   empty_line ();
-  start_class "sqlgg"
+  start_class "demo_java_gen"
 
-let finish_output () = end_class "sqlgg"
+let finish_output () = end_class "demo_java_gen"
 

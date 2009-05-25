@@ -16,3 +16,7 @@ ocamlc -w Alse -g -o demo_caml -I +sqlite3 -I ../impl sqlite3.cma ../impl/sqlgg_
 
 ../sqlgg.byte -gen cxx demo_mysql.sql > demo_cxx_gen.hpp
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmysqlclient
+
+../sqlgg.byte -gen java demo_mysql.sql > demo_java_gen.java
+javac demo_java.java
+

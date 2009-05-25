@@ -9,6 +9,7 @@ module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
 
 let generate = ref Cxx.process
+(* let name = ref None *)
 
 let set_out s =
   generate :=
@@ -37,8 +38,9 @@ let main () =
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|xml Set output language";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml Set output language";
     "-test", Arg.Unit Test.run, " Run unit tests";
+(*     "-name", Arg.String set_name, "identifier Set output class name"; *)
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
   ]
   in

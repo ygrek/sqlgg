@@ -1,0 +1,4 @@
+./demo_cxx
+./demo_cxx_mysql
+./demo_caml
+java -cp /usr/share/java/mysql.jar:. demo_java
