@@ -51,10 +51,19 @@ struct
 
   let sub l a = List.filter (fun x -> not (List.mem x a)) l
 
-  let natural t1 t2 =
+  let to_string v = Show.show<t>(v)
+  let names t = t >> List.map (fun attr -> attr.name) >> String.concat "," >> sprintf "[%s]"
+
+  let natural_ t1 t2 =
     let (common,t1only) = List.partition (fun x -> List.mem x t2) t1 in
+    if 0 = List.length common then failwith "natural'";
     let t2only = sub t2 common in
     common @ t1only @ t2only
+
+  let natural t1 t2 =
+    try natural_ t1 t2 with
+    | _ -> raise (Error (t1,"no common attributes for natural join of " ^ 
+                             (names t1) ^ " and " ^ (names t2)))
 
   let join_using l t1 t2 =
     let common = List.map (find t1) l in
@@ -64,8 +73,8 @@ struct
   (* FIXME? should be less strict -- check only types *)
   let compound t1 t2 =
     if t1 <> t2 then
-      raise (Error (t1, (Show.show<t>(t1)) ^ " not equal to " ^ (Show.show<t>(t2))))
-    else
+      raise (Error (t1, (to_string t1) ^ " not equal to " ^ (to_string t2)))
+     else
       t1
 
   let to_string x = Show.show<t>(x)
