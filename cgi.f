@@ -33,19 +33,34 @@ ALSO XHTML
    `body tag
    CONT ;
 
+: sdiv ( `style --> \ <-- ) PRO %[ `style $$ ]% `div atag CONT ;
+
 : render-edit ( a u -- )
   \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
   S" " form-post
   <<
-   `div tag
+   S" float:left; margin: 0 1em 1em 0" sdiv
 
    %[ `content `name $$ `25 `rows $$ `80 `cols $$ ]% `textarea atag
    ( a u ) TYPE
   >>
 
+  << S" float:left; padding: 0 1em; background-color: #eee; border: 1px solid green" sdiv
+    << `h3 tag S" Example" TYPE >>
+    << `pre tag
+" CREATE TABLE t1 (x INT, name TEXT);
+CREATE TABLE t2 (y INT, name TEXT);
+CREATE TABLE t3 (z INT, r INT);
+
+SELECT *, y+z AS q FROM t1
+  JOIN t2 USING (name)
+  JOIN t3 ON x = r
+WHERE x = @val;" STYPE
+    >>
+  >>
+
   <<
-   `div tag
-   CR
+   S" clear:left" sdiv
    <<
    %[ `gen `name $$ ]% `select atag
    << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
