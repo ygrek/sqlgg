@@ -68,9 +68,9 @@ let generate_code (x,_) index scheme params kind props =
   let sql = get_sql props kind params in
   x := Node ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
 
-let start_output (x,pre) = pre := !x; x := []
+let start_output (x,pre) _ = pre := !x; x := []
 
-let finish_output (x,pre) =
+let finish_output (x,pre) _ =
   List.iter (fun z -> z >> xml_to_string >> print_endline) (List.rev !pre);
   Node ("sqlgg",[],List.rev !x) >> xml_to_string >> print_endline;
   x := [];

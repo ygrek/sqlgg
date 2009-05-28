@@ -138,10 +138,10 @@ let generate_code () index schema params kind props =
    G.close_curly "";
    empty_line ()
 
-let start_output () =
+let start_output () name =
   output "import java.sql.*;";
   empty_line ();
-  start_class "demo_java_gen"
+  start_class name
 
-let finish_output () = end_class "demo_java_gen"
+let finish_output () name = end_class name
 

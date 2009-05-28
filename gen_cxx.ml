@@ -176,11 +176,11 @@ let generate_code () index schema params kind props =
    close_curly "";
    empty_line ()
 
-let start_output () =
+let start_output () name =
   output "#pragma once";
   empty_line ();
   output "template <class Traits>";
-  start_struct "sqlgg"
+  start_struct name
 
-let finish_output () = end_struct "sqlgg"
+let finish_output () name = end_struct name
 

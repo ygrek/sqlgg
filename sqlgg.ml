@@ -9,7 +9,7 @@ module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
 
 let generate = ref Cxx.process
-(* let name = ref None *)
+let name = ref "sqlgg"
 
 let set_out s =
   generate :=
@@ -20,8 +20,10 @@ let set_out s =
   | "java" -> Java.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
+let set_name s = name := s
+
 let work =
-  let f s = s >> Main.parse_sql >> !generate in
+  let f s = s >> Main.parse_sql >> !generate !name in
   function
   | "-" -> f (Std.input_all stdin)
   | filename -> Main.with_file filename f
@@ -39,9 +41,9 @@ let main () =
   [
     "-version", Arg.Unit show_version, " Show version";
     "-gen", Arg.String set_out, "cxx|caml|java|xml Set output language";
-    "-test", Arg.Unit Test.run, " Run unit tests";
-(*     "-name", Arg.String set_name, "identifier Set output class name"; *)
+    "-name", Arg.String set_name, "<identifier> Set output module name";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
+    "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in
   Arg.parse (Arg.align args) work usage_msg

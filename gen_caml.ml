@@ -100,12 +100,12 @@ let generate_code () index scheme params kind props =
   dec_indent ();
   empty_line ()
 
-let start_output () =
-  output "module Sqlgg (T : Sqlgg_traits.M) = struct";
+let start_output () name =
+  output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
   empty_line ();
   inc_indent ()
 
-let finish_output () =
+let finish_output () name =
   dec_indent ();
-  output "end (* module Sqlgg *)"
+  output "end (* module %s *)" (String.capitalize name)
 
