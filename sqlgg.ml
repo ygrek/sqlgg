@@ -23,10 +23,10 @@ let set_out s =
 let set_name s = name := s
 
 let work =
-  let f s = s >> Main.parse_sql >> !generate !name in
+  let run ch = ch >> Main.get_statements >> !generate !name in
   function
-  | "-" -> f (Std.input_all stdin)
-  | filename -> Main.with_file filename f
+  | "-" -> run stdin
+  | filename -> Main.with_channel filename run
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in

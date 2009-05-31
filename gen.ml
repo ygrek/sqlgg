@@ -82,7 +82,7 @@ let process name stmts =
   let out = S.start () in
   generate_header out;
   S.start_output out name;
-  List.iteri (generate_code out) stmts;
+  Enum.iteri (generate_code out) stmts;
   S.finish_output out name
 
 end
