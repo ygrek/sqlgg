@@ -205,7 +205,7 @@ mnot(X): NOT x = X | x = X { x }
 expr:
      expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
     | expr boolean_bin_op expr %prec AND { `Func ((Some Bool),[$1;$3]) }
-    | e1=expr comparison_op anyall? e2=expr { `Func ((Some Bool),[e1;e2]) }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Some Bool),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
     | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
       { `Func (None,(List.filter_valid [Some e1; Some e2; e3])) }
