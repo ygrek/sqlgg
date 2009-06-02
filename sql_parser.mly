@@ -37,13 +37,13 @@
 %token <Sql.Type.t option> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
-%token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL
+%token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
-%token NUM_BINARY_OP PLUS MINUS
+%token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
 (*
@@ -198,11 +198,14 @@ set_column: name=IDENT EQUAL e=expr { name,e }
 
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
+anyall: ANY | ALL | SOME { }
+
 mnot(X): NOT x = X | x = X { x }
 
 expr:
      expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
-    | expr boolean_bin_op expr %prec AND { `Func ((Some Int),[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { `Func ((Some Bool),[$1;$3]) }
+    | e1=expr comparison_op anyall? e2=expr { `Func ((Some Bool),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
     | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
       { `Func (None,(List.filter_valid [Some e1; Some e2; e3])) }
@@ -230,13 +233,14 @@ expr:
     | FUNCTION LPAREN func_params RPAREN { `Func ($1,$3) }
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
-    | EXISTS LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
            | ASTERISK { [] } ;
 escape: ESCAPE expr { $2 }
-numeric_bin_op: EQUAL | PLUS | MINUS | ASTERISK | NUM_BINARY_OP { }
+numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_BINARY_OP { }
+comparison_op: EQUAL | COMPARISON_OP { }
 boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }

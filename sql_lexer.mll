@@ -49,6 +49,8 @@ let keywords =
    "character",CHARACTER;
    "binary",BINARY;
    "all",ALL;
+   "any",ANY;
+   "some",SOME;
    "order",ORDER;
    "by",BY;
    "limit",LIMIT;
@@ -160,7 +162,8 @@ ruleMain = parse
   | "+" { PLUS }
   | "-" { MINUS }
 
-  | "/" | "%" | ">" | ">=" | "<=" | "<" | "&" | "|" { NUM_BINARY_OP }
+  | "/" | "%" | "|" | "&" { NUM_BINARY_OP }
+  | ">" | ">=" | "<=" | "<" | "<>" { COMPARISON_OP }
 
   | "?" { PARAM Stmt.Next }
   | "?" (digit+ as str) { PARAM (Stmt.Numbered (int_of_string str)) }
