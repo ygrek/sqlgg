@@ -172,9 +172,10 @@ ruleMain = parse
 
   | ident as str { get_ident str }
   | digit+ as str { INTEGER (int_of_string str) }
+  | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
-and 
+and
 ruleInQuotes acc = parse
   | '"'	        { acc }
   | eof	        { error lexbuf "no terminating quote" }

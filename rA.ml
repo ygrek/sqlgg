@@ -70,9 +70,9 @@ struct
     List.iter (check_contains t2) common;
     common @ sub t1 common @ sub t2 common
 
-  (* FIXME? should be less strict -- check only types *)
   let compound t1 t2 =
-    if t1 <> t2 then
+    let types = List.map (fun attr -> attr.domain) in
+    if types t1 <> types t2 then
       raise (Error (t1, (to_string t1) ^ " not equal to " ^ (to_string t2)))
      else
       t1

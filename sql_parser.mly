@@ -20,16 +20,19 @@
     in
     (Named name,t)
 
+  let params_of select = List.map (fun x -> `Param x) (snd select)
+
   let select_value select =
     let (s,p) = select in
     if (List.length s <> 1) then
       raise (RA.Scheme.Error (s,"only one column allowed for SELECT operator in this expression"));
-    List.map (fun x -> `Param x) p
+    params_of select
 
 %}
 
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
+%token <float> FLOAT
 %token <Stmt.param_id> PARAM
 %token <Sql.Type.t option> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
@@ -66,7 +69,7 @@ input: statement EOF { $1 }
 
 if_not_exists: IF NOT EXISTS { }
 
-statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT 
+statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
            LPAREN scheme=column_defs RPAREN
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
@@ -185,6 +188,7 @@ column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: name=IDENT t=sql_type? column_def_extra* { RA.attr name (match t with Some t -> t | None -> Type.Int) }
 column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | NOT NULL { Some Constraint.NotNull }
+                | NULL { None }
                 | UNIQUE { Some Constraint.Unique }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
                 | ON CONFLICT CONFLICT_ALGO { None }
@@ -208,6 +212,7 @@ expr:
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
     | INTEGER { `Value Int }
+    | FLOAT { `Value Float }
     | e1=expr mnot(IN) LPAREN l=separated_nonempty_list(COMMA,expr) RPAREN { `Func (None,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
@@ -225,6 +230,7 @@ expr:
     | FUNCTION LPAREN func_params RPAREN { `Func ($1,$3) }
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
+    | EXISTS LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
