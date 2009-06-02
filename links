@@ -12,3 +12,24 @@ http://www.wiscorp.com/sql200n.zip
 
 SQL-92 BNF
 http://savage.net.au/SQL/sql-92.bnf.html
+
+sqlparser
+http://www.sqlparser.com/
+
+SQL::Statement
+http://search.cpan.org/~rehsack/SQL-Statement-1.20/lib/SQL/Statement.pm
+
+ZQL: a Java SQL parser
+http://www.gibello.com/code/zql/
+
+Active Query Builder
+http://www.activequerybuilder.com/
+
+SQL Parse Convert to Tree Array
+http://www.phpclasses.org/browse/package/4916.html
+
+JSqlParser
+http://jsqlparser.sourceforge.net/home.php
+
+MSSQL SELECT grammar
+http://www.antlr.org/grammar/1062280680642/MS_SQL_SELECT.html
