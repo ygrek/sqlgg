@@ -34,7 +34,7 @@
 %token <Sql.Type.t option> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
-%token SELECT INSERT OR INTO CREATE UPDATE TABLE VALUES WHERE ASTERISK DISTINCT ALL
+%token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
@@ -69,7 +69,7 @@ if_not_exists: IF NOT EXISTS { }
 statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT 
            LPAREN scheme=column_defs RPAREN
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
-         | CREATE TABLE name=IDENT AS select=select_stmt
+        | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
                 let (s,p) = select in
                 Tables.add (name,s);
@@ -145,7 +145,7 @@ join_cond: ON e=expr { `Search e }
 source1: IDENT { Tables.get $1,[] }
        | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
 
-source: src=source1 alias=preceded(AS,IDENT)?
+source: src=source1 alias=maybe_as
     {
       match alias with
       | Some name -> let ((n,s),p) = src in ((name,s),p)
@@ -224,7 +224,7 @@ expr:
     | PARAM { `Param ($1,None) }
     | FUNCTION LPAREN func_params RPAREN { `Func ($1,$3) }
     | expr TEST_NULL { $1 }
-    | expr BETWEEN expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
+    | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }

@@ -58,6 +58,7 @@ let keywords =
    "select",SELECT;
    "create",CREATE;
    "table",TABLE;
+   "view",VIEW;
    "insert",INSERT;
    "replace",REPLACE;
    "update",UPDATE;
@@ -81,8 +82,9 @@ let keywords =
    "exists",EXISTS;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum"];
-  all (FUNCTION (Some T.Text)) ["concat"];
+  all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
+  all (FUNCTION (Some T.Text)) ["concat";"lower";"upper"];
+  all (FUNCTION (Some T.Datetime)) ["current_date";"current_timestamp";"current_time"];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];

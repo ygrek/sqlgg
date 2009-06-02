@@ -27,7 +27,7 @@ struct
     | _ -> raise (Error (t,"duplicate attribute : " ^ name))
 
   let is_unique t =
-    let t1 = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name) t in
+    let t1 = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name && a1.name <> "") t in
     List.length t1 = List.length t
 
   let check_unique t = is_unique t || raise (Error (t,"duplicate attributes"))
