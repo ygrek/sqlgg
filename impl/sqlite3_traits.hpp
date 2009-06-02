@@ -23,12 +23,12 @@ struct sqlite3_traits
   typedef sqlite3_stmt* row;
   typedef sqlite3* connection;
 
-  static void get_column(row r, int index, Int& val)
+  static void get_column_Int(row r, int index, Int& val)
   {
      val = sqlite3_column_int(r, index);
   }
 
-  static void get_column(row r, int index, Text& val)
+  static void get_column_Text(row r, int index, Text& val)
   {
   #if defined(_UNICODE) || defined(UNICODE)
      val = (const TCHAR*)sqlite3_column_text16(r, index);

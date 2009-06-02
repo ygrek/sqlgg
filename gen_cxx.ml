@@ -49,9 +49,9 @@ let name_of attr index =
   | s -> s
 
 let column_action action attr index =
-  output "Traits::%s_column(row, %u, obj.%s);"
+  output "Traits::%s_column_%s(row, %u, obj.%s);"
     action
-(*     (Type.to_string attr.RA.domain) *)
+    (Type.to_string attr.RA.domain)
     index
     (name_of attr index)
 

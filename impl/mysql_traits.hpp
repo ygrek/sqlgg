@@ -46,12 +46,12 @@ struct mysql_traits
   typedef row_t& row;
   typedef MYSQL* connection;
 
-  static void get_column(row r, int index, Int& data)
+  static void get_column_Int(row r, int index, Int& data)
   {
     // nothing
   }
 
-  static void get_column(row r, int index, Text& data)
+  static void get_column_Text(row r, int index, Text& data)
   {
     unsigned long const& length = r.length[index];
     MYSQL_BIND& bind = r.bind[index];
@@ -67,7 +67,7 @@ struct mysql_traits
     //data.resize(length);
   }
 
-  static void bind_column(row r, int index, Int& data)
+  static void bind_column_Int(row r, int index, Int& data)
   {
     MYSQL_BIND& bind = r.bind[index];
 
@@ -79,7 +79,7 @@ struct mysql_traits
     bind.error = &r.error[index];
   }
 
-  static void bind_column(row r, int index, Text& data)
+  static void bind_column_Text(row r, int index, Text& data)
   {
     MYSQL_BIND& bind = r.bind[index];
 
