@@ -29,7 +29,7 @@ let test () =
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [attr "name" Text; attr "other_name" Text]
      [Named "delta", Some Int];
-  tt "select test.name from test where test.id = @x + ? or test.id = @x - ?"
+  tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr "name" Text;]
      [Named "x", Some Int; Next, Some Int; Named "x", Some Int; Next, Some Int;];
   ()
