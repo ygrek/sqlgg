@@ -226,7 +226,6 @@ expr:
       {
         `Func (None,select_value select)
       }
-(*     | FLOAT { `Value Float } *)
     | TEXT { `Value Text }
     | BLOB { `Value Blob }
     | PARAM { `Param ($1,None) }
@@ -259,7 +258,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Type.Int }
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
 
-either(X,Y): X | Y { }
+%inline either(X,Y): X | Y { }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
 collate: COLLATE IDENT { }
