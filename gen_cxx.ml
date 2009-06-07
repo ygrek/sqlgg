@@ -17,7 +17,14 @@ let to_string x =
 let inline x =
   String.concat ", " (List.map (fun (n,t) -> n) x)
 
+let names = List.map fst
+
 end
+
+let rec newname name scope =
+  match List.find_all ((=) name) scope with
+  | [] -> name
+  | _ -> newname (name ^ "_") scope
 
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
@@ -49,7 +56,7 @@ let column_action action attr index =
     (name_of attr index)
 
 let func ret name args k =
-  output "%s %s(%s)";
+  output "%s %s(%s)" (String.concat " " ret) name (Values.to_string args);
   open_curly ();
   k ();
   close_curly ""
@@ -62,10 +69,11 @@ let bind_column = column_action "bind"
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let as_cxx_type str = "typename Traits::" ^ str
 
-let set_param index param =
+let set_param arg index param =
   let (id,t) = param in
-  output "Traits::set_param(x, %s, %u);"
+  output "Traits::set_param(%s, %s, %u);"
 (*     (param_type_to_string t) *)
+    arg
     (param_name_to_string id index)
     index
 
@@ -131,13 +139,12 @@ let output_params_binder index params =
   open_curly ();
   close_curly "";
   empty_line ();
-  output "enum { count = %u };" (List.length values);
+  comment () "binding slots in a query (one param may be bound several times)";
+  output "enum { count = %u };" (List.length params);
   empty_line ();
+  let arg = newname "x" (name :: Values.names values) in
   output "template <class T>";
-  output "void set_params(T& x)";
-  open_curly ();
-  List.iteri set_param params;
-  close_curly "";
+  func ["void"] "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
   empty_line ();
   end_struct name;
   name
@@ -159,20 +166,16 @@ let generate_code () index schema params kind props =
    if (Option.is_some schema_binder_name) then output "template<class T>";
    let values = params_to_values params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T&"] in
-   let all_params = Values.to_string
-     (["db","typename Traits::connection"] @ result @ (make_const_values values))
-   in
+   let all_params = ["db","typename Traits::connection"] @ result @ (make_const_values values) in
    let name = choose_name props kind index in
    let sql = quote (get_sql props kind params) in
-   let inline_params =Values.inline (make_const_values values) in
-   output "static bool %s(%s)" name all_params;
-   open_curly ();
-   begin match schema_binder_name with
-   | None -> output "return Traits::do_execute(db,SQLGG_STR(%s),%s(%s));" sql params_binder_name inline_params
-   | Some schema_name ->output "return Traits::do_select(db,result,SQLGG_STR(%s),%s(),%s(%s));"
+   let inline_params = Values.inline (make_const_values values) in
+   func ["static";"bool"] name all_params (fun () ->
+    begin match schema_binder_name with
+    | None -> output "return Traits::do_execute(db,SQLGG_STR(%s),%s(%s));" sql params_binder_name inline_params
+    | Some schema_name ->output "return Traits::do_select(db,result,SQLGG_STR(%s),%s(),%s(%s));"
           sql (schema_name ^ "<typename T::value_type>") params_binder_name inline_params
-   end;
-   close_curly "";
+    end);
    empty_line ()
 
 let start_output () name =
