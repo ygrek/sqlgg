@@ -1,4 +1,4 @@
-(* OCaml code generation *)
+(** XML generation *)
 
 open ExtList
 open ExtString
@@ -27,7 +27,6 @@ let xml_escape s =
 
 let xml_to_string xml =
   let b = Buffer.create 1000 in
-(*   let indent = ref 0 in *)
   let rec iter spaces = function
     | Node (name,attrs,children) ->
         bprintf b "\n%s<%s" spaces name;
