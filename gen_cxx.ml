@@ -55,8 +55,12 @@ let column_action action attr index =
     index
     (name_of attr index)
 
-let func ret name args k =
-  output "%s %s(%s)" (String.concat " " ret) name (Values.to_string args);
+let func ret name args ?tail k =
+  let tail = match tail with
+  | Some s -> " " ^ s
+  | None -> ""
+  in
+  output "%s %s(%s)%s" ret name (Values.to_string args) tail;
   open_curly ();
   k ();
   close_curly ""
@@ -87,7 +91,7 @@ let output_schema_binder index schema =
   empty_line ();
 
   let mthd action =
-    func ["static";"void"] action ["row","typename Traits::row"; "obj","T&"] (fun () ->
+    func "static void" action ["row","typename Traits::row"; "obj","T&"] (fun () ->
       List.iteri (fun index attr -> column_action action attr index) schema)    
   in
 
@@ -142,7 +146,7 @@ let output_params_binder index params =
   empty_line ();
   let arg = freshname "target" (name :: Values.names values) in
   output "template <class T>";
-  func ["void"] "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
+  func "void" "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
   empty_line ();
   end_struct name;
   name
@@ -168,7 +172,7 @@ let generate_code () index schema params kind props =
    let name = choose_name props kind index in
    let sql = quote (get_sql props kind params) in
    let inline_params = Values.inline (make_const_values values) in
-   func ["static";"bool"] name all_params (fun () ->
+   func "static bool" name all_params (fun () ->
     begin match schema_binder_name with
     | None -> output "return Traits::do_execute(db,SQLGG_STR(%s),%s(%s));" sql params_binder_name inline_params
     | Some schema_name ->output "return Traits::do_select(db,result,SQLGG_STR(%s),%s(),%s(%s));"

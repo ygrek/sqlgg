@@ -78,31 +78,7 @@ let output_schema_data index schema =
   schema >> schema_to_values >> output_value_defs;
   end_class name
 
-let output_params_binder index params =
-(*
-  let name = default_name "params" index in
-  start_class name;
-*)
-(*
-  let values = params_to_values params in
-  values >> make_const_values >> output_value_defs;
-  empty_line ();
-  output "%s(%s)" name (values >> make_const_values >> G.Values.to_string);
-  output_value_inits values;
-  G.open_curly ();
-  G.close_curly "";
-  empty_line ();
-  output "void set_params(typename Traits::statement stmt)";
-  G.open_curly ();
-*)
-  List.iteri set_param params;
-  ()
-(*
-  G.close_curly "";
-  empty_line ();
-  end_class name;
-  name
-*)
+let output_params_binder index params = List.iteri set_param params
 
 type t = unit
 
@@ -112,30 +88,26 @@ let generate_code () index schema params kind props =
    let schema_binder_name = output_schema_binder index schema in
    let values = params_to_values params in
    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
-   let all_params = G.Values.to_string
-     (["db","Connection"] @ result @ values)
-   in
+   let all_params = ["db","Connection"] @ result @ values in
    let name = choose_name props kind index in
    let sql = G.quote (get_sql props kind params) in
-   output "public static int %s(%s) throws SQLException" name all_params;
-   G.open_curly ();
-   output "PreparedStatement pstmt = db.prepareStatement(%s);" sql;
-   output_params_binder index params;
-   begin match schema_binder_name with
-   | None -> output "return pstmt.executeUpdate();"
-   | Some name ->
-      output "ResultSet res = pstmt.executeQuery();";
-      let args = List.mapi (fun index attr -> get_column attr index) schema in
-      let args = String.concat "," args in
-      output "int count = 0;";
-      output "while (res.next())";
-      G.open_curly ();
-      output "result.callback(%s);" args;
-      output "count++;";
-      G.close_curly "";
-      output "return count;"
-   end;
-   G.close_curly "";
+   G.func "public static int" name all_params ~tail:"throws SQLException" (fun () ->
+    output "PreparedStatement pstmt = db.prepareStatement(%s);" sql;
+    output_params_binder index params;
+    begin match schema_binder_name with
+    | None -> output "return pstmt.executeUpdate();"
+    | Some name ->
+       output "ResultSet res = pstmt.executeQuery();";
+       let args = List.mapi (fun index attr -> get_column attr index) schema in
+       let args = String.concat "," args in
+       output "int count = 0;";
+       output "while (res.next())";
+       G.open_curly ();
+       output "result.callback(%s);" args;
+       output "count++;";
+       G.close_curly "";
+       output "return count;"
+    end);
    empty_line ()
 
 let start_output () name =

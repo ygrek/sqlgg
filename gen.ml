@@ -62,14 +62,14 @@ end
 module Make(S : Lang) = struct
 
 let generate_code out index stmt =
-  let ((scheme,params,kind),props) = stmt in
+  let ((schema,params,kind),props) = stmt in
   let sql = Props.get props "sql" >> Option.default "" in
   S.comment out "%s" sql;
-  if not (RA.Scheme.is_unique scheme) then
+  if not (RA.Scheme.is_unique schema) then
     Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql
   else
   begin
-    S.generate_code out index scheme params kind props
+    S.generate_code out index schema params kind props
   end
 
 let generate_header code =
