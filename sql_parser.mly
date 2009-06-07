@@ -70,7 +70,7 @@ input: statement EOF { $1 }
 if_not_exists: IF NOT EXISTS { }
 
 statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
-           LPAREN scheme=column_defs RPAREN
+           scheme=sequence(column_def1)
               { let () = Tables.add (name,scheme) in ([],[],Create name) }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
@@ -80,7 +80,7 @@ statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
               }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
-         | insert_cmd table=IDENT cols=columns_list? VALUES
+         | insert_cmd table=IDENT cols=sequence(IDENT)? VALUES (*sequence(expr)?*)
               {
                 let s = Tables.get_scheme table in
                 let s = match cols with
@@ -105,8 +105,6 @@ statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
                 let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
-
-columns_list: LPAREN cols=separated_nonempty_list(COMMA,IDENT) RPAREN { cols }
 
 select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
               {
@@ -142,7 +140,7 @@ join_source: NATURAL maybe_join_type JOIN src=source { src,`Natural }
 qualified_join: COMMA | maybe_join_type JOIN { }
 
 join_cond: ON e=expr { `Search e }
-         | USING LPAREN l=separated_nonempty_list(COMMA,IDENT) RPAREN { `Using l }
+         | USING l=sequence(IDENT) { `Using l }
          | (* *) { `Default }
 
 source1: IDENT { Tables.get $1,[] }
@@ -184,7 +182,6 @@ column1:
 maybe_as: AS? name=IDENT { Some name }
         | { None }
 
-column_defs: separated_nonempty_list(COMMA,column_def1) { $1 }
 column_def1: name=IDENT t=sql_type? column_def_extra* { RA.attr name (match t with Some t -> t | None -> Type.Int) }
 column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | NOT NULL { Some Constraint.NotNull }
@@ -216,7 +213,7 @@ expr:
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
     | INTEGER { `Value Int }
     | FLOAT { `Value Float }
-    | e1=expr mnot(IN) LPAREN l=separated_nonempty_list(COMMA,expr) RPAREN { `Func (None,e1::l) }
+    | e1=expr mnot(IN) l=sequence(expr) { `Func (None,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
         `Func (None,e1::select_value select)
@@ -236,7 +233,8 @@ expr:
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
-           | ASTERISK { [] } ;
+           | ASTERISK { [] }
+           | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_BINARY_OP { }
 comparison_op: EQUAL | COMPARISON_OP { }
@@ -259,6 +257,8 @@ binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
 
 %inline either(X,Y): X | Y { }
+(* (x1,x2,...,xn) *)
+sequence(X): LPAREN l=separated_nonempty_list(COMMA,X) RPAREN { l }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
 collate: COLLATE IDENT { }
