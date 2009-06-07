@@ -82,6 +82,12 @@ let keywords =
    "temporary",TEMPORARY;
    "if",IF;
    "exists",EXISTS;
+   "foreign",FOREIGN;
+   "global",GLOBAL;
+   "local",LOCAL;
+   "value",VALUE;
+   "references",REFERENCES;
+   "check",CHECK;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];

@@ -41,8 +41,9 @@
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
-       UNIQUE PRIMARY KEY AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
+       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
+       GLOBAL LOCAL VALUE REFERENCES CHECK
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -69,7 +70,7 @@ input: statement EOF { $1 }
 
 if_not_exists: IF NOT EXISTS { }
 
-statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
+statement: CREATE (*either(GLOBAL,LOCAL)?*) ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
            schema=sequence(column_def1)
               { let () = Tables.add (name,schema) in ([],[],Create name) }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
@@ -182,14 +183,26 @@ column1:
 maybe_as: AS? name=IDENT { Some name }
         | { None }
 
-column_def1: name=IDENT t=sql_type? column_def_extra* { RA.attr name (match t with Some t -> t | None -> Type.Int) }
+column_def1: name=IDENT t=sql_type? column_def_extra*
+              { RA.attr name (match t with Some t -> t | None -> Type.Int) }
+(*            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { c } *)
+
+on_conflict: ON CONFLICT CONFLICT_ALGO { $3 }
 column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | NOT NULL { Some Constraint.NotNull }
                 | NULL { None }
                 | UNIQUE { Some Constraint.Unique }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
-                | ON CONFLICT CONFLICT_ALGO { None }
+                | on_conflict { None }
+                | CHECK LPAREN expr RPAREN
                 | DEFAULT INTEGER { None }
+
+(* FIXME check columns *)
+table_constraint_1:
+      | either(UNIQUE,pair(PRIMARY,KEY)) sequence(IDENT) { [] }
+      | UNIQUE LPAREN VALUE RPAREN { [] }
+      | FOREIGN KEY cols=sequence(IDENT) REFERENCES table=IDENT fcols=sequence(IDENT)? { [] }
+      | CHECK LPAREN e=expr RPAREN { e }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
 
