@@ -35,13 +35,6 @@ let end_struct name =
    empty_line ()
 let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
-let in_namespace name f =
-  output "namespace %s" name;
-  open_curly ();
-  let result = f () in
-  close_curly " // namespace %s" name;
-  empty_line ();
-  result
 
 let name_of attr index =
   match attr.RA.name with
@@ -54,6 +47,12 @@ let column_action action attr index =
     (Type.to_string attr.RA.domain)
     index
     (name_of attr index)
+
+let func ret name args k =
+  output "%s %s(%s)";
+  open_curly ();
+  k ();
+  close_curly ""
 
 (*
 let get_column = column_action "get"

@@ -267,7 +267,8 @@ Available output languages:
 Download
 --------
 
-No download for now.
+sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip), [Linux](dist/sqlgg-0.2.1.tar.gz).
+
 Try it [online](sql.cgi).
 
 <a id="todo"/>
@@ -289,7 +290,7 @@ TODO
 * type check expressions
 
 ----
-2009-05-25
+2009-06-05
 
 <style>
 code { font-family: monospace; }
