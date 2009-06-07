@@ -28,17 +28,17 @@ let xml_escape s =
 let xml_to_string xml =
   let b = Buffer.create 1000 in
 (*   let indent = ref 0 in *)
-  let rec fold = function
+  let rec iter spaces = function
     | Node (name,attrs,children) ->
-        bprintf b "\n<%s" name;
+        bprintf b "\n%s<%s" spaces name;
         List.iter (fun (n,v) -> bprintf b " %s=\"%s\"" n (xml_escape v)) attrs;
         begin match children with
         | [] -> bprintf b "/>"
-        | _ -> bprintf b ">"; List.iter fold children; bprintf b "</%s>" name
+        | _ -> bprintf b ">"; List.iter (iter (spaces ^ " ")) children; bprintf b "\n%s</%s>" spaces name
         end
     | Comment text -> bprintf b "\n<!-- %s -->" (Gen_caml.replace_all ~str:text ~sub:"--" ~by:"&mdash;")
   in
-  fold xml;
+  iter "" xml;
   Buffer.contents b
 
 (*
@@ -53,7 +53,6 @@ let value n t = Node ("value",["name",n; "type",t;],[])
 
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let params_to_values = List.mapi (fun i (n,t) -> value (param_name_to_string n i) (param_type_to_string t))
-let params_to_values = List.unique & params_to_values
 
 let scheme_to_values = List.map (fun attr -> value attr.RA.name (Type.to_string attr.RA.domain))
 
