@@ -21,10 +21,10 @@ let names = List.map fst
 
 end
 
-let rec newname name scope =
+let rec freshname name scope =
   match List.find_all ((=) name) scope with
   | [] -> name
-  | _ -> newname (name ^ "_") scope
+  | _ -> freshname (name ^ "_") scope
 
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
@@ -87,10 +87,8 @@ let output_schema_binder index schema =
   empty_line ();
 
   let mthd action =
-    output "static void %s(typename Traits::row row, T& obj)" action;
-    open_curly ();
-    List.iteri (fun index attr -> column_action action attr index) schema;
-    close_curly ""
+    func ["static";"void"] action ["row","typename Traits::row"; "obj","T&"] (fun () ->
+      List.iteri (fun index attr -> column_action action attr index) schema)    
   in
 
   mthd "get";
@@ -142,7 +140,7 @@ let output_params_binder index params =
   comment () "binding slots in a query (one param may be bound several times)";
   output "enum { count = %u };" (List.length params);
   empty_line ();
-  let arg = newname "x" (name :: Values.names values) in
+  let arg = freshname "target" (name :: Values.names values) in
   output "template <class T>";
   func ["void"] "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
   empty_line ();
