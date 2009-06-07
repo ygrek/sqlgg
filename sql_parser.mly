@@ -70,8 +70,8 @@ input: statement EOF { $1 }
 if_not_exists: IF NOT EXISTS { }
 
 statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
-           scheme=sequence(column_def1)
-              { let () = Tables.add (name,scheme) in ([],[],Create name) }
+           schema=sequence(column_def1)
+              { let () = Tables.add (name,schema) in ([],[],Create name) }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
                 let (s,p) = select in
@@ -82,12 +82,12 @@ statement: CREATE ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
               { let (s,p) = $1 in s,p,Select }
          | insert_cmd table=IDENT cols=sequence(IDENT)? VALUES (*sequence(expr)?*)
               {
-                let s = Tables.get_scheme table in
+                let s = Tables.get_schema table in
                 let s = match cols with
                   | Some cols -> RA.Scheme.project cols s
                   | None -> s
                 in
-                let p = Syntax.scheme_as_params s in
+                let p = Syntax.schema_as_params s in
                 [],p,Insert table
               }
          | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=where?
@@ -111,10 +111,10 @@ select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order
                 let (s1,p1,tbls) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-                let scheme = List.fold_left RA.Scheme.compound s1 s2l in
-                let p3 = Syntax.get_params_l tbls scheme o in
-(*                 RA.Scheme.check_unique scheme; *)
-                scheme,(p1@(List.flatten p2l)@p3@p4)
+                let schema = List.fold_left RA.Scheme.compound s1 s2l in
+                let p3 = Syntax.get_params_l tbls schema o in
+(*                 RA.Scheme.check_unique schema; *)
+                schema,(p1@(List.flatten p2l)@p3@p4)
               }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
@@ -123,12 +123,12 @@ select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              g=loption(group)
              h=having?
               {
-                let (tbls,p2,joined_scheme) = Syntax.join t in
-                let p1 = Syntax.params_of_columns tbls joined_scheme r in
-                let p3 = Syntax.get_params_opt tbls joined_scheme w in
-                let p4 = Syntax.get_params_l tbls joined_scheme g in
-                let p5 = Syntax.get_params_opt tbls joined_scheme h in
-                (Syntax.infer_scheme r tbls joined_scheme, p1 @ p2 @ p3 @ p4 @ p5, tbls)
+                let (tbls,p2,joined_schema) = Syntax.join t in
+                let p1 = Syntax.params_of_columns tbls joined_schema r in
+                let p3 = Syntax.get_params_opt tbls joined_schema w in
+                let p4 = Syntax.get_params_l tbls joined_schema g in
+                let p5 = Syntax.get_params_opt tbls joined_schema h in
+                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls)
               }
 
 table_list: src=source joins=join_source* { (src,joins) }

@@ -53,16 +53,16 @@ let value n t = Node ("value",["name",n; "type",t;],[])
 let param_type_to_string t = Option.map_default Type.to_string "Any" t
 let params_to_values = List.mapi (fun i (n,t) -> value (param_name_to_string n i) (param_type_to_string t))
 
-let scheme_to_values = List.map (fun attr -> value attr.RA.name (Type.to_string attr.RA.domain))
+let schema_to_values = List.map (fun attr -> value attr.RA.name (Type.to_string attr.RA.domain))
 
 type t = xml list ref * xml list ref
 
 let start () = ref [], ref []
 
-let generate_code (x,_) index scheme params kind props =
+let generate_code (x,_) index schema params kind props =
   let name = choose_name props kind index in
   let input = Node ("in",[],params_to_values params) in
-  let output = Node ("out",[],scheme_to_values scheme) in
+  let output = Node ("out",[],schema_to_values schema) in
   let sql = get_sql props kind params in
   x := Node ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
 

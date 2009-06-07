@@ -42,22 +42,22 @@ let set_param index param =
     index
     (param_name_to_string id index)
 
-let output_scheme_binder index scheme =
+let output_schema_binder index schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
   inc_indent ();
   output "callback";
   inc_indent ();
-  List.iteri (fun index attr -> get_column attr index) scheme;
+  List.iteri (fun index attr -> get_column attr index) schema;
   dec_indent ();
   dec_indent ();
   output "in";
   name
 
-let output_scheme_binder index scheme =
-  match scheme with
+let output_schema_binder index schema =
+  match schema with
   | [] -> None
-  | _ -> Some (output_scheme_binder index scheme)
+  | _ -> Some (output_schema_binder index schema)
 
 let params_to_values = List.mapi (fun i (n,_) -> param_name_to_string n i)
 let params_to_values = List.unique & params_to_values
@@ -82,20 +82,20 @@ type t = unit
 
 let start () = ()
 
-let generate_code () index scheme params kind props =
+let generate_code () index schema params kind props =
   let name = choose_name props kind index >> String.uncapitalize in
   let values = params_to_values params >> List.map (prepend "~") >> inline_values in
-  let all_params = match scheme with [] -> values | _ -> "callback " ^ values in
+  let all_params = match schema with [] -> values | _ -> "callback " ^ values in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql props kind params) in
-  let scheme_binder_name = output_scheme_binder index scheme in
+  let schema_binder_name = output_schema_binder index schema in
   let params_binder_name = output_params_binder index params in
-  begin match scheme_binder_name with
+  begin match schema_binder_name with
   | None ->
       output "T.execute db %s %s" sql params_binder_name
-  | Some scheme_binder_name ->
-      output "T.select db %s %s %s" sql scheme_binder_name params_binder_name
+  | Some schema_binder_name ->
+      output "T.select db %s %s %s" sql schema_binder_name params_binder_name
   end;
   dec_indent ();
   empty_line ()

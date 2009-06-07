@@ -13,11 +13,11 @@ let get_from tables name =
   with Not_found -> failwith (sprintf "no such table %s" name)
 
 let get name = get_from !all name
-let get_scheme name = snd (get name)
+let get_schema name = snd (get name)
 let check name = ignore (get name)
 
 let add v =
-  let (name,scheme) = v in
+  let (name,schema) = v in
   match List.find_all (fun (n,_) -> n = name) !all with
   | [] -> all := v :: !all
   | _ -> failwith (sprintf "table %s already exists" name)

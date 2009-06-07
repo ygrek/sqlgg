@@ -30,16 +30,16 @@ type columns = column list deriving (Show)
 
 let collect f l = List.flatten (List.map f l)
 
-let scheme_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
+let schema_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
 
 (** replace every Column with Value of corresponding type *)
-let resolve_columns tables joined_scheme expr =
-  let scheme name = name >> Tables.get_from tables >> snd in
+let resolve_columns tables joined_schema expr =
+  let schema name = name >> Tables.get_from tables >> snd in
   let rec each e =
     match e with
     | `Value x -> `Value x
     | `Column (name,x) ->
-      let attr = RA.Scheme.find (Option.map_default scheme joined_scheme x) name in
+      let attr = RA.Scheme.find (Option.map_default schema joined_schema x) name in
       `Value attr.RA.domain
     | `Param x -> `Param x
     | `Func (r,l) -> `Func (r,(List.map each l))
@@ -52,7 +52,7 @@ let assign_types expr =
     match e with
     | `Value t -> e, Some t
     | `Func (ret,l) ->
-(** Assumption: sql functions/operators have type scheme 'a -> ... -> 'a -> 'a -> 'b
+(** Assumption: sql functions/operators have type schema 'a -> ... -> 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
         let (l,t) = l >> List.map typeof >> List.split in
         let t = match List.filter_valid t with
@@ -75,24 +75,24 @@ let assign_types expr =
 
 let show_e e = Show.show<expr_q> (e) >> print_endline
 
-let resolve_types tables joined_scheme expr =
+let resolve_types tables joined_schema expr =
   expr
-  >> resolve_columns tables joined_scheme
+  >> resolve_columns tables joined_schema
 (*   >> tee show_e  *)
   >> assign_types
 
-let infer_scheme columns tables joined_scheme =
+let infer_schema columns tables joined_schema =
 (*   let all = tables >> List.map snd >> List.flatten in *)
-  let scheme name = name >> Tables.get_from tables >> snd in
+  let schema name = name >> Tables.get_from tables >> snd in
   let resolve1 = function
-    | All -> joined_scheme
-    | AllOf t -> scheme t
+    | All -> joined_schema
+    | AllOf t -> schema t
     | Expr (e,name) ->
       let col = begin
       match e with
-      | `Column (name,Some t) -> RA.Scheme.find (scheme t) name
-      | `Column (name,None) -> RA.Scheme.find joined_scheme name
-      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables joined_scheme e >> snd))
+      | `Column (name,Some t) -> RA.Scheme.find (schema t) name
+      | `Column (name,None) -> RA.Scheme.find joined_schema name
+      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables joined_schema e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
@@ -108,8 +108,8 @@ let get_params e =
   in
   loop [] e >> List.rev
 
-let get_params tables joined_scheme e =
-  e >> resolve_types tables joined_scheme >> fst >> get_params
+let get_params tables joined_schema e =
+  e >> resolve_types tables joined_schema >> fst >> get_params
 
 (*
 let _ =
@@ -129,24 +129,24 @@ let get_params_opt tables j_s = function
 
 let get_params_l tables j_s l = collect (get_params tables j_s) l
 
-let do_join (tables,params,scheme) ((table1,params1),kind) =
-  let (_,scheme1) = table1 in
+let do_join (tables,params,schema) ((table1,params1),kind) =
+  let (_,schema1) = table1 in
   let tables = tables @ [table1] in
-  let scheme = match kind with
+  let schema = match kind with
   | `Cross
   | `Search _
-  | `Default -> RA.Scheme.cross scheme scheme1
-  | `Natural -> RA.Scheme.natural scheme scheme1
-  | `Using l -> RA.Scheme.join_using l scheme scheme1
+  | `Default -> RA.Scheme.cross schema schema1
+  | `Natural -> RA.Scheme.natural schema schema1
+  | `Using l -> RA.Scheme.join_using l schema schema1
   in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
-  | `Search e -> get_params tables scheme e
+  | `Search e -> get_params tables schema e
   in
-  tables,params @ params1 @ p , scheme
+  tables,params @ params1 @ p , schema
 
 let join ((t0,p0),joins) =
-  let (tables,params,joined_scheme) = List.fold_left do_join ([t0],p0,snd t0) joins in
-(*   let joined_scheme = tables >> List.map snd >> List.flatten in *)
-  (tables,params,joined_scheme)
+  let (tables,params,joined_schema) = List.fold_left do_join ([t0],p0,snd t0) joins in
+(*   let joined_schema = tables >> List.map snd >> List.flatten in *)
+  (tables,params,joined_schema)
 

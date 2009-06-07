@@ -4,8 +4,8 @@ open RA
 open Sql.Type
 open Stmt
 
-let tt ?msg stmt scheme params =
-  let print_scheme = RA.Scheme.to_string in
+let tt ?msg stmt schema params =
+  let print_schema = RA.Scheme.to_string in
   let print_params = Stmt.params_to_string in
   let (s1,p1,_) =
     try
@@ -13,7 +13,7 @@ let tt ?msg stmt scheme params =
     with
     | _ -> assert_failure "tt failed"
   in
-  assert_equal ?msg ~printer:print_scheme scheme s1;
+  assert_equal ?msg ~printer:print_schema schema s1;
   assert_equal ?msg ~printer:print_params params p1
 
 let test () =
