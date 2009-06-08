@@ -79,6 +79,11 @@ struct sqlite3_traits
 
     bool prepare()
     {
+      if (NULL != stmt)
+      {
+        return true; // already prepared
+      }
+
       int nResult;
       TCHAR const* pszTail;
 #if defined(_UNICODE) || defined(UNICODE)
