@@ -69,8 +69,9 @@
 input: statement EOF { $1 }
 
 if_not_exists: IF NOT EXISTS { }
+temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
-statement: CREATE (*either(GLOBAL,LOCAL)?*) ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
            table_def=sequence(column_def1)
               {
                 let schema = List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) table_def in

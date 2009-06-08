@@ -55,12 +55,13 @@ let column_action action attr index =
     index
     (name_of attr index)
 
-let func ret name args ?tail k =
+let func head name args ?tail k =
   let tail = match tail with
   | Some s -> " " ^ s
   | None -> ""
   in
-  output "%s %s(%s)%s" ret name (Values.to_string args) tail;
+  let head = match head with "" -> "" | s -> s ^ " " in
+  output "%s%s(%s)%s" head name (Values.to_string args) tail;
   open_curly ();
   k ();
   close_curly ""
@@ -92,7 +93,7 @@ let output_schema_binder index schema =
 
   let mthd action =
     func "static void" action ["row","typename Traits::row"; "obj","T&"] (fun () ->
-      List.iteri (fun index attr -> column_action action attr index) schema)    
+      List.iteri (fun index attr -> column_action action attr index) schema)
   in
 
   mthd "get";
@@ -122,33 +123,37 @@ let output_schema_data index schema =
   schema >> schema_to_values >> output_value_defs;
   end_struct name
 
-let output_value_inits vals =
+let value_inits vals =
   match vals with
-  | [] -> ()
-  | _ ->
-    output " : %s"
-    (String.concat "," (List.map (fun (name,_) -> sprintf "%s(%s)" name name) vals))
+  | [] -> ""
+  | _ -> sprintf ": %s" (String.concat "," (List.map (fun (name,_) -> sprintf "%s(%s)" name name) vals))
+
+let struct_params name values k =
+  start_struct name;
+  output_value_defs values;
+  empty_line ();
+  k ();
+  end_struct name
+
+let struct_ctor name values k =
+  struct_params name values (fun () ->
+    func "" name values ~tail:(value_inits values) Apply.id;
+    empty_line ();
+    k ())
 
 let output_params_binder index params =
   out_private ();
   let name = default_name "params" index in
-  start_struct name;
   let values = params_to_values params in
-  values >> make_const_values >> output_value_defs;
-  empty_line ();
-  output "%s(%s)" name (values >> make_const_values >> Values.to_string);
-  output_value_inits values;
-  open_curly ();
-  close_curly "";
-  empty_line ();
-  comment () "binding slots in a query (one param may be bound several times)";
-  output "enum { count = %u };" (List.length params);
-  empty_line ();
-  let arg = freshname "target" (name :: Values.names values) in
-  output "template <class T>";
-  func "void" "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
-  empty_line ();
-  end_struct name;
+  struct_ctor name (make_const_values values) (fun () ->
+    comment () "binding slots in a query (one param may be bound several times)";
+    output "enum { count = %u };" (List.length params);
+    empty_line ();
+    let arg = freshname "target" (name :: Values.names values) in
+    output "template <class T>";
+    func "void" "set_params" [arg,"T&"] (fun () -> List.iteri (set_param arg) params);
+    empty_line ()
+  );
   name
 
 let output_params_binder index params =
@@ -160,7 +165,16 @@ type t = unit
 
 let start () = ()
 
+let names = ref []
+
 let generate_code () index schema params kind props =
+   let name = choose_name props kind index in
+   names := name :: !names;
+   let name = "stmt_" ^ name in
+   let sql = quote (get_sql props kind params) in
+   struct_params name ["stmt","typename Traits::statement"] (fun () ->
+    func "" name ["db","typename Traits::connection"] ~tail:": stmt(db)" (fun () ->
+    output "stmt.prepare(SQLGG_STR(%s));" sql);
    let schema_binder_name = output_schema_binder index schema in
    let params_binder_name = output_params_binder index params in
    if (Option.is_some schema_binder_name) then output_schema_data index schema;
@@ -168,17 +182,15 @@ let generate_code () index schema params kind props =
    if (Option.is_some schema_binder_name) then output "template<class T>";
    let values = params_to_values params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T&"] in
-   let all_params = ["db","typename Traits::connection"] @ result @ (make_const_values values) in
-   let name = choose_name props kind index in
-   let sql = quote (get_sql props kind params) in
+   let all_params = result @ (make_const_values values) in
    let inline_params = Values.inline (make_const_values values) in
-   func "static bool" name all_params (fun () ->
+   func "bool" "operator()" all_params (fun () ->
     begin match schema_binder_name with
-    | None -> output "return Traits::do_execute(db,SQLGG_STR(%s),%s(%s));" sql params_binder_name inline_params
-    | Some schema_name ->output "return Traits::do_select(db,result,SQLGG_STR(%s),%s(),%s(%s));"
-          sql (schema_name ^ "<typename T::value_type>") params_binder_name inline_params
+    | None -> output "return stmt.execute(%s(%s));" params_binder_name inline_params
+    | Some schema_name -> output "return stmt.select(result,%s(),%s(%s));"
+          (schema_name ^ "<typename T::value_type>") params_binder_name inline_params
     end);
-   empty_line ()
+   )
 
 let start_output () name =
   output "#pragma once";
@@ -186,5 +198,13 @@ let start_output () name =
   output "template <class Traits>";
   start_struct name
 
-let finish_output () name = end_struct name
+let finish_output () name =
+  List.iter (fun name -> output "stmt_%s %s;" name name) !names;
+  empty_line ();
+  let tail = match !names with
+  | [] -> ""
+  | _ -> ": " ^ (String.concat ", " (List.map (fun name -> sprintf "%s(db)" name) !names))
+  in
+  func "" name ["db","typename Traits::connection"] ~tail Apply.id;
+  end_struct name
 

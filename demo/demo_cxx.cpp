@@ -5,7 +5,7 @@
 
 using namespace std;
 
-typedef sqlgg<sqlite3_traits> gen;
+//typedef sqlgg<sqlite3_traits> gen;
 typedef long long int64;
 
 int main()
@@ -13,28 +13,30 @@ int main()
   sqlite3* db = NULL;
   sqlite3_open(":memory:", &db);
 
+  sqlgg<sqlite3_traits> gen(db);
+
   // create tables
-  gen::create_person(db);
-  gen::create_money(db);
+  gen.create_person();
+  gen.create_money();
 
   // add all person records
-  gen::add_person(db,"John","Black");
+  gen.add_person("John","Black");
   int64 john = sqlite3_last_insert_rowid(db);
-  gen::add_person(db,"Ivan","Petrov");
+  gen.add_person("Ivan","Petrov");
   int64 ivan = sqlite3_last_insert_rowid(db);
-  gen::add_person(db,"Sancho","Alvares");
+  gen.add_person("Sancho","Alvares");
   int64 sancho = sqlite3_last_insert_rowid(db);
 
   // add money relations
-  gen::add_money(db,john,ivan,200);
-  gen::add_money(db,john,sancho,100);
-  gen::add_money(db,john,sancho,250);
-  gen::add_money(db,sancho,ivan,300);
+  gen.add_money(john,ivan,200);
+  gen.add_money(john,sancho,100);
+  gen.add_money(john,sancho,250);
+  gen.add_money(sancho,ivan,300);
 
   // summarize by person
-  typedef vector<gen::data_4> collection;
+  typedef vector<sqlgg<sqlite3_traits>::stmt_calc_total::data_4> collection;
   collection all;
-  gen::calc_total(db,all);
+  gen.calc_total(all);
 
   // output
   cout << "Total transfers:" << endl;
@@ -44,9 +46,9 @@ int main()
   }
 
   // list donors
-  typedef vector<gen::data_5> people;
+  typedef vector<sqlgg<sqlite3_traits>::stmt_list_donors::data_5> people;
   people p;
-  gen::list_donors(db,p,"petrov",100);
+  gen.list_donors(p,"petrov",100);
 
   cout << "Donors:" << endl;
   for (people::const_iterator i = p.begin(), end = p.end(); i != end; ++i)
