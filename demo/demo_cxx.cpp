@@ -5,7 +5,7 @@
 
 using namespace std;
 
-//typedef sqlgg<sqlite3_traits> gen;
+typedef sqlgg<sqlite3_traits> gen_t;
 typedef long long int64;
 
 int main()
@@ -13,7 +13,7 @@ int main()
   sqlite3* db = NULL;
   sqlite3_open(":memory:", &db);
 
-  sqlgg<sqlite3_traits> gen(db);
+  gen_t gen(db);
 
   // create tables
   gen.create_person();
@@ -34,7 +34,7 @@ int main()
   gen.add_money(sancho,ivan,300);
 
   // summarize by person
-  typedef vector<sqlgg<sqlite3_traits>::stmt_calc_total::data_4> collection;
+  typedef vector<gen_t::calc_total::data_4> collection;
   collection all;
   gen.calc_total(all);
 
@@ -46,7 +46,7 @@ int main()
   }
 
   // list donors
-  typedef vector<sqlgg<sqlite3_traits>::stmt_list_donors::data_5> people;
+  typedef vector<gen_t::list_donors::data_5> people;
   people p;
   gen.list_donors(p,"petrov",100);
 
