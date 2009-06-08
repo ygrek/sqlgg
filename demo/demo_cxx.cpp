@@ -34,7 +34,7 @@ int main()
   gen.add_money(sancho,ivan,300);
 
   // summarize by person
-  typedef vector<gen_t::calc_total::data_4> collection;
+  typedef vector<gen_t::calc_total::data> collection;
   collection all;
   gen.calc_total(all);
 
@@ -46,7 +46,7 @@ int main()
   }
 
   // list donors
-  typedef vector<gen_t::list_donors::data_5> people;
+  typedef vector<gen_t::list_donors::data> people;
   people p;
   gen.list_donors(p,"petrov",100);
 

@@ -84,7 +84,7 @@ let set_param arg index param =
 
 let output_schema_binder index schema =
   out_private ();
-  let name = default_name "output" index in
+  let name = "output" in
   output "template <class T>";
   start_struct name;
 
@@ -118,7 +118,7 @@ let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >
 
 let output_schema_data index schema =
   out_public ();
-  let name = default_name "data" index in
+  let name = "data" in
   start_struct name;
   schema >> schema_to_values >> output_value_defs;
   end_struct name
@@ -143,7 +143,7 @@ let struct_ctor name values k =
 
 let output_params_binder index params =
   out_private ();
-  let name = default_name "params" index in
+  let name = "params" in
   let values = params_to_values params in
   struct_ctor name (make_const_values values) (fun () ->
     comment () "binding slots in a query (one param may be bound several times)";
