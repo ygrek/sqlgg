@@ -7,7 +7,7 @@ sed -r 's/%([^%]*)%([^%]*)%/\2/' demo.sql.pp > demo_sqlite3.sql
 
 ../sqlgg.byte -gen cxx demo_sqlite3.sql > demo_cxx_gen.hpp
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx demo_cxx.cpp -lsqlite3
-exit
+
 ../sqlgg.byte -gen caml demo_sqlite3.sql > demo_caml_gen.ml
 ocamlc -w Alse -g -o demo_caml -I +sqlite3 -I ../impl sqlite3.cma ../impl/sqlgg_sqlite3.ml ../impl/sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
 

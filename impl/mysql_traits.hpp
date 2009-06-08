@@ -117,11 +117,24 @@ struct mysql_traits
     {
     }
 
-    virtual ~mysql_stmt()
+    void close()
     {
       if (stmt) mysql_stmt_close(stmt);
       stmt = NULL;
     }
+
+    virtual ~mysql_stmt()
+    {
+      close();
+    }
+
+/*
+    mysql_stmt& operator=(MYSQL_STMT* v)
+    {
+      close();
+      stmt = v;
+    }
+*/
 
     operator MYSQL_STMT*()
     {
@@ -132,25 +145,51 @@ struct mysql_traits
     MYSQL_STMT* stmt;
   };
 
-  template<class Container, class Binder, class Params>
-  static bool do_select(connection db, Container& result, const char* sql, Binder binder, Params params)
+  class statement
   {
-    mysql_stmt stmt(mysql_stmt_init(db));
-    if (!stmt)
+  private:
+    mysql_stmt stmt;
+    char const* sql;
+    connection db;
+    bool ready;
+
+  public:
+    statement(connection aDb, char const* sql) : db(aDb), sql(sql), stmt(mysql_stmt_init(aDb))
     {
-#if defined(SQLGG_DEBUG)
-      fprintf(stderr, " mysql_stmt_init(), out of memory\n");
-#endif
-      return false;
+      ready = false;
     }
-    if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+
+    bool prepare()
     {
+      if (ready)
+      {
+        return true;
+      }
+
+      if (!stmt)
+      {
 #if defined(SQLGG_DEBUG)
-      fprintf(stderr, " mysql_stmt_prepare(), SELECT failed\n");
-      fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+        fprintf(stderr, " mysql_stmt_init(), out of memory\n");
 #endif
-      return false;
+        return false;
+      }
+
+      if (mysql_stmt_prepare(stmt, sql, strlen(sql)))
+      {
+#if defined(SQLGG_DEBUG)
+        fprintf(stderr, " mysql_stmt_prepare(), failed\n");
+        fprintf(stderr, " %s\n", mysql_stmt_error(stmt));
+#endif
+        return false;
+      }
+
+      ready = true;
+      return true;
     }
+
+  template<class Container, class Binder, class Params>
+  bool select(Container& result, Binder binder, Params params)
+  {
     if (Params::count != mysql_stmt_param_count(stmt))
     {
 #if defined(SQLGG_DEBUG)
@@ -214,6 +253,9 @@ struct mysql_traits
 
     return true;
   }
+
+
+  }; // statement
 
   struct no_params
   {
