@@ -173,8 +173,7 @@ let generate_code () index schema params kind props =
    let name = "stmt_" ^ name in
    let sql = quote (get_sql props kind params) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
-    func "" name ["db","typename Traits::connection"] ~tail:": stmt(db)" (fun () ->
-    output "stmt.prepare(SQLGG_STR(%s));" sql);
+    func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) Apply.id;
    let schema_binder_name = output_schema_binder index schema in
    let params_binder_name = output_params_binder index params in
    if (Option.is_some schema_binder_name) then output_schema_data index schema;

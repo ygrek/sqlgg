@@ -55,14 +55,15 @@ struct sqlite3_traits
   private:
     row stmt;
     connection db;
+    TCHAR const* sql;
 
   public:
-    statement(connection db) : db(db)
+    statement(connection db, TCHAR const* sql) : db(db), sql(sql)
     {
       stmt = NULL;
     }
 
-    virtual ~statement()
+    void finish()
     {
       if (NULL != stmt)
       {
@@ -71,7 +72,12 @@ struct sqlite3_traits
       }
     }
 
-    bool prepare(TCHAR const* sql)
+    virtual ~statement()
+    {
+      finish();
+    }
+
+    bool prepare()
     {
       int nResult;
       TCHAR const* pszTail;
@@ -96,6 +102,8 @@ struct sqlite3_traits
     template<class Container, class Binder, class Params>
     bool select(Container& result, Binder binder, Params params)
     {
+      prepare();
+
       if (NULL == stmt)
       {
         assert(false);
@@ -122,6 +130,8 @@ struct sqlite3_traits
     int execute(Params params)
     {
       int nResult;
+
+      prepare();
 
       if (NULL == stmt)
       {
