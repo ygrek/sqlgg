@@ -88,6 +88,7 @@ let keywords =
    "value",VALUE;
    "references",REFERENCES;
    "check",CHECK;
+   "constraint",CONSTRAINT;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
@@ -106,7 +107,7 @@ let keywords =
       BOOLEAN,
       DATE, TIME, TIMESTAMP, INTERVAL
     *)
-  all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial"];
+  all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
   all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
