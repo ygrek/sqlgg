@@ -44,6 +44,7 @@
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        GLOBAL LOCAL VALUE REFERENCES CHECK
+       DATETIME_FUNC DATE TIME TIMESTAMP
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -195,7 +196,9 @@ column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN
-                | DEFAULT INTEGER { None }
+                | DEFAULT default_value { None } (* FIXME check type with column *)
+
+default_value: literal_value | datetime_value { }
 
 (* FIXME check columns *)
 table_constraint_1:
@@ -224,8 +227,7 @@ expr:
     | IDENT { `Column ($1,None) }
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
-    | INTEGER { `Value Int }
-    | FLOAT { `Value Float }
+    | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { `Func (None,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
@@ -236,13 +238,22 @@ expr:
       {
         `Func (None,select_value select)
       }
-    | TEXT { `Value Text }
-    | BLOB { `Value Blob }
     | PARAM { `Param ($1,None) }
-    | FUNCTION LPAREN func_params RPAREN { `Func ($1,$3) }
+    | f=FUNCTION LPAREN p=func_params RPAREN { `Func (f,p) }
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
+
+datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER RPAREN { `Value Datetime }
+
+literal_value:
+    | TEXT { `Value Text }
+    | BLOB { `Value Blob }
+    | INTEGER { `Value Int }
+    | FLOAT { `Value Float }
+    | DATE TEXT
+    | TIME TEXT
+    | TIMESTAMP TEXT { `Value Datetime }
 
 expr_list: separated_nonempty_list(COMMA,expr) { $1 }
 func_params: expr_list { $1 }
