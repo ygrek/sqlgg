@@ -88,12 +88,20 @@ let keywords =
    "value",VALUE;
    "references",REFERENCES;
    "check",CHECK;
+   "date",DATE;
+   "time",TIME;
+   "timestamp",TIMESTAMP;
+   "alter",ALTER;
+   "add",ADD;
+   "cascade",CASCADE;
+   "restrict",RESTRICT;
+   "drop",DROP;
    "constraint",CONSTRAINT;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
   all (FUNCTION (Some T.Text)) ["concat";"lower";"upper"];
-  all (FUNCTION (Some T.Datetime)) ["current_date";"current_timestamp";"current_time"];
+  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp"];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
