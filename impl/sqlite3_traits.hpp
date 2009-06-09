@@ -1,9 +1,6 @@
 //
 
 #include <sqlite3.h>
-//#include <tchar.h>
-//#include <atlbase.h>
-#define ATLASSERT assert
 #if defined(_UNICODE)
 #define TCHAR wchar_t
 #define SQLGG_STR(x) L##x
@@ -44,89 +41,121 @@ struct sqlite3_traits
   #else
       int nResult = sqlite3_bind_text(r, index + 1, val.c_str(), -1, SQLITE_TRANSIENT);
   #endif
-      ATLASSERT(SQLITE_OK == nResult);
+      assert(SQLITE_OK == nResult);
   }
 
   static void set_param(row r, const Int& val, int index)
   {
       int nResult = sqlite3_bind_int(r, index + 1, val);
-      ATLASSERT(SQLITE_OK == nResult);
+      assert(SQLITE_OK == nResult);
   }
 
-  template<class Container, class Binder, class Params>
-  static bool do_select(connection db, Container& result, const TCHAR* sql, Binder binder, Params params)
+  class statement
   {
-      sqlite3_stmt *stmt;
-      const TCHAR *pszTail;
+  private:
+    row stmt;
+    connection db;
+    TCHAR const* sql;
+
+  public:
+    statement(connection db, TCHAR const* sql) : db(db), sql(sql)
+    {
+      stmt = NULL;
+    }
+
+    void finish()
+    {
+      if (NULL != stmt)
+      {
+        sqlite3_finalize(stmt);
+        stmt = NULL;
+      }
+    }
+
+    virtual ~statement()
+    {
+      finish();
+    }
+
+    bool prepare()
+    {
       int nResult;
-  #if defined(_UNICODE) || defined(UNICODE)
+      TCHAR const* pszTail;
+#if defined(_UNICODE) || defined(UNICODE)
       nResult = sqlite3_prepare16(db, sql, -1, &stmt, (void const**)&pszTail);
-  #else
+#else
       nResult = sqlite3_prepare(db, sql, -1, &stmt, &pszTail);
-  #endif
+#endif
 
       if (SQLITE_OK != nResult)
       {
 #if defined(SQLGG_DEBUG)
         printf("sqlite3_prepare error (%u):%s\n%s\n",nResult,sqlite3_errmsg(db),sql);
 #endif
-        //log_sqlite(sql,instDB);
-        ATLASSERT(false);
+        assert(false);
         return false;
       }
+
+      return true;
+    }
+
+    template<class Container, class Binder, class Params>
+    bool select(Container& result, Binder binder, Params params)
+    {
+      prepare();
+
+      if (NULL == stmt)
+      {
+        assert(false);
+        return false;
+      }
+
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
 
       params.set_params(stmt);
 
       result.clear();
 
-      while(SQLITE_ROW == sqlite3_step(stmt)) //Iterate all objects
+      while(SQLITE_ROW == sqlite3_step(stmt)) // iterate all objects
       {
           result.push_back(typename Container::value_type());
           binder.get(stmt,result.back());
       }
 
-      //Destroy the command
-      nResult = sqlite3_finalize(stmt);
-      if (SQLITE_OK != nResult)
-      {
-          return false;
-      }
-
       return true;
-  }
+    }
 
-  struct no_params
-  {
-    void set_params(row) {}
-  };
-
-  template<class Params>
-  static int do_execute(connection db, const char* sql, Params params)
-  {
-      sqlite3_stmt *stmt;
+    template<class Params>
+    int execute(Params params)
+    {
       int nResult;
-      const char *pszTail;
-  #if defined(_UNICODE) || defined(UNICODE)
-      nResult = sqlite3_prepare16(db, sql, -1, &stmt, (void const**)&pszTail);
-  #else
-      nResult = sqlite3_prepare(db, sql, -1, &stmt, &pszTail);
-  #endif
-      //ATLASSERT(SQLITE_OK == nResult);
-      if (SQLITE_OK != nResult)
+
+      prepare();
+
+      if (NULL == stmt)
       {
-          return nResult;
+        assert(false);
+        return false;
       }
+
+      sqlite3_reset(stmt);
+      sqlite3_clear_bindings(stmt);
 
       params.set_params(stmt);
 
       //Execute the command
       nResult = sqlite3_step(stmt);
-      ATLASSERT(SQLITE_DONE == nResult);
-
-      //Destroy the command
-      nResult = sqlite3_finalize(stmt);
+      assert(SQLITE_DONE == nResult);
 
       return nResult;
-  }
+    }
+
+  }; // statement
+
+  struct no_params
+  {
+    void set_params(row) {}
+  };
 
 }; // sqlite3_traits

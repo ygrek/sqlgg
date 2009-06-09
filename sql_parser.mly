@@ -43,8 +43,8 @@
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
-       GLOBAL LOCAL VALUE REFERENCES CHECK
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
+       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -70,10 +70,15 @@
 input: statement EOF { $1 }
 
 if_not_exists: IF NOT EXISTS { }
+temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
-statement: CREATE (*either(GLOBAL,LOCAL)?*) ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
-           schema=sequence(column_def1)
-              { let () = Tables.add (name,schema) in ([],[],Create name) }
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
+           table_def=sequence(column_def1)
+              {
+                let schema = List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) table_def in
+                let () = Tables.add (name,schema) in
+                ([],[],Create name)
+              }
         | ALTER TABLE name=IDENT alter_action { [],[],Alter name }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
@@ -187,13 +192,15 @@ maybe_as: AS? name=IDENT { Some name }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
-alter_action: ADD COLUMN? maybe_parenth(column_def1) { }
+alter_action: ADD COLUMN? maybe_parenth(column_def) { }
             | DROP COLUMN? name=IDENT drop_behavior? { }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def1: name=IDENT t=sql_type? column_def_extra*
-              { RA.attr name (match t with Some t -> t | None -> Int) }
-(*            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { c } *)
+column_def: name=IDENT t=sql_type? column_def_extra*  
+    { RA.attr name (match t with Some x -> x | None -> Int) }
+
+column_def1: c=column_def { `Attr c }
+           | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }
 
 on_conflict: ON CONFLICT algo=CONFLICT_ALGO { algo }
 column_def_extra: PRIMARY KEY { Some PrimaryKey }
@@ -212,7 +219,7 @@ table_constraint_1:
       | either(UNIQUE,pair(PRIMARY,KEY)) sequence(IDENT) { [] }
       | UNIQUE LPAREN VALUE RPAREN { [] }
       | FOREIGN KEY cols=sequence(IDENT) REFERENCES table=IDENT fcols=sequence(IDENT)? { [] }
-      | CHECK LPAREN e=expr RPAREN { e }
+      | CHECK LPAREN e=expr RPAREN { [] }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
 
