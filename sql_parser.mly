@@ -5,7 +5,7 @@
 
 %{
   open Printf
-  open Sql
+  open Sql.Constraint
   open Sql.Type
   open ListMore
   open Stmt
@@ -163,7 +163,7 @@ update_cmd: UPDATE {}
 select_type: DISTINCT | ALL { }
 
 int_or_param: INTEGER { [] }
-            | PARAM { [($1,Some Sql.Type.Int)] }
+            | PARAM { [($1,Some Int)] }
 
 limit: LIMIT p=int_or_param { p }
      | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 } (* Named? *)
@@ -185,15 +185,15 @@ maybe_as: AS? name=IDENT { Some name }
         | { None }
 
 column_def1: name=IDENT t=sql_type? column_def_extra*
-              { RA.attr name (match t with Some t -> t | None -> Type.Int) }
+              { RA.attr name (match t with Some t -> t | None -> Int) }
 (*            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { c } *)
 
 on_conflict: ON CONFLICT algo=CONFLICT_ALGO { algo }
-column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
-                | NOT NULL { Some Constraint.NotNull }
+column_def_extra: PRIMARY KEY { Some PrimaryKey }
+                | NOT NULL { Some NotNull }
                 | NULL { None }
-                | UNIQUE { Some Constraint.Unique }
-                | AUTOINCREMENT { Some Constraint.Autoincrement }
+                | UNIQUE { Some Unique }
+                | AUTOINCREMENT { Some Autoincrement }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
                 | DEFAULT default_value { None } (* FIXME check type with column *)
@@ -270,12 +270,12 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
-sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Type.Int }
-               | binary { Type.Blob }
-               | NATIONAL? text VARYING? charset? collate? { Type.Text }
-               | T_FLOAT PRECISION? { Type.Float }
-               | T_BOOLEAN { Type.Bool }
-               | T_DATETIME { Type.Datetime }
+sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
+               | binary { Blob }
+               | NATIONAL? text VARYING? charset? collate? { Text }
+               | T_FLOAT PRECISION? { Float }
+               | T_BOOLEAN { Bool }
+               | T_DATETIME { Datetime }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
