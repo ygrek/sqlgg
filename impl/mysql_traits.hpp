@@ -163,9 +163,9 @@ struct mysql_traits
   class statement
   {
   private:
-    mysql_stmt stmt;
-    char const* sql;
     connection db;
+    char const* sql;
+    mysql_stmt stmt;
     bool ready;
 
   public:
@@ -205,6 +205,8 @@ struct mysql_traits
     template<class Container, class Binder, class Params>
     bool select(Container& result, Binder binder, Params params)
     {
+      prepare();
+
       if (Params::count != mysql_stmt_param_count(stmt))
       {
 #if defined(SQLGG_DEBUG)
@@ -273,7 +275,7 @@ struct mysql_traits
     bool execute(Params params)
     {
       std::vector<int> z;
-      return do_select(db,z,sql,no_binder<int>(),params);
+      return select(z,no_binder<int>(),params);
     }
 
   }; // statement
