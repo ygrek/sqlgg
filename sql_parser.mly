@@ -44,7 +44,7 @@
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        GLOBAL LOCAL VALUE REFERENCES CHECK
-       DATETIME_FUNC DATE TIME TIMESTAMP
+       DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -74,6 +74,7 @@ if_not_exists: IF NOT EXISTS { }
 statement: CREATE (*either(GLOBAL,LOCAL)?*) ioption(TEMPORARY) TABLE ioption(if_not_exists) name=IDENT
            schema=sequence(column_def1)
               { let () = Tables.add (name,schema) in ([],[],Create name) }
+        | ALTER TABLE name=IDENT alter_action { [],[],Alter name }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
                 let (s,p) = select in
@@ -183,6 +184,12 @@ column1:
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }
+
+maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
+
+alter_action: ADD COLUMN? maybe_parenth(column_def1) { }
+            | DROP COLUMN? name=IDENT drop_behavior? { }
+drop_behavior: CASCADE | RESTRICT { }
 
 column_def1: name=IDENT t=sql_type? column_def_extra*
               { RA.attr name (match t with Some t -> t | None -> Int) }

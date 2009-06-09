@@ -91,6 +91,11 @@ let keywords =
    "date",DATE;
    "time",TIME;
    "timestamp",TIMESTAMP;
+   "alter",ALTER;
+   "add",ADD;
+   "cascade",CASCADE;
+   "restrict",RESTRICT;
+   "drop",DROP;
   ] in
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];

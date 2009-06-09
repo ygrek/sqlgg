@@ -13,8 +13,9 @@ let params_to_string ps = Show.show<params>(ps)
 
 type kind = | Select
             | Insert of string (** table name *)
-            | Create of string (** table name *)
-            | Update of string (** table name *)
-            | Delete of string (** table name *)
+            | Create of string
+            | Update of string
+            | Delete of string
+            | Alter of string
             deriving (Show)
 
