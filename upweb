@@ -1,0 +1,12 @@
+#! /bin/bash
+
+set -e -u
+
+www=/home/ygrek/work/ygrek_web/ygrek.org.ua
+
+sed -e 's|sql.cgi|/exec/sql.cgi|' overview.md > $www/p/sqlgg/index.md
+cp -a impl/*.{hpp,ml} $www/p/sqlgg/impl/
+cp -a demo/*.{cpp,hpp,ml,xml,java} $www/p/sqlgg/demo/
+make -C /home/ygrek/work/ygrek_web/ygrek.org.ua/
+svn add /home/ygrek/work/ygrek_web/ygrek.org.ua/p/sqlgg/{demo,impl}/*
+svn ci /home/ygrek/work/ygrek_web/ygrek.org.ua/
