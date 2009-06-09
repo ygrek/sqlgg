@@ -179,7 +179,7 @@ having: HAVING e=expr { e }
 column1:
        | IDENT DOT ASTERISK { Syntax.AllOf $1 }
        | ASTERISK { Syntax.All }
-       | expr maybe_as { let e = $1 in Syntax.Expr (e,$2) }
+       | e=expr m=maybe_as { Syntax.Expr (e,m) }
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }
@@ -188,14 +188,14 @@ column_def1: name=IDENT t=sql_type? column_def_extra*
               { RA.attr name (match t with Some t -> t | None -> Type.Int) }
 (*            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { c } *)
 
-on_conflict: ON CONFLICT CONFLICT_ALGO { $3 }
+on_conflict: ON CONFLICT algo=CONFLICT_ALGO { algo }
 column_def_extra: PRIMARY KEY { Some Constraint.PrimaryKey }
                 | NOT NULL { Some Constraint.NotNull }
                 | NULL { None }
                 | UNIQUE { Some Constraint.Unique }
                 | AUTOINCREMENT { Some Constraint.Autoincrement }
                 | on_conflict { None }
-                | CHECK LPAREN expr RPAREN
+                | CHECK LPAREN expr RPAREN { None }
                 | DEFAULT default_value { None } (* FIXME check type with column *)
 
 default_value: literal_value | datetime_value { }
