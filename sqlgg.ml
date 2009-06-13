@@ -7,17 +7,19 @@ module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml)
 module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
+module CSharp = Gen.Make(Gen_csharp)
 
 let generate = ref Cxx.process
 let name = ref "sqlgg"
 
 let set_out s =
   generate :=
-  match s with
-  | "cxx" -> Cxx.process
-  | "caml" -> Caml.process
+  match (String.lowercase s) with
+  | "cxx" | "c++" | "cpp" -> Cxx.process
+  | "caml" | "ocaml" | "ml" -> Caml.process
   | "xml" -> Xml_gen.process
   | "java" -> Java.process
+  | "csharp" | "c#" | "cs" -> CSharp.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let set_name s = name := s
@@ -40,7 +42,7 @@ let main () =
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|java|xml Set output language";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp Set output language";
     "-name", Arg.String set_name, "<identifier> Set output module name";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
