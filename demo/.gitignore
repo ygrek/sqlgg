@@ -1,8 +1,9 @@
 demo_cxx
 demo_cxx_mysql
 demo_caml
-*_gen.*
+*_gen*.*
 *.cm?
 demo_mysql.sql
 demo_sqlite3.sql
 *.class
+*.exe
