@@ -14,9 +14,9 @@ module G = Gen_cxx
 let comment = G.comment
 let empty_line = G.empty_line
 
-let start_ access cls =
+let start_ cls =
    let f1 name =
-   output "%s %s %s" access cls name;
+   output "%s %s" cls name;
    G.open_curly ()
    in
    let f2 name =
@@ -25,8 +25,8 @@ let start_ access cls =
    in
    f1,f2
 
-let (start_class,end_class) = start_ "public" "class"
-let (start_intf,end_intf) = start_ "public" "interface"
+let (start_class,end_class) = start_ "public class"
+let (start_intf,end_intf) = start_ "public interface"
 
 let as_java_type = function
   | Type.Int -> "int"

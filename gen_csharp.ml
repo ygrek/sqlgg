@@ -16,7 +16,7 @@ let comment = G.comment
 let empty_line = G.empty_line
 
 let (start_class,end_class) = J.start_class,J.end_class
-let (start_ns,end_ns) = J.start_ "" "namespace"
+let (start_ns,end_ns) = J.start_ "namespace"
 
 let as_db_type = function
   | Type.Int -> "Int32"
