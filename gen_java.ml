@@ -53,11 +53,9 @@ let set_param index param =
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_java_type)
 
 let output_schema_binder index schema =
-  let name = default_name "output" index in
+  let name = "output" in
   start_intf name;
-
   output "public void callback(%s);" (G.Values.to_string (schema_to_values schema));
-
   end_intf name;
   name
 
@@ -85,30 +83,36 @@ type t = unit
 let start () = ()
 
 let generate_code () index schema params kind props =
-   let schema_binder_name = output_schema_binder index schema in
    let values = params_to_values params in
-   let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
-   let all_params = ["db","Connection"] @ result @ values in
    let name = choose_name props kind index in
    let sql = G.quote (get_sql props kind params) in
-   G.func "public static int" name all_params ~tail:"throws SQLException" (fun () ->
-    output "PreparedStatement pstmt = db.prepareStatement(%s);" sql;
-    output_params_binder index params;
-    begin match schema_binder_name with
-    | None -> output "return pstmt.executeUpdate();"
-    | Some name ->
-       output "ResultSet res = pstmt.executeQuery();";
-       let args = List.mapi (fun index attr -> get_column attr index) schema in
-       let args = String.concat "," args in
-       output "int count = 0;";
-       output "while (res.next())";
-       G.open_curly ();
-       output "result.callback(%s);" args;
-       output "count++;";
-       G.close_curly "";
-       output "return count;"
-    end);
-   empty_line ()
+   start_class name;
+    output "PreparedStatement pstmt;";
+    empty_line ();
+    G.func "public" name ["db","Connection"] (fun () ->
+      output "pstmt = db.prepareStatement(%s);" sql;
+    );
+    empty_line ();
+    let schema_binder_name = output_schema_binder index schema in
+    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
+    let all_params = values @ result in
+    G.func "public int" "execute" all_params ~tail:"throws SQLException" (fun () ->
+      output_params_binder index params;
+      begin match schema_binder_name with
+      | None -> output "return pstmt.executeUpdate();"
+      | Some name ->
+         output "ResultSet res = pstmt.executeQuery();";
+         let args = List.mapi (fun index attr -> get_column attr index) schema in
+         let args = String.concat "," args in
+         output "int count = 0;";
+         output "while (res.next())";
+         G.open_curly ();
+         output "result.callback(%s);" args;
+         output "count++;";
+         G.close_curly "";
+         output "return count;"
+      end);
+   end_class name
 
 let start_output () name =
   output "import java.sql.*;";
