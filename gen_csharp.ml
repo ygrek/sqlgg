@@ -39,7 +39,7 @@ let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >
 
 let output_schema_binder index schema =
   let name = "callback" in
-  output "public delegate %s(%s);" name (G.Values.to_string (schema_to_values schema));
+  output "public delegate void %s(%s);" name (G.Values.to_string (schema_to_values schema));
   empty_line ();
   name
 
@@ -55,7 +55,7 @@ let set_param index param =
   let (id,t) = param in
   let name = default_name "param" index in
   comment () "FIXME unnamed params";
-  output "IDbParameter %s = cmd.CreateParameter();" name;
+  output "IDbDataParameter %s = cmd.CreateParameter();" name;
   output "%s.ParameterName = \"@%s\";" name (param_name_to_string id index);
   output "%s.DbType = DbType.%s;" name (param_type_to_string t);
   output "cmd.Parameters.Add(%s);" name
@@ -92,13 +92,13 @@ let generate_code () index schema params kind props =
       begin match schema_binder_name with
       | None -> output "return cmd.ExecuteNonQuery();"
       | Some name ->
-         output "IDataReader reader = cmd.executeReader();";
+         output "IDataReader reader = cmd.ExecuteReader();";
          let args = List.mapi (fun index attr -> get_column attr index) schema in
          let args = String.concat "," args in
          output "int count = 0;";
          output "while (reader.Read())";
          G.open_curly ();
-         output "result.callback(%s);" args;
+         output "result(%s);" args;
          output "count++;";
          G.close_curly "";
          output "reader.Close();";
@@ -107,6 +107,7 @@ let generate_code () index schema params kind props =
    end_class name
 
 let start_output () name =
+  output "using System;";
   output "using System.Data;";
   empty_line ();
   start_ns name
