@@ -211,13 +211,14 @@ column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
                 | DEFAULT default_value { None } (* FIXME check type with column *)
+                | COLLATE IDENT { None }
 
 default_value: literal_value | datetime_value { }
 
 (* FIXME check columns *)
 table_constraint_1:
       | either(UNIQUE,pair(PRIMARY,KEY)) sequence(IDENT) { [] }
-      | UNIQUE LPAREN VALUE RPAREN { [] }
+      | UNIQUE pair(KEY,IDENT)? LPAREN VALUE RPAREN { [] }
       | FOREIGN KEY cols=sequence(IDENT) REFERENCES table=IDENT fcols=sequence(IDENT)? { [] }
       | CHECK LPAREN e=expr RPAREN { [] }
 
