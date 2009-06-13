@@ -6,16 +6,19 @@ sed -r 's/%([^%]*)%([^%]*)%/\1/' demo.sql.pp > demo_mysql.sql
 sed -r 's/%([^%]*)%([^%]*)%/\2/' demo.sql.pp > demo_sqlite3.sql
 
 ../sqlgg.byte -gen cxx demo_sqlite3.sql > demo_cxx_gen.hpp
+../sqlgg.byte -gen cxx demo_mysql.sql > demo_cxx_gen_mysql.hpp
+../sqlgg.byte -gen caml demo_sqlite3.sql > demo_caml_gen.ml
+../sqlgg.byte -gen xml demo_sqlite3.sql > demo_xml_gen.xml
+../sqlgg.byte -gen java -name demo_java_gen demo_mysql.sql > demo_java_gen.java
+../sqlgg.byte -gen csharp demo_mysql.sql > demo_csharp_gen.cs
+
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx demo_cxx.cpp -lsqlite3
 
-../sqlgg.byte -gen caml demo_sqlite3.sql > demo_caml_gen.ml
 ocamlc -w Alse -g -o demo_caml -I +sqlite3 -I ../impl sqlite3.cma ../impl/sqlgg_sqlite3.ml ../impl/sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
 
-../sqlgg.byte -gen xml demo_sqlite3.sql > demo_xml_gen.xml
-
-../sqlgg.byte -gen cxx demo_mysql.sql > demo_cxx_gen.hpp
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmysqlclient
 
-../sqlgg.byte -gen java -name demo_java_gen demo_mysql.sql > demo_java_gen.java
 javac demo_java.java
+
+gmcs -r:System.Data -r:MySql.Data demo_csharp.cs demo_csharp_gen.cs
 
