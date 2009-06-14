@@ -26,7 +26,9 @@ let as_db_type = function
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
 
-let as_cs_type = as_db_type
+let as_cs_type = function
+  | Type.Int -> "System.Decimal" (* ?? *)
+  | x -> as_db_type x
 
 let get_column attr index =
   sprintf "(%s)reader[\"%s\"]"
