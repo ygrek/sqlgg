@@ -1,5 +1,5 @@
 true: use_menhir
-true: dtypes, warn_A, warn_z
+true and not <sql_parser.ml>: dtypes, warn_A, warn_z
 <*.ml> and not <sql_parser.ml>: pp(deriving), use_deriving
 <example/*>: not_hygienic
 <demo/*>: not_hygienic
