@@ -44,7 +44,7 @@
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
-       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT
+       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -73,7 +73,7 @@ if_not_exists: IF NOT EXISTS { }
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
-           table_def=sequence(column_def1)
+           table_def=sequence_(column_def1) table_def_done
               {
                 let schema = List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) table_def in
                 let () = Tables.add (name,schema) in
@@ -113,6 +113,10 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
+
+(* ignoring everything after RPAREN (NB one look-ahead token) *)
+table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
+table_def_done1: { Parser_state.mode_ignore () }
 
 select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
               {
@@ -193,10 +197,10 @@ maybe_as: AS? name=IDENT { Some name }
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? maybe_parenth(column_def) { }
-            | DROP COLUMN? name=IDENT drop_behavior? { }
+            | DROP COLUMN? IDENT drop_behavior? { }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT t=sql_type? column_def_extra*  
+column_def: name=IDENT t=sql_type? column_def_extra*
     { RA.attr name (match t with Some x -> x | None -> Int) }
 
 column_def1: c=column_def { `Attr c }
@@ -218,12 +222,12 @@ default_value: literal_value | datetime_value { }
 (* FIXME check columns *)
 table_constraint_1:
       | PRIMARY KEY sequence(IDENT) { [] }
-      | unique_key unique_arg { [] }
-      | FOREIGN KEY cols=sequence(IDENT) REFERENCES table=IDENT fcols=sequence(IDENT)? { [] }
-      | CHECK LPAREN e=expr RPAREN { [] }
+      | unique_key IDENT? unique_arg { [] }
+      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)? { [] }
+      | CHECK LPAREN expr RPAREN { [] }
 
 (* mysql specific? (not in ANS) *)
-unique_key: UNIQUE | UNIQUE KEY IDENT { }
+unique_key: UNIQUE KEY? { }
 unique_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
@@ -294,14 +298,15 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | NATIONAL? text VARYING? charset? collate? { Text }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
-               | T_DATETIME { Datetime }
+               | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
 
 %inline either(X,Y): X | Y { }
 (* (x1,x2,...,xn) *)
-sequence(X): LPAREN l=separated_nonempty_list(COMMA,X) RPAREN { l }
+%inline sequence_(X): LPAREN l=separated_nonempty_list(COMMA,X) { l }
+%inline sequence(X): l=sequence_(X) RPAREN { l }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
 collate: COLLATE IDENT { }

@@ -122,7 +122,7 @@ let keywords =
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
-  all T_DATETIME ["datetime";"date";"time";"timestamp";"year";];
+  all T_DATETIME ["datetime";"year";];
   !k
 
 (*
@@ -219,6 +219,14 @@ ruleComment acc = parse
 
 {
 
-  let parse_rule lexbuf = ruleMain lexbuf
+  let parse_rule lexbuf =
+    let module P = Parser_state in
+    let token = ruleMain lexbuf in
+    match !P.mode with
+    | P.Normal -> token
+    | P.Ignore ->
+(*         Printf.eprintf "ignored: %s\n" (Lexing.lexeme lexbuf); *)
+      if (token = EOF) then token else IGNORED
 
 }
+
