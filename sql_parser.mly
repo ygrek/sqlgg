@@ -70,6 +70,7 @@
 input: statement EOF { $1 }
 
 if_not_exists: IF NOT EXISTS { }
+if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
@@ -79,7 +80,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 let () = Tables.add (name,schema) in
                 ([],[],Create name)
               }
-        | ALTER TABLE name=IDENT action=alter_action
+         | ALTER TABLE name=IDENT action=alter_action
               {
                 begin match action with
                 | `Add (col,pos) -> Tables.alter_add name col pos
@@ -88,7 +89,12 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 end;
                 ([],[],Alter name)
               }
-        | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
+         | DROP TABLE if_exists? name=IDENT
+              {
+                Tables.drop name;
+                ([],[],Drop name)
+              }
+         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
                 let (s,p) = select in
                 Tables.add (name,s);
