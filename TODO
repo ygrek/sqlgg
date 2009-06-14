@@ -1,4 +1,3 @@
-* reuse prepared statements
 * query parameter placeholders are database API specific, decide what to do
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
