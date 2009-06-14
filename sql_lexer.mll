@@ -98,6 +98,12 @@ let keywords =
    "drop",DROP;
    "constraint",CONSTRAINT;
    "collate",COLLATE;
+   "after",AFTER;
+   "index",INDEX;
+   "fulltext",FULLTEXT;
+   "unsigned",UNSIGNED;
+   "first",FIRST;
+   "column",COLUMN;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
@@ -187,6 +193,7 @@ ruleMain = parse
 
   | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | "`" { IDENT (ruleInBackQuotes "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }
@@ -210,6 +217,14 @@ ruleInSingleQuotes acc = parse
   | "''"        { ruleInSingleQuotes (acc ^ "'") lexbuf }
   | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInSingleQuotes" }
+and
+ruleInBackQuotes acc = parse
+  | '`'	        { acc }
+  | eof	        { error lexbuf "no terminating back quote" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating back quote" }
+  | "``"        { ruleInBackQuotes (acc ^ "`") lexbuf }
+  | [^'`' '\n']+  { ruleInBackQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInBackQuotes" }
 and
 ruleComment acc = parse
   | '\n'	      { advance_line lexbuf; acc }
