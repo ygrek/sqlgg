@@ -217,10 +217,14 @@ default_value: literal_value | datetime_value { }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | either(UNIQUE,pair(PRIMARY,KEY)) sequence(IDENT) { [] }
-      | UNIQUE pair(KEY,IDENT)? LPAREN VALUE RPAREN { [] }
+      | PRIMARY KEY sequence(IDENT) { [] }
+      | unique_key unique_arg { [] }
       | FOREIGN KEY cols=sequence(IDENT) REFERENCES table=IDENT fcols=sequence(IDENT)? { [] }
       | CHECK LPAREN e=expr RPAREN { [] }
+
+(* mysql specific? (not in ANS) *)
+unique_key: UNIQUE | UNIQUE KEY IDENT { }
+unique_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
 
