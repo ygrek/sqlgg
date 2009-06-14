@@ -69,6 +69,7 @@ let generate_code (x,_) index schema params kind props =
 let start_output (x,pre) _ = pre := !x; x := []
 
 let finish_output (x,pre) _ =
+  print_endline "<?xml version=\"1.0\"?>";
   List.iter (fun z -> z >> xml_to_string >> print_endline) (List.rev !pre);
   Node ("sqlgg",[],List.rev !x) >> xml_to_string >> print_endline;
   x := [];
