@@ -44,7 +44,7 @@
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
-       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED
+       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -79,7 +79,15 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 let () = Tables.add (name,schema) in
                 ([],[],Create name)
               }
-        | ALTER TABLE name=IDENT alter_action { [],[],Alter name }
+        | ALTER TABLE name=IDENT action=alter_action
+              {
+                begin match action with
+                | `Add (col,pos) -> Tables.alter_add name col pos
+                | `Drop col -> Tables.alter_drop name col
+                | `None -> ()
+                end;
+                ([],[],Alter name)
+              }
         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
               {
                 let (s,p) = select in
@@ -196,8 +204,13 @@ maybe_as: AS? name=IDENT { Some name }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
-alter_action: ADD COLUMN? maybe_parenth(column_def) { }
-            | DROP COLUMN? IDENT drop_behavior? { }
+alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
+            | ADD index_type IDENT? sequence(IDENT) { `None }
+            | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
+index_type: INDEX | FULLTEXT { }
+alter_pos: AFTER col=IDENT { `After col }
+         | FIRST { `First }
+         | { `Last }
 drop_behavior: CASCADE | RESTRICT { }
 
 column_def: name=IDENT t=sql_type? column_def_extra*
@@ -221,13 +234,15 @@ default_value: literal_value | datetime_value { }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | PRIMARY KEY sequence(IDENT) { [] }
+      | primary_key IDENT? sequence(IDENT) { [] }
       | unique_key IDENT? unique_arg { [] }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)? { [] }
       | CHECK LPAREN expr RPAREN { [] }
 
 (* mysql specific? (not in ANS) *)
 unique_key: UNIQUE KEY? { }
+
+primary_key: PRIMARY? KEY { }
 unique_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
