@@ -1,7 +1,7 @@
 sqlgg: SQL Guided (code) Generator
 ==================================
 
-*SQL query parser and binding code generator for C++, Java, OCaml.*
+*SQL query parser and binding code generator for C#, C++, Java, Objective Caml.*
 
 * [Problem](#problem)
 * [Solution](#solution)
@@ -111,14 +111,14 @@ Things to note above:
 2. Syntax. All queries are written in plain SQL. Every statement should be terminated with
     semicolon. There is no need to write (?,?) after VALUES in INSERT statement. The annotation
     `[sqlgg] name=function_name` (or simply `@function_name`) before the query specifies the name
-    of the generated function (this annotation optional but very convenient).
+    of the generated function (this annotation is optional but very convenient).
 1. The generated code is parametrized by database-specific class `Traits`. It specifies the
 		correspondence between SQL and native types, provides types for database connection and
     implements actual code to execute statements. `Traits` should be implemented
 		once for every specific database API.
 1. `add_money()` function takes three data parameters -- the values to INSERT into table (note the
     names and types).
-3. `calc_total()` returns data via `result` parameter. Under the scenes it will
+3. `calc_total()` returns data via `result` parameter. Behind the scenes it will
     bind columns of resulting rowset to the fields of `T::value_type`, which should provide fields
     `fullname` of type `Traits::Text` and
     `total` of type `Traits::Int` (otherwise it will fail to compile). For convenience a structure
@@ -196,9 +196,9 @@ Then manually-written C++ code boils down to (without error-checking):
       return 0;
     }
 
-The code is straightforward and free of SQL-specific details. More importantly it is statically
-checked by the compiler -- suppose we change the database schema and add one more field to `money`
-table (e.g. timestamp of transfer). Compilation rightfully fails:
+The code is straightforward and free of most database-specific details. More importantly it is
+statically checked by the compiler -- suppose we change the database schema and add one more field
+to `money` table (e.g. timestamp of transfer). Compilation rightfully fails:
 
     demo_cxx.cpp: In function `int main()':
     demo_cxx.cpp:29: error: no matching function for call to
@@ -233,12 +233,14 @@ SQL statements unmodified.
 
 Available output languages:
 
+* **C#**: code for System.Data ([generated code example][demo_csharp_gen],
+  [usage example][demo_csharp_mysql]).
 * **C++**: code is parametrized with template class for database specific code
   ([generated code example][demo_cxx_gen], [sqlite3 traits][sqlite3_cxx],
   [usage example (sqlite3)][demo_cxx_sqlite3], [mysql traits][mysql_cxx],
   [usage example (mysql)][demo_cxx_mysql]).
 * **Java**: code for JDBC ([generated code example][demo_java_gen],
-	[usage example (mysql)][demo_java_mysql]).
+	[usage example][demo_java_mysql]).
 * **OCaml**: functor parametrized with module for database specific code
 	[Sqlgg\_traits.M][sqlgg_caml] ([generated code example][demo_caml_gen],
   [OCaml-SQLite3 traits][sqlite3_caml],	[usage example][demo_caml_sqlite3]).
@@ -257,11 +259,13 @@ Available output languages:
 [demo_caml_gen]: demo/demo_caml_gen.ml
 [demo_xml_gen]: demo/demo_xml_gen.xml
 [demo_java_gen]: demo/demo_java_gen.java
+[demo_csharp_gen]: demo/demo_csharp_gen.cs
 
 [demo_cxx_sqlite3]:	demo/demo_cxx.cpp
 [demo_cxx_mysql]: demo/demo_cxx_mysql.cpp
 [demo_caml_sqlite3]: demo/demo_caml.ml
 [demo_java_mysql]: demo/demo_java.java
+[demo_csharp_mysql]: demo/demo_csharp.cs
 
 <a id="download"/>
 Download
@@ -275,8 +279,7 @@ Try it [online](sql.cgi).
 TODO
 ----
 
-* reuse prepared statements
-* query parameter placeholders are specific to database API, decide what to do
+* query parameter placeholders are specific to database API, substitute
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
