@@ -26,7 +26,7 @@ let start_ cls =
    f1,f2
 
 let (start_class,end_class) = start_ "public class"
-let (start_intf,end_intf) = start_ "public interface"
+let (start_intf,end_intf) = start_ "public static interface"
 
 let as_java_type = function
   | Type.Int -> "int"
@@ -93,7 +93,8 @@ let generate_code () index schema params kind props =
    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
    let all_params = values @ result in
    G.func "public int" name all_params ~tail:"throws SQLException" (fun () ->
-      output "if (null == pstmt_%s) pstmt_%s = db.prepareStatement(%s);" name name sql;
+      output "if (null == pstmt_%s)" name;
+      output "  pstmt_%s = db.prepareStatement(%s);" name sql;
       output_params_binder name index params;
       begin match schema_binder_name with
       | None -> output "return pstmt_%s.executeUpdate();" name
@@ -108,7 +109,8 @@ let generate_code () index schema params kind props =
          output "count++;";
          G.close_curly "";
          output "return count;"
-      end)
+      end);
+    empty_line ()
 
 let start_output () name =
   output "import java.sql.*;";
