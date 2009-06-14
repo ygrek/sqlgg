@@ -13,34 +13,33 @@ public class demo_java
     {
       Class.forName(driver).newInstance();
       Connection db = DriverManager.getConnection(url+dbName,userName,password);
-//      System.out.println("Connected to the database");
 
       Statement st = db.createStatement();
       st.executeUpdate("DROP TABLE IF EXISTS person");
       st.executeUpdate("DROP TABLE IF EXISTS money");
-      demo_java_gen gen = new demo_java_gen();
-      gen.create_person(db);
-      gen.create_money(db);
+      demo_java_gen gen = new demo_java_gen(db);
+      gen.create_person();
+      gen.create_money();
 
-      gen.add_person(db,"John","Black");
+      gen.add_person("John","Black");
       ResultSet rs = st.executeQuery("SELECT LAST_INSERT_ID()"); rs.next();
       int john = rs.getInt(1);
 
-      gen.add_person(db,"Ivan","Petrov");
+      gen.add_person("Ivan","Petrov");
       rs = st.executeQuery("SELECT LAST_INSERT_ID()"); rs.next();
       int ivan = rs.getInt(1);
 
-      gen.add_person(db,"Sancho","Alvares");
+      gen.add_person("Sancho","Alvares");
       rs = st.executeQuery("SELECT LAST_INSERT_ID()"); rs.next();
       int sancho = rs.getInt(1);
 
       // add money relations
-      gen.add_money(db,john,ivan,200);
-      gen.add_money(db,john,sancho,100);
-      gen.add_money(db,john,sancho,250);
-      gen.add_money(db,sancho,ivan,300);
+      gen.add_money(john,ivan,200);
+      gen.add_money(john,sancho,100);
+      gen.add_money(john,sancho,250);
+      gen.add_money(sancho,ivan,300);
 
-      class a1 implements demo_java_gen.output_4
+      class a1 implements demo_java_gen.calc_total_callback
       {
         public void callback(String fullname, int total)
         {
@@ -50,9 +49,9 @@ public class demo_java
 
       // summarize by person
       System.out.println("Total transfers:");
-      gen.calc_total(db,new a1());
+      gen.calc_total(new a1());
 
-      class a2 implements demo_java_gen.output_5
+      class a2 implements demo_java_gen.list_donors_callback
       {
         public void callback(String surname)
         {
@@ -62,7 +61,7 @@ public class demo_java
 
       // list donors
       System.out.println("Donors:");
-      gen.list_donors(db,new a2(),"petrov",100);
+      gen.list_donors("petrov",100,new a2());
 
       db.close();
     }

@@ -43,26 +43,19 @@ let get_column attr index =
 
 let param_type_to_string t = t >> Option.default Type.Text >> as_java_type
 
-let set_param index param =
-  let (id,t) = param in
-  output "pstmt.set%s(%u, %s);"
-    (t >> param_type_to_string >> String.capitalize)
-    (index+1)
-    (param_name_to_string id index)
-
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_java_type)
 
-let output_schema_binder index schema =
-  let name = "output" in
+let output_schema_binder name index schema =
+  let name = sprintf "%s_callback" name in
   start_intf name;
   output "public void callback(%s);" (G.Values.to_string (schema_to_values schema));
   end_intf name;
   name
 
-let output_schema_binder index schema =
+let output_schema_binder name index schema =
   match schema with
   | [] -> None
-  | _ -> Some (output_schema_binder index schema)
+  | _ -> Some (output_schema_binder name index schema)
 
 let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> param_type_to_string)
 let params_to_values = List.unique & params_to_values
@@ -76,7 +69,15 @@ let output_schema_data index schema =
   schema >> schema_to_values >> output_value_defs;
   end_class name
 
-let output_params_binder index params = List.iteri set_param params
+let set_param name index param =
+  let (id,t) = param in
+  output "pstmt_%s.set%s(%u, %s);"
+    name
+    (t >> param_type_to_string >> String.capitalize)
+    (index+1)
+    (param_name_to_string id index)
+
+let output_params_binder name index params = List.iteri (set_param name) params
 
 type t = unit
 
@@ -86,22 +87,18 @@ let generate_code () index schema params kind props =
    let values = params_to_values params in
    let name = choose_name props kind index in
    let sql = G.quote (get_sql props kind params) in
-   start_class name;
-    output "PreparedStatement pstmt;";
-    empty_line ();
-    G.func "public" name ["db","Connection"] (fun () ->
-      output "pstmt = db.prepareStatement(%s);" sql;
-    );
-    empty_line ();
-    let schema_binder_name = output_schema_binder index schema in
-    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
-    let all_params = values @ result in
-    G.func "public int" "execute" all_params ~tail:"throws SQLException" (fun () ->
-      output_params_binder index params;
+   output "PreparedStatement pstmt_%s;" name;
+   empty_line ();
+   let schema_binder_name = output_schema_binder name index schema in
+   let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
+   let all_params = values @ result in
+   G.func "public int" name all_params ~tail:"throws SQLException" (fun () ->
+      output "if (null == pstmt_%s) pstmt_%s = db.prepareStatement(%s);" name name sql;
+      output_params_binder name index params;
       begin match schema_binder_name with
-      | None -> output "return pstmt.executeUpdate();"
-      | Some name ->
-         output "ResultSet res = pstmt.executeQuery();";
+      | None -> output "return pstmt_%s.executeUpdate();" name
+      | Some _ ->
+         output "ResultSet res = pstmt_%s.executeQuery();" name;
          let args = List.mapi (fun index attr -> get_column attr index) schema in
          let args = String.concat "," args in
          output "int count = 0;";
@@ -111,13 +108,18 @@ let generate_code () index schema params kind props =
          output "count++;";
          G.close_curly "";
          output "return count;"
-      end);
-   end_class name
+      end)
 
 let start_output () name =
   output "import java.sql.*;";
   empty_line ();
-  start_class name
+  start_class name;
+  output "Connection db;";
+  empty_line ();
+  G.func "public" name ["aDb","Connection"] (fun () ->
+    output "db = aDb;";
+  );
+  empty_line ()
 
 let finish_output () name = end_class name
 
