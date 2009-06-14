@@ -1,3 +1,5 @@
+<title>sqlgg: SQL Guided (code) Generator</title>
+
 sqlgg: SQL Guided (code) Generator
 ==================================
 
@@ -63,6 +65,10 @@ following SQL tables and queries:
 	SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @surname) LIMIT @limit;
 
 Generate the binding C++ code (boilerplate omitted, only function prototypes shown):
+<span class="also">
+(corresponding [C#][demo_csharp_gen] [C++][demo_cxx_gen] [Java][demo_java_gen]
+[OCaml][demo_caml_gen] [XML][demo_xml_gen])
+</span>
 
 	// DO NOT EDIT MANUALLY
 
@@ -133,6 +139,10 @@ Things to note above:
 		ambiguous column names etc.
 
 Then manually-written C++ code boils down to (without error-checking):
+<span class="also">
+(corresponding [C#][demo_csharp_mysql] [C++][demo_cxx_sqlite3] [Java][demo_java_mysql]
+[OCaml][demo_caml_sqlite3])
+</span>
 
     #include "../sqlite3_helper.hpp" // sqlite3 traits
     #include "demo_cxx_gen.hpp" // generated
@@ -293,10 +303,12 @@ TODO
 * type check expressions
 
 ----
-2009-06-05
+2009-06-14
 
 <style>
+span.also { position: absolute; right: 1em; margin-top: 1em; font-style: italic; font-size: 80%; }
 code { font-family: monospace; }
 pre { background-color: #eee; border: 1px solid #0f0; }
 :not(pre) > code { font-size: 1em; }
 </style>
+
