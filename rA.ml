@@ -20,7 +20,9 @@ struct
 
   exception Error of t * string
 
-  let find_by_name t name = List.find_all (fun attr -> attr.name = name) t
+  (** FIXME attribute case sensitivity? *)
+  let by_name name = function attr -> attr.name = name
+  let find_by_name t name = List.find_all (by_name name) t
 
   let find t name =
     match find_by_name t name with
@@ -84,13 +86,21 @@ struct
     | [] ->
       begin
       match pos with
-      | `After _ -> col::t
       | `First -> col::t
       | `Last -> t @ [col]
+      | `After name -> 
+        try
+          let (i,_) = List.findi (fun _ attr -> by_name name attr) t in
+          let (l1,l2) = List.split_nth (i+1) t in
+          l1 @ (col :: l2)
+        with
+          Not_found -> raise (Error (t,"Can't insert column " ^ col.name ^ " after non-existing column " ^ name))
       end
     | _ -> raise (Error (t,"Already has column " ^ col.name))
 
-  let drop t col = t
+  let drop t col =
+    ignore (find t col);
+    List.remove_if (by_name col) t
 
   let to_string x = Show.show<t>(x)
   let print x = prerr_endline (to_string x)
