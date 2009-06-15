@@ -97,7 +97,14 @@ let keywords =
    "restrict",RESTRICT;
    "drop",DROP;
    "constraint",CONSTRAINT;
-  ] in
+   "collate",COLLATE;
+   "after",AFTER;
+   "index",INDEX;
+   "fulltext",FULLTEXT;
+   "unsigned",UNSIGNED;
+   "first",FIRST;
+   "column",COLUMN;
+  ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
   all (FUNCTION (Some T.Text)) ["concat";"lower";"upper"];
@@ -121,7 +128,7 @@ let keywords =
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
-  all T_DATETIME ["datetime";"date";"time";"timestamp";"year";];
+  all T_DATETIME ["datetime";"year";];
   !k
 
 (*
@@ -186,6 +193,7 @@ ruleMain = parse
 
   | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | "`" { IDENT (ruleInBackQuotes "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }
@@ -210,6 +218,14 @@ ruleInSingleQuotes acc = parse
   | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInSingleQuotes" }
 and
+ruleInBackQuotes acc = parse
+  | '`'	        { acc }
+  | eof	        { error lexbuf "no terminating back quote" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating back quote" }
+  | "``"        { ruleInBackQuotes (acc ^ "`") lexbuf }
+  | [^'`' '\n']+  { ruleInBackQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInBackQuotes" }
+and
 ruleComment acc = parse
   | '\n'	      { advance_line lexbuf; acc }
   | eof	        { acc }
@@ -218,6 +234,14 @@ ruleComment acc = parse
 
 {
 
-  let parse_rule lexbuf = ruleMain lexbuf
+  let parse_rule lexbuf =
+    let module P = Parser_state in
+    let token = ruleMain lexbuf in
+    match !P.mode with
+    | P.Normal -> token
+    | P.Ignore ->
+(*         Printf.eprintf "ignored: %s\n" (Lexing.lexeme lexbuf); *)
+      if (token = EOF) then token else IGNORED
 
 }
+

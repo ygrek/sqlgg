@@ -1,5 +1,5 @@
 #include "../impl/mysql_traits.hpp" // mysql traits
-#include "demo_cxx_gen.hpp" // generated
+#include "demo_cxx_gen_mysql.hpp" // generated
 #include <iostream>
 #include <vector>
 

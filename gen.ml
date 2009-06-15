@@ -39,6 +39,7 @@ let choose_name props kind index =
   | Insert t -> sprintf "insert_%s_%u" t index
   | Delete t -> sprintf "delete_%s_%u" t index
   | Alter t -> sprintf "alter_%s_%u" t index
+  | Drop t -> sprintf "drop_%s" t
   | Select   -> sprintf "select_%u" index
   in
   make_name props name
@@ -48,7 +49,7 @@ let get_sql props kind params =
   (* fill VALUES *)
   match kind with
   | Insert _ -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
-  | Select | Update _ | Delete _ | Create _ | Alter _ -> sql
+  | Select | Update _ | Delete _ | Create _ | Alter _ | Drop _ -> sql
 
 module type Lang = sig
   type t

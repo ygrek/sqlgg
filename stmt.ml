@@ -17,5 +17,6 @@ type kind = | Select
             | Update of string
             | Delete of string
             | Alter of string
+            | Drop of string
             deriving (Show)
 

@@ -1,4 +1,4 @@
-(* $Id$ *)
+(* Simple wrapper tying together parser and lexer *)
 
 module type Parser_type =
 sig
@@ -13,7 +13,7 @@ struct
   let parse_buf_exn lexbuf =
     try
       T.input T.rule lexbuf
-    with exn -> 
+    with exn ->
       begin
         let curr = lexbuf.Lexing.lex_curr_p in
         let line = curr.Lexing.pos_lnum in

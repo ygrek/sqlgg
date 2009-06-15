@@ -64,6 +64,7 @@ WHERE x = @val;" STYPE
    <<
    %[ `gen `name $$ ]% `select atag
    << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
+   << %[ `csharp `value $$ ]% `option atag `C# TYPE >>
    << %[ `java `value $$ ]% `option atag `Java TYPE >>
    << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
    << %[ `xml `value $$ ]% `option atag `XML TYPE >>
@@ -79,6 +80,7 @@ WHERE x = @val;" STYPE
   2DUP `caml CEQUAL IF EXIT THEN
   2DUP `xml  CEQUAL IF EXIT THEN
   2DUP `java CEQUAL IF EXIT THEN
+  2DUP `csharp CEQUAL IF EXIT THEN
   2DROP `cxx ;
 
 : process ( a u -- )
