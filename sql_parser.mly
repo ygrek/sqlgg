@@ -248,16 +248,12 @@ default_value: literal_value | datetime_value { }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | primary_key IDENT? sequence(IDENT) { [] }
-      | unique_key IDENT? unique_arg { [] }
+      | some_key IDENT? key_arg { [] }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)? { [] }
       | CHECK LPAREN expr RPAREN { [] }
 
-(* mysql specific? (not in ANS) *)
-unique_key: UNIQUE KEY? { }
-
-primary_key: PRIMARY? KEY { }
-unique_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
+some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
+key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=IDENT EQUAL e=expr { name,e }
 
