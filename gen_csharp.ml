@@ -18,6 +18,9 @@ let empty_line = G.empty_line
 let (start_class,end_class) = J.start_class,J.end_class
 let (start_ns,end_ns) = J.start_ "namespace"
 
+let quote = String.replace_chars (function '\n' -> "\" +\n\"" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
+let quote s = "\"" ^ quote s ^ "\""
+
 let as_db_type = function
   | Type.Int -> "Int32"
   | Type.Text -> "String"
@@ -73,7 +76,7 @@ let start () = ()
 let generate_code () index schema params kind props =
    let values = params_to_values params in
    let name = choose_name props kind index in
-   let sql = G.quote (get_sql props kind params) in
+   let sql = quote (get_sql props kind params) in
    start_class name;
     output "IDbCommand cmd;";
     output "static string sql = %s;" sql;
