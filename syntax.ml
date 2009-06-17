@@ -150,3 +150,12 @@ let join ((t0,p0),joins) =
 (*   let joined_schema = tables >> List.map snd >> List.flatten in *)
   (tables,params,joined_schema)
 
+let split_column_assignments schema l =
+  let cols = ref [] in
+  let exprs = ref [] in
+  List.iter (fun (col,expr) -> 
+    cols := col :: !cols;
+    (* hint expression to unify with the column type *)
+    let typ = (RA.Scheme.find schema col).RA.domain in
+    exprs := (`Func (None, [`Value typ;expr])) :: !exprs) l;
+  (!cols,!exprs)
