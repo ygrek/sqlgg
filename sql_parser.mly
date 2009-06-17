@@ -112,6 +112,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 let p = Syntax.schema_as_params s in
                 [],p,Insert table
               }
+         | insert_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column)
+              {
+                let t = Tables.get table in
+                let (cols,exprs) = List.split assignments in
+                let _ = RA.Scheme.project cols (snd t) in (* validates columns *)
+                let p1 = Syntax.get_params_l [t] (snd t) exprs in
+                [], p1, Insert table
+              }
          | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=where?
               {
                 let t = Tables.get table in
@@ -288,7 +296,7 @@ expr:
     | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
 
-datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER RPAREN { `Value Datetime }
+datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { `Value Datetime }
 
 literal_value:
     | TEXT { `Value Text }
@@ -333,7 +341,7 @@ charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASC
 collate: COLLATE IDENT { }
 
 sql_type: t=sql_type_flavor
-        | t=sql_type_flavor LPAREN INTEGER RPAREN
+        | t=sql_type_flavor LPAREN INTEGER RPAREN UNSIGNED?
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
