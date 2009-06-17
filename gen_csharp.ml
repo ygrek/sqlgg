@@ -25,7 +25,7 @@ let as_db_type = function
   | Type.Int -> "Int32"
   | Type.Text -> "String"
   | Type.Float -> "Float"
-  | Type.Blob -> "Blob"
+  | Type.Blob -> "String"
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
 
@@ -34,9 +34,9 @@ let as_cs_type = function
   | x -> as_db_type x
 
 let get_column attr index =
-  sprintf "(%s)reader[\"%s\"]"
-    (attr.RA.domain >> as_cs_type)
-    (attr.RA.name)
+  sprintf "reader.Get%s(%u)"
+    (attr.RA.domain >> as_db_type)
+    index
 
 let param_type_to_string t = t >> Option.default Type.Text >> as_db_type
 

@@ -110,7 +110,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                   | None -> s
                 in
                 let p = Syntax.schema_as_params s in
-                [],p,Insert table
+                [], p, Insert (true,table)
               }
          | insert_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column)
               {
@@ -118,7 +118,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 let (cols,exprs) = List.split assignments in
                 let _ = RA.Scheme.project cols (snd t) in (* validates columns *)
                 let p1 = Syntax.get_params_l [t] (snd t) exprs in
-                [], p1, Insert table
+                [], p1, Insert (false,table)
               }
          | update_cmd table=IDENT SET assignments=separated_nonempty_list(COMMA,set_column) w=where?
               {
