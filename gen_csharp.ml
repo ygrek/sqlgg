@@ -18,11 +18,14 @@ let empty_line = G.empty_line
 let (start_class,end_class) = J.start_class,J.end_class
 let (start_ns,end_ns) = J.start_ "namespace"
 
+let quote = String.replace_chars (function '\n' -> "\" +\n\"" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
+let quote s = "\"" ^ quote s ^ "\""
+
 let as_db_type = function
-  | Type.Int -> "Int32"
+  | Type.Int -> "Int64"
   | Type.Text -> "String"
   | Type.Float -> "Float"
-  | Type.Blob -> "Blob"
+  | Type.Blob -> "String"
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
 
@@ -30,10 +33,12 @@ let as_cs_type = function
   | Type.Int -> "System.Decimal" (* ?? *)
   | x -> as_db_type x
 
+let as_cs_type = as_db_type
+
 let get_column attr index =
-  sprintf "(%s)reader[\"%s\"]"
-    (attr.RA.domain >> as_cs_type)
-    (attr.RA.name)
+  sprintf "reader.Get%s(%u)"
+    (attr.RA.domain >> as_db_type)
+    index
 
 let param_type_to_string t = t >> Option.default Type.Text >> as_db_type
 
@@ -56,7 +61,7 @@ let params_to_values = List.unique & params_to_values
 let set_param index param =
   let (id,t) = param in
   let name = default_name "param" index in
-  comment () "FIXME unnamed params";
+  (* FIXME unnamed params *)
   output "IDbDataParameter %s = cmd.CreateParameter();" name;
   output "%s.ParameterName = \"@%s\";" name (param_name_to_string id index);
   output "%s.DbType = DbType.%s;" name (param_type_to_string t);
@@ -73,7 +78,7 @@ let start () = ()
 let generate_code () index schema params kind props =
    let values = params_to_values params in
    let name = choose_name props kind index in
-   let sql = G.quote (get_sql props kind params) in
+   let sql = quote (get_sql props kind params) in
    start_class name;
     output "IDbCommand cmd;";
     output "static string sql = %s;" sql;
@@ -106,6 +111,29 @@ let generate_code () index schema params kind props =
          output "reader.Close();";
          output "return count;"
       end);
+(*    begin match schema_binder_name with
+    | None -> ()
+    | Some name ->
+      empty_line();
+      G.func "public IEnumerable<" "enumerate" all_params (fun () ->
+      List.iteri
+        (fun i (name,_) -> output "((IDbDataParameter)cmd.Parameters[%u]).Value = %s;" i name)
+        values;
+      begin match schema_binder_name with
+      | None -> output "return cmd.ExecuteNonQuery();"
+      | Some name ->
+         output "IDataReader reader = cmd.ExecuteReader();";
+         let args = List.mapi (fun index attr -> get_column attr index) schema in
+         let args = String.concat "," args in
+         output "int count = 0;";
+         output "while (reader.Read())";
+         G.open_curly ();
+         output "result(%s);" args;
+         output "count++;";
+         G.close_curly "";
+         output "reader.Close();";
+         output "return count;"
+      end);*)
    end_class name
 
 let start_output () name =

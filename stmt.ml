@@ -12,7 +12,7 @@ type params = param list deriving (Show)
 let params_to_string ps = Show.show<params>(ps)
 
 type kind = | Select
-            | Insert of string (** table name *)
+            | Insert of bool (** values omitted *) * string (** table name *)
             | Create of string
             | Update of string
             | Delete of string

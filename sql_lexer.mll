@@ -108,7 +108,7 @@ let keywords =
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
   all (FUNCTION (Some T.Text)) ["concat";"lower";"upper"];
-  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp"];
+  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";"unix_timestamp"];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
@@ -161,6 +161,7 @@ rule ruleStatement props = parse
         ruleStatement (Props.set props "name" name) lexbuf
       }
   | cmnt { ignore (ruleComment "" lexbuf); ruleStatement props lexbuf }
+  | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleStatement props lexbuf }
   | alpha [^ ';']+ as stmt ';' { Some (stmt,props) }
   | _ { None }
 and
@@ -175,6 +176,7 @@ ruleMain = parse
   | '.'   { DOT }
 
   | cmnt { ignore (ruleComment "" lexbuf); ruleMain lexbuf }
+  | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleMain lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -227,10 +229,16 @@ ruleInBackQuotes acc = parse
   | _		{ error lexbuf "ruleInBackQuotes" }
 and
 ruleComment acc = parse
-  | '\n'	      { advance_line lexbuf; acc }
+  | '\n'	{ advance_line lexbuf; acc }
   | eof	        { acc }
   | [^'\n']+    { let s = Lexing.lexeme lexbuf in ruleComment (acc ^ s) lexbuf; }
   | _		{ error lexbuf "ruleComment"; }
+and
+ruleCommentMulti acc = parse
+  | '\n'	{ advance_line lexbuf; ruleCommentMulti (acc ^ "\n") lexbuf }
+  | "*/"	{ acc }
+  | [^'\n']+    { let s = Lexing.lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
+  | _	        { error lexbuf "ruleCommentMulti" }
 
 {
 
