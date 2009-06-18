@@ -15,6 +15,16 @@ module J = Gen_java
 let comment = G.comment
 let empty_line = G.empty_line
 
+let comment_doc sl = 
+  output "/**";
+  output_l (List.map (fun str -> Gen_caml.replace_all ~sub:"*/" ~by:"* /" ~str) sl);
+  output "*/"
+
+let comment_xml summary params =
+  let summary = String.nsplit summary "\n" in
+  let params = List.map (fun (n,s) -> sprintf "<param name=\"%s\">%s</param>" n s) params in
+  comment_doc ("<summary>" :: summary @ ("</summary>" :: params))
+
 let (start_class,end_class) = J.start_class,J.end_class
 let (start_ns,end_ns) = J.start_ "namespace"
 
@@ -43,10 +53,11 @@ let get_column attr index =
 let param_type_to_string t = t >> Option.default Type.Text >> as_db_type
 
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_cs_type)
+let schema_to_string schema = schema >> schema_to_values >> G.Values.to_string 
 
 let output_schema_binder index schema =
   let name = "callback" in
-  output "public delegate void %s(%s);" name (G.Values.to_string (schema_to_values schema));
+  output "public delegate void %s(%s);" name (schema_to_string schema);
   empty_line ();
   name
 
@@ -92,6 +103,8 @@ let generate_code () index schema params kind props =
     let schema_binder_name = output_schema_binder index schema in
     let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
     let all_params = values @ result in
+    let doc = match schema_binder_name with None -> [] | Some name -> [name, schema_to_string schema] in
+    comment_xml "execute query" doc;
     G.func "public int" "execute" all_params (fun () ->
       List.iteri
         (fun i (name,_) -> output "((IDbDataParameter)cmd.Parameters[%u]).Value = %s;" i name)

@@ -16,6 +16,7 @@ let print_indent () = print_string (make_indent ())
 let indent s = print_indent (); print_string s
 let indent_endline s = print_indent (); print_endline s
 let output fmt = kprintf indent_endline fmt
+let output_l = List.iter indent_endline
 let print fmt = kprintf print_endline fmt
 
 let name_of attr index =
