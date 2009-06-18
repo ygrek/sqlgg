@@ -1,4 +1,17 @@
-(* modify as needed *)
+(** 
+  This ocamlbuild plugin will try to find libraries by name :
+    - from the local myocamlbuild.config file
+    - ocamlfind
+
+  Sample myocamlbuild.config :
+
+extlib=C:/my/contrib/extlib-1.5.1
+deriving=C:/my/contrib/deriving-0.1.1/lib
+ounit=C:/my/contrib/ounit-1.0.3
+
+*)
+
+(** querying ocamlfind *)
 
 let chomp s =
   let is_nl ch = match ch with | '\n' | '\r' -> true | _ -> false in
@@ -16,10 +29,36 @@ let ocamlfind lib =
   ignore (Unix.close_process_in cin);
   s
 
-let extlib_dir = ocamlfind "extlib"
-let ounit_dir = ocamlfind "oUnit"
+(** querying config *)
 
-let deriving_dir = 
-  if Sys.os_type = "Win32"
-  then "D:/temp/deriving-ocaml-3.11/deriving-0.1.1/lib"
-  else "/home/ygrek/work/contrib/deriving-0.1.1/lib"
+let file_lines name =
+  let l = ref [] in
+  begin try
+    let ch = open_in name in
+    begin try while true do l := input_line ch :: !l done with End_of_file -> () end;
+    close_in_noerr ch
+  with 
+    exn -> ()
+  end;
+  !l
+
+let read_config name =
+  let l = file_lines name in
+  let split s =
+    let index = String.index s '=' in
+    (String.sub s 0 index, String.sub s (index+1) ((String.length s) - index - 1))
+  in
+  let split s = try split s with _ -> "","" in
+  List.map split l
+
+(** usage *)
+
+let config = read_config "myocamlbuild.config"
+let () = print_endline "Using config : "; List.iter (fun (x,y) -> Printf.printf "%s=%s\n%!" x y) config
+
+let lib name = try List.assoc name config with exn -> ocamlfind name
+
+let extlib_dir = lib "extlib"
+let deriving_dir = lib "deriving"
+let ounit_dir = lib "ounit"
+
