@@ -103,7 +103,7 @@ let generate_code () index schema params kind props =
     let schema_binder_name = output_schema_binder index schema in
     let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
     let all_params = values @ result in
-    let doc = match schema_binder_name with None -> [] | Some name -> [name, schema_to_string schema] in
+    let doc = match schema_binder_name with None -> [] | Some _ -> ["result", schema_to_string schema] in
     comment_xml "execute query" doc;
     G.func "public int" "execute" all_params (fun () ->
       List.iteri
