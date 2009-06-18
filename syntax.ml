@@ -158,4 +158,4 @@ let split_column_assignments schema l =
     (* hint expression to unify with the column type *)
     let typ = (RA.Scheme.find schema col).RA.domain in
     exprs := (`Func (None, [`Value typ;expr])) :: !exprs) l;
-  (!cols,!exprs)
+  (List.rev !cols,List.rev !exprs)
