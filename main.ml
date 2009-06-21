@@ -23,6 +23,10 @@ let parse_one (stmt,props) =
   try
 (*     print_endline stmt; *)
     let (s,p,k) = Parser.parse_stmt stmt in
+    if not (RA.Schema.is_unique s) then
+    begin
+      Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" stmt
+    end;
     Some {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" stmt}
   with
   | exn ->
@@ -40,12 +44,7 @@ let get_statements ch =
     | Some sql ->
       begin match parse_one sql with
       | None -> next ()
-      | Some stmt ->
-          if not (RA.Schema.is_unique stmt.Stmt.schema) then
-          begin
-            Error.log "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql)
-          end;
-          stmt
+      | Some stmt -> stmt
       end
   in
   Enum.from next
