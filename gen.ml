@@ -44,8 +44,19 @@ let choose_name props kind index =
   in
   make_name props name
 
+let substitute_params s params f =
+  let b = Buffer.create (String.length s) in
+  let last = List.fold_left (fun i ((name,(i1,i2)),t) ->
+    let prefix = String.slice ~first:i ~last:i1 s in
+    Buffer.add_string b prefix;
+    Buffer.add_string b (f name t);
+    i2) 0 params in
+  Buffer.add_string b (String.slice ~first:last s);
+  Buffer.contents b
+
 let get_sql stmt =
   let sql = Props.get stmt.props "sql" >> Option.get in
+(*   let sql = substitute_params sql stmt.params (fun name t -> "XXX") in *)
   (* fill VALUES *)
   match stmt.kind with
   | Insert (true,_) -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") stmt.params)) ^ ")"
