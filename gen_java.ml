@@ -113,6 +113,7 @@ let generate_code index stmt =
     empty_line ()
 
 let generate () name stmts =
+  substitution_mode := Some subst_unnamed; (* allow only unnamed params *)
   output "import java.sql.*;";
   empty_line ();
   start_class name;
