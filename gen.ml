@@ -45,11 +45,11 @@ let choose_name props kind index =
   in
   make_name props name
 
-let get_sql props kind params =
-  let sql = Props.get props "sql" >> Option.get in
+let get_sql stmt =
+  let sql = Props.get stmt.props "sql" >> Option.get in
   (* fill VALUES *)
-  match kind with
-  | Insert (true,_) -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") params)) ^ ")"
+  match stmt.kind with
+  | Insert (true,_) -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") stmt.params)) ^ ")"
   | _ -> sql
 
 module type Lang = sig
@@ -61,19 +61,6 @@ module type Lang = sig
 end
 
 module Make(S : Lang) = struct
-
-(*
-let generate_code stmt f =
-  let ((schema,params,kind),props) = stmt in
-  let sql = Props.get props "sql" >> Option.default "" in
-(*   S.comment out "%s" sql; *)
-  if not (RA.Scheme.is_unique schema) then
-    Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql
-  else
-  begin
-    f schema params kind props
-  end
-*)
 
 let time_string () = 
   let module U = Unix in

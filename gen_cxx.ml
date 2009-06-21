@@ -167,7 +167,7 @@ let start () = ()
 
 let make_stmt index stmt =
    let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
+   let sql = quote (get_sql stmt) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) Apply.id;
    let schema_binder_name = output_schema_binder index stmt.schema in

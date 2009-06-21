@@ -88,7 +88,7 @@ let generate_stmt index stmt =
   let all_params = match stmt.schema with [] -> values | _ -> "callback " ^ values in
   output "let %s db %s =" name all_params;
   inc_indent ();
-  let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
+  let sql = quote (get_sql stmt) in
   let schema_binder_name = output_schema_binder index stmt.schema in
   let params_binder_name = output_params_binder index stmt.params in
   begin match schema_binder_name with

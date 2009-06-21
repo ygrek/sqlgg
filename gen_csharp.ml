@@ -85,7 +85,7 @@ let start () = ()
 let generate_code index stmt =
    let values = params_to_values stmt.params in
    let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
+   let sql = quote (get_sql stmt) in
    start_class name;
     output "IDbCommand cmd;";
     output "static string sql = %s;" sql;

@@ -63,7 +63,7 @@ let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
   let input = Node ("in",[],params_to_values stmt.params) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
-  let sql = get_sql stmt.props stmt.kind stmt.params in
+  let sql = get_sql stmt in
   x := Node ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
 
 let start_output (x,pre) = pre := !x; x := []

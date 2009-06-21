@@ -86,7 +86,7 @@ let start () = ()
 let generate_code index stmt =
    let values = params_to_values stmt.params in
    let name = choose_name stmt.props stmt.kind index in
-   let sql = G.quote (get_sql stmt.props stmt.kind stmt.params) in
+   let sql = G.quote (get_sql stmt) in
    output "PreparedStatement pstmt_%s;" name;
    empty_line ();
    let schema_binder_name = output_schema_binder name index stmt.schema in

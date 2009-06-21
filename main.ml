@@ -37,10 +37,15 @@ let get_statements ch =
   let rec next () =
     match f () with
     | None -> raise Enum.No_more_elements
-    | Some s ->
-      begin match parse_one s with
+    | Some sql ->
+      begin match parse_one sql with
       | None -> next ()
-      | Some stmt -> stmt
+      | Some stmt ->
+          if not (RA.Schema.is_unique stmt.Stmt.schema) then
+          begin
+            Error.log "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql)
+          end;
+          stmt
       end
   in
   Enum.from next
