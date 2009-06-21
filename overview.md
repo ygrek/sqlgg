@@ -1,4 +1,5 @@
 <title>sqlgg: SQL Guided (code) Generator</title>
+<span class="right border">[ygrek.org.ua](/) / [p](/p) / [sqlgg]()</span>
 
 sqlgg: SQL Guided (code) Generator
 ==================================
@@ -65,7 +66,7 @@ following SQL tables and queries:
 	SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @surname) LIMIT @limit;
 
 Generate the binding C++ code (boilerplate omitted, only function prototypes shown):
-<span class="also">
+<span class="right also">
 (corresponding [C#][demo_csharp_gen] [C++][demo_cxx_gen] [Java][demo_java_gen]
 [OCaml][demo_caml_gen] [XML][demo_xml_gen])
 </span>
@@ -139,7 +140,7 @@ Things to note above:
 		ambiguous column names etc.
 
 Then manually-written C++ code boils down to (without error-checking):
-<span class="also">
+<span class="right also">
 (corresponding [C#][demo_csharp_mysql] [C++][demo_cxx_sqlite3] [Java][demo_java_mysql]
 [OCaml][demo_caml_sqlite3])
 </span>
@@ -231,7 +232,7 @@ The main idea is that the generator should take care only of semantic binding be
 sides, being as unobtrusive as possible. So the choice of the specific database and API is a
 programmer's choice. Similarly, queries to the database are expressed in plain SQL, so that the
 generator can be easily plugged in any existing project -- just move all SQL statements used in the
-code to separate file and feed it to generator. The generated code can be easily inspected just as
+code to a separate file and feed it to generator. The generated code can be easily inspected just as
 any other code in the project, and you can even edit it manually if such need arises (though it is
 highly not recommended). In order to keep code and database layer in sync
 the generator must be invoked every time SQL queries are modified.
@@ -291,7 +292,7 @@ Available output languages:
 Download
 --------
 
-sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip), [Linux](dist/sqlgg-0.2.1.tar.gz) (released on 7 Jun 2009).
+sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip) and [Linux](dist/sqlgg-0.2.1.tar.gz) (released on 7 June 2009).
 
 Try it [online](sql.cgi).
 
@@ -315,9 +316,12 @@ TODO
 
 ----
 2009-06-21
+<span class="right">[sqlgg&#x40;ygrek.org.ua](mailto:sqlgg&#x40;ygrek.org.ua)</span>
 
 <style>
-span.also { position: absolute; right: 1em; margin-top: 1em; font-style: italic; font-size: 80%; }
+.right { position: absolute; right: 1em; }
+.also { margin-top: 1em; font-style: italic; font-size: 80%; }
+.border { padding: 0.5em; border: 1px solid black; }
 code { font-family: monospace; }
 pre { background-color: #eee; border: 1px solid #0f0; }
 :not(pre) > code { font-size: 1em; }
