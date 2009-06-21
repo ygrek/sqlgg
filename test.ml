@@ -5,7 +5,7 @@ open Sql.Type
 open Stmt
 
 let tt ?msg stmt schema params =
-  let print_schema = RA.Scheme.to_string in
+  let print_schema = RA.Schema.to_string in
   let print_params = Stmt.params_to_string in
   let (s1,p1,_) =
     try
@@ -61,7 +61,7 @@ let test_join_result_cols () =
 let test_misc () =
   let test =
     let printer = Show.show<int list> in
-    fun x y z -> assert_equal ~printer (RA.Scheme.natural_ x y) z
+    fun x y z -> assert_equal ~printer (RA.Schema.natural_ x y) z
   in
   test [1;2;3;4] [1;2;5;6] [1;2;3;4;5;6];
   test [1;2;3;4] [4;3;2;1] [1;2;3;4];

@@ -31,7 +31,7 @@ let parse_one (stmt,props) =
     end
 
 let show_one ((s,p),props) =
-  RA.Scheme.print s;
+  RA.Schema.print s;
   print_endline (Stmt.params_to_string p)
 
 let get_statements ch =

@@ -20,3 +20,5 @@ type kind = | Select
             | Drop of string
             deriving (Show)
 
+type t = { schema : RA.Schema.t; params : params; kind : kind; props : Props.t; }
+

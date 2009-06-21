@@ -165,11 +165,8 @@ type t = unit
 
 let start () = ()
 
-let names = ref []
-
-let generate_code () index schema params kind props =
+let make_stmt index schema params kind props =
    let name = choose_name props kind index in
-   names := name :: !names;
    let sql = quote (get_sql props kind params) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) Apply.id;
@@ -188,7 +185,21 @@ let generate_code () index schema params kind props =
     | Some schema_name -> output "return stmt.select(result,%s(),%s(%s));"
           (schema_name ^ "<typename T::value_type>") params_binder_name inline_params
     end);
-   )
+   );
+   name
+
+let generate () name stmts =
+  let stmts = List.of_enum stmts in
+  let names = 
+    List.mapi (fun i ((schema,params,kind),props) -> make_stmt i schema params kind props) stmts 
+  in
+  List.iter (fun name -> output "%s %s;" name name) names;
+  empty_line ();
+  let tail = match names with
+  | [] -> ""
+  | _ -> ": " ^ (String.concat ", " (List.map (fun name -> sprintf "%s(db)" name) names))
+  in
+  func "" name ["db","typename Traits::connection"] ~tail Apply.id
 
 let start_output () name =
   output "#pragma once";
@@ -197,12 +208,5 @@ let start_output () name =
   start_struct name
 
 let finish_output () name =
-  List.iter (fun name -> output "%s %s;" name name) !names;
-  empty_line ();
-  let tail = match !names with
-  | [] -> ""
-  | _ -> ": " ^ (String.concat ", " (List.map (fun name -> sprintf "%s(db)" name) !names))
-  in
-  func "" name ["db","typename Traits::connection"] ~tail Apply.id;
   end_struct name
 

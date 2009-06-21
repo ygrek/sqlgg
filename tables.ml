@@ -37,8 +37,8 @@ let alter name f =
   in
   all := List.map alter_scheme !all
 
-let alter_add name col pos = alter name (fun s -> RA.Scheme.add s col pos)
-let alter_drop name col = alter name (fun s -> RA.Scheme.drop s col)
+let alter_add name col pos = alter name (fun s -> RA.Schema.add s col pos)
+let alter_drop name col = alter name (fun s -> RA.Schema.drop s col)
 
 let print () = List.iter RA.print_table !all
 

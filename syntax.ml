@@ -39,7 +39,7 @@ let resolve_columns tables joined_schema expr =
     match e with
     | `Value x -> `Value x
     | `Column (name,x) ->
-      let attr = RA.Scheme.find (Option.map_default schema joined_schema x) name in
+      let attr = RA.Schema.find (Option.map_default schema joined_schema x) name in
       `Value attr.RA.domain
     | `Param x -> `Param x
     | `Func (r,l) -> `Func (r,(List.map each l))
@@ -90,8 +90,8 @@ let infer_schema columns tables joined_schema =
     | Expr (e,name) ->
       let col = begin
       match e with
-      | `Column (name,Some t) -> RA.Scheme.find (schema t) name
-      | `Column (name,None) -> RA.Scheme.find joined_schema name
+      | `Column (name,Some t) -> RA.Schema.find (schema t) name
+      | `Column (name,None) -> RA.Schema.find joined_schema name
       | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables joined_schema e >> snd))
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
@@ -135,9 +135,9 @@ let do_join (tables,params,schema) ((table1,params1),kind) =
   let schema = match kind with
   | `Cross
   | `Search _
-  | `Default -> RA.Scheme.cross schema schema1
-  | `Natural -> RA.Scheme.natural schema schema1
-  | `Using l -> RA.Scheme.join_using l schema schema1
+  | `Default -> RA.Schema.cross schema schema1
+  | `Natural -> RA.Schema.natural schema schema1
+  | `Using l -> RA.Schema.join_using l schema schema1
   in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
@@ -156,6 +156,7 @@ let split_column_assignments schema l =
   List.iter (fun (col,expr) -> 
     cols := col :: !cols;
     (* hint expression to unify with the column type *)
-    let typ = (RA.Scheme.find schema col).RA.domain in
+    let typ = (RA.Schema.find schema col).RA.domain in
     exprs := (`Func (None, [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols,List.rev !exprs)
+

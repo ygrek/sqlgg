@@ -25,7 +25,7 @@
   let select_value select =
     let (s,p) = select in
     if (List.length s <> 1) then
-      raise (RA.Scheme.Error (s,"only one column allowed for SELECT operator in this expression"));
+      raise (RA.Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
     params_of select
 
 %}
@@ -63,7 +63,7 @@
 
 %type <Syntax.expr> expr
 
-%start <RA.Scheme.t * Stmt.params * Stmt.kind> input
+%start <RA.Schema.t * Stmt.params * Stmt.kind> input
 
 %%
 
@@ -106,7 +106,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
               {
                 let s = Tables.get_schema table in
                 let s = match cols with
-                  | Some cols -> RA.Scheme.project cols s
+                  | Some cols -> RA.Schema.project cols s
                   | None -> s
                 in
                 let p = Syntax.schema_as_params s in
@@ -144,9 +144,9 @@ select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order
                 let (s1,p1,tbls) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-                let schema = List.fold_left RA.Scheme.compound s1 s2l in
+                let schema = List.fold_left RA.Schema.compound s1 s2l in
                 let p3 = Syntax.get_params_l tbls schema o in
-(*                 RA.Scheme.check_unique schema; *)
+(*                 RA.Schema.check_unique schema; *)
                 schema,(p1@(List.flatten p2l)@p3@p4)
               }
 

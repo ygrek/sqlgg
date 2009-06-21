@@ -13,7 +13,7 @@ type attr = {name : string; domain : Type.t;}
 
 let attr n d = {name=n;domain=d}
 
-module Scheme =
+module Schema =
 struct
   type t = attr list
     deriving (Show)
@@ -107,12 +107,12 @@ struct
 
 end
 
-type table = string * Scheme.t deriving (Show)
+type table = string * Schema.t deriving (Show)
 
 let print_table t = print_endline (Show.show<table>(t))
 
 (*
-open Scheme
+open Schema
 
 let test = [{name="a";domain=Type.Int}; {name="b";domain=Type.Int}; {name="c";domain=Type.Text};];;
 

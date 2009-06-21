@@ -13,3 +13,5 @@ SELECT %CONCAT(name,' ',surname)%name || ' ' || surname% AS fullname, SUM(amount
 -- @list_donors
 SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE ?) LIMIT ?;
 
+DROP TABLE IF EXISTS person;
+DROP TABLE IF EXISTS money;
