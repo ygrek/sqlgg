@@ -124,36 +124,24 @@ let generate_code index stmt =
          output "reader.Close();";
          output "return count;"
       end);
-(*    begin match schema_binder_name with
-    | None -> ()
-    | Some name ->
-      empty_line();
-      G.func "public IEnumerable<" "enumerate" all_params (fun () ->
-      List.iteri
-        (fun i (name,_) -> output "((IDbDataParameter)cmd.Parameters[%u]).Value = %s;" i name)
-        values;
-      begin match schema_binder_name with
-      | None -> output "return cmd.ExecuteNonQuery();"
-      | Some name ->
-         output "IDataReader reader = cmd.ExecuteReader();";
-         let args = List.mapi (fun index attr -> get_column attr index) schema in
-         let args = String.concat "," args in
-         output "int count = 0;";
-         output "while (reader.Read())";
-         G.open_curly ();
-         output "result(%s);" args;
-         output "count++;";
-         G.close_curly "";
-         output "reader.Close();";
-         output "return count;"
-      end);*)
-   end_class name
+   end_class name;
+   name
+
+let generate_all names =
+  start_class "all";
+  List.iter (fun s -> output "public %s %s;" s s) names;
+  empty_line ();
+  G.func "public" "all" ["db","IDbConnection"] (fun () ->
+    List.iter (fun name -> output "%s = new %s(db);" name name) names
+  );
+  end_class "all"
 
 let generate () name stmts =
   output "using System;";
   output "using System.Data;";
   empty_line ();
   start_ns name;
-  Enum.iteri generate_code stmts;
+  let names = List.mapi generate_code (List.of_enum stmts) in
+  generate_all names;
   end_ns name
 
