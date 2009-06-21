@@ -86,10 +86,10 @@ type t = unit
 
 let start () = ()
 
-let generate_code () index schema params kind props =
-   let values = params_to_values params in
-   let name = choose_name props kind index in
-   let sql = quote (get_sql props kind params) in
+let generate_code index stmt =
+   let values = params_to_values stmt.params in
+   let name = choose_name stmt.props stmt.kind index in
+   let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
    start_class name;
     output "IDbCommand cmd;";
     output "static string sql = %s;" sql;
@@ -97,13 +97,13 @@ let generate_code () index schema params kind props =
     G.func "public" name ["db","IDbConnection"] (fun () ->
       output "cmd = db.CreateCommand();";
       output "cmd.CommandText = sql;";
-      output_params_binder params;
+      output_params_binder stmt.params;
     );
     empty_line ();
-    let schema_binder_name = output_schema_binder index schema in
+    let schema_binder_name = output_schema_binder index stmt.schema in
     let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
     let all_params = values @ result in
-    let doc = match schema_binder_name with None -> [] | Some _ -> ["result", schema_to_string schema] in
+    let doc = match schema_binder_name with None -> [] | Some _ -> ["result", schema_to_string stmt.schema] in
     comment_xml "execute query" doc;
     G.func "public int" "execute" all_params (fun () ->
       List.iteri
@@ -113,7 +113,7 @@ let generate_code () index schema params kind props =
       | None -> output "return cmd.ExecuteNonQuery();"
       | Some name ->
          output "IDataReader reader = cmd.ExecuteReader();";
-         let args = List.mapi (fun index attr -> get_column attr index) schema in
+         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
          let args = String.concat "," args in
          output "int count = 0;";
          output "while (reader.Read())";
@@ -149,11 +149,11 @@ let generate_code () index schema params kind props =
       end);*)
    end_class name
 
-let start_output () name =
+let generate () name stmts =
   output "using System;";
   output "using System.Data;";
   empty_line ();
-  start_ns name
-
-let finish_output () name = end_ns name
+  start_ns name;
+  Enum.iteri generate_code stmts;
+  end_ns name
 

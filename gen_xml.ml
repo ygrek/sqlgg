@@ -59,19 +59,24 @@ type t = xml list ref * xml list ref
 
 let start () = ref [], ref []
 
-let generate_code (x,_) index schema params kind props =
-  let name = choose_name props kind index in
-  let input = Node ("in",[],params_to_values params) in
-  let output = Node ("out",[],schema_to_values schema) in
-  let sql = get_sql props kind params in
+let generate_code (x,_) index stmt =
+  let name = choose_name stmt.props stmt.kind index in
+  let input = Node ("in",[],params_to_values stmt.params) in
+  let output = Node ("out",[],schema_to_values stmt.schema) in
+  let sql = get_sql stmt.props stmt.kind stmt.params in
   x := Node ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
 
-let start_output (x,pre) _ = pre := !x; x := []
+let start_output (x,pre) = pre := !x; x := []
 
-let finish_output (x,pre) _ =
+let finish_output (x,pre) =
   print_endline "<?xml version=\"1.0\"?>";
   List.iter (fun z -> z >> xml_to_string >> print_endline) (List.rev !pre);
   Node ("sqlgg",[],List.rev !x) >> xml_to_string >> print_endline;
   x := [];
   pre := []
+
+let generate out name stmts =
+  start_output out;
+  Enum.iteri (generate_code out) stmts;
+  finish_output out
 

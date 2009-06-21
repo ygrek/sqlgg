@@ -165,17 +165,17 @@ type t = unit
 
 let start () = ()
 
-let make_stmt index schema params kind props =
-   let name = choose_name props kind index in
-   let sql = quote (get_sql props kind params) in
+let make_stmt index stmt =
+   let name = choose_name stmt.props stmt.kind index in
+   let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) Apply.id;
-   let schema_binder_name = output_schema_binder index schema in
-   let params_binder_name = output_params_binder index params in
-   if (Option.is_some schema_binder_name) then output_schema_data index schema;
+   let schema_binder_name = output_schema_binder index stmt.schema in
+   let params_binder_name = output_params_binder index stmt.params in
+   if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema;
    out_public ();
    if (Option.is_some schema_binder_name) then output "template<class T>";
-   let values = params_to_values params in
+   let values = params_to_values stmt.params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T&"] in
    let all_params = result @ (make_const_values values) in
    let inline_params = Values.inline (make_const_values values) in
@@ -188,11 +188,7 @@ let make_stmt index schema params kind props =
    );
    name
 
-let generate () name stmts =
-  let stmts = List.of_enum stmts in
-  let names = 
-    List.mapi (fun i ((schema,params,kind),props) -> make_stmt i schema params kind props) stmts 
-  in
+let make_all name names =
   List.iter (fun name -> output "%s %s;" name name) names;
   empty_line ();
   let tail = match names with
@@ -201,12 +197,13 @@ let generate () name stmts =
   in
   func "" name ["db","typename Traits::connection"] ~tail Apply.id
 
-let start_output () name =
+let generate () name stmts =
   output "#pragma once";
   empty_line ();
   output "template <class Traits>";
-  start_struct name
-
-let finish_output () name =
+  start_struct name;
+  let stmts = List.of_enum stmts in
+  let names = List.mapi make_stmt stmts in
+  make_all name names;
   end_struct name
 

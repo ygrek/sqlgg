@@ -83,24 +83,24 @@ type t = unit
 
 let start () = ()
 
-let generate_code () index schema params kind props =
-   let values = params_to_values params in
-   let name = choose_name props kind index in
-   let sql = G.quote (get_sql props kind params) in
+let generate_code index stmt =
+   let values = params_to_values stmt.params in
+   let name = choose_name stmt.props stmt.kind index in
+   let sql = G.quote (get_sql stmt.props stmt.kind stmt.params) in
    output "PreparedStatement pstmt_%s;" name;
    empty_line ();
-   let schema_binder_name = output_schema_binder name index schema in
+   let schema_binder_name = output_schema_binder name index stmt.schema in
    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
    let all_params = values @ result in
    G.func "public int" name all_params ~tail:"throws SQLException" (fun () ->
       output "if (null == pstmt_%s)" name;
       output "  pstmt_%s = db.prepareStatement(%s);" name sql;
-      output_params_binder name index params;
+      output_params_binder name index stmt.params;
       begin match schema_binder_name with
       | None -> output "return pstmt_%s.executeUpdate();" name
       | Some _ ->
          output "ResultSet res = pstmt_%s.executeQuery();" name;
-         let args = List.mapi (fun index attr -> get_column attr index) schema in
+         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
          let args = String.concat "," args in
          output "int count = 0;";
          output "while (res.next())";
@@ -112,7 +112,7 @@ let generate_code () index schema params kind props =
       end);
     empty_line ()
 
-let start_output () name =
+let generate () name stmts =
   output "import java.sql.*;";
   empty_line ();
   start_class name;
@@ -121,7 +121,7 @@ let start_output () name =
   G.func "public" name ["aDb","Connection"] (fun () ->
     output "db = aDb;";
   );
-  empty_line ()
-
-let finish_output () name = end_class name
+  empty_line ();
+  Enum.iteri generate_code stmts;
+  end_class name
 

@@ -82,15 +82,15 @@ type t = unit
 
 let start () = ()
 
-let generate_code () index schema params kind props =
-  let name = choose_name props kind index >> String.uncapitalize in
-  let values = params_to_values params >> List.map (prepend "~") >> inline_values in
-  let all_params = match schema with [] -> values | _ -> "callback " ^ values in
+let generate_stmt index stmt =
+  let name = choose_name stmt.props stmt.kind index >> String.uncapitalize in
+  let values = params_to_values stmt.params >> List.map (prepend "~") >> inline_values in
+  let all_params = match stmt.schema with [] -> values | _ -> "callback " ^ values in
   output "let %s db %s =" name all_params;
   inc_indent ();
-  let sql = quote (get_sql props kind params) in
-  let schema_binder_name = output_schema_binder index schema in
-  let params_binder_name = output_params_binder index params in
+  let sql = quote (get_sql stmt.props stmt.kind stmt.params) in
+  let schema_binder_name = output_schema_binder index stmt.schema in
+  let params_binder_name = output_params_binder index stmt.params in
   begin match schema_binder_name with
   | None ->
       output "T.execute db %s %s" sql params_binder_name
@@ -100,12 +100,11 @@ let generate_code () index schema params kind props =
   dec_indent ();
   empty_line ()
 
-let start_output () name =
+let generate () name stmts =
   output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
   empty_line ();
-  inc_indent ()
-
-let finish_output () name =
+  inc_indent ();
+  Enum.iteri generate_stmt stmts;
   dec_indent ();
   output "end (* module %s *)" (String.capitalize name)
 

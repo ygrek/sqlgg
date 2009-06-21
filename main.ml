@@ -1,5 +1,5 @@
-(* 
-  Main 
+(**
+  Main
 *)
 
 open Printf
@@ -22,17 +22,14 @@ let repeat f x k =
 let parse_one (stmt,props) =
   try
 (*     print_endline stmt; *)
-    Some ((Parser.parse_stmt stmt), Props.set props "sql" stmt)
+    let (s,p,k) = Parser.parse_stmt stmt in
+    Some {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" stmt}
   with
   | exn ->
     begin
       Error.log "==> %s" stmt;
       None
     end
-
-let show_one ((s,p),props) =
-  RA.Schema.print s;
-  print_endline (Stmt.params_to_string p)
 
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
