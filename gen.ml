@@ -45,22 +45,33 @@ let choose_name props kind index =
   make_name props name
 
 let substitute_params s params f =
+  let index = ref 0 in
   let b = Buffer.create (String.length s) in
-  let last = List.fold_left (fun i ((name,(i1,i2)),t) ->
+  let last = List.fold_left (fun i ((_,(i1,i2)),_ as param) ->
     let prefix = String.slice ~first:i ~last:i1 s in
     Buffer.add_string b prefix;
-    Buffer.add_string b (f name t);
+    Buffer.add_string b (f !index param);
+    incr index;
     i2) 0 params in
   Buffer.add_string b (String.slice ~first:last s);
   Buffer.contents b
 
+let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
+let subst_unnamed _ _ = "?"
+
+(** defines substitution function for parameter literals *)
+let subst_mode = ref None
+
 let get_sql stmt =
   let sql = Props.get stmt.props "sql" >> Option.get in
-(*   let sql = substitute_params sql stmt.params (fun name t -> "XXX") in *)
-  (* fill VALUES *)
-  match stmt.kind with
-  | Insert (true,_) -> sql ^ " (" ^ (String.concat "," (List.map (fun _ -> "?") stmt.params)) ^ ")"
-  | _ -> sql
+  match !subst_mode with
+  | None -> sql
+  | Some subst -> substitute_params sql stmt.params subst
+
+let time_string () = 
+  let module U = Unix in
+  let t = U.time () >> U.gmtime in
+  sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) t.U.tm_mon t.U.tm_mday t.U.tm_hour t.U.tm_min
 
 module type Lang = sig
   type t
@@ -71,11 +82,6 @@ module type Lang = sig
 end
 
 module Make(S : Lang) = struct
-
-let time_string () = 
-  let module U = Unix in
-  let t = U.time () >> U.gmtime in
-  sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) t.U.tm_mon t.U.tm_mday t.U.tm_hour t.U.tm_min
 
 let generate_header out =
   S.comment out "DO NOT EDIT MANUALLY";

@@ -13,7 +13,7 @@ type params = param list deriving (Show)
 let params_to_string ps = Show.show<params>(ps)
 
 type kind = | Select
-            | Insert of bool (** values omitted *) * string (** table name *)
+            | Insert of RA.Schema.t option (** inserted *) * string (** table name *)
             | Create of string
             | Update of string
             | Delete of string

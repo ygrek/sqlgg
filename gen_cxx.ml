@@ -43,11 +43,6 @@ let end_struct name =
 let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
 
-let name_of attr index =
-  match attr.RA.name with
-  | "" -> sprintf "_%u" index
-  | s -> s
-
 let column_action action attr index =
   output "Traits::%s_column_%s(row, %u, obj.%s);"
     action

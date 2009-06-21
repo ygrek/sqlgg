@@ -27,6 +27,25 @@ let parse_one (stmt,props) =
     begin
       Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" stmt
     end;
+    (* fill VALUES *)
+    let (stmt,p) = match k with
+    | Stmt.Insert (Some s,_) ->
+      let module B = Buffer in 
+      let b = B.create 100 in
+      B.add_string b stmt;
+      B.add_string b "(";
+      let params = ref [] in
+      s >> List.iter (fun attr ->
+        if !params <> [] then B.add_string b ",";
+        let name = "@" ^ attr.RA.name in
+        let param = ((Some attr.RA.name,(B.length b,B.length b + String.length name)),Some attr.RA.domain) in
+        B.add_string b name;
+        params := param :: !params
+      );
+      B.add_string b ")";
+      (B.contents b, p @ (List.rev !params))
+    | _ -> (stmt,p)
+    in
     Some {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" stmt}
   with
   | exn ->
