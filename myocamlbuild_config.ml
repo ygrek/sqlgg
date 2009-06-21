@@ -1,13 +1,13 @@
 (** 
-  This ocamlbuild plugin will try to find libraries by name :
-    - from the local myocamlbuild.config file
-    - ocamlfind
+  This ocamlbuild plugin will try to find libraries by name using (in order)
+  - local myocamlbuild.config file
+  - ocamlfind
 
   Sample myocamlbuild.config :
 
 extlib=C:/my/contrib/extlib-1.5.1
 deriving=C:/my/contrib/deriving-0.1.1/lib
-ounit=C:/my/contrib/ounit-1.0.3
+oUnit=C:/my/contrib/ounit-1.0.3
 
 *)
 
@@ -25,7 +25,7 @@ let chomp s =
 let ocamlfind lib =
   let cin = Unix.open_process_in (Printf.sprintf "ocamlfind -query %s" lib) in
   let s = chomp (input_line cin) in
-(*  let s = Filename.quote s in*)
+  (*  let s = Filename.quote s in*)
   ignore (Unix.close_process_in cin);
   s
 
@@ -54,11 +54,22 @@ let read_config name =
 (** usage *)
 
 let config = read_config "myocamlbuild.config"
-let () = print_endline "Using config : "; List.iter (fun (x,y) -> Printf.printf "%s=%s\n%!" x y) config
+let () = 
+  match config with
+  | [] -> prerr_endline "No config, will use ocamlfind"
+  | _ -> prerr_endline "Using config : "; 
+         List.iter (fun (x,y) -> Printf.eprintf "%s=%s\n%!" x y) config
 
-let lib name = try List.assoc name config with exn -> ocamlfind name
+let lib name = 
+  try 
+    List.assoc name config 
+  with exn -> 
+    try 
+      ocamlfind name 
+    with exn -> 
+      "+" ^ name
 
 let extlib_dir = lib "extlib"
 let deriving_dir = lib "deriving"
-let ounit_dir = lib "ounit"
+let ounit_dir = lib "oUnit"
 
