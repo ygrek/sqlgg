@@ -60,11 +60,11 @@ let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
 let subst_unnamed _ _ = "?"
 
 (** defines substitution function for parameter literals *)
-let subst_mode = ref None
+let substitution_mode = ref None
 
 let get_sql stmt =
   let sql = Props.get stmt.props "sql" >> Option.get in
-  match !subst_mode with
+  match !substitution_mode with
   | None -> sql
   | Some subst -> substitute_params sql stmt.params subst
 
