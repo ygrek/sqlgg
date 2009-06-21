@@ -15,7 +15,7 @@ module J = Gen_java
 let comment = G.comment
 let empty_line = G.empty_line
 
-let comment_doc sl = 
+let comment_doc sl =
   output "/**";
   output_l (List.map (fun str -> Gen_caml.replace_all ~sub:"*/" ~by:"* /" ~str) sl);
   output "*/"
@@ -39,10 +39,6 @@ let as_db_type = function
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
 
-let as_cs_type = function
-  | Type.Int -> "System.Decimal" (* ?? *)
-  | x -> as_db_type x
-
 let as_cs_type = as_db_type
 
 let get_column attr index =
@@ -53,7 +49,7 @@ let get_column attr index =
 let param_type_to_string t = t >> Option.default Type.Text >> as_db_type
 
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_cs_type)
-let schema_to_string schema = schema >> schema_to_values >> G.Values.to_string 
+let schema_to_string schema = schema >> schema_to_values >> G.Values.to_string
 
 let output_schema_binder index schema =
   let name = "callback" in
