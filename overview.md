@@ -300,7 +300,6 @@ Try it [online](sql.cgi).
 TODO
 ----
 
-* query parameter placeholders are database API specific, substitute
 * some database API are inadequately strict about data types (notably ADO.NET), need native-type annotations in queries
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
