@@ -1,6 +1,7 @@
 
 {
   open Sql_parser
+  open Lexing
   module T = Sql.Type
 
 let error buf callerID =
@@ -8,15 +9,13 @@ let error buf callerID =
 (*	update_pos buf;*)
 	raise Parsing.Parse_error
 
+let pos lexbuf = (lexeme_start lexbuf, lexeme_end lexbuf)
+
 let advance_line_pos pos =
-  let module L = Lexing in
-  {L.pos_fname = pos.L.pos_fname;
-   pos_lnum = pos.L.pos_lnum + 1;
-   pos_bol = pos.L.pos_cnum;
-   pos_cnum = pos.L.pos_cnum;}
+  { pos with pos_lnum = pos.pos_lnum + 1; pos_bol = pos.pos_cnum; }
 
 let advance_line lexbuf =
-  lexbuf.Lexing.lex_curr_p <- advance_line_pos lexbuf.Lexing.lex_curr_p
+  lexbuf.lex_curr_p <- advance_line_pos lexbuf.lex_curr_p
 
 (* use Map or Hashtbl ? *)
 let keywords =
@@ -189,9 +188,8 @@ ruleMain = parse
   | "/" | "%" | "|" | "&" { NUM_BINARY_OP }
   | ">" | ">=" | "<=" | "<" | "<>" { COMPARISON_OP }
 
-  | "?" { PARAM Stmt.Next }
-  | "?" (digit+ as str) { PARAM (Stmt.Numbered (int_of_string str)) }
-  | [':' '@'] (ident as str) { PARAM (Stmt.Named str) }
+  | "?" { PARAM (None,pos lexbuf) }
+  | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }
 
   | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
@@ -209,7 +207,7 @@ ruleInQuotes acc = parse
   | eof	        { error lexbuf "no terminating quote" }
   | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote" }
   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf }
-  | [^'"' '\n']+  { ruleInQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | [^'"' '\n']+  { ruleInQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInQuotes" }
 and
 ruleInSingleQuotes acc = parse
@@ -217,7 +215,7 @@ ruleInSingleQuotes acc = parse
   | eof	        { error lexbuf "no terminating single quote" }
   | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating single quote" }
   | "''"        { ruleInSingleQuotes (acc ^ "'") lexbuf }
-  | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInSingleQuotes" }
 and
 ruleInBackQuotes acc = parse
@@ -225,19 +223,19 @@ ruleInBackQuotes acc = parse
   | eof	        { error lexbuf "no terminating back quote" }
   | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating back quote" }
   | "``"        { ruleInBackQuotes (acc ^ "`") lexbuf }
-  | [^'`' '\n']+  { ruleInBackQuotes (acc ^ Lexing.lexeme lexbuf) lexbuf }
+  | [^'`' '\n']+  { ruleInBackQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInBackQuotes" }
 and
 ruleComment acc = parse
   | '\n'	{ advance_line lexbuf; acc }
   | eof	        { acc }
-  | [^'\n']+    { let s = Lexing.lexeme lexbuf in ruleComment (acc ^ s) lexbuf; }
+  | [^'\n']+    { let s = lexeme lexbuf in ruleComment (acc ^ s) lexbuf; }
   | _		{ error lexbuf "ruleComment"; }
 and
 ruleCommentMulti acc = parse
   | '\n'	{ advance_line lexbuf; ruleCommentMulti (acc ^ "\n") lexbuf }
   | "*/"	{ acc }
-  | [^'\n']+    { let s = Lexing.lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
+  | [^'\n']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
   | _	        { error lexbuf "ruleCommentMulti" }
 
 {
@@ -248,7 +246,7 @@ ruleCommentMulti acc = parse
     match !P.mode with
     | P.Normal -> token
     | P.Ignore ->
-(*         Printf.eprintf "ignored: %s\n" (Lexing.lexeme lexbuf); *)
+(*         Printf.eprintf "ignored: %s\n" (lexeme lexbuf); *)
       if (token = EOF) then token else IGNORED
 
 }

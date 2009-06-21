@@ -12,14 +12,6 @@
   open Syntax
   open Operators
 
-  let def_param_name name (id,t) =
-    let name =
-    match id with
-    | Next | Numbered _ -> name
-    | Named x -> x
-    in
-    (Named name,t)
-
   let params_of select = List.map (fun x -> `Param x) (snd select)
 
   let select_value select =

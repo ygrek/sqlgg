@@ -24,11 +24,10 @@ let name_of attr index =
   | "" -> sprintf "_%u" index
   | s -> s
 
-let param_name_to_string id index =
-  match id with
-  | Next -> sprintf "_%u" index
-  | Numbered x -> sprintf "_%u" x
-  | Named s -> s
+let param_name_to_string (name,_) index =
+  match name with
+  | None -> sprintf "_%u" index
+  | Some s -> s
 
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index

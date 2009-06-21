@@ -3,6 +3,18 @@ open OUnit
 open RA
 open Sql.Type
 open Stmt
+open ListMore
+
+let named s = (Some s,(0,0))
+let param = (None,(0,0))
+
+let cmp_params p1 p2 =
+  try
+    List.for_all2 (fun ((name1,pos1),t1) ((name2,pos2),t2) -> 
+      name1 = name2 && t1 = t2 && pos1 = (0,0) && snd pos2 > fst pos2)
+    p1 p2
+  with
+    _ -> false
 
 let tt ?msg stmt schema params =
   let print_schema = RA.Schema.to_string in
@@ -14,7 +26,7 @@ let tt ?msg stmt schema params =
     | _ -> assert_failure "tt failed"
   in
   assert_equal ?msg ~printer:print_schema schema s1;
-  assert_equal ?msg ~printer:print_params params p1
+  assert_equal ?msg ~cmp:cmp_params ~printer:print_params params p1
 
 let test () =
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)"
@@ -22,16 +34,16 @@ let test () =
      [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
-     [Next,Some Int];
+     [param,Some Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr "x" Text; attr "z" Int]
-     [Next,Some Int; Named "id", Some Int; Named "lim",Some Int; ];
+     [param,Some Int; named "id", Some Int; named "lim",Some Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [attr "name" Text; attr "other_name" Text]
-     [Named "delta", Some Int];
+     [named "delta", Some Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr "name" Text;]
-     [Named "x", Some Int; Next, Some Int; Named "x", Some Int; Next, Some Int;];
+     [named "x", Some Int; param, Some Int; named "x", Some Int; param, Some Int;];
   ()
 
 (*
@@ -51,11 +63,11 @@ let test_join_result_cols () =
   tt ~msg:"NATURAL JOIN with common column in WHERE"
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x" 
     (ints ["j";"i";"k"]) 
-    [Named "x",Some Int];
+    [named "x",Some Int];
   tt ~msg:"NATURAL JOIN with common column qualified in WHERE"
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x" 
     (ints ["j";"i";"k"]) 
-    [Named "x",Some Int];
+    [named "x",Some Int];
   ()
 
 let test_misc () =

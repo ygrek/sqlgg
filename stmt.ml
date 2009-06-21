@@ -1,10 +1,11 @@
-(** *)
+(** Statement *)
 
 open Printf
 open ExtString
 open ListMore
 
-type param_id = | Named of string | Numbered of int | Next deriving (Show)
+(** optional name and start/end position in string *)
+type param_id = string option * (int * int) deriving (Show) 
 type param_type = Sql.Type.t option deriving (Show)
 type param = param_id * param_type deriving (Show)
 type params = param list deriving (Show)

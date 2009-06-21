@@ -30,7 +30,8 @@ type columns = column list deriving (Show)
 
 let collect f l = List.flatten (List.map f l)
 
-let schema_as_params = List.map (fun attr -> Named attr.RA.name, Some attr.RA.domain)
+(* FIXME *)
+let schema_as_params = List.map (fun attr -> (Some attr.RA.name,(0,0)), Some attr.RA.domain)
 
 (** replace every Column with Value of corresponding type *)
 let resolve_columns tables joined_schema expr =
