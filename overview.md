@@ -18,29 +18,29 @@ Problem
 
 Writing database layer code is usually tedious and error-prone, due to the mix of different
 languages. SQL queries constructed dynamically need to bind external data (from application), and
-the resulting rowset must be decomposed into application native data. Data crossing these
-application-to-database boundaries is what causes troubles. One can factor out all common database
-communication code, hide the database under some application-specific abstraction, but one always
-needs to manually specify correspondence between SQL query binding slots (or resulting rowset
-columns) and code variables. This mapping should be updated manually every time SQL query is
-modified.
+the resulting rowset must be decomposed into application native data. The impedance mismatch between
+database layer and application code, as well as the absence of static (compile-time) checking, 
+frequently leads to runtime failures (and sometimes even security holes). One
+can factor out all common database communication code, hide the database under some
+application-specific abstraction, but one always needs to manually specify correspondence between
+SQL query binding slots (or resulting rowset columns) and code variables. This mapping should be
+updated manually every time SQL query is modified.
 
 <a id="solution"/>
 Solution
 --------
 
-SQL query parser and code generator which ensures that application code and database queries are in sync.
-It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
-substitution parameters) and the set of resulting columns (for SELECT). Then it generates the
-code in host language, matching query input and output to function parameters and return values with
-corresponding native data types. So basically you provide an SQL query and generator creates a
-function which takes the set of typed parameters as required to fill slots in a query. Generated
-code binds provided parameters into query and executes it. SELECT statements additionally return the
-collection of structures with fields representing columns of resulting rowset (or pass those
-structures to callback-function). The most fruitful consequence of such approach is that
-the host language compiler will itself check that functions generated from SQL queries will be
-called correctly (i.e. all parameters bound with correct types). So if you modify the query and
-forget to update the code -- the compiler will point on erroneous parts.
+SQL query parser and code generator which ensures that application code and database queries are in
+sync. It analyzes SQL query and determines the set of input parameters (values for INSERT, run-time
+substitution parameters) and the set of resulting columns (for SELECT). Then it generates the code
+in host language, mapping query parameters on function arguments with corresponding native data
+types. So basically you provide an SQL query and generator creates a function which takes the set of
+typed parameters as required to fill slots in a query. Generated code binds provided parameters into
+query and executes it. The code for SELECT statements additionally invokes a strongly-typed callback
+function for every row of the resulting rowset. The most fruitful consequence of such
+approach is that the host language compiler will itself check that functions generated from SQL
+queries will be called correctly (i.e. all parameters bound with correct types). So if you modify
+the query and forget to update the code -- the compiler will point on erroneous parts.
 
 <a id="example"/>
 Complete example
@@ -221,21 +221,31 @@ to `money` table (e.g. timestamp of transfer). Compilation rightfully fails:
 Details
 -------
 
+Distinguishing feature of **sqlgg** is that it starts off with actual SQL queries, not object models
+or SQL table descriptions. Ideally, it generates {meta,template,abstract,generic} code which is later
+specialized for the actual database/environment by the means of the target language. The
+generated code doesn't require any special runtime support and doesn't impose any restrictions on
+the application.
+
 The main idea is that the generator should take care only of semantic binding between SQL and code
 sides, being as unobtrusive as possible. So the choice of the specific database and API is a
 programmer's choice. Similarly, queries to the database are expressed in plain SQL, so that the
 generator can be easily plugged in any existing project -- just move all SQL statements used in the
-code to separate file and feed it to generator.
+code to separate file and feed it to generator. The generated code can be easily inspected just as
+any other code in the project, and you can even edit it manually if such need arises (though it is
+highly not recommended). In order to keep code and database layer in sync
+the generator must be invoked every time SQL queries are modified.
 
-Distinguishing feature of **sqlgg** is that it starts off with actual SQL queries, not object models
-or SQL table descriptions. Ideally, it generates {meta,template,abstract,generic} code which is later
-specialized for actual database/environment (if the target language provides such ability).
+For now the status of this project is **works for me** . It is evolving and there is
+plenty of room for improvement. The generated code and traits interfaces may change from time to
+time. I am interested in opinions on output code structure/naming best fitting the target
+language/platform.
 
-This is work in progress and there is plenty of room for improvement. For now the status of this
-project is **works for me** .  I use it for some simple database-access code with
-[sqlite3](http://sqlite.org) engine (using suitable [sqlite3_traits.hpp][sqlite3_cxx] helper).
-This project was started when I found myself editing existing code with tons of C++ wrappers for SQL
-queries, each binding several parameters and decomposing results.
+This project was started when I found myself editing existing code
+with tons of C++ wrappers for SQL queries, each binding several parameters and decomposing results.
+I used it for C++ desktop applications with [sqlite3](http://sqlite.org) engine and 
+C#/[Mono](http://mono-project.com) server-side 
+component with [mysql](http://dev.mysql.com) database.
 
 **Sqlgg** understands the subset of the standard SQL language with arbitrary database-specific
 extensions. The goal is to cover as much SQL as possible in order to accept most of the real-world
@@ -281,7 +291,7 @@ Available output languages:
 Download
 --------
 
-sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip), [Linux](dist/sqlgg-0.2.1.tar.gz).
+sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip), [Linux](dist/sqlgg-0.2.1.tar.gz) (released on 7 Jun 2009).
 
 Try it [online](sql.cgi).
 
@@ -289,7 +299,8 @@ Try it [online](sql.cgi).
 TODO
 ----
 
-* query parameter placeholders are specific to database API, substitute
+* query parameter placeholders are database API specific, substitute
+* some database API are inadequately strict about data types (notably ADO.NET), need native-type annotations in queries
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
@@ -303,7 +314,7 @@ TODO
 * type check expressions
 
 ----
-2009-06-14
+2009-06-21
 
 <style>
 span.also { position: absolute; right: 1em; margin-top: 1em; font-style: italic; font-size: 80%; }
