@@ -133,7 +133,7 @@ let generate_all names =
   end_class "all"
 
 let generate () name stmts =
-  substitution_mode := Some subst_named; (* only named params allowed *)
+  params_mode := Some Named; (* only named params allowed *)
   output "using System;";
   output "using System.Data;";
   empty_line ();

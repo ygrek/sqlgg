@@ -6,6 +6,11 @@ open ExtString
 open Operators
 open Stmt
 
+type subst_mode = | Named | Unnamed
+
+(** defines substitution function for parameter literals *)
+let params_mode = ref None
+
 let (inc_indent,dec_indent,make_indent) =
   let v = ref 0 in
   (fun () -> v := !v + 2),
@@ -59,14 +64,13 @@ let substitute_params s params f =
 let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
 let subst_unnamed _ _ = "?"
 
-(** defines substitution function for parameter literals *)
-let substitution_mode = ref None
-
 let get_sql stmt =
   let sql = Props.get stmt.props "sql" >> Option.get in
-  match !substitution_mode with
+  match !params_mode with
   | None -> sql
-  | Some subst -> substitute_params sql stmt.params subst
+  | Some subst ->
+    let f = match subst with Named -> subst_named | Unnamed -> subst_unnamed in
+    substitute_params sql stmt.params f
 
 let time_string () = 
   let module U = Unix in
