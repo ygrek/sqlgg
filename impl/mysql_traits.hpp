@@ -210,14 +210,14 @@ struct mysql_traits
       if (Params::count != mysql_stmt_param_count(stmt))
       {
 #if defined(SQLGG_DEBUG)
-        fprintf(stderr, " wrong params count\n");
+        fprintf(stderr, " wrong params count %u != %lu\n",Params::count,mysql_stmt_param_count(stmt));
 #endif
         return false;
       }
       if (Binder::count != mysql_stmt_field_count(stmt))
       {
 #if defined(SQLGG_DEBUG)
-        fprintf(stderr, " wrong number of columns\n");
+        fprintf(stderr, " wrong number of columns %u != %u\n",Binder::count,mysql_stmt_field_count(stmt));
 #endif
         return false;
       }

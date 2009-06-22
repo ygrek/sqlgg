@@ -30,10 +30,10 @@ let parse_one (stmt,props) =
     (* fill VALUES *)
     let (stmt,p) = match k with
     | Stmt.Insert (Some s,_) ->
-      let module B = Buffer in 
+      let module B = Buffer in
       let b = B.create 100 in
       B.add_string b stmt;
-      B.add_string b "(";
+      B.add_string b " (";
       let params = ref [] in
       s >> List.iter (fun attr ->
         if !params <> [] then B.add_string b ",";
