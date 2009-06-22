@@ -34,6 +34,22 @@ MYSQL* connect()
   return conn;
 }
 
+struct output_transfers
+{
+  void operator()(std::string const& fullname, int total)
+  {
+     cout << fullname << " = " << total << endl;
+  }
+};
+
+struct output_donors
+{
+  void operator()(std::string const& surname)
+  {
+     cout << surname << endl;
+  }
+};
+
 int main()
 {
   MYSQL* db = connect();
@@ -63,27 +79,12 @@ int main()
   gen.add_money(sancho,ivan,300);
 
   // summarize by person
-  typedef vector<gen_t::calc_total::data> collection;
-  collection all;
-  gen.calc_total(all);
-
-  // output
   cout << "Total transfers:" << endl;
-  for (collection::const_iterator i = all.begin(), end = all.end(); i != end; ++i)
-  {
-     cout << i->fullname << " = " << i->total << endl;
-  }
+  gen.calc_total(output_transfers());
 
   // list donors
-  typedef vector<gen_t::list_donors::data> people;
-  people p;
-  gen.list_donors(p,"petrov",100);
-
   cout << "Donors:" << endl;
-  for (people::const_iterator i = p.begin(), end = p.end(); i != end; ++i)
-  {
-    cout << i->surname << endl;
-  }
+  gen.list_donors("petrov",100,output_donors());
 
   // properly close database
   mysql_close(db);
