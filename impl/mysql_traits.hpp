@@ -154,8 +154,8 @@ struct mysql_traits
   template<class T>
   struct no_binder
   {
-    void get(row,T&) {}
-    void bind(row,T&) {}
+    void get(row,T) {}
+    void bind(row) {}
     enum { count = 0 };
   };
 
@@ -202,8 +202,8 @@ struct mysql_traits
       return true;
     }
 
-    template<class Container, class Binder, class Params>
-    bool select(Container& result, Binder binder, Params params)
+    template<class T, class Binder, class Params>
+    bool select(T result, Binder binder, Params params)
     {
       prepare();
 
@@ -244,11 +244,11 @@ struct mysql_traits
       }
 
       row_t r(stmt,Binder::count);
-      typename Container::value_type val;
-      binder.bind(r,val);
 
       if (0 != Binder::count)
       {
+        binder.bind(r);
+
         if (mysql_stmt_bind_result(stmt, r.bind))
         {
 #if defined(SQLGG_DEBUG)
@@ -259,13 +259,11 @@ struct mysql_traits
         }
       }
 
-      result.clear();
       while (true)
       {
         int res = mysql_stmt_fetch(stmt);
         if (0 != res && MYSQL_DATA_TRUNCATED != res) break;
-        binder.get(r,val);
-        result.push_back(val);
+        binder.get(r,result);
       }
 
       return true;
@@ -274,8 +272,8 @@ struct mysql_traits
     template<class Params>
     bool execute(Params params)
     {
-      std::vector<int> z;
-      return select(z,no_binder<int>(),params);
+      int dummy;
+      return select(dummy,no_binder<int>(),params);
     }
 
   }; // statement

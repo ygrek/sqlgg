@@ -104,8 +104,8 @@ struct sqlite3_traits
       return true;
     }
 
-    template<class Container, class Binder, class Params>
-    bool select(Container& result, Binder binder, Params params)
+    template<class T, class Binder, class Params>
+    bool select(T result, Binder binder, Params params)
     {
       prepare();
 
@@ -120,12 +120,9 @@ struct sqlite3_traits
 
       params.set_params(stmt);
 
-      result.clear();
-
-      while(SQLITE_ROW == sqlite3_step(stmt)) // iterate all objects
+      while (SQLITE_ROW == sqlite3_step(stmt)) // iterate all objects
       {
-          result.push_back(typename Container::value_type());
-          binder.get(stmt,result.back());
+          binder.get(stmt,result);
       }
 
       return true;
