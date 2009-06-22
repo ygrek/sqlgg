@@ -34,6 +34,7 @@ ALSO XHTML
    CONT ;
 
 : sdiv ( `style --> \ <-- ) PRO %[ `style $$ ]% `div atag CONT ;
+: option ( `value `name -- ) 2SWAP %[ `value $$ ]% `option atag TYPE ;
 
 : render-edit ( a u -- )
   \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
@@ -61,13 +62,25 @@ WHERE x = @val;" STYPE
 
   <<
    S" clear:left" sdiv
+
+(
+  << `div tag S" Output query parameters substitution :" TYPE
+   << 
+    %[ `params `name $$ ]% `select atag
+    `input S" As is" option
+    `named S" Only named" option
+    `unnamed S" Only unnamed" option
+   >>
+  >>
+)
+
    <<
    %[ `gen `name $$ ]% `select atag
-   << %[ `cxx `value $$ `selected 2DUP $$ ]% `option atag `C++ TYPE >>
-   << %[ `csharp `value $$ ]% `option atag `C# TYPE >>
-   << %[ `java `value $$ ]% `option atag `Java TYPE >>
-   << %[ `caml `value $$ ]% `option atag `OCaml TYPE >>
-   << %[ `xml `value $$ ]% `option atag `XML TYPE >>
+   `cxx `C++ option
+   `csharp `C# option
+   `java `Java option
+   `caml `OCaml option
+   `xml  `XML option
    >>
 
    S" generate code " `button `submit input
