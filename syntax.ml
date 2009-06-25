@@ -35,12 +35,12 @@ let schema_as_params = List.map (fun attr -> (Some attr.RA.name,(0,0)), Some att
 
 (** replace every Column with Value of corresponding type *)
 let resolve_columns tables joined_schema expr =
-  let schema name = name >> Tables.get_from tables >> snd in
+  let schema_of_table name = name >> Tables.get_from tables >> snd in
   let rec each e =
     match e with
     | `Value x -> `Value x
-    | `Column (name,x) ->
-      let attr = RA.Schema.find (Option.map_default schema joined_schema x) name in
+    | `Column (name,table) ->
+      let attr = RA.Schema.find (Option.map_default schema_of_table joined_schema table) name in
       `Value attr.RA.domain
     | `Param x -> `Param x
     | `Func (r,l) -> `Func (r,(List.map each l))

@@ -130,10 +130,10 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
 
-select_stmt: select_core list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
+select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
               {
                 let (s1,p1,tbls) = $1 in
-                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) $2) in
+                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) other) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let schema = List.fold_left RA.Schema.compound s1 s2l in
                 let p3 = Syntax.get_params_l tbls schema o in
