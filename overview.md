@@ -324,5 +324,6 @@ TODO
 code { font-family: monospace; }
 pre { background-color: #eee; border: 1px solid #0f0; }
 :not(pre) > code { font-size: 1em; }
+html { font-family: sans-serif; }
 </style>
 
