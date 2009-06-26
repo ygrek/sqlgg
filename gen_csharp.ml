@@ -69,14 +69,14 @@ let set_param index param =
   let (id,t) = param in
   let name = default_name "param" index in
   (* FIXME unnamed params *)
-  output "IDbDataParameter %s = cmd.CreateParameter();" name;
+  output "IDbDataParameter %s = _cmd.CreateParameter();" name;
   output "%s.ParameterName = \"@%s\";" name (param_name_to_string id index);
   output "%s.DbType = DbType.%s;" name (param_type_to_string t);
-  output "cmd.Parameters.Add(%s);" name
+  output "_cmd.Parameters.Add(%s);" name
 
 let output_params_binder params =
   List.iteri set_param params;
-  output "cmd.Prepare();"
+  output "_cmd.Prepare();"
 
 type t = unit
 
@@ -87,13 +87,13 @@ let generate_code index stmt =
    let name = choose_name stmt.props stmt.kind index in
    let sql = quote (get_sql stmt) in
    start_class name;
-    output "IDbCommand cmd;";
+    output "IDbCommand _cmd;";
+    output "IDbConnection _conn;";
     output "static string sql = %s;" sql;
     empty_line ();
     G.func "public" name ["db","IDbConnection"] (fun () ->
-      output "cmd = db.CreateCommand();";
-      output "cmd.CommandText = sql;";
-      output_params_binder stmt.params;
+      output "_cmd = null;";
+      output "_conn = db;";
     );
     empty_line ();
     let schema_binder_name = output_schema_binder index stmt.schema in
@@ -102,13 +102,19 @@ let generate_code index stmt =
     let doc = match schema_binder_name with None -> [] | Some _ -> ["result", schema_to_string stmt.schema] in
     comment_xml "execute query" doc;
     G.func "public int" "execute" all_params (fun () ->
+      output "if (null == _cmd)";
+      output "{"; inc_indent ();
+      output "_cmd = _conn.CreateCommand();";
+      output "_cmd.CommandText = sql;";
+      output_params_binder stmt.params;
+      dec_indent (); output "}";
       List.iteri
-        (fun i (name,_) -> output "((IDbDataParameter)cmd.Parameters[%u]).Value = %s;" i name)
+        (fun i (name,_) -> output "((IDbDataParameter)_cmd.Parameters[%u]).Value = %s;" i name)
         values;
       begin match schema_binder_name with
-      | None -> output "return cmd.ExecuteNonQuery();"
+      | None -> output "return _cmd.ExecuteNonQuery();"
       | Some name ->
-         output "IDataReader reader = cmd.ExecuteReader();";
+         output "IDataReader reader = _cmd.ExecuteReader();";
          let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
          let args = String.concat "," args in
          output "int count = 0;";
