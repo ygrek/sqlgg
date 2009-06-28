@@ -1,10 +1,10 @@
 true: use_menhir
-true and not <sql_parser.ml>: dtypes, warn_A, warn_z
-<*.ml> and not <sql_parser.ml>: pp(deriving), use_deriving
+true: dtypes, warn_A, warn_z
+<*.ml>: pp(deriving), use_deriving
 <example/*>: not_hygienic
 <demo/*>: not_hygienic
 <impl/*>: not_hygienic
 <*.ml>: use_extLib
 <test.ml>: use_oUnit
 <*.{byte,native}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit
-<sql_parser.ml>: warn_e
+<sql_parser.ml>: warn_e, -dtypes, -pp(deriving), -use_deriving, -use_extLib
