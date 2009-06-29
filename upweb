@@ -3,10 +3,12 @@
 set -e -u
 
 www=/home/ygrek/work/ygrek_web/ygrek.org.ua
+sqlgg=$www/p/sqlgg
 
-sed -e 's|sql.cgi|/exec/sql.cgi|' overview.md > $www/p/sqlgg/index.md
-cp -a impl/*.{hpp,ml} $www/p/sqlgg/impl/
-cp -a demo/*.{cpp,hpp,ml,xml,java,cs} $www/p/sqlgg/demo/
-make -C /home/ygrek/work/ygrek_web/ygrek.org.ua/
-svn add /home/ygrek/work/ygrek_web/ygrek.org.ua/p/sqlgg/{demo,impl}/*
-svn ci /home/ygrek/work/ygrek_web/ygrek.org.ua/
+sed -e 's|sql.cgi|/exec/sql.cgi|' overview.md > $sqlgg/index.md
+cp changelog $sqlgg/dist/changelog
+cp -a impl/*.{hpp,ml} $sqlgg/impl/
+cp -a demo/*.{cpp,hpp,ml,xml,java,cs} $sqlgg/demo/
+make -C $www
+svn add $sqlgg/{demo,impl,dist}/*
+svn ci $www
