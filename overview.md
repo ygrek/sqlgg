@@ -1,5 +1,5 @@
 <title>sqlgg: SQL Guided (code) Generator</title>
-<span class="right border">[ygrek.org.ua](/) / [p](/p) / [sqlgg]()</span>
+<span class="right border">[ygrek.org.ua](http://ygrek.org.ua/) / [p](http://ygrek.org.ua/p/) / [sqlgg](http://ygrek.org.ua/p/sqlgg/)</span>
 
 sqlgg: SQL Guided (code) Generator
 ==================================
@@ -292,7 +292,7 @@ Available output languages:
 Download
 --------
 
-sqlgg 0.2.1 for [Windows](dist/sqlgg-0.2.1.zip) and [Linux](dist/sqlgg-0.2.1.tar.gz) (released on 7 June 2009).
+sqlgg 0.2.2 for [Windows](dist/sqlgg-0.2.2.zip) and [Linux](dist/sqlgg-0.2.2.tar.gz) (released on 29 June 2009). [Changes history](changelog).
 
 Try it [online](sql.cgi).
 
@@ -314,8 +314,8 @@ TODO
 * type check expressions
 
 ----
-2009-06-21
-<span class="right">[sqlgg&#x40;ygrek.org.ua](mailto:sqlgg&#x40;ygrek.org.ua)</span>
+2009-06-29
+<span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>
 .right { position: absolute; right: 1em; }

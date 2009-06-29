@@ -1,0 +1,27 @@
+sqlgg changelog
+---------------
+
+0.2.2
+2009-06-28
+	+ generate C#
+	+ parse table constraints
+	+ reuse prepared statements
+	+ substitute params syntax in queries to match target
+	+ parse more SQL (mysql quirks, ALTER, DROP TABLE, INSERT SET)
+	+ better infer types for UPDATE SET
+
+0.2.1
+2009-06-02
+	+ generate XML and Java
+	+ c++ traits for mysql
+	+ parse more SQL
+
+0.2.0
+2009-05-17
+	+ understands all basic SQL
+	+ generate OCaml and C++
+
+0.1.0
+2009-05-05
+	+ cleaned up old code
+
