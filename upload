@@ -1,4 +1,4 @@
 ./build
 ocamlbuild sqlgg.native
 spf cgi.f
-rsync sql.cgi _build/sqlgg.native ygrek.org.ua:ygrek.org.ua/htdocs/exec/
+rsync sqlgg.cgi _build/sqlgg.native ygrek.org.ua:ygrek.org.ua/htdocs/exec/

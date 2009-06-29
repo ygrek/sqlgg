@@ -103,12 +103,12 @@ WHERE x = @val;" STYPE
   DUP limit > IF DROP limit S" Input too long, truncated" TYPE CR THEN
   << `pre tag 2DUP TYPE >>
   hrule
-	(( S" sql" DROP 0x1FF )) mkdir DROP
+	(( S" data_sqlgg" DROP 0x1FF )) mkdir DROP
 	ms@ { tick | src dst err gen }
   `gen GetParam gen-param >STR TO gen
-  tick " sql/{n}.in" -> src
-  tick " sql/{n}.out" -> dst
-  tick " sql/{n}.err" -> err
+  tick " data_sqlgg/{n}.in" -> src
+  tick " data_sqlgg/{n}.out" -> dst
+  tick " data_sqlgg/{n}.err" -> err
   \ src STR@ TYPE CR dst STR@ TYPE CR err STR@ TYPE CR
   src STR@ OCCUPY
   err STR@ dst STR@ src STR@ gen STR@
@@ -185,9 +185,9 @@ PREVIOUS
 
 : save
   ['] index MAINX !
-  `sql.cgi SAVE
-  `sql.cgi.o DELETE-FILE DROP
-  `sql.cgi.ld DELETE-FILE DROP
+  `sqlgg.cgi SAVE
+  `sqlgg.cgi.o DELETE-FILE DROP
+  `sqlgg.cgi.ld DELETE-FILE DROP
 ;
 
 save BYE
