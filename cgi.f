@@ -3,9 +3,6 @@
 
 REQUIRE ATTACH ~pinka/samples/2005/lib/append-file.f
 REQUIRE USER-TYPE ~ygrek/lib/typestr.f
-\ :NONAME 2DROP ; TO USER-TYPE \ no stdout
-
-REQUIRE XSLTmm ~ac/lib/lin/xml/xslt.f
 REQUIRE XHTML ~ygrek/lib/xhtml/core.f
 REQUIRE NOT ~profit/lib/logic.f
 REQUIRE DateTime>PAD ~ygrek/lib/spec/unixdate.f
@@ -27,7 +24,6 @@ ALSO XHTML
    << `head tag
      << `application/xhtml+xml;charset=utf-8 `content-type http-equiv >>
      << `title tag ( `title ) TYPE >>
-\     << `wiki.css link-stylesheet >>
    >>
 
    `body tag
@@ -37,7 +33,6 @@ ALSO XHTML
 : option ( `value `name -- ) 2SWAP %[ `value $$ ]% `option atag TYPE ;
 
 : render-edit ( a u -- )
-  \ << `h1 tag S" Nota bene: Editing is disabled ('save' will ignore your changes)" TYPE >>
   S" " form-post
   <<
    S" float:left; margin: 0 1em 1em 0" sdiv
@@ -63,8 +58,7 @@ WHERE x = @val;" STYPE
   <<
    S" clear:left" sdiv
 
-(
-  << `div tag S" Output query parameters substitution :" TYPE
+( << `div tag S" Output query parameters substitution :" TYPE
    << 
     %[ `params `name $$ ]% `select atag
     `input S" As is" option
