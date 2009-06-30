@@ -75,7 +75,7 @@ let get_sql stmt =
 let time_string () = 
   let module U = Unix in
   let t = U.time () >> U.gmtime in
-  sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) t.U.tm_mon t.U.tm_mday t.U.tm_hour t.U.tm_min
+  sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) (t.U.tm_mon+1) t.U.tm_mday t.U.tm_hour t.U.tm_min
 
 module type Lang = sig
   type t
