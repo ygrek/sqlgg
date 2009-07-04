@@ -8,11 +8,13 @@ module C = Myocamlbuild_config
 dispatch begin function
 | After_rules ->
 
-     ocaml_lib ~extern:true ~dir:C.extlib_dir "extLib";
-     ocaml_lib ~extern:true ~dir:C.deriving_dir "deriving";
-     ocaml_lib ~extern:true ~dir:C.ounit_dir "oUnit";
+     let extlib_dir = C.lib "extlib" in
 
-     flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A C.extlib_dir]);
+     ocaml_lib ~extern:true ~dir:extlib_dir "extLib";
+     ocaml_lib ~extern:true ~dir:(C.lib "deriving") "deriving";
+     ocaml_lib ~extern:true ~dir:(C.lib "oUnit") "oUnit";
+
+     flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A extlib_dir]);
 
 | _ -> ()
 end
