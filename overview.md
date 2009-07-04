@@ -163,16 +163,14 @@ Things to note above:
     feature).
 1. `add_money()` function call operator takes three data parameters -- the values to INSERT into 
     table (note the names and types).
-3. `calc_total()` returns data via `result` parameter. Behind the scenes it will
-    bind columns of resulting rowset to the fields of `T::value_type`, which should provide fields
-    `fullname` of type `Traits::Text` and
-    `total` of type `Traits::Int` (otherwise it will fail to compile). For convenience a structure
-    satisfying the requirements for output type is generated alongside the function, `data_4` in
-    this particular case, so `std::vector<data_4>` for `result` is fine.
+3. `calc_total()` returns data via `result` parameter, which is a callback that gets executed for
+    each row of the resulting rowset, with statically typed parameters binding each column of a row.
+    In this case the parameters are `fullname` of type `Traits::Text` and `total` of type 
+    `Traits::Int`.
 4. The types of parameters for `list_donors` were inferred correctly (`limit` is `Int` and `surname`
     is `Text`. SQL is not a statically-typed language so the inferred types are based on some
     reasonable assumptions.
-5. Statements of arbitrary depth across many tables should be supported.
+5. Statements of arbitrary depth across many tables are supported.
 6. Statements are checked for correctness as far as generator is concerned, so it will detect
 		syntax errors, non-existent columns in expressions, mismatched columns in compound statements,
 		ambiguous column names etc.
@@ -355,7 +353,7 @@ TODO
 * type check expressions
 
 ----
-2009-06-30
+2009-07-04
 <span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>
