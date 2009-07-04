@@ -1,4 +1,4 @@
-(** 
+(**
   This ocamlbuild plugin will try to find libraries by name using (in order)
   - local myocamlbuild.config file
   - ocamlfind
@@ -37,7 +37,7 @@ let file_lines name =
     let ch = open_in name in
     begin try while true do l := input_line ch :: !l done with End_of_file -> () end;
     close_in_noerr ch
-  with 
+  with
     exn -> ()
   end;
   !l
@@ -54,22 +54,18 @@ let read_config name =
 (** usage *)
 
 let config = read_config "myocamlbuild.config"
-let () = 
+let () =
   match config with
   | [] -> prerr_endline "No config, will use ocamlfind"
-  | _ -> prerr_endline "Using config : "; 
+  | _ -> prerr_endline "Using config : ";
          List.iter (fun (x,y) -> Printf.eprintf "%s=%s\n%!" x y) config
 
-let lib name = 
-  try 
-    List.assoc name config 
-  with exn -> 
-    try 
-      ocamlfind name 
-    with exn -> 
+let lib name =
+  try
+    List.assoc name config
+  with exn ->
+    try
+      ocamlfind name
+    with exn ->
       "+" ^ name
-
-let extlib_dir = lib "extlib"
-let deriving_dir = lib "deriving"
-let ounit_dir = lib "oUnit"
 

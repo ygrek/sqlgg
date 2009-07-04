@@ -1,6 +1,7 @@
 *.byte
 *.native
-sql.cgi
+*.exe
+sqlgg.cgi
 _build
 impl/*.cm?
 myocamlbuild.config

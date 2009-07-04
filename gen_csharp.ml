@@ -28,8 +28,7 @@ let comment_xml summary params =
 let (start_class,end_class) = J.start_class,J.end_class
 let (start_ns,end_ns) = J.start_ "namespace"
 
-let quote = String.replace_chars (function '\n' -> "\" +\n\"" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
-let quote s = "\"" ^ quote s ^ "\""
+let quote = J.quote
 
 let as_db_type = function
   | Type.Int -> "Int64"

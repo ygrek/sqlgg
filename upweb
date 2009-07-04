@@ -5,7 +5,7 @@ set -e -u
 www=/home/ygrek/work/ygrek_web/ygrek.org.ua
 sqlgg=$www/p/sqlgg
 
-sed -e 's|sql.cgi|/exec/sql.cgi|' overview.md > $sqlgg/index.md
+sed -e 's|sqlgg.cgi|/exec/sqlgg.cgi|' overview.md > $sqlgg/index.md
 cp changelog $sqlgg/dist/changelog
 cp -a impl/*.{hpp,ml} $sqlgg/impl/
 cp -a demo/*.{cpp,hpp,ml,xml,java,cs} $sqlgg/demo/
