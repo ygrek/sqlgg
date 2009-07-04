@@ -12,13 +12,10 @@ open Sql
 
 module Values = struct
 
-let to_string x =
-  String.concat ", " (List.map (fun (n,t) -> t ^ " " ^ n) x)
-
-let inline x =
-  String.concat ", " (List.map (fun (n,t) -> n) x)
-
 let names = List.map fst
+let join = String.concat ", "
+let inline = join & names
+let to_string = join & (List.map (fun (n,t) -> t ^ " " ^ n))
 
 end
 

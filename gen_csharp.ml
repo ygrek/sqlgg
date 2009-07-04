@@ -11,6 +11,7 @@ open Sql
 
 module G = Gen_cxx
 module J = Gen_java
+module Values = G.Values
 
 let comment = G.comment
 let empty_line = G.empty_line
@@ -84,11 +85,13 @@ let start () = ()
 let func_execute index stmt =
     let values = params_to_values stmt.params in
     let schema_binder_name = output_schema_binder index stmt.schema in
-    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
-    let all_params = values @ result in
-    let doc = match schema_binder_name with None -> [] | Some _ -> ["result", schema_to_string stmt.schema] in
+    let is_select = Option.is_some schema_binder_name in
+    let doc = if is_select then ["result", schema_to_string stmt.schema] else [] in
     comment_xml "execute query" doc;
-    G.func "public int" "execute" all_params (fun () ->
+    let func_name = if is_select then "execute_reader" else "execute" in
+    let result = if is_select then ["result","Action<IDataReader>"] else [] in
+    let all_params = values @ result in
+    G.func "public int" func_name all_params (fun () ->
       output "if (null == _cmd)";
       output "{"; inc_indent ();
       output "_cmd = _conn.CreateCommand();";
@@ -100,19 +103,48 @@ let func_execute index stmt =
         values;
       begin match schema_binder_name with
       | None -> output "return _cmd.ExecuteNonQuery();"
-      | Some name ->
+      | Some _ ->
          output "IDataReader reader = _cmd.ExecuteReader();";
-         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
-         let args = String.concat "," args in
          output "int count = 0;";
          output "while (reader.Read())";
          G.open_curly ();
-         output "result(%s);" args;
+         output "result(reader);";
          output "count++;";
          G.close_curly "";
          output "reader.Close();";
          output "return count;"
-      end)
+      end);
+    if is_select then
+    begin
+      empty_line ();
+      let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
+      let all_params = values @ result in
+      G.func "public int" "execute" all_params (fun () ->
+         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
+         let cb = sprintf "delegate(IDataReader reader) { result(%s); }" (Values.join args) in
+         let values = (Values.names values) @ [cb] in
+         output "return execute_reader(%s);" (Values.join values)
+      );
+      empty_line ();
+      start_class "row";
+      List.iteri (fun index attr ->
+        output "public %s %s { get { return %s; } }" 
+          (as_cs_type attr.RA.domain)
+          (attr.RA.name)
+          (get_column attr index)
+      ) stmt.schema;
+      output "private IDataReader reader;";
+      empty_line ();
+      G.func "public" "row" ["reader","IDataReader"] (fun () ->
+        output "this.reader = reader;"
+      );
+      end_class "row";
+      G.func "public IEnumerable<row>" "enumerate" values (fun () ->
+        let cb = "delegate(IDataReader reader) { yield return new row(reader); }" in
+        let values = (Values.names values) @ [cb] in
+        output "execute_reader(%s);" (Values.join values)
+      )
+    end
 
 let generate_code index stmt =
    let name = choose_name stmt.props stmt.kind index in
@@ -142,8 +174,8 @@ let generate_all names =
 
 let generate () name stmts =
   params_mode := Some Named; (* only named params allowed *)
-  output "using System;";
-  output "using System.Data;";
+  let using = ["System";"System.Data";"System.Collections.Generic"] in
+  List.iter (fun s -> output "using %s;" s) using;
   empty_line ();
   start_ns name;
   let names = List.mapi generate_code (List.of_enum stmts) in
