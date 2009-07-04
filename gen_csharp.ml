@@ -81,20 +81,8 @@ type t = unit
 
 let start () = ()
 
-let generate_code index stmt =
-   let values = params_to_values stmt.params in
-   let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt) in
-   start_class name;
-    output "IDbCommand _cmd;";
-    output "IDbConnection _conn;";
-    output "static string sql = %s;" sql;
-    empty_line ();
-    G.func "public" name ["db","IDbConnection"] (fun () ->
-      output "_cmd = null;";
-      output "_conn = db;";
-    );
-    empty_line ();
+let func_execute index stmt =
+    let values = params_to_values stmt.params in
     let schema_binder_name = output_schema_binder index stmt.schema in
     let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
     let all_params = values @ result in
@@ -124,7 +112,22 @@ let generate_code index stmt =
          G.close_curly "";
          output "reader.Close();";
          output "return count;"
-      end);
+      end)
+
+let generate_code index stmt =
+   let name = choose_name stmt.props stmt.kind index in
+   let sql = quote (get_sql stmt) in
+   start_class name;
+    output "IDbCommand _cmd;";
+    output "IDbConnection _conn;";
+    output "static string sql = %s;" sql;
+    empty_line ();
+    G.func "public" name ["db","IDbConnection"] (fun () ->
+      output "_cmd = null;";
+      output "_conn = db;";
+    );
+    empty_line ();
+    func_execute index stmt;
    end_class name;
    name
 
