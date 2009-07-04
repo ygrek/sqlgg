@@ -136,7 +136,10 @@ select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) other) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let schema = List.fold_left RA.Schema.compound s1 s2l in
-                let all_columns = List.fold_left RA.Schema.cross [] (List.map snd tbls) in
+                let all_columns = (* ugly specially for ORDER BY *)
+                  RA.Schema.make_unique
+                  (List.fold_left RA.Schema.cross [] (schema :: (List.map snd tbls)))
+                in
                 let p3 = Syntax.get_params_l tbls all_columns o in
 (*                 RA.Schema.check_unique schema; *)
                 schema,(p1@(List.flatten p2l)@p3@p4)
