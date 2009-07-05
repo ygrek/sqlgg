@@ -196,6 +196,7 @@ ruleMain = parse
   | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
   | "`" { IDENT (ruleInBackQuotes "" lexbuf) }
+  | "[" { IDENT (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }
@@ -204,6 +205,7 @@ ruleMain = parse
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
 and
+(* FIXME factor out all that ruleIn* rules *)
 ruleInQuotes acc = parse
   | '"'	        { acc }
   | eof	        { error lexbuf "no terminating quote" }
@@ -211,6 +213,14 @@ ruleInQuotes acc = parse
   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf }
   | [^'"' '\n']+  { ruleInQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInQuotes" }
+and
+ruleInBrackets acc = parse
+  | ']'	        { acc }
+  | eof	        { error lexbuf "no terminating bracket" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating bracket" }
+(*   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf } *)
+  | [^']' '\n']+  { ruleInBrackets (acc ^ lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInBrackets" }
 and
 ruleInSingleQuotes acc = parse
   | '\''	      { acc }
