@@ -94,24 +94,33 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
               }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
-         | insert_cmd table=IDENT cols=sequence(IDENT)? VALUES (*sequence(expr)?*)
+         | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
-                let s = Tables.get_schema table in
-                let s = match cols with
-                  | Some cols -> RA.Schema.project cols s
-                  | None -> s
+                let schema = Tables.get_schema table in
+                let columns = match names with
+                | Some names -> RA.Schema.project names schema
+                | None -> schema
                 in
-                [], [], Insert (Some s,table)
+                let params, values = match values with
+                | None -> [], Some columns
+                | Some values ->
+                  let vl = List.length values in
+                  let cl = List.length columns in
+                  if vl <> cl then
+                    failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
+                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) columns) values), None
+                in
+                [], params, Insert (values,table)
               }
          | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
               {
-                let p1 = Syntax.params_of_column_assignments (Tables.get table) ss in
+                let p1 = Syntax.params_of_assigns (Tables.get table) ss in
                 [], p1, Insert (None,table)
               }
          | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
                 let t = Tables.get table in
-                let p1 = Syntax.params_of_column_assignments t ss in
+                let p1 = Syntax.params_of_assigns t ss in
                 let p2 = get_params_opt [t] (snd t) w in
                 [], p1 @ p2, Update table
               }

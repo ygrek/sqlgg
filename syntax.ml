@@ -161,7 +161,7 @@ let split_column_assignments schema l =
     exprs := (`Func (None, [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols,List.rev !exprs)
 
-let params_of_column_assignments t ss =
+let params_of_assigns t ss =
   let (_,exprs) = split_column_assignments (snd t) ss in
   get_params_l [t] (snd t) exprs
 
