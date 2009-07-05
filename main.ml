@@ -19,20 +19,15 @@ let repeat f x k =
   in
   loop ()
 
-let parse_one (stmt,props) =
-  try
+let parse_one_exn (sql,props) =
 (*     print_endline stmt; *)
-    let (s,p,k) = Parser.parse_stmt stmt in
-    if not (RA.Schema.is_unique s) then
-    begin
-      Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" stmt
-    end;
+    let (s,p,k) = Parser.parse_stmt sql in
     (* fill VALUES *)
-    let (stmt,p) = match k with
+    let (sql,p) = match k with
     | Stmt.Insert (Some s,_) ->
       let module B = Buffer in
       let b = B.create 100 in
-      B.add_string b stmt;
+      B.add_string b sql;
       B.add_string b " (";
       let params = ref [] in
       s >> List.iter (fun attr ->
@@ -44,14 +39,26 @@ let parse_one (stmt,props) =
       );
       B.add_string b ")";
       (B.contents b, p @ (List.rev !params))
-    | _ -> (stmt,p)
+    | _ -> (sql,p)
     in
-    Some {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" stmt}
+    {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" sql}
+
+let parse_one (sql,props as x) =
+  try
+    let stmt = parse_one_exn x in
+    if not (RA.Schema.is_unique stmt.Stmt.schema) then
+      Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql;
+    Some stmt
   with
-  | exn ->
+  | Parser_utils.Error (exn,(line,cnum,tok)) ->
     begin
-      Error.log "==> %s" stmt;
-      None
+     let extra = Printexc.to_string exn in
+     Error.log "==> %s" sql;
+     if cnum = String.length sql then
+       Error.log "Exception %s" extra
+     else
+       Error.log "Exception %s in %u:%u at lexeme \"%s\"" extra line cnum tok;
+     None
     end
 
 let get_statements ch =
