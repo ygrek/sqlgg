@@ -1,6 +1,11 @@
 sqlgg changelog
 ---------------
 
+0.2.3
+?
+	+ sql: ORDER BY, explicit VALUES
+	+ csharp: IEnumerable<>
+
 0.2.2
 2009-06-28
 	+ generate C#
