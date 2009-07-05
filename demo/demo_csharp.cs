@@ -38,7 +38,10 @@ public class Test
       gen.add_money.execute(sancho,ivan,300);
 
       Console.WriteLine("Total transfers:");
-      gen.calc_total.execute(delegate (String name, long total) { Console.WriteLine(name + ": " + total); });
+      foreach (var row in gen.calc_total.rows())
+      {
+        Console.WriteLine(row.fullname + ": " + row.total);
+      }
 
       Console.WriteLine("Donors:");
       gen.list_donors.execute("petrov",100,delegate(string surname) { Console.WriteLine(surname); });

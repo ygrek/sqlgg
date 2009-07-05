@@ -126,6 +126,16 @@ let func_execute index stmt =
          output "return count;"
       );
       empty_line ();
+      match stmt.schema with
+      | [attr] ->
+        let t = as_cs_type attr.RA.domain in
+        G.func ("public IEnumerable<" ^ t ^ ">") "rows" values (fun () ->
+        output "foreach (var reader in execute_reader(%s))" (Values.inline values);
+        G.open_curly ();
+        output "yield return %s;" (get_column attr 0);
+        G.close_curly ""
+        )
+      | _ ->
       start_class "row";
       List.iteri (fun index attr ->
         output "public %s %s { get { return %s; } }" 
@@ -139,7 +149,7 @@ let func_execute index stmt =
         output "this.reader = reader;"
       );
       end_class "row";
-      G.func "public IEnumerable<row>" "enumerate" values (fun () ->
+      G.func "public IEnumerable<row>" "rows" values (fun () ->
         output "foreach (var reader in execute_reader(%s))" (Values.inline values);
         G.open_curly ();
         output "yield return new row(reader);";
