@@ -105,18 +105,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
               }
          | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
               {
-                let t = Tables.get table in
-                let (cols,exprs) = Syntax.split_column_assignments (snd t) ss in
-                let p1 = Syntax.get_params_l [t] (snd t) exprs in
-                (*List.iter (fun e -> print_endline (Syntax.expr_to_string e)) exprs;*)
+                let p1 = Syntax.params_of_column_assignments (Tables.get table) ss in
                 [], p1, Insert (None,table)
               }
          | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
                 let t = Tables.get table in
+                let p1 = Syntax.params_of_column_assignments t ss in
                 let p2 = get_params_opt [t] (snd t) w in
-                let (cols,exprs) = Syntax.split_column_assignments (snd t) ss in
-                let p1 = Syntax.get_params_l [t] (snd t) exprs in
                 [], p1 @ p2, Update table
               }
          | DELETE FROM table=IDENT w=where?
