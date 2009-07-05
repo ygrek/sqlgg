@@ -123,10 +123,12 @@ let keywords =
     *)
   all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
   all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
+  all T_INTEGER ["number"]; (* oracle *)
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
+  all T_TEXT ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime";"year";];
   !k
 

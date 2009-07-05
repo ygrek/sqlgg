@@ -4,7 +4,7 @@
 CREATE TABLE mytable (
         id NUMBER(10) NOT NULL,
         paginator NUMBER(10) NOT NULL,
-        value VARCHAR2(50)
+        `value` VARCHAR2(50)
 );
 
 ALTER TABLE mytable
@@ -15,7 +15,7 @@ CREATE INDEX ix_mytable_paginator_id ON mytable(paginator, id);
 
 
 INSERT
-INTO    mytable(id, paginator, value)
+INTO    mytable(id, paginator, `value`)
 SELECT  level, level / 10000, 'Value ' || level
 FROM    dual
 CONNECT BY
