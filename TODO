@@ -1,11 +1,13 @@
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
 * allow to tolerate errors in query
+* decide what to do with unquoted identifiers matching keywords
+* provide ways to extend lexer with tokens in runtime
 * split overview into several pages
 * some database API are inadequately strict about data types (notably ADO.NET), need native-type annotations in queries
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
-* type-inferrer is too primitive
+* calculate types more precisely, type-inferrer is too primitive
 * detect statements on single tables and group the corresponding generated code together
 * check function names for uniqueness
 * support/test other SQL engines
