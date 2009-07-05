@@ -140,7 +140,7 @@ let func_execute index stmt =
       List.iteri (fun index attr ->
         output "public %s %s { get { return %s; } }" 
           (as_cs_type attr.RA.domain)
-          (attr.RA.name)
+          (name_of attr index)
           (get_column attr index)
       ) stmt.schema;
       output "private IDataReader reader;";
