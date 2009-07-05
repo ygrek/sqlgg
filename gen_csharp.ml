@@ -89,9 +89,8 @@ let func_execute index stmt =
     let doc = if is_select then ["result", schema_to_string stmt.schema] else [] in
     comment_xml "execute query" doc;
     let func_name = if is_select then "execute_reader" else "execute" in
-    let result = if is_select then ["result","Action<IDataReader>"] else [] in
-    let all_params = values @ result in
-    G.func "public int" func_name all_params (fun () ->
+    let result = "public " ^ if is_select then "IEnumerable<IDataReader>" else "int" in
+    G.func result func_name values (fun () ->
       output "if (null == _cmd)";
       output "{"; inc_indent ();
       output "_cmd = _conn.CreateCommand();";
@@ -105,14 +104,11 @@ let func_execute index stmt =
       | None -> output "return _cmd.ExecuteNonQuery();"
       | Some _ ->
          output "IDataReader reader = _cmd.ExecuteReader();";
-         output "int count = 0;";
          output "while (reader.Read())";
          G.open_curly ();
-         output "result(reader);";
-         output "count++;";
+         output "yield return reader;";
          G.close_curly "";
          output "reader.Close();";
-         output "return count;"
       end);
     if is_select then
     begin
@@ -121,9 +117,13 @@ let func_execute index stmt =
       let all_params = values @ result in
       G.func "public int" "execute" all_params (fun () ->
          let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
-         let cb = sprintf "delegate(IDataReader reader) { result(%s); }" (Values.join args) in
-         let values = (Values.names values) @ [cb] in
-         output "return execute_reader(%s);" (Values.join values)
+         output "int count = 0;";
+         output "foreach (var reader in execute_reader(%s))" (Values.inline values);
+         G.open_curly ();
+         output "result(%s);" (Values.join args);
+         output "count++;";
+         G.close_curly "";
+         output "return count;"
       );
       empty_line ();
       start_class "row";
@@ -140,9 +140,10 @@ let func_execute index stmt =
       );
       end_class "row";
       G.func "public IEnumerable<row>" "enumerate" values (fun () ->
-        let cb = "delegate(IDataReader reader) { yield return new row(reader); }" in
-        let values = (Values.names values) @ [cb] in
-        output "execute_reader(%s);" (Values.join values)
+        output "foreach (var reader in execute_reader(%s))" (Values.inline values);
+        G.open_curly ();
+        output "yield return new row(reader);";
+        G.close_curly ""
       )
     end
 
