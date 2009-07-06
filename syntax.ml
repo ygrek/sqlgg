@@ -4,17 +4,18 @@ open Stmt
 open Operators
 open ListMore
 open Apply
+open Sql
 
-type expr = [ `Value of Sql.Type.t (** literal value *)
+type expr = [ `Value of Type.t (** literal value *)
             | `Param of param
-            | `Func of Sql.Type.t option * expr list (** return type, parameters *)
+            | `Func of Type.t * expr list (** return type, parameters *)
             | `Column of string * string option (** name, table *)
             ]
             deriving (Show)
 
-type expr_q = [ `Value of Sql.Type.t (** literal value *)
+type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
-            | `Func of Sql.Type.t option * expr_q list (** return type, parameters *)
+            | `Func of Type.t * expr_q list (** return type, parameters *)
             ]
             deriving (Show)
 
@@ -51,24 +52,24 @@ let resolve_columns tables joined_schema expr =
 let assign_types expr =
   let rec typeof e = (* FIXME simplify *)
     match e with
-    | `Value t -> e, Some t
+    | `Value t -> e, t
     | `Func (ret,l) ->
 (** Assumption: sql functions/operators have type schema 'a -> ... -> 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
         let (l,t) = l >> List.map typeof >> List.split in
-        let t = match List.filter_valid t with
-        | [] -> None
-        | h::t -> if List.for_all ((=) h) t then Some h else None
+        let t = match List.filter ((<>) Type.Any) t with
+        | [] -> Type.Any
+        | h::t -> if List.for_all ((=) h) t then h else Type.Any
         in
 (*
         print_endline (Show.show<expr_q list>(l));
-        print_endline (Show.show<Sql.Type.t option>(t));
+        print_endline (Show.show<Type.t option>(t));
 *)
         let assign = function
-        | `Param (n,None) -> `Param (n,t)
+        | `Param (n,Type.Any) -> `Param (n,t)
         | x -> x
         in
-        let ret = if Option.is_some ret then ret else t in
+        let ret = if Type.Any <> ret then ret else t in
         `Func (ret,(List.map assign l)),ret
     | `Param (_,t) -> e, t
   in
@@ -93,7 +94,7 @@ let infer_schema columns tables joined_schema =
       match e with
       | `Column (name,Some t) -> RA.Schema.find (schema t) name
       | `Column (name,None) -> RA.Schema.find joined_schema name
-      | _ -> RA.attr "" (Option.default Sql.Type.Text (resolve_types tables joined_schema e >> snd))
+      | _ -> RA.attr "" (resolve_types tables joined_schema e >> snd)
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
@@ -114,7 +115,7 @@ let get_params tables joined_schema e =
 
 (*
 let _ =
-  let e = Sub [Value Sql.Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Sql.Type.Int);] in
+  let e = Sub [Value Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Type.Int);] in
   e >> get_params >> to_string >> print_endline
 *)
 
@@ -158,6 +159,6 @@ let split_column_assignments schema l =
     cols := col :: !cols;
     (* hint expression to unify with the column type *)
     let typ = (RA.Schema.find schema col).RA.domain in
-    exprs := (`Func (None, [`Value typ;expr])) :: !exprs) l;
+    exprs := (`Func (Type.Any, [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols,List.rev !exprs)
 

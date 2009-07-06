@@ -40,6 +40,7 @@ let as_api_type = function
   | Type.Blob -> "String"
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
+  | Type.Any -> "String"
 
 let as_lang_type = as_api_type
 

@@ -26,7 +26,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Stmt.param_id> PARAM
-%token <Sql.Type.t option> FUNCTION
+%token <Sql.Type.t> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -189,7 +189,7 @@ update_cmd: UPDATE {}
 select_type: DISTINCT | ALL { }
 
 int_or_param: INTEGER { [] }
-            | PARAM { [($1,Some Int)] }
+            | PARAM { [($1,Int)] }
 
 limit: LIMIT p=int_or_param { p }
      | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 } (* Named? *)
@@ -258,33 +258,33 @@ anyall: ANY | ALL | SOME { }
 mnot(X): NOT x = X | x = X { x }
 
 expr:
-     expr numeric_bin_op expr %prec PLUS { `Func ((Some Int),[$1;$3]) }
-    | expr boolean_bin_op expr %prec AND { `Func ((Some Bool),[$1;$3]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Some Bool),[e1;e2]) }
-    | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
+     expr numeric_bin_op expr %prec PLUS { `Func (Int,[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { `Func (Bool,[$1;$3]) }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func (Bool,[e1;e2]) }
+    | expr CONCAT_OP expr { `Func (Text,[$1;$3]) }
     | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
-      { `Func (None,(List.filter_valid [Some e1; Some e2; e3])) }
+      { `Func (Any,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
     | IDENT { `Column ($1,None) }
     | t=IDENT DOT c=IDENT
     | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
     | v=literal_value | v=datetime_value { v }
-    | e1=expr mnot(IN) l=sequence(expr) { `Func (None,e1::l) }
+    | e1=expr mnot(IN) l=sequence(expr) { `Func (Any,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
-        `Func (None,e1::select_value select)
+        `Func (Any,e1::select_value select)
       }
     | e1=expr IN table=IDENT { Tables.check(table); e1 }
     | LPAREN select=select_stmt RPAREN
       {
-        `Func (None,select_value select)
+        `Func (Any,select_value select)
       }
-    | PARAM { `Param ($1,None) }
+    | PARAM { `Param ($1,Any) }
     | f=FUNCTION LPAREN p=func_params RPAREN { `Func (f,p) }
     | expr TEST_NULL { $1 }
-    | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
+    | expr mnot(BETWEEN) expr AND expr { `Func (Int,[$1;$3;$5]) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func (Bool,params_of select) }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { `Value Datetime }
 

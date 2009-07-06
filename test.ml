@@ -34,16 +34,16 @@ let test () =
      [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
-     [param,Some Int];
+     [param, Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr "x" Text; attr "z" Int]
-     [param,Some Int; named "id", Some Int; named "lim",Some Int; ];
+     [param,Int; named "id", Int; named "lim",Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [attr "name" Text; attr "other_name" Text]
-     [named "delta", Some Int];
+     [named "delta", Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr "name" Text;]
-     [named "x", Some Int; param, Some Int; named "x", Some Int; param, Some Int;];
+     [named "x", Int; param, Int; named "x", Int; param, Int;];
   ()
 
 (*
@@ -63,11 +63,11 @@ let test_join_result_cols () =
   tt ~msg:"NATURAL JOIN with common column in WHERE"
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x" 
     (ints ["j";"i";"k"]) 
-    [named "x",Some Int];
+    [named "x",Int];
   tt ~msg:"NATURAL JOIN with common column qualified in WHERE"
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x" 
     (ints ["j";"i";"k"]) 
-    [named "x",Some Int];
+    [named "x",Int];
   ()
 
 let test_misc () =

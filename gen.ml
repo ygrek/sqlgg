@@ -86,11 +86,11 @@ end
 
 module Translate(T : LangTypes) = struct
 
-let param_type_to_string = T.as_api_type & Option.default Sql.Type.Text
+let param_type_to_string = T.as_api_type
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.RA.domain)
 (* let schema_to_string = G.Values.to_string & schema_to_values  *)
-let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> Option.default Sql.Type.Text >> T.as_lang_type)
-let params_to_values = List.unique & params_to_values
+let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
+let params_to_values = List.unique & all_params_to_values
 
 end
 

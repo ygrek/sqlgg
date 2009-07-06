@@ -105,8 +105,8 @@ let keywords =
    "column",COLUMN;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all (FUNCTION (Some T.Int)) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
-  all (FUNCTION (Some T.Text)) ["concat";"lower";"upper"];
+  all (FUNCTION T.Int) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
+  all (FUNCTION T.Text) ["concat";"lower";"upper"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";"unix_timestamp"];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];

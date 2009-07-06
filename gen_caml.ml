@@ -33,7 +33,15 @@ let get_column attr index =
     (Type.to_string attr.RA.domain)
     index
 
-let param_type_to_string t = Option.map_default Type.to_string "Any" t
+module L = struct
+  let as_lang_type = Type.to_string
+  let as_api_type = as_lang_type
+end
+
+module T = Translate(L)
+
+open L
+open T
 
 let set_param index param =
   let (id,t) = param in
@@ -59,8 +67,7 @@ let output_schema_binder index schema =
   | [] -> None
   | _ -> Some (output_schema_binder index schema)
 
-let params_to_values = List.mapi (fun i (n,_) -> param_name_to_string n i)
-let params_to_values = List.unique & params_to_values
+let params_to_values = List.map fst & params_to_values
 
 let output_params_binder index params =
   output "let set_params stmt =";

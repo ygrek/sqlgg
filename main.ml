@@ -38,7 +38,7 @@ let parse_one (stmt,props) =
       s >> List.iter (fun attr ->
         if !params <> [] then B.add_string b ",";
         let name = "@" ^ attr.RA.name in
-        let param = ((Some attr.RA.name,(B.length b,B.length b + String.length name)),Some attr.RA.domain) in
+        let param = ((Some attr.RA.name,(B.length b,B.length b + String.length name)),attr.RA.domain) in
         B.add_string b name;
         params := param :: !params
       );

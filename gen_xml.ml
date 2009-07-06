@@ -50,10 +50,11 @@ let empty_line _ = ()
 
 let value n t = Node ("value",["name",n; "type",t;],[])
 
-let param_type_to_string t = Option.map_default Type.to_string "Any" t
-let params_to_values = List.mapi (fun i (n,t) -> value (param_name_to_string n i) (param_type_to_string t))
+open Gen_caml.L
+open Gen_caml.T
 
-let schema_to_values = List.mapi (fun i attr -> value (name_of attr i) (Type.to_string attr.RA.domain))
+let params_to_values = List.map (fun (n,t) -> value n t) & all_params_to_values
+let schema_to_values = List.map (fun (n,t) -> value n t) & schema_to_values
 
 type t = xml list ref * xml list ref
 

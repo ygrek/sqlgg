@@ -2,7 +2,7 @@
 
 module Type =
 struct
-  type t = | Int | Text | Blob | Float | Bool | Datetime
+  type t = | Int | Text | Blob | Float | Bool | Datetime | Any
         deriving (Show)
 
   let to_string = Show.show<t>
