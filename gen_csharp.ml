@@ -68,7 +68,6 @@ let params_to_values = List.unique & params_to_values
 let set_param index param =
   let (id,t) = param in
   let name = default_name "param" index in
-  (* FIXME unnamed params *)
   output "IDbDataParameter %s = _cmd.CreateParameter();" name;
   output "%s.ParameterName = \"@%s\";" name (param_name_to_string id index);
   output "%s.DbType = DbType.%s;" name (param_type_to_string t);
@@ -92,11 +91,12 @@ let func_execute index stmt =
     let result = "public " ^ if is_select then "IEnumerable<IDataReader>" else "int" in
     G.func result func_name values (fun () ->
       output "if (null == _cmd)";
-      output "{"; inc_indent ();
+      G.open_curly ();
       output "_cmd = _conn.CreateCommand();";
       output "_cmd.CommandText = sql;";
       output_params_binder stmt.params;
-      dec_indent (); output "}";
+      G.close_curly "";
+      output "if (null != CommandTimeout) _cmd.CommandTimeout = CommandTimeout.Value;";
       List.iteri
         (fun i (name,_) -> output "((IDbDataParameter)_cmd.Parameters[%u]).Value = %s;" i name)
         values;
@@ -163,6 +163,7 @@ let generate_code index stmt =
    start_class name;
     output "IDbCommand _cmd;";
     output "IDbConnection _conn;";
+    output "public int? CommandTimeout;";
     output "static string sql = %s;" sql;
     empty_line ();
     G.func "public" name ["db","IDbConnection"] (fun () ->
