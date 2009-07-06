@@ -41,8 +41,18 @@ let end_struct name =
 let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
 
+module L = struct
+  let as_api_type = Type.to_string
+  let as_lang_type t = "typename Traits::" ^ (as_api_type t)
+end
+
+module T = Translate(L)
+
+open L
+open T
+
 let column_action action attr index =
-  let typ = Type.to_string attr.RA.domain in
+  let typ = as_api_type attr.RA.domain in
   let name = name_of attr index in
   output "Traits::%s_column_%s(row, %u, %s);" action typ index name
 
@@ -57,14 +67,6 @@ let func head name args ?tail k =
   k ();
   close_curly ""
 
-(*
-let get_column = column_action "get"
-let bind_column = column_action "bind"
-*)
-
-let param_type_to_string t = Option.map_default Type.to_string "Any" t
-let as_cxx_type str = "typename Traits::" ^ str
-
 let set_param arg index param =
   let (id,t) = param in
   output "Traits::set_param(%s, %s, %u);"
@@ -75,8 +77,6 @@ let set_param arg index param =
 
 let output_value_defs vals =
   vals >> List.iter (fun (name,t) -> output "%s %s;" t name)
-
-let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> Type.to_string >> as_cxx_type)
 
 let output_schema_binder index schema =
   out_private ();
@@ -111,8 +111,6 @@ let output_schema_binder index schema =
   | [] -> None
   | _ -> Some (output_schema_binder index schema)
 
-let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> param_type_to_string >> as_cxx_type)
-let params_to_values = List.unique & params_to_values
 let make_const_values = List.map (fun (name,t) -> name, sprintf "%s const&" t)
 
 (*

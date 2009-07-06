@@ -31,7 +31,9 @@ let (start_ns,end_ns) = J.start_ "namespace"
 
 let quote = J.quote
 
-let as_db_type = function
+module L = struct
+
+let as_api_type = function
   | Type.Int -> "Int64"
   | Type.Text -> "String"
   | Type.Float -> "Float"
@@ -39,17 +41,21 @@ let as_db_type = function
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
 
-let as_cs_type = as_db_type
+let as_lang_type = as_api_type
+
+end
+
+module T = Translate(L)
+
+open L
+open T
 
 let get_column attr index =
   sprintf "reader.Get%s(%u)"
-    (attr.RA.domain >> as_db_type)
+    (attr.RA.domain >> as_api_type)
     index
 
-let param_type_to_string t = t >> Option.default Type.Text >> as_db_type
-
-let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_cs_type)
-let schema_to_string schema = schema >> schema_to_values >> G.Values.to_string
+let schema_to_string = G.Values.to_string & schema_to_values
 
 let output_schema_binder index schema =
   let name = "callback" in
@@ -61,9 +67,6 @@ let output_schema_binder index schema =
   match schema with
   | [] -> None
   | _ -> Some (output_schema_binder index schema)
-
-let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> param_type_to_string)
-let params_to_values = List.unique & params_to_values
 
 let set_param index param =
   let (id,t) = param in
@@ -128,7 +131,7 @@ let func_execute index stmt =
       empty_line ();
       match stmt.schema with
       | [attr] ->
-        let t = as_cs_type attr.RA.domain in
+        let t = as_lang_type attr.RA.domain in
         G.func ("public IEnumerable<" ^ t ^ ">") "rows" values (fun () ->
         output "foreach (var reader in execute_reader(%s))" (Values.inline values);
         G.open_curly ();
@@ -139,7 +142,7 @@ let func_execute index stmt =
       start_class "row";
       List.iteri (fun index attr ->
         output "public %s %s { get { return %s; } }" 
-          (as_cs_type attr.RA.domain)
+          (as_lang_type attr.RA.domain)
           (name_of attr index)
           (get_column attr index)
       ) stmt.schema;

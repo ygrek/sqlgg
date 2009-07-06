@@ -31,7 +31,9 @@ let start_ cls =
 let (start_class,end_class) = start_ "public class"
 let (start_intf,end_intf) = start_ "public static interface"
 
-let as_java_type = function
+module L = struct
+
+let as_lang_type = function
   | Type.Int -> "int"
   | Type.Text -> "String"
   | Type.Float -> "float"
@@ -39,14 +41,19 @@ let as_java_type = function
   | Type.Bool -> "boolean"
   | Type.Datetime -> "Timestamp"
 
+let as_api_type = String.capitalize & as_lang_type
+
+end
+
+module T = Translate(L)
+
+open L
+open T
+
 let get_column attr index =
   sprintf "res.get%s(%u)"
-    (attr.RA.domain >> as_java_type >> String.capitalize)
+    (attr.RA.domain >> as_api_type)
     (index + 1)
-
-let param_type_to_string t = t >> Option.default Type.Text >> as_java_type
-
-let schema_to_values = List.mapi (fun i attr -> name_of attr i, attr.RA.domain >> as_java_type)
 
 let output_schema_binder name index schema =
   let name = sprintf "%s_callback" name in
@@ -59,9 +66,6 @@ let output_schema_binder name index schema =
   match schema with
   | [] -> None
   | _ -> Some (output_schema_binder name index schema)
-
-let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> param_type_to_string)
-let params_to_values = List.unique & params_to_values
 
 let output_value_defs vals =
   vals >> List.iter (fun (name,t) -> output "%s %s;" t name)

@@ -29,7 +29,7 @@ let name_of attr index =
   | "" -> sprintf "_%u" index
   | s -> s
 
-let param_name_to_string (name,_) index =
+let param_name_to_string ((name,_):param_id) index =
   match name with
   | None -> sprintf "_%u" index
   | Some s -> s
@@ -77,7 +77,24 @@ let time_string () =
   let t = U.time () >> U.gmtime in
   sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) (t.U.tm_mon+1) t.U.tm_mday t.U.tm_hour t.U.tm_min
 
-module type Lang = sig
+module type LangTypes = sig
+
+val as_api_type : Sql.Type.t -> string
+val as_lang_type : Sql.Type.t -> string
+
+end
+
+module Translate(T : LangTypes) = struct
+
+let param_type_to_string = T.as_api_type & Option.default Sql.Type.Text
+let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.RA.domain)
+(* let schema_to_string = G.Values.to_string & schema_to_values  *)
+let params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, t >> Option.default Sql.Type.Text >> T.as_lang_type)
+let params_to_values = List.unique & params_to_values
+
+end
+
+module type Generator = sig
   type t
   val generate : t -> string -> Stmt.t Enum.t -> unit
   val start : unit -> t
@@ -85,7 +102,7 @@ module type Lang = sig
   val empty_line : t -> unit
 end
 
-module Make(S : Lang) = struct
+module Make(S : Generator) = struct
 
 let generate_header out =
   S.comment out "DO NOT EDIT MANUALLY";
