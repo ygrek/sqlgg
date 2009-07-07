@@ -7,7 +7,7 @@ open ListMore
 
 let named s = (Some s,(0,0))
 let param = (None,(0,0))
-let p name t = (named name, Some t)
+let p name t = (named name, t)
 
 let cmp_params p1 p2 =
   try
