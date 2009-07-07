@@ -8,6 +8,8 @@ sig
   val rule : Lexing.lexbuf -> token
 end
 
+exception Error of exn * (int * int * string)
+
 module Make(T : Parser_type) =
 struct
   let parse_buf_exn lexbuf =
@@ -19,9 +21,7 @@ struct
         let line = curr.Lexing.pos_lnum in
         let cnum = curr.Lexing.pos_cnum - curr.Lexing.pos_bol in
         let tok = Lexing.lexeme lexbuf in
-        let extra = Printexc.to_string exn in
-        Error.report "Exception %s in %u:%u at lexeme \"%s\"" extra line cnum tok;
-        raise exn
+				raise (Error (exn,(line,cnum,tok)))
       end
 
   let parse_buf lexbuf = try Some (parse_buf_exn lexbuf) with exn -> None

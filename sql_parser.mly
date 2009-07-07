@@ -20,6 +20,12 @@
       raise (RA.Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
     params_of select
 
+  let values_or_all table names =
+    let schema = Tables.get_schema table in
+    match names with
+    | Some names -> RA.Schema.project names schema
+    | None -> schema
+
 %}
 
 %token <int> INTEGER
@@ -30,7 +36,7 @@
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
-       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
+       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
@@ -65,11 +71,9 @@ if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
-statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
-           table_def=sequence_(column_def1) table_def_done
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT schema=table_definition
               {
-                let schema = List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) table_def in
-                let () = Tables.add (name,schema) in
+                Tables.add (name,schema);
                 ([],[],Create name)
               }
          | ALTER TABLE name=IDENT action=alter_action
@@ -94,29 +98,37 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
               }
          | select_stmt
               { let (s,p) = $1 in s,p,Select }
-         | insert_cmd table=IDENT cols=sequence(IDENT)? VALUES (*sequence(expr)?*)
+         | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
-                let s = Tables.get_schema table in
-                let s = match cols with
-                  | Some cols -> RA.Schema.project cols s
-                  | None -> s
+                let expect = values_or_all table names in
+                let params, values = match values with
+                | None -> [], Some expect
+                | Some values ->
+                  let vl = List.length values in
+                  let cl = List.length expect in
+                  if vl <> cl then
+                    failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
+                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) expect) values), None
                 in
-                [], [], Insert (Some s,table)
+                [], params, Insert (values,table)
+              }
+         | insert_cmd table=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt)
+              {
+                let (schema,params) = select in
+                let expect = values_or_all table names in
+                ignore (RA.Schema.compound expect schema); (* test equal types *)
+                [], params, Insert(None,table)
               }
          | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
               {
-                let t = Tables.get table in
-                let (cols,exprs) = Syntax.split_column_assignments (snd t) ss in
-                let p1 = Syntax.get_params_l [t] (snd t) exprs in
-                (*List.iter (fun e -> print_endline (Syntax.expr_to_string e)) exprs;*)
+                let p1 = Syntax.params_of_assigns (Tables.get table) ss in
                 [], p1, Insert (None,table)
               }
          | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
                 let t = Tables.get table in
+                let p1 = Syntax.params_of_assigns t ss in
                 let p2 = get_params_opt [t] (snd t) w in
-                let (cols,exprs) = Syntax.split_column_assignments (snd t) ss in
-                let p1 = Syntax.get_params_l [t] (snd t) exprs in
                 [], p1 @ p2, Update table
               }
          | DELETE FROM table=IDENT w=where?
@@ -126,6 +138,10 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 [], p, Delete table
               }
 
+table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
+                | LIKE name=maybe_parenth(IDENT) { Tables.get name >> snd } (* mysql *)
+
+(* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
@@ -262,7 +278,7 @@ expr:
     | expr boolean_bin_op expr %prec AND { `Func (Bool,[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func (Bool,[e1;e2]) }
     | expr CONCAT_OP expr { `Func (Text,[$1;$3]) }
-    | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
+    | e1=expr mnot(like) e2=expr e3=escape?
       { `Func (Any,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
@@ -285,6 +301,8 @@ expr:
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func (Int,[$1;$3;$5]) }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func (Bool,params_of select) }
+
+like: LIKE | LIKE_OP { }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { `Value Datetime }
 

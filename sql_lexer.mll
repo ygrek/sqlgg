@@ -103,15 +103,17 @@ let keywords =
    "unsigned",UNSIGNED;
    "first",FIRST;
    "column",COLUMN;
+   "like", LIKE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION T.Int) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
   all (FUNCTION T.Text) ["concat";"lower";"upper"];
+  all (FUNCTION T.Any) ["coalesce"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";"unix_timestamp"];
   all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
-  all LIKE_OP ["like";"glob";"regexp";"match"];
+  all LIKE_OP ["glob";"regexp";"match"];
   all AUTOINCREMENT ["autoincrement";"auto_increment"];
 (* standard built-in types
       CHARACTER, CHARACTER VARYING, CHARACTER LARGE OBJECT,
@@ -123,10 +125,12 @@ let keywords =
     *)
   all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
   all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
+  all T_INTEGER ["number"]; (* oracle *)
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
+  all T_TEXT ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime";"year";];
   !k
 
@@ -194,6 +198,7 @@ ruleMain = parse
   | '"' { IDENT (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
   | "`" { IDENT (ruleInBackQuotes "" lexbuf) }
+  | "[" { IDENT (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }
@@ -202,6 +207,7 @@ ruleMain = parse
   | eof		{ EOF }
   | _		{ error lexbuf "ruleMain" }
 and
+(* FIXME factor out all that ruleIn* rules *)
 ruleInQuotes acc = parse
   | '"'	        { acc }
   | eof	        { error lexbuf "no terminating quote" }
@@ -209,6 +215,14 @@ ruleInQuotes acc = parse
   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf }
   | [^'"' '\n']+  { ruleInQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInQuotes" }
+and
+ruleInBrackets acc = parse
+  | ']'	        { acc }
+  | eof	        { error lexbuf "no terminating bracket" }
+  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating bracket" }
+(*   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf } *)
+  | [^']' '\n']+  { ruleInBrackets (acc ^ lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInBrackets" }
 and
 ruleInSingleQuotes acc = parse
   | '\''	      { acc }

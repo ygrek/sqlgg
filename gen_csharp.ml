@@ -160,6 +160,17 @@ let func_execute index stmt =
         G.close_curly ""
       )
     end
+(*
+    else (* not is_select *)
+    begin
+      match stmt.kind with
+      | Insert _ when List.length values > 1 ->
+          G.func "public int" "execute<T>" ["v","T"] (fun () ->
+            output "return execute(%s);" (values >> Values.names >> List.map ((^) "v.") >> Values.join)
+          )
+      | _ -> ()
+    end
+*)
 
 let generate_code index stmt =
    let name = choose_name stmt.props stmt.kind index in

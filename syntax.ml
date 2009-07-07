@@ -155,10 +155,14 @@ let join ((t0,p0),joins) =
 let split_column_assignments schema l =
   let cols = ref [] in
   let exprs = ref [] in
-  List.iter (fun (col,expr) -> 
+  List.iter (fun (col,expr) ->
     cols := col :: !cols;
     (* hint expression to unify with the column type *)
     let typ = (RA.Schema.find schema col).RA.domain in
     exprs := (`Func (Type.Any, [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols,List.rev !exprs)
+
+let params_of_assigns t ss =
+  let (_,exprs) = split_column_assignments (snd t) ss in
+  get_params_l [t] (snd t) exprs
 
