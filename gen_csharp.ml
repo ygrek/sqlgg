@@ -156,6 +156,7 @@ let func_execute index stmt =
         G.close_curly ""
       )
     end
+(*
     else (* not is_select *)
     begin
       match stmt.kind with
@@ -165,6 +166,7 @@ let func_execute index stmt =
           )
       | _ -> ()
     end
+*)
 
 let generate_code index stmt =
    let name = choose_name stmt.props stmt.kind index in
