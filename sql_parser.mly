@@ -20,6 +20,12 @@
       raise (RA.Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
     params_of select
 
+  let values_or_all table names =
+    let schema = Tables.get_schema table in
+    match names with
+    | Some names -> RA.Schema.project names schema
+    | None -> schema
+
 %}
 
 %token <int> INTEGER
@@ -94,21 +100,24 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               { let (s,p) = $1 in s,p,Select }
          | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
-                let schema = Tables.get_schema table in
-                let columns = match names with
-                | Some names -> RA.Schema.project names schema
-                | None -> schema
-                in
+                let expect = values_or_all table names in
                 let params, values = match values with
-                | None -> [], Some columns
+                | None -> [], Some expect
                 | Some values ->
                   let vl = List.length values in
-                  let cl = List.length columns in
+                  let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) columns) values), None
+                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) expect) values), None
                 in
                 [], params, Insert (values,table)
+              }
+         | insert_cmd table=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt)
+              {
+                let (schema,params) = select in
+                let expect = values_or_all table names in
+                ignore (RA.Schema.compound expect schema); (* test equal types *)
+                [], params, Insert(None,table)
               }
          | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
               {
