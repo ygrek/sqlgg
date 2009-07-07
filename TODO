@@ -9,6 +9,7 @@
 * fix line numbers in error output
 * enhance error reporting
 * calculate types more precisely, type-inferrer is too primitive
+* track NULLs
 * detect statements on single tables and group the corresponding generated code together
 * check function names for uniqueness
 * support/test other SQL engines
