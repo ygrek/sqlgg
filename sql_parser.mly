@@ -30,7 +30,7 @@
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
-       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP
+       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
        EXCL TILDE NOT TEST_NULL BETWEEN AND ESCAPE USING UNION EXCEPT INTERSECT AS
        CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
@@ -65,11 +65,9 @@ if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
-statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
-           table_def=sequence_(column_def1) table_def_done
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT schema=table_definition
               {
-                let schema = List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) table_def in
-                let () = Tables.add (name,schema) in
+                Tables.add (name,schema);
                 ([],[],Create name)
               }
          | ALTER TABLE name=IDENT action=alter_action
@@ -131,6 +129,10 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT
                 [], p, Delete table
               }
 
+table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
+                | LIKE name=maybe_parenth(IDENT) { Tables.get name >> snd } (* mysql *)
+
+(* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
@@ -267,7 +269,7 @@ expr:
     | expr boolean_bin_op expr %prec AND { `Func ((Some Bool),[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Some Bool),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Some Text),[$1;$3]) }
-    | e1=expr mnot(LIKE_OP) e2=expr e3=escape?
+    | e1=expr mnot(like) e2=expr e3=escape?
       { `Func (None,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
@@ -290,6 +292,8 @@ expr:
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func ((Some Int),[$1;$3;$5]) }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Some Bool),params_of select) }
+
+like: LIKE | LIKE_OP { }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { `Value Datetime }
 
