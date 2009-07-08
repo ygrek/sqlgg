@@ -190,9 +190,11 @@ let generate_code index stmt =
 
 let generate_all names =
   start_class "all";
+  output "public readonly IDbConnection db;";
   List.iter (fun s -> output "public %s %s;" s s) names;
   empty_line ();
   G.func "public" "all" ["db","IDbConnection"] (fun () ->
+    output "this.db = db;";
     List.iter (fun name -> output "%s = new %s(db);" name name) names
   );
   end_class "all"
