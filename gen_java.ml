@@ -36,6 +36,7 @@ module L = struct
 let as_lang_type = function
   | Type.Int -> "int"
   | Type.Text -> "String"
+  | Type.Any -> "String"
   | Type.Float -> "float"
   | Type.Blob -> "Blob"
   | Type.Bool -> "boolean"
