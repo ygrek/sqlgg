@@ -142,15 +142,13 @@ let func_execute index stmt =
       | _ ->
       start_class "row";
       List.iteri (fun index attr ->
-        output "public %s %s { get { return %s; } }" 
+        output "public readonly %s %s;" 
           (as_lang_type attr.RA.domain)
           (name_of attr index)
-          (get_column attr index)
       ) stmt.schema;
-      output "private IDataReader reader;";
       empty_line ();
       G.func "public" "row" ["reader","IDataReader"] (fun () ->
-        output "this.reader = reader;"
+        List.iteri (fun i attr -> output "%s = %s;" (name_of attr i) (get_column attr i)) stmt.schema;
       );
       end_class "row";
       G.func "public IEnumerable<row>" "rows" values (fun () ->
