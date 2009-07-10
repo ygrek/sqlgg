@@ -108,7 +108,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                   let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) expect) values), None
+                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name, None) expect) values), None
                 in
                 [], params, Insert (values,table)
               }
@@ -129,9 +129,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let t = Tables.get table in
                 let p1 = Syntax.params_of_assigns t ss in
                 let p2 = get_params_opt [t] (snd t) w in
-                [], p1 @ p2, Update table
+                [], p1 @ p2 @ lim, Update table
               }
-(*         | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where? *)
+         /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
+         | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
+              {
+                ignore tables; ignore ss; ignore w;
+                failwith "not implemented"
+              }
          | DELETE FROM table=IDENT w=where?
               {
                 let t = Tables.get table in
@@ -262,13 +267,17 @@ table_constraint_1:
 some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
 key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
-set_column: name=IDENT EQUAL e=expr { name,e }
+set_column: name=attr_name EQUAL e=expr { name,e }
 
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
 anyall: ANY | ALL | SOME { }
 
 mnot(X): NOT x = X | x = X { x }
+
+attr_name: name=IDENT { (name,None) }
+         | table=IDENT DOT name=IDENT
+         | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
 
 expr:
      expr numeric_bin_op expr %prec PLUS { `Func (Int,[$1;$3]) }
@@ -279,9 +288,7 @@ expr:
       { `Func (Any,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
-    | IDENT { `Column ($1,None) }
-    | t=IDENT DOT c=IDENT
-    | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
+    | attr_name { `Column $1 }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { `Func (Any,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN

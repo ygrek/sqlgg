@@ -162,8 +162,15 @@ let split_column_assignments schema l =
     exprs := (`Func (Type.Any, [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols,List.rev !exprs)
 
+let restrict_column_names name =
+  List.iter (function
+    | (_,Some tname) -> 
+        if name <> tname then failwith (Printf.sprintf "Can't use table %s. Only %s is available." tname name);              
+    | _ -> ())
+
 let params_of_assigns t ss =
-  let (_,exprs) = split_column_assignments (snd t) ss in
+  restrict_column_names (fst t) (List.map fst ss);
+  let (_,exprs) = split_column_assignments (snd t) (List.map (fun ((name,_),e) -> name,e) ss) in
   get_params_l [t] (snd t) exprs
 
 let params_of_order o final_schema tables =
