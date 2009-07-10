@@ -166,3 +166,9 @@ let params_of_assigns t ss =
   let (_,exprs) = split_column_assignments (snd t) ss in
   get_params_l [t] (snd t) exprs
 
+let params_of_order o final_schema tables =
+  let all_columns = (* ugly, specially for ORDER BY *)
+    RA.Schema.make_unique
+    (List.fold_left RA.Schema.cross [] (final_schema :: (List.map snd tables)))
+  in
+  get_params_l tables all_columns o
