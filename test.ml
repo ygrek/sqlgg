@@ -18,11 +18,11 @@ let cmp_params p1 p2 =
     _ -> false
 
 let tt ?msg sql schema params =
-  let print_schema = RA.Schema.to_string in
-  let print_params = Stmt.params_to_string in
-  let stmt = Main.parse_one_exn (sql,[]) in
-  assert_equal ?msg ~printer:print_schema schema stmt.schema;
-  assert_equal ?msg ~cmp:cmp_params ~printer:print_params params stmt.params
+  match Main.parse_one (sql,[]) with
+  | None -> assert_failure ("Failed to parse " ^ (Option.default "" msg))
+  | Some stmt ->
+      assert_equal ?msg ~printer:RA.Schema.to_string schema stmt.schema;
+      assert_equal ?msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params
 
 let wrong sql =
   ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with exn -> true)
@@ -30,9 +30,8 @@ let wrong sql =
 (* let wrong sql = assert_equal None (Main.parse_one (sql,[])) *)
 
 let test () =
-  tt "CREATE TABLE test (id INT, str TEXT, name TEXT)"
-     []
-     [];
+  tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
+  tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
      [param, Int];
@@ -56,6 +55,7 @@ let test () =
      [p "name" Text];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
+  tt "update test, (select * from test2) as x set test.name = x.name where test.id=x.id" [] [];
   ()
 
 (*

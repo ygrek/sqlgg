@@ -45,10 +45,7 @@ let parse_one_exn (sql,props) =
 
 let parse_one (sql,props as x) =
   try
-    let stmt = parse_one_exn x in
-    if not (RA.Schema.is_unique stmt.Stmt.schema) then
-      Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql;
-    Some stmt
+    Some (parse_one_exn x)
   with
   | Parser_utils.Error (exn,(line,cnum,tok)) ->
     begin
@@ -70,7 +67,10 @@ let get_statements ch =
     | Some sql ->
       begin match parse_one sql with
       | None -> next ()
-      | Some stmt -> stmt
+      | Some stmt -> 
+          if not (RA.Schema.is_unique stmt.Stmt.schema) then
+            Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
+          stmt
       end
   in
   Enum.from next
