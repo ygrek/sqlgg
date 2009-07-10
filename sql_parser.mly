@@ -129,13 +129,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let t = Tables.get table in
                 let p1 = Syntax.params_of_assigns t ss in
                 let p2 = get_params_opt [t] (snd t) w in
-                [], p1 @ p2 @ lim, Update table
+                [], p1 @ p2 @ lim, Update (Some table)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
          | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
-                ignore tables; ignore ss; ignore w;
-                failwith "not implemented"
+                (*let p1 = Syntax.params_of_assigns t ss in
+                let p2 = get_params_opt [t] (snd t) w in*)
+                [], [], Update None
               }
          | DELETE FROM table=IDENT w=where?
               {
