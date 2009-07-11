@@ -108,7 +108,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                   let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name, None) expect) values), None
+                  Syntax.params_of_assigns [Tables.get table] (List.combine (List.map (fun a -> a.RA.name, None) expect) values), None
                 in
                 [], params, Insert (values,table)
               }
@@ -121,22 +121,23 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               }
          | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
               {
-                let p1 = Syntax.params_of_assigns (Tables.get table) ss in
+                let p1 = Syntax.params_of_assigns [Tables.get table] ss in
                 [], p1, Insert (None,table)
               }
          | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 let t = Tables.get table in
-                let p1 = Syntax.params_of_assigns t ss in
+                let p1 = Syntax.params_of_assigns [t] ss in
                 let p2 = get_params_opt [t] (snd t) w in
                 [], p1 @ p2 @ lim, Update (Some table)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
          | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
-                (*let p1 = Syntax.params_of_assigns t ss in
-                let p2 = get_params_opt [t] (snd t) w in*)
-                [], [], Update None
+                let (tables,params) = List.split tables in
+                let p1 = Syntax.params_of_assigns tables ss in
+                let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
+                [], (List.flatten params) @ p1 @ p2, Update None
               }
          | DELETE FROM table=IDENT w=where?
               {

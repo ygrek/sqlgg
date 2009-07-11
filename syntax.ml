@@ -152,30 +152,33 @@ let join ((t0,p0),joins) =
 (*   let joined_schema = tables >> List.map snd >> List.flatten in *)
   (tables,params,joined_schema)
 
-let split_column_assignments schema l =
+let cross = List.fold_left RA.Schema.cross []
+
+(* all columns from tables, without duplicates *)
+(* FIXME check type of duplicates *)
+let all_columns = RA.Schema.make_unique & cross
+let all_tbl_columns = all_columns & List.map snd
+
+let split_column_assignments tables l =
   let cols = ref [] in
   let exprs = ref [] in
-  List.iter (fun (col,expr) ->
+  let all = all_tbl_columns tables in 
+  List.iter (fun ((cname,tname as col),expr) ->
     cols := col :: !cols;
+    let schema = 
+      match tname with
+      | Some name -> Tables.get_from tables name >> snd
+      | None -> all
+    in
     (* hint expression to unify with the column type *)
-    let typ = (RA.Schema.find schema col).RA.domain in
+    let typ = (RA.Schema.find schema cname).RA.domain in
     exprs := (`Func (Type.Any, [`Value typ;expr])) :: !exprs) l;
-  (List.rev !cols,List.rev !exprs)
+  (List.rev !cols, List.rev !exprs)
 
-let restrict_column_names name =
-  List.iter (function
-    | (_,Some tname) -> 
-        if name <> tname then failwith (Printf.sprintf "Can't use table %s. Only %s is available." tname name);              
-    | _ -> ())
-
-let params_of_assigns t ss =
-  restrict_column_names (fst t) (List.map fst ss);
-  let (_,exprs) = split_column_assignments (snd t) (List.map (fun ((name,_),e) -> name,e) ss) in
-  get_params_l [t] (snd t) exprs
+let params_of_assigns tables ss =
+  let (_,exprs) = split_column_assignments tables ss in
+  get_params_l tables (cross (List.map snd tables)) exprs
 
 let params_of_order o final_schema tables =
-  let all_columns = (* ugly, specially for ORDER BY *)
-    RA.Schema.make_unique
-    (List.fold_left RA.Schema.cross [] (final_schema :: (List.map snd tables)))
-  in
-  get_params_l tables all_columns o
+  get_params_l tables (final_schema :: (List.map snd tables) >> all_columns) o
+
