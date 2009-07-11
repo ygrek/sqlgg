@@ -31,7 +31,6 @@ let wrong sql =
 
 let test () =
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
-  tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
      [param, Int];
@@ -55,7 +54,15 @@ let test () =
      [p "name" Text];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
-  tt "update test, (select * from test2) as x set test.name = x.name where test.id=x.id" [] [];
+  ()
+
+let test2 () =
+  tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
+  tt    "update test, (select * from test2) as x set str = x.str where test.id=x.id" [] [];
+  tt    "update test, (select * from test2) as x set name = x.str where test.id=x.id" [] [];
+  tt    "update test, (select * from test2) as x set test.str = x.str where test.id=x.id" [] [];
+  wrong "update test, (select * from test2) as x set test.name = x.name where test.id=x.id";
+  wrong "update test, (select * from test2) as x set test.str = str where test.id=x.id";
   ()
 
 (*
@@ -97,6 +104,7 @@ let run () =
   let tests =
   [
     "simple" >:: test;
+    "multi-table UPDATE" >:: test2;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
   ]
