@@ -108,7 +108,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                   let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name) expect) values), None
+                  Syntax.params_of_assigns (Tables.get table) (List.combine (List.map (fun a -> a.RA.name, None) expect) values), None
                 in
                 [], params, Insert (values,table)
               }
@@ -124,12 +124,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let p1 = Syntax.params_of_assigns (Tables.get table) ss in
                 [], p1, Insert (None,table)
               }
-         | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where?
+         | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 let t = Tables.get table in
                 let p1 = Syntax.params_of_assigns t ss in
                 let p2 = get_params_opt [t] (snd t) w in
-                [], p1 @ p2, Update table
+                [], p1 @ p2 @ lim, Update (Some table)
+              }
+         /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
+         | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
+              {
+                (*let p1 = Syntax.params_of_assigns t ss in
+                let p2 = get_params_opt [t] (snd t) w in*)
+                [], [], Update None
               }
          | DELETE FROM table=IDENT w=where?
               {
@@ -151,14 +158,10 @@ select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption
                 let (s1,p1,tbls) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) other) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-                let schema = List.fold_left RA.Schema.compound s1 s2l in
-                let all_columns = (* ugly specially for ORDER BY *)
-                  RA.Schema.make_unique
-                  (List.fold_left RA.Schema.cross [] (schema :: (List.map snd tbls)))
-                in
-                let p3 = Syntax.get_params_l tbls all_columns o in
+                let final_schema = List.fold_left RA.Schema.compound s1 s2l in
+                let p3 = Syntax.params_of_order o final_schema tbls in
 (*                 RA.Schema.check_unique schema; *)
-                schema,(p1@(List.flatten p2l)@p3@p4)
+                final_schema,(p1@(List.flatten p2l)@p3@p4)
               }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
@@ -265,13 +268,17 @@ table_constraint_1:
 some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
 key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
-set_column: name=IDENT EQUAL e=expr { name,e }
+set_column: name=attr_name EQUAL e=expr { name,e }
 
 (* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
 
 anyall: ANY | ALL | SOME { }
 
 mnot(X): NOT x = X | x = X { x }
+
+attr_name: name=IDENT { (name,None) }
+         | table=IDENT DOT name=IDENT
+         | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
 
 expr:
      expr numeric_bin_op expr %prec PLUS { `Func (Int,[$1;$3]) }
@@ -282,9 +289,7 @@ expr:
       { `Func (Any,(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
-    | IDENT { `Column ($1,None) }
-    | t=IDENT DOT c=IDENT
-    | IDENT DOT t=IDENT DOT c=IDENT { `Column (c,Some t) }
+    | attr_name { `Column $1 }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { `Func (Any,e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN

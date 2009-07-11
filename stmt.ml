@@ -14,7 +14,7 @@ let params_to_string ps = Show.show<params>(ps)
 type kind = | Select
             | Insert of RA.Schema.t option (** inserted *) * string (** table name *)
             | Create of string
-            | Update of string
+            | Update of string option (* name for single-table UPDATEs *)
             | Delete of string
             | Alter of string
             | Drop of string

@@ -40,7 +40,8 @@ let default_name str index = sprintf "%s_%u" str index
 let choose_name props kind index =
   let name = match kind with
   | Create t -> sprintf "create_%s" t
-  | Update t -> sprintf "update_%s_%u" t index
+  | Update (Some t) -> sprintf "update_%s_%u" t index
+  | Update None -> sprintf "update_%u" index
   | Insert (_,t) -> sprintf "insert_%s_%u" t index
   | Delete t -> sprintf "delete_%s_%u" t index
   | Alter t -> sprintf "alter_%s_%u" t index
