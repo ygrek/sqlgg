@@ -1,7 +1,5 @@
-(* $Id$ *)
-
 (** Association list *)
-type t = (string * string) list 
+type t = (string * string) list
  deriving (Show)
 
 let get x n = try Some (List.assoc n x) with Not_found -> None

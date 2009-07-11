@@ -5,7 +5,7 @@ open ExtString
 open ListMore
 
 (** optional name and start/end position in string *)
-type param_id = string option * (int * int) deriving (Show) 
+type param_id = string option * (int * int) deriving (Show)
 type param = param_id * Sql.Type.t deriving (Show)
 type params = param list deriving (Show)
 
@@ -18,6 +18,7 @@ type kind = | Select
             | Delete of string
             | Alter of string
             | Drop of string
+            | Other
             deriving (Show)
 
 type t = { schema : RA.Schema.t; params : params; kind : kind; props : Props.t; }

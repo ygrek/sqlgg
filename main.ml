@@ -58,6 +58,11 @@ let parse_one (sql,props as x) =
      None
     end
 
+let parse_one (sql,props as x) =
+  match Props.get props "noparse" with
+  | Some _ -> Some { Stmt.schema=[]; params=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
+  | None -> parse_one x
+
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
   let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with exn -> None in
@@ -67,7 +72,7 @@ let get_statements ch =
     | Some sql ->
       begin match parse_one sql with
       | None -> next ()
-      | Some stmt -> 
+      | Some stmt ->
           if not (RA.Schema.is_unique stmt.Stmt.schema) then
             Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
           stmt

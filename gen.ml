@@ -47,6 +47,7 @@ let choose_name props kind index =
   | Alter t -> sprintf "alter_%s_%u" t index
   | Drop t -> sprintf "drop_%s" t
   | Select   -> sprintf "select_%u" index
+  | Other -> sprintf "statement_%u" index
   in
   make_name props name
 
