@@ -335,15 +335,27 @@ sqlgg 0.2.2 for [Windows](dist/sqlgg-0.2.2.zip) and [Linux](dist/sqlgg-0.2.2.tar
 
 Try it [online](sqlgg.cgi).
 
+Get the [source](http://repo.or.cz/w/sqlgg.git).
+<!--: `git clone git://repo.or.cz/sqlgg.git`
+([rss](http://repo.or.cz/w/sqlgg.git?a=rss))-->
+
 <a id="todo"/>
 TODO
 ----
 
+* allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
+* allow to tolerate errors in query
+* special code for queries returning single values (COUNT(*) and the like)
+* support BULK INSERTs (how?)
+* decide what to do with unquoted identifiers matching keywords
+* provide ways to extend lexer with tokens in runtime
+* split overview into several pages
 * some database API are inadequately strict about data types (notably ADO.NET), need native-type annotations in queries
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
 * enhance error reporting
-* type-inferrer is too primitive
+* calculate types more precisely, type-inferrer is too primitive
+* track NULLs
 * detect statements on single tables and group the corresponding generated code together
 * check function names for uniqueness
 * support/test other SQL engines
@@ -353,7 +365,7 @@ TODO
 * type check expressions
 
 ----
-2009-07-04
+2009-07-12
 <span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>
