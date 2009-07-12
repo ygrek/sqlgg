@@ -8,7 +8,7 @@ sig
   val rule : Lexing.lexbuf -> token
 end
 
-exception Error of exn * (int * int * string)
+exception Error of exn * (int * int * string * string)
 
 module Make(T : Parser_type) =
 struct
@@ -21,7 +21,8 @@ struct
         let line = curr.Lexing.pos_lnum in
         let cnum = curr.Lexing.pos_cnum - curr.Lexing.pos_bol in
         let tok = Lexing.lexeme lexbuf in
-				raise (Error (exn,(line,cnum,tok)))
+        let tail = Sql_lexer.ruleTail "" lexbuf in
+				raise (Error (exn,(line,cnum,tok,tail)))
       end
 
   let parse_buf lexbuf = try Some (parse_buf_exn lexbuf) with exn -> None

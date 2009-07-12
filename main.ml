@@ -47,14 +47,14 @@ let parse_one (sql,props as x) =
   try
     Some (parse_one_exn x)
   with
-  | Parser_utils.Error (exn,(line,cnum,tok)) ->
+  | Parser_utils.Error (exn,(line,cnum,tok,tail)) ->
     begin
      let extra = Printexc.to_string exn in
      Error.log "==> %s" sql;
      if cnum = String.length sql then
        Error.log "Exception %s" extra
      else
-       Error.log "Exception %s in %u:%u at lexeme \"%s\"" extra line cnum tok;
+       Error.log "Exception %s in %u:%u at \"%s%s\"" extra line cnum tok (String.slice ~last:32 tail);
      None
     end
 

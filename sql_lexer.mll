@@ -168,6 +168,10 @@ rule ruleStatement props = parse
   | alpha [^ ';']+ as stmt ';' { Some (stmt,props) }
   | _ { None }
 and
+ruleTail acc = parse
+| eof { acc }
+| _* as str { ruleTail (acc ^ str) lexbuf }
+and
 ruleMain = parse
   | wsp   { ruleMain lexbuf }
   (* update line number *)
