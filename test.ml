@@ -65,6 +65,13 @@ let test2 () =
   wrong "update test, (select * from test2) as x set test.str = str where test.id=x.id";
   ()
 
+let test3 () =
+  tt "SELECT id FROM test WHERE str IN ( SELECT str FROM test2 )" [attr "id" Int] [];
+  todo "tuples";
+  (* from http://stackoverflow.com/questions/1063866/sql-portability-gotchas/1063946#1063946 *)
+  tt "SELECT id FROM test WHERE (id, str) IN ( SELECT id, str FROM test2)" [attr "id" Int] [];
+  ()
+
 (*
   see MySQL 5.4 refman -- 12.2.8.1. JOIN Syntax
   see SQL:2008 -- 7.7 <joined table>
@@ -105,6 +112,7 @@ let run () =
   [
     "simple" >:: test;
     "multi-table UPDATE" >:: test2;
+    "gotchas" >:: test3;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
   ]
