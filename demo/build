@@ -5,12 +5,12 @@ set -e -u
 sed -r 's/%([^%]*)%([^%]*)%/\1/' demo.sql.pp > demo_mysql.sql
 sed -r 's/%([^%]*)%([^%]*)%/\2/' demo.sql.pp > demo_sqlite3.sql
 
-../sqlgg.byte -gen cxx demo_sqlite3.sql > demo_cxx_gen.hpp
-../sqlgg.byte -gen cxx -params unnamed demo_mysql.sql > demo_cxx_gen_mysql.hpp
-../sqlgg.byte -gen caml demo_sqlite3.sql > demo_caml_gen.ml
-../sqlgg.byte -gen xml demo_sqlite3.sql > demo_xml_gen.xml
-../sqlgg.byte -gen java -name demo_java_gen demo_mysql.sql > demo_java_gen.java
-../sqlgg.byte -gen csharp demo_mysql.sql > demo_csharp_gen.cs
+../sqlgg -gen cxx demo_sqlite3.sql > demo_cxx_gen.hpp
+../sqlgg -gen cxx -params unnamed demo_mysql.sql > demo_cxx_gen_mysql.hpp
+../sqlgg -gen caml demo_sqlite3.sql > demo_caml_gen.ml
+../sqlgg -gen xml demo_sqlite3.sql > demo_xml_gen.xml
+../sqlgg -gen java -name demo_java_gen demo_mysql.sql > demo_java_gen.java
+../sqlgg -gen csharp demo_mysql.sql > demo_csharp_gen.cs
 
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx demo_cxx.cpp -lsqlite3
 
