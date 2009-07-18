@@ -51,7 +51,7 @@ let parse_one (sql,props as x) =
     begin
      let extra = Printexc.to_string exn in
      Error.log "==> %s" sql;
-     if cnum = String.length sql then
+     if cnum = String.length sql && tok = "" then
        Error.log "Exception %s" extra
      else
        Error.log "Exception %s in %u:%u at \"%s%s\"" extra line cnum tok (String.slice ~last:32 tail);
