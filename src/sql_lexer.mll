@@ -17,7 +17,6 @@ let advance_line_pos pos =
 let advance_line lexbuf =
   lexbuf.lex_curr_p <- advance_line_pos lexbuf.lex_curr_p
 
-(* use Map or Hashtbl ? *)
 let keywords =
   let k = ref [
    "as",AS;
@@ -139,11 +138,21 @@ let keywords =
   A: Sometimes SQL is case-sensitive, also string contents should be preserved
 *)
 
-let keywords = List.map (fun (k,v) -> (String.lowercase k, v)) keywords
+module Keywords = Map.Make(String)
+
+let keywords =
+  let add map (k,v) =
+    let k = String.lowercase k in
+    if Keywords.mem k map then
+      failwith (sprintf "Lexeme %s is already associated with keyword." k)
+    else
+      Keywords.add k v map
+  in
+  List.fold_left add Keywords.empty keywords
 
 let get_ident str =
   let str = String.lowercase str in
-  try List.assoc str keywords with Not_found -> IDENT str
+  try Keywords.find str keywords with Not_found -> IDENT str
 }
 
 let digit = ['0'-'9']
@@ -165,12 +174,12 @@ rule ruleStatement props = parse
       }
   | cmnt { ignore (ruleComment "" lexbuf); ruleStatement props lexbuf }
   | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleStatement props lexbuf }
-  | alpha [^ ';']+ as stmt ';' { Some (stmt,props) }
+  | alpha [^ ';']+ as stmt ';' { Some (stmt,props) } (* FIXME strings *)
   | _ { None }
 and
 ruleTail acc = parse
-| eof { acc }
-| _* as str { ruleTail (acc ^ str) lexbuf }
+  | eof { acc }
+  | _* as str { ruleTail (acc ^ str) lexbuf }
 and
 ruleMain = parse
   | wsp   { ruleMain lexbuf }
