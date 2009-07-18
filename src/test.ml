@@ -52,6 +52,8 @@ let test () =
   tt "insert into test values (2,'hello' || ' world',@name)"
      []
      [p "name" Text];
+  tt "insert or replace into test values (2,?,?);" [] [param,Text; param,Text;];
+  tt "replace into test values (2,?,?);" [] [param,Text; param,Text;];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   ()

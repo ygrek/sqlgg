@@ -201,10 +201,9 @@ source: src=source1 alias=maybe_as
       | None -> src
     }
 
-insert_cmd: INSERT OR CONFLICT_ALGO INTO | INSERT INTO | REPLACE INTO { }
-
-update_cmd: UPDATE {}
-          | UPDATE OR CONFLICT_ALGO {} ;
+insert_cmd: INSERT OR conflict_algo INTO | INSERT INTO | REPLACE INTO { }
+update_cmd: UPDATE | UPDATE OR conflict_algo { }
+conflict_algo: CONFLICT_ALGO | REPLACE { }
 
 select_type: DISTINCT | ALL { }
 
@@ -247,7 +246,7 @@ column_def: name=IDENT t=sql_type? column_def_extra*
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }
 
-on_conflict: ON CONFLICT algo=CONFLICT_ALGO { algo }
+on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
                 | NULL { None }

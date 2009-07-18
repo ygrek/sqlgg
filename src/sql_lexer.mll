@@ -110,7 +110,7 @@ let keywords =
   all (FUNCTION T.Text) ["concat";"lower";"upper"];
   all (FUNCTION T.Any) ["coalesce"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";"unix_timestamp"];
-  all CONFLICT_ALGO ["ignore"; "replace"; "abort"; "fail"; "rollback"];
+  all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["glob";"regexp";"match"];
@@ -209,7 +209,7 @@ ruleMain = parse
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
-  | _		{ error lexbuf "ruleMain" }
+  | _	{ error lexbuf "ruleMain" }
 and
 (* FIXME factor out all that ruleIn* rules *)
 ruleInQuotes acc = parse
