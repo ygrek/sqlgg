@@ -32,6 +32,12 @@
     let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
     (List.flatten params) @ p1 @ p2
 
+  let name_unnamed name = function
+    | ((None,pos),t) -> ((Some name,pos),t)
+    | param -> param
+
+  let name_unnamed_l name = List.map (name_unnamed name)
+
 %}
 
 %token <int> INTEGER
@@ -215,8 +221,10 @@ int_or_param: INTEGER { [] }
             | PARAM { [($1,Int)] }
 
 limit: LIMIT p=int_or_param { p }
-     | LIMIT p1=int_or_param COMMA p2=int_or_param { p1 @ p2 } (* Named? *)
-     | LIMIT p1=int_or_param OFFSET p2=int_or_param { p1 @ p2 }
+     | LIMIT p1=int_or_param COMMA p2=int_or_param
+        { (name_unnamed_l "offset" p1) @ (name_unnamed_l "limit" p2) }
+     | LIMIT p1=int_or_param OFFSET p2=int_or_param
+        { (name_unnamed_l "limit" p1) @ (name_unnamed_l "offset" p2) }
 
 order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
