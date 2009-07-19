@@ -3,7 +3,9 @@ sqlgg changelog
 
 0.2.3
 ?
-	+ sql: ORDER BY, explicit VALUES
+	+ input: noparse attribute
+	+ sql: ORDER BY, explicit VALUES, CREATE LIKE, INSERT INTO ... SELECT,
+			multi-table UPDATE
 	+ csharp: IEnumerable<>
 
 0.2.2
