@@ -32,11 +32,17 @@
     let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
     (List.flatten params) @ p1 @ p2
 
-  let name_unnamed name = function
-    | ((None,pos),t) -> ((Some name,pos),t)
-    | param -> param
-
-  let name_unnamed_l name = List.map (name_unnamed name)
+  let limit lim ofs =
+    let params = ref [] in
+    let add p = params := (p,Int) :: !params in 
+    let param name = function
+      | `Const _ -> ()
+      | `Param (None,pos) -> add (Some name,pos)
+      | `Param p -> add p
+    in
+    param "limit" lim;
+    param "offset" ofs;
+    !params, `Const 1 = lim
 
 %}
 
@@ -217,14 +223,14 @@ conflict_algo: CONFLICT_ALGO | REPLACE { }
 
 select_type: DISTINCT | ALL { }
 
-int_or_param: INTEGER { [] }
-            | PARAM { [($1,Int)] }
+int_or_param: i=INTEGER { `Const i }
+            | p=PARAM { `Param p }
 
-limit: LIMIT p=int_or_param { p }
-     | LIMIT p1=int_or_param COMMA p2=int_or_param
-        { (name_unnamed_l "offset" p1) @ (name_unnamed_l "limit" p2) }
-     | LIMIT p1=int_or_param OFFSET p2=int_or_param
-        { (name_unnamed_l "limit" p1) @ (name_unnamed_l "offset" p2) }
+limit_t: LIMIT lim=int_or_param { limit lim (`Const 0) }
+       | LIMIT ofs=int_or_param COMMA lim=int_or_param { limit lim ofs }
+       | LIMIT lim=int_or_param OFFSET ofs=int_or_param { limit lim ofs }
+
+limit: limit_t { fst $1 }
 
 order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
