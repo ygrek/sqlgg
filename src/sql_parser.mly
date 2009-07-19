@@ -115,8 +115,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 Tables.add (name,s);
                 ([],p,Create name)
               }
-         | select_stmt
-              { let (s,p) = $1 in s,p,Select }
+         | select_stmt_t { $1 }
          | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
                 let expect = values_or_all table names in
@@ -170,16 +169,20 @@ table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (fun
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
 
-select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) p4=loption(limit)
+select_stmt_t: select_core other=list(preceded(compound_op,select_core)) 
+               o=loption(order) lim=limit_t?
               {
                 let (s1,p1,tbls) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) other) in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let final_schema = List.fold_left RA.Schema.compound s1 s2l in
                 let p3 = Syntax.params_of_order o final_schema tbls in
+                let (p4,singlerow) = match lim with | Some x -> x | None -> [],false in
 (*                 RA.Schema.check_unique schema; *)
-                final_schema,(p1@(List.flatten p2l)@p3@p4)
+                final_schema,(p1@(List.flatten p2l)@p3@p4), Select singlerow
               }
+
+select_stmt: select_stmt_t { let (s,p,_) = $1 in s,p }
 
 select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
              FROM t=table_list

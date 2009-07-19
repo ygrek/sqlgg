@@ -28,8 +28,8 @@ let comment () fmt = Printf.kprintf (indent_endline & make_comment) fmt
 
 let empty_line () = print_newline ()
 
-let get_column attr index =
-  output "(T.get_column_%s stmt %u)"
+let get_column index attr =
+  sprintf "(T.get_column_%s stmt %u)"
     (Type.to_string attr.RA.domain)
     index
 
@@ -53,19 +53,33 @@ let set_param index param =
 let output_schema_binder index schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
-  inc_indent ();
-  output "callback";
-  inc_indent ();
-  List.iteri (fun index attr -> get_column attr index) schema;
-  dec_indent ();
-  dec_indent ();
+  indented (fun () ->
+    output "callback";
+    indented (fun () ->
+      List.iteri (fun i a -> output "%s" (get_column i a)) schema));
   output "in";
   name
 
-let output_schema_binder index schema =
+let output_select1_cb index schema =
+  let name = "get_row" in
+  output "let %s stmt =" name;
+  indented (fun () ->
+    List.mapi get_column schema >> String.concat ", " >> indent_endline);
+  output "in";
+  name
+
+let output_schema_binder index schema kind =
   match schema with
-  | [] -> None
-  | _ -> Some (output_schema_binder index schema)
+  | [] -> "execute",""
+  | _ -> match kind with 
+         | Select true -> "select1", output_select1_cb index schema
+         | _ -> "select",output_schema_binder index schema
+
+let is_callback stmt =
+  match stmt.schema, stmt.kind with
+  | [],_ -> false
+  | _,Select true -> false
+  | _ -> true
 
 let params_to_values = List.map fst & params_to_values
 
@@ -92,18 +106,13 @@ let start () = ()
 let generate_stmt index stmt =
   let name = choose_name stmt.props stmt.kind index >> String.uncapitalize in
   let values = params_to_values stmt.params >> List.map (prepend "~") >> inline_values in
-  let all_params = match stmt.schema with [] -> values | _ -> "callback " ^ values in
+  let all_params = values ^ (if is_callback stmt then " callback" else "") in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql stmt) in
-  let schema_binder_name = output_schema_binder index stmt.schema in
+  let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
-  begin match schema_binder_name with
-  | None ->
-      output "T.execute db %s %s" sql params_binder_name
-  | Some schema_binder_name ->
-      output "T.select db %s %s %s" sql params_binder_name schema_binder_name 
-  end;
+  output "T.%s db %s %s %s" func sql params_binder_name callback;
   dec_indent ();
   empty_line ()
 

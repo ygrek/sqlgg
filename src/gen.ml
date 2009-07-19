@@ -23,6 +23,7 @@ let indent_endline s = print_indent (); print_endline s
 let output fmt = kprintf indent_endline fmt
 let output_l = List.iter indent_endline
 let print fmt = kprintf print_endline fmt
+let indented k = inc_indent (); k (); dec_indent ()
 
 let name_of attr index =
   match attr.RA.name with
@@ -46,7 +47,7 @@ let choose_name props kind index =
   | Delete t -> sprintf "delete_%s_%u" t index
   | Alter t -> sprintf "alter_%s_%u" t index
   | Drop t -> sprintf "drop_%s" t
-  | Select   -> sprintf "select_%u" index
+  | Select _  -> sprintf "select_%u" index
   | Other -> sprintf "statement_%u" index
   in
   make_name props name
