@@ -115,6 +115,12 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 Tables.add (name,s);
                 ([],p,Create name)
               }
+         | CREATE UNIQUE? INDEX if_not_exists? name=table_name 
+                ON table=table_name cols=sequence(index_column)
+              {
+                RA.Schema.project cols (Tables.get_schema table) >> ignore; (* just check *)
+                [],[],CreateIndex name
+              }
          | select_stmt_t { $1 }
          | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
@@ -160,6 +166,9 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
+
+table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
+index_column: name=IDENT collate? order_type? { name }
 
 table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
                 | LIKE name=maybe_parenth(IDENT) { Tables.get name >> snd } (* mysql *)
