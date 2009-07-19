@@ -7,17 +7,19 @@ module G = Test_caml_gen.Sqlgg(Sqlgg_sqlite3)
 let explain msg db = printf "%s : %s\n" msg (errmsg db)
 
 let main () =
-  let db = db_open "test.db" in
+  let db = db_open ":memory:" in
   explain "open" db;
 
-  exec db "DROP TABLE test;";
+(*
+  G.drop_test db;
   explain "drop" db;
-  exec db "DROP TABLE loc;";
+  G.drop_loc db;
   explain "drop" db;
-  exec db "DROP TABLE zuzu;";
+  G.drop_zuzu db;
   explain "drop" db;
+*)
 
-  G.create db;
+  G.create_test db;
   explain "create" db;
 
   G.add db "c++" "ugly";

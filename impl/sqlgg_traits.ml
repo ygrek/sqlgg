@@ -14,6 +14,7 @@ module type M = sig
 
   val get_column_Int : statement -> int -> num
   val get_column_Text : statement -> int -> text
+  val get_column_Any : statement -> int -> any
 
   (** [set_param_* stmt index val]. [index] is 0-based,
     @raise Oops on error *)

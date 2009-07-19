@@ -22,6 +22,8 @@ let get_column_Text stmt index =
   let x = S.column stmt index in
   S.Data.to_string x
 
+let get_column_Any = get_column_Text
+
 let test_ok rc = 
   if rc <> S.Rc.OK then
     raise (Oops (sprintf "test_ok %s" (S.Rc.to_string rc)))

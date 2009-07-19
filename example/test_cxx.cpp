@@ -1,12 +1,9 @@
 #include "../impl/sqlite3_traits.hpp"
 #include "test_cxx_gen.hpp"
-#include <boost/foreach.hpp>
 #include <iostream>
 #include <vector>
 
-using namespace std;
-
-typedef sqlgg<sqlite3_traits> gen;
+typedef sqlgg<sqlite3_traits> gen_t;
 
 /*
 void to_console(const wchar_t* s)
@@ -25,25 +22,36 @@ void to_console(const std::wstring& s)
 
 void explain(char const* msg, sqlite3* db)
 {
-  cout << msg << " : " /*<< sqlite3_errcode(db) << " "*/ << sqlite3_errmsg(db) << endl;
+  std::cout << msg << " : " << sqlite3_errcode(db) << " : " << sqlite3_errmsg(db) << std::endl;
 }
+
+struct output
+{
+  void operator()(int id, std::string name, std::string desc)
+  {
+    std::cout << id << ") " << name << " is " << desc << std::endl;
+  }
+};
 
 int main()
 {
   sqlite3* db = NULL;
-  int nResult = SQLITE_OK;
 
-  nResult = sqlite3_open("test.db", &db);
+  sqlite3_open(":memory:", &db);
   explain("open",db);
 
-  nResult = sqlite3_exec(db,"DROP TABLE test;",NULL,NULL,NULL);
-  explain("drop",db);
-  nResult = sqlite3_exec(db,"DROP TABLE loc;",NULL,NULL,NULL);
-  explain("drop",db);
-  nResult = sqlite3_exec(db,"DROP TABLE zuzu;",NULL,NULL,NULL);
-  explain("drop",db);
+  gen_t gen(db);
 
-  nResult = gen::create(db);
+/*
+  gen.drop_test();
+  explain("drop",db);
+  gen.drop_loc();
+  explain("drop",db);
+  gen.drop_zuzu();
+  explain("drop",db);
+*/
+
+  gen.create_test();
   explain("create",db);
 
 /*
@@ -53,35 +61,28 @@ int main()
   nResult = gen::Add(db,t);
   cout << "insert : " << nResult << " " << sqlite3_errmsg(db) << endl;
 */
-  nResult = gen::Add(db,"c++","ugly");
+  gen.Add("c++","ugly");
   explain("insert",db);
 
-  nResult = gen::Add(db,"c","hard");
+  gen.Add("c","hard");
   explain("insert",db);
 
-  nResult = gen::Add(db,"ocaml","wonderful");
+  gen.Add("ocaml","wonderful");
   explain("insert",db);
 
-  nResult = gen::Exaggerate(db,"really");
+  gen.Exaggerate("really");
   explain("update",db);
 
-  std::vector<gen::data_1> all;
-  nResult = gen::select_all(db,all);
+  gen.select_all(output());
   explain("select",db);
 
-  BOOST_FOREACH(gen::data_1 const& q, all)
-  {
-     std::cout << q.id << ") " << q.name << " is " << q.descr << std::endl;
-  }
-
-  gen::create_loc(db);
+  gen.create_loc();
   explain("create_loc",db);
 
-  nResult = gen::create_zuzu(db,"qq");
+  gen.create_zuzu("qq");
   explain("create_zuzu",db);
 
-  nResult = sqlite3_close(db);
-  cout << "close : " << nResult << endl;
+  sqlite3_close(db);
 
   return 0;
 }

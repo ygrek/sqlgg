@@ -1,4 +1,4 @@
--- [sqlgg] name=create
+
 CREATE TABLE test (id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT,descr TEXT);
 -- [sqlgg] name=select_all
 SELECT * FROM test;
@@ -27,3 +27,4 @@ CREATE TABLE zuzu AS
 SELECT x,z FROM (SELECT name as x,
   city || ' ' || descr as "y""",
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
+

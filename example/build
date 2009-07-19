@@ -2,8 +2,9 @@
 
 set -e -u
 
-../sqlgg -gen cxx test.sql > test_cxx_gen.hpp
-g++ -g -o test_cxx test_cxx.cpp -lsqlite3
+sqlgg -gen cxx test.sql > test_cxx_gen.hpp
+sqlgg -gen caml test.sql > test_caml_gen.ml
 
-../sqlgg -gen caml test.sql > test_caml_gen.ml
+g++ -g -DSQLGG_DEBUG -o test_cxx test_cxx.cpp -lsqlite3
+
 ocamlc -w Alse -g -o test_caml -I ../impl -I +sqlite3 sqlite3.cma ../impl/sqlgg_sqlite3.ml ../impl/sqlgg_traits.ml test_caml_gen.ml test_caml.ml
