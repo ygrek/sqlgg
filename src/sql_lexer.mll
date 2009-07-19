@@ -101,6 +101,11 @@ let keywords =
    "first",FIRST;
    "column",COLUMN;
    "like", LIKE;
+   "case", CASE;
+   "when", WHEN;
+   "then", THEN;
+   "else", ELSE;
+   "end", END;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION T.Int) ["max"; "min"; "length"; "random";"count";"sum";"avg"];

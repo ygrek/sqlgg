@@ -49,6 +49,7 @@
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
+       CASE WHEN THEN ELSE END
 %token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -309,7 +310,13 @@ expr:
     | expr TEST_NULL { $1 }
     | expr mnot(BETWEEN) expr AND expr { `Func (Int,[$1;$3;$5]) }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func (Bool,params_of select) }
+    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END 
+      {
+        let l = function None -> [] | Some x -> [x] in
+        `Func (Any,l e1 @ List.flatten branches @ l e2)
+      }
 
+case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { `Value Datetime }
