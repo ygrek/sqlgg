@@ -40,7 +40,7 @@ public class Test
       Console.WriteLine("Total transfers:");
       foreach (var row in gen.calc_total.rows())
       {
-        Console.WriteLine(row.fullname + ": " + row.total);
+        Console.WriteLine(row.fullname + " = " + row.total);
       }
 
       Console.WriteLine("Donors:");
