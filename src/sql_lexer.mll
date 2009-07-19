@@ -68,7 +68,6 @@ let keywords =
    "into",INTO;
    "values",VALUES;
    "where",WHERE;
-   "from",FROM;
    "set",SET;
    "in",IN;
    "group",GROUP;
@@ -95,7 +94,6 @@ let keywords =
    "restrict",RESTRICT;
    "drop",DROP;
    "constraint",CONSTRAINT;
-   "collate",COLLATE;
    "after",AFTER;
    "index",INDEX;
    "fulltext",FULLTEXT;
@@ -144,7 +142,7 @@ let keywords =
   let add map (k,v) =
     let k = String.lowercase k in
     if Keywords.mem k map then
-      failwith (sprintf "Lexeme %s is already associated with keyword." k)
+      failwith (Printf.sprintf "Lexeme %s is already associated with keyword." k)
     else
       Keywords.add k v map
   in
