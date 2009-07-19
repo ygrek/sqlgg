@@ -1,6 +1,6 @@
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
 * allow to tolerate errors in query
-* special code for queries returning single values (COUNT(*) and the like)
+* special code for queries returning single values (COUNT(*) without GROUP BY, LIMIT 1, SELECT and UNIQUE INDEX, etc)
 * support BULK INSERTs (how?)
 * decide what to do with unquoted identifiers matching keywords
 * provide ways to extend lexer with tokens in runtime

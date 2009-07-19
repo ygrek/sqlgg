@@ -5,7 +5,7 @@ sqlgg changelog
 ?
 	+ input: noparse attribute
 	+ sql: ORDER BY, explicit VALUES, CREATE LIKE, INSERT INTO ... SELECT,
-			multi-table UPDATE
+			multi-table UPDATE, CASE
 	+ csharp: IEnumerable<>
 
 0.2.2

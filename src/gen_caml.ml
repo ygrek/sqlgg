@@ -102,12 +102,17 @@ let generate_stmt index stmt =
   | None ->
       output "T.execute db %s %s" sql params_binder_name
   | Some schema_binder_name ->
-      output "T.select db %s %s %s" sql schema_binder_name params_binder_name
+      output "T.select db %s %s %s" sql params_binder_name schema_binder_name 
   end;
   dec_indent ();
   empty_line ()
 
 let generate () name stmts =
+(*
+  let types = 
+    String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"]) 
+  in
+*)
   output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
   empty_line ();
   inc_indent ();
