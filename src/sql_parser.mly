@@ -26,6 +26,12 @@
     | Some names -> RA.Schema.project names schema
     | None -> schema
 
+  let update_tables tables ss w =
+    let (tables,params) = List.split tables in
+    let p1 = Syntax.params_of_assigns tables ss in
+    let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
+    (List.flatten params) @ p1 @ p2
+
 %}
 
 %token <int> INTEGER
@@ -126,18 +132,15 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               }
          | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where? o=loption(order) lim=loption(limit)
               {
-                let t = Tables.get table in
-                let p1 = Syntax.params_of_assigns [t] ss in
-                let p2 = get_params_opt [t] (snd t) w in
-                [], p1 @ p2 @ lim, Update (Some table)
+                let params = update_tables [Tables.get table,[]] ss w in
+                let p3 = Syntax.params_of_order o [] [Tables.get table] in
+                [], params @ p3 @ lim, Update (Some table)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
          | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
               {
-                let (tables,params) = List.split tables in
-                let p1 = Syntax.params_of_assigns tables ss in
-                let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
-                [], (List.flatten params) @ p1 @ p2, Update None
+                let params = update_tables tables ss w in
+                [], params, Update None
               }
          | DELETE FROM table=IDENT w=where?
               {
