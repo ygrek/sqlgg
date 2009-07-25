@@ -6,7 +6,7 @@ open ExtString
 open Operators
 open Stmt
 
-type subst_mode = | Named | Unnamed
+type subst_mode = | Named | Unnamed | Oracle
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -66,6 +66,7 @@ let substitute_params s params f =
   Buffer.contents b
 
 let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
+let subst_oracle index (id,_) = ":" ^ (param_name_to_string id index)
 let subst_unnamed _ _ = "?"
 
 let get_sql stmt =
@@ -73,7 +74,11 @@ let get_sql stmt =
   match !params_mode with
   | None -> sql
   | Some subst ->
-    let f = match subst with Named -> subst_named | Unnamed -> subst_unnamed in
+    let f = match subst with 
+    | Named -> subst_named
+    | Unnamed -> subst_unnamed
+    | Oracle -> subst_oracle 
+    in
     substitute_params sql stmt.params f
 
 let time_string () = 

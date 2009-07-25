@@ -28,6 +28,7 @@ let set_params_mode s =
   match String.lowercase s with
   | "named" -> Some Gen.Named
   | "unnamed" -> Some Gen.Unnamed
+  | "oracle" -> Some Gen.Oracle
   | _ -> None
 
 let work =
@@ -48,9 +49,9 @@ let main () =
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp Set output language";
-    "-name", Arg.String set_name, "<identifier> Set output module name";
-    "-params", Arg.String set_params_mode, "named|unnamed|input Output query parameters substitution";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp Set output language (default: cxx)";
+    "-name", Arg.String set_name, "<identifier> Set output module name (default: sqlgg)";
+    "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
