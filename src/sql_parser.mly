@@ -15,7 +15,7 @@
   let params_of select = List.map (fun x -> `Param x) (snd select)
 
   let select_value select =
-    let (s,p) = select in
+    let (s,_) = select in
     if (List.length s <> 1) then
       raise (RA.Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
     params_of select
@@ -95,13 +95,12 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 Tables.add (name,schema);
                 ([],[],Create name)
               }
-         | ALTER TABLE name=IDENT action=alter_action
+         | ALTER TABLE name=table_name actions=commas(alter_action)
               {
-                begin match action with
+                List.iter (function
                 | `Add (col,pos) -> Tables.alter_add name col pos
                 | `Drop col -> Tables.alter_drop name col
-                | `None -> ()
-                end;
+                | `None -> ()) actions;
                 ([],[],Alter name)
               }
          | DROP TABLE if_exists? name=IDENT
@@ -143,19 +142,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 ignore (RA.Schema.compound expect schema); (* test equal types *)
                 [], params, Insert(None,table)
               }
-         | insert_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column)
+         | insert_cmd table=IDENT SET ss=commas(set_column)
               {
                 let p1 = Syntax.params_of_assigns [Tables.get table] ss in
                 [], p1, Insert (None,table)
               }
-         | update_cmd table=IDENT SET ss=separated_nonempty_list(COMMA,set_column) w=where? o=loption(order) lim=loption(limit)
+         | update_cmd table=IDENT SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 let params = update_tables [Tables.get table,[]] ss w in
                 let p3 = Syntax.params_of_order o [] [Tables.get table] in
                 [], params @ p3 @ lim, Update (Some table)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
-         | update_cmd tables=separated_nonempty_list(COMMA,source) SET ss=separated_nonempty_list(COMMA,set_column) w=where?
+         | update_cmd tables=commas(source) SET ss=commas(set_column) w=where?
               {
                 let params = update_tables tables ss w in
                 [], params, Update None
@@ -193,7 +192,7 @@ select_stmt_t: select_core other=list(preceded(compound_op,select_core))
 
 select_stmt: select_stmt_t { let (s,p,_) = $1 in s,p }
 
-select_core: SELECT select_type? r=separated_nonempty_list(COMMA,column1)
+select_core: SELECT select_type? r=commas(column1)
              FROM t=table_list
              w=where?
              g=loption(group)
@@ -225,7 +224,7 @@ source1: IDENT { Tables.get $1,[] }
 source: src=source1 alias=maybe_as
     {
       match alias with
-      | Some name -> let ((n,s),p) = src in ((name,s),p)
+      | Some name -> let ((_,s),p) = src in ((name,s),p)
       | None -> src
     }
 
@@ -244,11 +243,11 @@ limit_t: LIMIT lim=int_or_param { limit lim (`Const 0) }
 
 limit: limit_t { fst $1 }
 
-order: ORDER BY l=separated_nonempty_list(COMMA,terminated(expr,order_type?)) { l }
+order: ORDER BY l=commas(terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
 
 where: WHERE e=expr { e }
-group: GROUP BY l=separated_nonempty_list(COMMA,expr) { l }
+group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
 
 column1:
@@ -263,6 +262,7 @@ maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD index_type IDENT? sequence(IDENT) { `None }
+            | DROP INDEX IDENT { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
 index_type: INDEX | FULLTEXT { }
 alter_pos: AFTER col=IDENT { `After col }
@@ -356,7 +356,7 @@ literal_value:
     | TIME TEXT
     | TIMESTAMP TEXT { `Value Datetime }
 
-expr_list: separated_nonempty_list(COMMA,expr) { $1 }
+expr_list: l=commas(expr) { l }
 func_params: expr_list { $1 }
            | ASTERISK { [] }
            | (* *) { [] }
@@ -382,8 +382,9 @@ binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | CHARACTER { }
 
 %inline either(X,Y): X | Y { }
+%inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
 (* (x1,x2,...,xn) *)
-%inline sequence_(X): LPAREN l=separated_nonempty_list(COMMA,X) { l }
+%inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
