@@ -303,7 +303,8 @@ Available output languages:
 	[usage example][demo_java_mysql]).
 * **OCaml**: functor parametrized with module for database specific code
 	[Sqlgg\_traits.M][sqlgg_caml] ([generated code example][demo_caml_gen],
-  [OCaml-SQLite3 traits][sqlite3_caml],	[usage example][demo_caml_sqlite3]).
+  [OCaml-SQLite3 traits][sqlite3_caml],	[usage example][demo_caml_sqlite3],
+	[complete example for sulci jabber bot](demo/sulci/)).
 * **XML**: input parameters and rowset schema with types and names -- everything needed
   to further generate code (e.g. using XSLT) in some other language
   ([generated xml example][demo_xml_gen])

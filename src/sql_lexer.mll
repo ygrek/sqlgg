@@ -206,7 +206,7 @@ ruleMain = parse
   | "-" { MINUS }
 
   | "/" | "%" | "|" | "&" { NUM_BINARY_OP }
-  | ">" | ">=" | "<=" | "<" | "<>" { COMPARISON_OP }
+  | ">" | ">=" | "<=" | "<" | "<>" | "!=" { COMPARISON_OP }
 
   | "?" { PARAM (None,pos lexbuf) }
   | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }
