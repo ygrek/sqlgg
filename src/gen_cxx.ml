@@ -68,7 +68,7 @@ let func head name args ?tail k =
   close_curly ""
 
 let set_param arg index param =
-  let (id,t) = param in
+  let (id,_) = param in
   output "Traits::set_param(%s, %s, %u);"
 (*     (param_type_to_string t) *)
     arg
@@ -78,7 +78,7 @@ let set_param arg index param =
 let output_value_defs vals =
   vals >> List.iter (fun (name,t) -> output "%s %s;" t name)
 
-let output_schema_binder index schema =
+let output_schema_binder _ schema =
   out_private ();
   let name = "output" in
   output "template <class T>";
@@ -140,7 +140,7 @@ let struct_ctor name values k =
     empty_line ();
     k ())
 
-let output_params_binder index params =
+let output_params_binder _ params =
   out_private ();
   let name = "params" in
   let values = params_to_values params in

@@ -4,7 +4,7 @@
   open Lexing
   module T = Sql.Type
 
-let error buf callerID =
+let error _ callerID =
   Error.report "Lexer error : %s" callerID;
 (*	update_pos buf;*)
 	raise Parsing.Parse_error

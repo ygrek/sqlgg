@@ -58,7 +58,7 @@ let get_column attr index =
 
 let schema_to_string = G.Values.to_string & schema_to_values
 
-let output_schema_binder index schema =
+let output_schema_binder _ schema =
   let name = "callback" in
   output "public delegate void %s(%s);" name (schema_to_string schema);
   empty_line ();

@@ -25,7 +25,7 @@ let tt ?msg sql schema params =
       assert_equal ?msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params
 
 let wrong sql =
-  ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with exn -> true)
+  ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true)
 
 (* let wrong sql = assert_equal None (Main.parse_one (sql,[])) *)
 

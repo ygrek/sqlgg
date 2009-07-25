@@ -21,7 +21,7 @@ let get_schema name = snd (get name)
 let check name = ignore (get name)
 
 let add v =
-  let (name,schema) = v in
+  let (name,_) = v in
   match List.find_all (by_name name) !all with
   | [] -> all := v :: !all
   | _ -> failwith (sprintf "table %s already exists" name)

@@ -43,13 +43,14 @@ let parse_one_exn (sql,props) =
     in
     {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" sql}
 
-let parse_one (sql,props as x) =
+let parse_one x =
   try
     Some (parse_one_exn x)
   with
   | Parser_utils.Error (exn,(line,cnum,tok,tail)) ->
     begin
      let extra = Printexc.to_string exn in
+     let sql = fst x in
      Error.log "==> %s" sql;
      if cnum = String.length sql && tok = "" then
        Error.log "Exception %s" extra
@@ -65,7 +66,7 @@ let parse_one (sql,props as x) =
 
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
-  let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with exn -> None in
+  let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with _ -> None in
   let rec next () =
     match f () with
     | None -> raise Enum.No_more_elements

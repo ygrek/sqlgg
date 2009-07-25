@@ -50,7 +50,7 @@ let set_param index param =
     index
     (param_name_to_string id index)
 
-let output_schema_binder index schema =
+let output_schema_binder _ schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
   indented (fun () ->
@@ -60,7 +60,7 @@ let output_schema_binder index schema =
   output "in";
   name
 
-let output_select1_cb index schema =
+let output_select1_cb _ schema =
   let name = "get_row" in
   output "let %s stmt =" name;
   indented (fun () ->
@@ -83,7 +83,7 @@ let is_callback stmt =
 
 let params_to_values = List.map fst & params_to_values
 
-let output_params_binder index params =
+let output_params_binder _ params =
   output "let set_params stmt =";
   inc_indent ();
   List.iteri set_param params;

@@ -25,14 +25,14 @@ struct
 				raise (Error (exn,(line,cnum,tok,tail)))
       end
 
-  let parse_buf lexbuf = try Some (parse_buf_exn lexbuf) with exn -> None
+  let parse_buf lexbuf = try Some (parse_buf_exn lexbuf) with _ -> None
 
   let parse_stdin () = parse_buf (Lexing.from_channel stdin)
   let parse_string str = (*Error.log "Parsing : %s" str; *)
                          parse_buf (Lexing.from_string str)
 
   let parse_file filename =
-    let contents = try Std.input_file filename with exn -> "" in
+    let contents = try Std.input_file filename with _ -> "" in
     parse_string contents
 
 end

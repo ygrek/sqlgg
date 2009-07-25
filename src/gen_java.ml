@@ -56,7 +56,7 @@ let get_column attr index =
     (attr.RA.domain >> as_api_type)
     (index + 1)
 
-let output_schema_binder name index schema =
+let output_schema_binder name _ schema =
   let name = sprintf "%s_callback" name in
   start_intf name;
   output "public void callback(%s);" (G.Values.to_string (schema_to_values schema));
@@ -85,7 +85,7 @@ let set_param name index param =
     (index+1)
     (param_name_to_string id index)
 
-let output_params_binder name index params = List.iteri (set_param name) params
+let output_params_binder name _ params = List.iteri (set_param name) params
 
 type t = unit
 

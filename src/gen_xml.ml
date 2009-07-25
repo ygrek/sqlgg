@@ -76,7 +76,7 @@ let finish_output (x,pre) =
   x := [];
   pre := []
 
-let generate out name stmts =
+let generate out _ stmts =
   start_output out;
   Enum.iteri (generate_code out) stmts;
   finish_output out
