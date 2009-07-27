@@ -1,3 +1,1 @@
-
-git describe | ocaml make_version.ml > git.ml
 ocamlbuild sqlgg.byte
