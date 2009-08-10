@@ -1,3 +1,5 @@
+* output params syntax for different DB
+* guarantee correct duplicate params usage
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
 * allow to tolerate errors in query
 * special code for queries returning single values (COUNT(*) without GROUP BY, LIMIT 1, SELECT and UNIQUE INDEX, etc)

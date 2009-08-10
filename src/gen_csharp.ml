@@ -73,8 +73,8 @@ let set_param index param =
   let (id,t) = param in
   let name = default_name "param" index in
   output "IDbDataParameter %s = _cmd.CreateParameter();" name;
-  output "%s.ParameterName = \"@%s\";" name (param_name_to_string id index);
-  output "%s.DbType = DbType.%s;" name (param_type_to_string t);
+  output "%s.ParameterName = \"@%s\";" name id;
+  output "%s.DbType = DbType.%s;" name t; (* FIXME? this is ok because api_type = lang_type *)
   output "_cmd.Parameters.Add(%s);" name
 
 let output_params_binder params =
@@ -98,7 +98,7 @@ let func_execute index stmt =
       G.open_curly ();
       output "_cmd = _conn.CreateCommand();";
       output "_cmd.CommandText = sql;";
-      output_params_binder stmt.params;
+      output_params_binder values;
       G.close_curly "";
       output "if (null != CommandTimeout) _cmd.CommandTimeout = CommandTimeout.Value;";
       List.iteri
