@@ -62,7 +62,7 @@
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END
-%token NUM_BINARY_OP PLUS MINUS COMPARISON_OP
+%token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
 (*
@@ -72,11 +72,14 @@
 (* FIXME precedence of COMMA and JOIN *)
 
 %left TEST_NULL
-%left AND OR
-%nonassoc EQUAL
-%nonassoc NUM_BINARY_OP
+%left OR
+%left AND
+%nonassoc EQUAL NUM_EQ_OP
+%nonassoc NUM_CMP_OP
+%nonassoc NUM_BIT_OP
 %left PLUS MINUS
-%left ASTERISK
+%left ASTERISK NUM_DIV_OP
+%left CONCAT_OP
 
 %type <Syntax.expr> expr
 
@@ -361,8 +364,8 @@ func_params: expr_list { $1 }
            | ASTERISK { [] }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
-numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_BINARY_OP { }
-comparison_op: EQUAL | COMPARISON_OP { }
+numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_DIV_OP | NUM_BIT_OP { }
+comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
 boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }
