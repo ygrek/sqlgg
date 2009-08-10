@@ -1,10 +1,11 @@
-(* SQL syntax and RA *)
+(** SQL syntax and RA *)
 
 open Stmt
 open Operators
 open ListMore
 open Apply
 open Sql
+open Printf
 
 type expr = [ `Value of Type.t (** literal value *)
             | `Param of param
@@ -61,10 +62,6 @@ let assign_types expr =
         | [] -> Type.Any
         | h::t -> if List.for_all ((=) h) t then h else Type.Any
         in
-(*
-        print_endline (Show.show<expr_q list>(l));
-        print_endline (Show.show<Type.t option>(t));
-*)
         let assign = function
         | `Param (n,Type.Any) -> `Param (n,t)
         | x -> x
@@ -80,8 +77,9 @@ let show_e e = Show.show<expr_q> (e) >> print_endline
 let resolve_types tables joined_schema expr =
   expr
   >> resolve_columns tables joined_schema
-(*   >> tee show_e  *)
+  >> tee (if Config.debug1 () then show_e else ignore)
   >> assign_types
+  >> tee (if Config.debug1 () then print_newline & show_e & fst else ignore)
 
 let infer_schema columns tables joined_schema =
 (*   let all = tables >> List.map snd >> List.flatten in *)

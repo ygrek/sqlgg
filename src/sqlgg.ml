@@ -22,7 +22,6 @@ let set_out s =
   | "csharp" | "c#" | "cs" -> CSharp.process
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
-let set_name s = name := s
 let set_params_mode s =
   Gen.params_mode :=
   match String.lowercase s with
@@ -50,8 +49,9 @@ let main () =
   [
     "-version", Arg.Unit show_version, " Show version";
     "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp Set output language (default: cxx)";
-    "-name", Arg.String set_name, "<identifier> Set output module name (default: sqlgg)";
+    "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
+    "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
