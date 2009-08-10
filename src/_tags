@@ -1,9 +1,6 @@
 true: use_menhir
 true: dtypes, warn_A, warn_e
 <*.ml>: pp(deriving), use_deriving
-<example/*>: not_hygienic
-<demo/*>: not_hygienic
-<impl/*>: not_hygienic
 <*.ml>: use_extLib
 <test.ml>: use_oUnit
 <*.{byte,native}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit

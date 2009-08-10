@@ -59,6 +59,10 @@ let test () =
     [p "id" Int; p "id" Int; p "def" Any];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
+  (* check precedence of boolean and arithmetic operators *)
+  tt "select str from test where id>=@id and id-@x<@id"
+    [attr "str" Text;]
+    [p "id" Int; p "x" Int; p "id" Int];
   ()
 
 let test2 () =
