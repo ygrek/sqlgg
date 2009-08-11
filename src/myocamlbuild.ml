@@ -24,13 +24,11 @@ let () =
 dispatch begin function
 | After_rules ->
 
-     let extlib_dir = C.lib "extlib" in
+     C.extern ~cma:"extLib" "extlib";
+     C.extern "deriving";
+     C.extern "oUnit";
 
-     ocaml_lib ~extern:true ~dir:extlib_dir "extLib";
-     ocaml_lib ~extern:true ~dir:(C.lib "deriving") "deriving";
-     ocaml_lib ~extern:true ~dir:(C.lib "oUnit") "oUnit";
-
-     flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A extlib_dir]);
+     flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A (C.lib "extlib")]);
 
 | _ -> ()
 end

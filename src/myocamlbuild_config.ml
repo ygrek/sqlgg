@@ -1,5 +1,5 @@
 (**
-  v0 2009-08-11
+  r1 (2009-08-11)
 
   This ocamlbuild plugin will try to find libraries by name using (in order)
   - local myocamlbuild.config file
@@ -71,3 +71,4 @@ let lib name =
     with exn ->
       "+" ^ name
 
+let extern ?cma pkg_name = Ocamlbuild_plugin.ocaml_lib ~extern:true ~dir:(lib pkg_name) (match cma with Some s -> s | None -> pkg_name)
