@@ -1,4 +1,6 @@
 (**
+  v0 2009-08-11
+
   This ocamlbuild plugin will try to find libraries by name using (in order)
   - local myocamlbuild.config file
   - ocamlfind

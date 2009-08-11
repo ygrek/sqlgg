@@ -3,9 +3,11 @@ sqlgg changelog
 
 0.2.3
 ?
-	+ input: noparse attribute
+  + ocaml: support single-row results (LIMIT 1 only for now)
+  + ocaml: more robust traits
+	+ sqlgg: noparse attribute
 	+ sql: ORDER BY, explicit VALUES, CREATE LIKE, INSERT INTO ... SELECT,
-			multi-table UPDATE, CASE
+			multi-table UPDATE, CASE, CREATE INDEX
 	+ csharp: IEnumerable<>
 
 0.2.2

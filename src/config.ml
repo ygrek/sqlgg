@@ -1,7 +1,7 @@
 (**  *)
 
 (** Sqlgg version *)
-let version = Git.revision
+let version = Version.id
 
 (** Debug level *)
 let debug_level = ref 0

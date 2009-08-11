@@ -6,17 +6,17 @@ module C = Myocamlbuild_config
 ;;
 
 let () =
-  let with_res res destroy k = let x = (try k res with e -> destroy res; raise e) in destroy res; x in
-  let get_line r d = with_res r d input_line in
+  let bracket res destroy k = let x = (try k res with e -> destroy res; raise e) in destroy res; x in
+  let get_line r d = bracket r d input_line in
 
-  with_res (open_out "git.ml") close_out (fun out ->
+  bracket (open_out "version.ml") close_out (fun out ->
    let revision =
     try
      get_line (Unix.open_process_in "git describe --always") (Unix.close_process_in)
     with
-     _ -> (try get_line (open_in "git.describe") close_in with _ -> "<unknown>")
+     _ -> (try get_line (open_in "version.id") close_in with _ -> "<unknown>")
    in
-   Printf.fprintf out "let revision=\"%s\"\n" (String.escaped revision)
+   Printf.fprintf out "let id=\"%s\"\n" (String.escaped revision)
   )
 
 ;;
