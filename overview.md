@@ -334,7 +334,7 @@ Download
 
 sqlgg 0.2.2 for [Windows](dist/sqlgg-0.2.2.zip) and [Linux](dist/sqlgg-0.2.2.tar.gz) (released on 29 June 2009). [Changes history](dist/changelog).
 
-Try it [online](sqlgg.cgi).
+Try it [online](online).
 
 Get the [source](http://repo.or.cz/w/sqlgg.git).
 <!--: `git clone git://repo.or.cz/sqlgg.git`
