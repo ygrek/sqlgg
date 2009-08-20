@@ -1,6 +1,7 @@
 * output params syntax for different DB
 * guarantee correct duplicate params usage
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
+* camlp4 syntax extension for inline sql
 * allow to tolerate errors in query
 * special code for queries returning single values (COUNT(*) without GROUP BY, LIMIT 1, SELECT and UNIQUE INDEX, etc)
 * support BULK INSERTs (how?)

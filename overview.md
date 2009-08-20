@@ -344,9 +344,12 @@ Get the [source](http://repo.or.cz/w/sqlgg.git).
 TODO
 ----
 
+* output params syntax for different DB
+* guarantee correct duplicate params usage
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
+* camlp4 syntax extension for inline sql
 * allow to tolerate errors in query
-* special code for queries returning single values (COUNT(*) and the like)
+* special code for queries returning single values (COUNT(*) without GROUP BY, LIMIT 1, SELECT and UNIQUE INDEX, etc)
 * support BULK INSERTs (how?)
 * decide what to do with unquoted identifiers matching keywords
 * provide ways to extend lexer with tokens in runtime
@@ -366,7 +369,7 @@ TODO
 * type check expressions
 
 ----
-2009-07-12
+2009-08-20
 <span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>

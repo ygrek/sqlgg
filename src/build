@@ -1,1 +1,1 @@
-ocamlbuild sqlgg.byte
+ocamlbuild -j 0 sqlgg.byte
