@@ -50,7 +50,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Stmt.param_id> PARAM
-%token <Sql.Type.t> FUNCTION
+%token <Sql.Type.t * bool> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -183,14 +183,16 @@ table_def_done1: { Parser_state.mode_ignore () }
 select_stmt_t: select_core other=list(preceded(compound_op,select_core)) 
                o=loption(order) lim=limit_t?
               {
-                let (s1,p1,tbls) = $1 in
-                let (s2l,p2l) = List.split (List.map (fun (s,p,_) -> s,p) other) in
+                let (s1,p1,tbls,singlerow1) = $1 in
+                let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) other) in
+                if Config.debug1 () then eprintf "singlerow=%b other=%u\n%!" singlerow1 (List.length other);
+                let singlerow1 = singlerow1 && other = [] in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let final_schema = List.fold_left RA.Schema.compound s1 s2l in
                 let p3 = Syntax.params_of_order o final_schema tbls in
                 let (p4,singlerow) = match lim with | Some x -> x | None -> [],false in
 (*                 RA.Schema.check_unique schema; *)
-                final_schema,(p1@(List.flatten p2l)@p3@p4), Select singlerow
+                final_schema,(p1@(List.flatten p2l)@p3@p4), Select (singlerow || singlerow1)
               }
 
 select_stmt: select_stmt_t { let (s,p,_) = $1 in s,p }
@@ -202,11 +204,12 @@ select_core: SELECT select_type? r=commas(column1)
              h=having?
               {
                 let (tbls,p2,joined_schema) = Syntax.join t in
+                let singlerow = g = [] && Syntax.test_singlerow r in
                 let p1 = Syntax.params_of_columns tbls joined_schema r in
                 let p3 = Syntax.get_params_opt tbls joined_schema w in
                 let p4 = Syntax.get_params_l tbls joined_schema g in
                 let p5 = Syntax.get_params_opt tbls joined_schema h in
-                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls)
+                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, singlerow)
               }
 
 table_list: src=source joins=join_source* { (src,joins) }
@@ -222,7 +225,7 @@ join_cond: ON e=expr { `Search e }
          | (* *) { `Default }
 
 source1: IDENT { Tables.get $1,[] }
-       | LPAREN s=select_core RPAREN { let (s,p,_) = s in ("",s),p }
+       | LPAREN s=select_core RPAREN { let (s,p,_,_) = s in ("",s),p }
 
 source: src=source1 alias=maybe_as
     {
@@ -314,35 +317,35 @@ attr_name: name=IDENT { (name,None) }
          | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
 
 expr:
-     expr numeric_bin_op expr %prec PLUS { `Func (Int,[$1;$3]) }
-    | expr boolean_bin_op expr %prec AND { `Func (Bool,[$1;$3]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func (Bool,[e1;e2]) }
-    | expr CONCAT_OP expr { `Func (Text,[$1;$3]) }
+     expr numeric_bin_op expr %prec PLUS { `Func ((Int,false),[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { `Func ((Bool,false),[$1;$3]) }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Bool,false),[e1;e2]) }
+    | expr CONCAT_OP expr { `Func ((Text,false),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
-      { `Func (Any,(List.filter_valid [Some e1; Some e2; e3])) }
+      { `Func ((Any,false),(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | LPAREN expr RPAREN { $2 }
     | attr_name { `Column $1 }
     | v=literal_value | v=datetime_value { v }
-    | e1=expr mnot(IN) l=sequence(expr) { `Func (Any,e1::l) }
+    | e1=expr mnot(IN) l=sequence(expr) { `Func ((Any,false),e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
-        `Func (Any,e1::select_value select)
+        `Func ((Any,false),e1::select_value select)
       }
     | e1=expr IN table=IDENT { Tables.check(table); e1 }
     | LPAREN select=select_stmt RPAREN
       {
-        `Func (Any,select_value select)
+        `Func ((Any,false),select_value select)
       }
     | PARAM { `Param ($1,Any) }
     | f=FUNCTION LPAREN p=func_params RPAREN { `Func (f,p) }
     | expr TEST_NULL { $1 }
-    | expr mnot(BETWEEN) expr AND expr { `Func (Int,[$1;$3;$5]) }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func (Bool,params_of select) }
+    | expr mnot(BETWEEN) expr AND expr { `Func ((Int,false),[$1;$3;$5]) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Bool,false),params_of select) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END 
       {
         let l = function None -> [] | Some x -> [x] in
-        `Func (Any,l e1 @ List.flatten branches @ l e2)
+        `Func ((Any,false),l e1 @ List.flatten branches @ l e2)
       }
 
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }

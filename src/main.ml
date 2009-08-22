@@ -20,7 +20,7 @@ let repeat f x k =
   loop ()
 
 let parse_one_exn (sql,props) =
-(*     print_endline stmt; *)
+    if Config.debug1 () then  prerr_endline sql;
     let (s,p,k) = Parser.parse_stmt sql in
     (* fill VALUES *)
     let (sql,p) = match k with

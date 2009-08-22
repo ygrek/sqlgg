@@ -9,14 +9,14 @@ open Printf
 
 type expr = [ `Value of Type.t (** literal value *)
             | `Param of param
-            | `Func of Type.t * expr list (** return type, parameters *)
+            | `Func of (Type.t * bool) * expr list (** return type, grouping, parameters *)
             | `Column of string * string option (** name, table *)
             ]
             deriving (Show)
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
-            | `Func of Type.t * expr_q list (** return type, parameters *)
+            | `Func of (Type.t * bool) * expr_q list (** return type, grouping, parameters *)
             ]
             deriving (Show)
 
@@ -54,7 +54,7 @@ let assign_types expr =
   let rec typeof e = (* FIXME simplify *)
     match e with
     | `Value t -> e, t
-    | `Func (ret,l) ->
+    | `Func ((ret,g),l) ->
 (** Assumption: sql functions/operators have type schema 'a -> ... -> 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
         let (l,t) = l >> List.map typeof >> List.split in
@@ -67,7 +67,7 @@ let assign_types expr =
         | x -> x
         in
         let ret = if Type.Any <> ret then ret else t in
-        `Func (ret,(List.map assign l)),ret
+        `Func ((ret,g),(List.map assign l)),ret
     | `Param (_,t) -> e, t
   in
   typeof expr
@@ -98,6 +98,13 @@ let infer_schema columns tables joined_schema =
       [ col ]
   in
   collect resolve1 columns
+
+let test_singlerow columns =
+  let test = function
+  | Expr (`Func ((_,true),args),_) when List.length args <= 1 -> true (* grouping function of zero or single parameter results in single row *)
+  | _ -> false
+  in
+  List.for_all test columns
 
 let get_params e =
   let rec loop acc e =
@@ -170,7 +177,7 @@ let split_column_assignments tables l =
     in
     (* hint expression to unify with the column type *)
     let typ = (RA.Schema.find schema cname).RA.domain in
-    exprs := (`Func (Type.Any, [`Value typ;expr])) :: !exprs) l;
+    exprs := (`Func ((Type.Any,false), [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
 
 let params_of_assigns tables ss =

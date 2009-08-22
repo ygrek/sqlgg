@@ -108,9 +108,10 @@ let keywords =
    "end", END;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all (FUNCTION T.Int) ["max"; "min"; "length"; "random";"count";"sum";"avg"];
-  all (FUNCTION T.Text) ["concat";"lower";"upper"];
-  all (FUNCTION T.Any) ["coalesce"];
+  all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];
+  all (FUNCTION (T.Int,false)) ["length"; "random";];
+  all (FUNCTION (T.Text,false)) ["concat";"lower";"upper"];
+  all (FUNCTION (T.Any,false)) ["coalesce"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";"unix_timestamp"];
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];

@@ -17,12 +17,16 @@ let cmp_params p1 p2 =
   with
     _ -> false
 
-let tt ?msg sql schema params =
+let tt ?msg sql ?kind schema params =
+  let msg = Option.default sql msg in
   match Main.parse_one (sql,[]) with
-  | None -> assert_failure ("Failed to parse " ^ (Option.default "" msg))
+  | None -> assert_failure "Failed to parse"
   | Some stmt ->
-      assert_equal ?msg ~printer:RA.Schema.to_string schema stmt.schema;
-      assert_equal ?msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params
+      assert_equal ~msg ~printer:RA.Schema.to_string schema stmt.schema;
+      assert_equal ~msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params;
+      match kind with 
+      | Some k -> assert_equal ~msg ~printer:Show.show<Stmt.kind> k stmt.kind
+      | None -> ()
 
 let wrong sql =
   ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true)
@@ -81,6 +85,15 @@ let test3 () =
   tt "SELECT id FROM test WHERE (id, str) IN ( SELECT id, str FROM test2)" [attr "id" Int] [];
   ()
 
+let test4  () =
+  tt "CREATE TABLE test4 (x INT, y INT)" [] [];
+  tt "select max(*) from test4" [attr "" Int] [] ~kind:(Select true);
+  tt "select max(x) as q from test4" [attr "q" Int] [] ~kind:(Select true);
+  tt "select max(x,y) from test4" [attr "" Int] [] ~kind:(Select false);
+  tt "select max(x,y) from test4 limit 1" [attr "" Int] [] ~kind:(Select true);
+  tt "select max(x,y) from test4 limit 2" [attr "" Int] [] ~kind:(Select false);
+  ()
+
 (*
   see MySQL 5.4 refman -- 12.2.8.1. JOIN Syntax
   see SQL:2008 -- 7.7 <joined table>
@@ -122,6 +135,7 @@ let run () =
     "simple" >:: test;
     "multi-table UPDATE" >:: test2;
     "gotchas" >:: test3;
+    "single-row SELECT" >:: test4;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
   ]
