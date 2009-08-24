@@ -332,7 +332,7 @@ Available output languages:
 Download
 --------
 
-sqlgg 0.2.2 for [Windows](dist/sqlgg-0.2.2.zip) and [Linux](dist/sqlgg-0.2.2.tar.gz) (released on 29 June 2009). [Changes history](dist/changelog).
+sqlgg 0.2.3 for [Windows](dist/sqlgg-0.2.3.zip) and [Linux](dist/sqlgg-0.2.3.tar.gz) (released on 24 August 2009). [Changes history](dist/changelog).
 
 Try it [online](online).
 
@@ -369,7 +369,7 @@ TODO
 * type check expressions
 
 ----
-2009-08-20
+2009-08-24
 <span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>
