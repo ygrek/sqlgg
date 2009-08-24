@@ -3,8 +3,8 @@ sqlgg changelog
 
 0.2.3
 2009-08-24
-  + ocaml: single-row SELECT (LIMIT 1, grouping without GROUP BY)
-  + ocaml: more robust traits
+	+ sql: detect single-row SELECT (LIMIT 1, grouping without GROUP BY)
+	+ ocaml: more robust traits
 	+ sqlgg: noparse attribute
 	+ sql: ORDER BY, explicit VALUES, CREATE LIKE, INSERT INTO ... SELECT,
 			multi-table UPDATE, CASE, CREATE INDEX
