@@ -28,8 +28,14 @@ specify paths to libraries as follows :
 sqlgg
 -----
 
-cd src && ./build
-(or build.bat for Windows)
+    cd src && ./build
+    (or build.bat for Windows)
+
+Windows users
+=============
+
+Install VS2005 SP1 redistributable
+<http://www.microsoft.com/downloads/details.aspx?FamilyID=200b2fd9-ae1a-4a14-984d-389c36f85647>
 
 ----
-2009-07-27
+2009-08-24
