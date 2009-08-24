@@ -2,8 +2,8 @@ sqlgg changelog
 ---------------
 
 0.2.3
-?
-  + ocaml: support single-row results (LIMIT 1 only for now)
+2009-08-24
+  + ocaml: single-row SELECT (LIMIT 1, grouping without GROUP BY)
   + ocaml: more robust traits
 	+ sqlgg: noparse attribute
 	+ sql: ORDER BY, explicit VALUES, CREATE LIKE, INSERT INTO ... SELECT,
