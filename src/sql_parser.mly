@@ -32,17 +32,14 @@
     let p2 = get_params_opt tables (Syntax.all_tbl_columns tables) w in
     (List.flatten params) @ p1 @ p2
 
-  let limit lim ofs =
-    let params = ref [] in
-    let add p = params := (p,Int) :: !params in 
-    let param name = function
-      | `Const _ -> ()
-      | `Param (None,pos) -> add (Some name,pos)
-      | `Param p -> add p
+  (* preserve order *)
+  let limit l =
+    let param = function
+      | _, `Const _ -> None
+      | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos),Int)
+      | _, `Param p -> Some (p,Int)
     in
-    param "limit" lim;
-    param "offset" ofs;
-    !params, `Const 1 = lim
+    List.filter_map param l, List.mem (`Limit,`Const 1) l
 
 %}
 
@@ -243,9 +240,9 @@ select_type: DISTINCT | ALL { }
 int_or_param: i=INTEGER { `Const i }
             | p=PARAM { `Param p }
 
-limit_t: LIMIT lim=int_or_param { limit lim (`Const 0) }
-       | LIMIT ofs=int_or_param COMMA lim=int_or_param { limit lim ofs }
-       | LIMIT lim=int_or_param OFFSET ofs=int_or_param { limit lim ofs }
+limit_t: LIMIT lim=int_or_param { limit [`Limit,lim] }
+       | LIMIT ofs=int_or_param COMMA lim=int_or_param { limit [`Offset,ofs; `Limit,lim] }
+       | LIMIT lim=int_or_param OFFSET ofs=int_or_param { limit [`Limit,lim; `Offset,ofs] }
 
 limit: limit_t { fst $1 }
 
