@@ -23,13 +23,13 @@ let get_column_Int row index =
   try
     Int64.of_string (opt (row.(index)))
   with
-    _ -> oops "get_column_Int %i" index
+    e -> oops "get_column_Int %i (%s)" index (Printexc.to_string e)
 
 let get_column_Text row index =
   try
     opt (row.(index))
   with
-    _ -> oops "get_column_Text %i" index
+    e -> oops "get_column_Text %i (%s)" index (Printexc.to_string e)
 
 let get_column_Any = get_column_Text
 

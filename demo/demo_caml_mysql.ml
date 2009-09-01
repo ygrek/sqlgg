@@ -7,6 +7,9 @@ module G = Demo_caml_gen_mysql.Sqlgg(Sqlgg_mysql)
 let main () =
   let db = M.quick_connect ~database:"test" ~user:"root" () in
 
+  G.drop_person db;
+  G.drop_money db;
+
   (* create tables *)
   G.create_person db;
   G.create_money db;
@@ -35,7 +38,6 @@ let main () =
 
   (* properly close database *)
   M.disconnect db;
-  
 
   ()
 
