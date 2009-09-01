@@ -43,13 +43,6 @@ module T = Translate(L)
 open L
 open T
 
-let set_param index param =
-  let (id,t) = param in
-  output "T.set_param_%s stmt %u %s;"
-    (param_type_to_string t)
-    index
-    (param_name_to_string id index)
-
 let output_schema_binder _ schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
@@ -83,18 +76,26 @@ let is_callback stmt =
 
 let params_to_values = List.map fst & params_to_values
 
+let set_param index param =
+  let (id,t) = param in
+  output "T.set_param_%s p %u %s;"
+    (param_type_to_string t)
+    index
+    (param_name_to_string id index)
+
 let output_params_binder _ params =
   output "let set_params stmt =";
   inc_indent ();
+  output "let p = T.start_params stmt %u in" (List.length params);
   List.iteri set_param params;
-  output "()";
+  output "T.finish_params p";
   dec_indent ();
   output "in";
   "set_params"
 
 let output_params_binder index params =
   match params with
-  | [] -> "(fun _ -> ())"
+  | [] -> "T.no_params"
   | _ -> output_params_binder index params
 
 let prepend prefix = function s -> prefix ^ s

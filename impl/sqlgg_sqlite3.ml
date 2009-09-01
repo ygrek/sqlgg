@@ -6,6 +6,9 @@ module S = Sqlite3
 
 type statement = S.stmt
 type connection = S.db
+type params = statement
+type row = statement
+type result = unit
 
 type num = int64
 type text = string
@@ -32,10 +35,15 @@ let bind_param d stmt index =
   let rc = S.bind stmt (index+1) d in
   test_ok rc
 
+let start_params stmt _ = stmt
+let finish_params _ = ()
+
 let set_param_null = bind_param S.Data.NULL
 let set_param_Text stmt index v = bind_param (S.Data.TEXT v) stmt index
 let set_param_Any = set_param_Text
 let set_param_Int stmt index v = bind_param (S.Data.INT v) stmt index
+
+let no_params _ = ()
 
 let finally final f x =
   let r =
