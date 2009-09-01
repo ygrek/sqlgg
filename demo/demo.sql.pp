@@ -1,10 +1,10 @@
 -- @create_person
-CREATE TABLE person (id INTEGER PRIMARY KEY %AUTO_INCREMENT%AUTOINCREMENT%,name TEXT,surname TEXT);
+CREATE TABLE IF NOT EXISTS person (id INTEGER PRIMARY KEY %AUTO_INCREMENT%AUTOINCREMENT%,name TEXT,surname TEXT);
 -- @add_person
 INSERT INTO person (name,surname) VALUES;
 
 -- @create_money
-CREATE TABLE money (src INTEGER, dst INTEGER, amount INTEGER);
+CREATE TABLE IF NOT EXISTS money (src INTEGER, dst INTEGER, amount INTEGER);
 -- @add_money
 INSERT INTO money VALUES;
 

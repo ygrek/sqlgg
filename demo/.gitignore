@@ -1,6 +1,7 @@
 demo_cxx
 demo_cxx_mysql
 demo_caml
+demo_caml_mysql
 *_gen*.*
 *.cm?
 demo_mysql.sql
