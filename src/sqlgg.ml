@@ -20,6 +20,7 @@ let set_out s =
   | "xml" -> Xml_gen.process
   | "java" -> Java.process
   | "csharp" | "c#" | "cs" -> CSharp.process
+  | "none" -> (fun _ e -> Enum.force e)
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let set_params_mode s =
@@ -48,7 +49,7 @@ let main () =
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp Set output language (default: cxx)";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: cxx)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
