@@ -5,13 +5,15 @@ open Printf
 module M = Mysql
 module P = Mysql.P
 
+module Make(Number : sig type t val of_string : string -> t val to_string : t -> string end) = struct
+
 type statement = P.stmt
 type connection = M.dbd
 type params = statement * string array
 type row = string option array
 type result = P.result
 
-type num = int64
+type num = Number.t
 type text = string
 type any = string
 
@@ -21,7 +23,7 @@ let opt = function Some x -> x | None -> failwith "opt"
 
 let get_column_Int row index =
   try
-    Int64.of_string (opt (row.(index)))
+    Number.of_string (opt (row.(index)))
   with
     e -> oops "get_column_Int %i (%s)" index (Printexc.to_string e)
 
@@ -44,7 +46,7 @@ let finish_params (stmt,params) = P.execute stmt params
 let set_param_Text stmt index v = bind_param (Some v) stmt index
 let set_param_null stmt index = bind_param None stmt index
 let set_param_Any = set_param_Text
-let set_param_Int stmt index v = bind_param (Some (Int64.to_string v)) stmt index
+let set_param_Int stmt index v = bind_param (Some (Number.to_string v)) stmt index
 
 let no_params stmt = P.execute stmt [||]
 
@@ -78,4 +80,6 @@ let select1 db sql set_params callback =
     match P.fetch (set_params stmt) with
     | Some row -> Some (callback row)
     | None -> None)
+
+end
 

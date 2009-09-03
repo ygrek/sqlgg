@@ -2,7 +2,7 @@
 open Printf
 module M = Mysql
 
-module G = Demo_caml_gen_mysql.Sqlgg(Sqlgg_mysql)
+module G = Demo_caml_gen_mysql.Sqlgg(Sqlgg_mysql.Make(Int64))
 
 let main () =
   let db = M.quick_connect ~database:"test" ~user:"root" () in
