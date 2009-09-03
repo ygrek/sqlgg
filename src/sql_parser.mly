@@ -165,6 +165,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
+         | SET IDENT EQUAL either(literal_value,IDENT) { [], [], Other }
 
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_column: name=IDENT collate? order_type? { name }
@@ -382,7 +383,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
-text: T_TEXT | CHARACTER { }
+text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
 
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
