@@ -73,7 +73,8 @@ let select db sql set_params callback =
 let execute db sql set_params = 
   with_stmt db sql (fun stmt ->
     let _ = set_params stmt in
-    M.StatusEmpty = M.status db)
+    if 0 <> P.real_status stmt then oops "execute : %s" sql;
+    P.affected stmt)
 
 let select1 db sql set_params callback =
   with_stmt db sql (fun stmt ->

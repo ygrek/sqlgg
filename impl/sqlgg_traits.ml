@@ -45,9 +45,9 @@ module type M = sig
 
   (** Execute non-query. 
     @raise Oops on error
-    @return true if successful
+    @return number of affected rows
   *)
-  val execute : connection -> string -> (statement -> result) -> bool
+  val execute : connection -> string -> (statement -> result) -> int64
 
 end
 

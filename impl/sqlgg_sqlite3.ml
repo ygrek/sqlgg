@@ -67,7 +67,8 @@ let execute db sql set_params =
   (fun () ->
     set_params stmt;
     let rc = S.step stmt in
-    rc = S.Rc.DONE
+    if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
+    0L (* FIXME sqlite3_changes() *)
   ) ()
 
 let select1 db sql set_params callback =
