@@ -40,3 +40,12 @@ http://www.devnewsgroups.net/group/microsoft.public.dotnet.framework.adonet/topi
 Comparison of different SQL implementations
 http://troels.arvin.dk/db/rdbms/
 
+PG'OCaml
+http://developer.berlios.de/projects/pgocaml/
+
+Addressing the ORM problem, typed relational algebra
+http://eigenclass.org/hiki/addressing-orm-problem-typed-relational-algebra
+
+Typed relational algebra: schemas, CRUD, source code
+http://eigenclass.org/hiki/typed-relational-algebra-in-OCaml
+
