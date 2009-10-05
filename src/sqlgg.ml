@@ -40,8 +40,9 @@ let each_input =
   let run = function Some ch -> Main.get_statements ch | None -> Enum.empty () in
   let run x =
     let e = run x in
+    Enum.force e;
     match !generate with
-    | None -> Enum.force e; Enum.empty ()
+    | None -> Enum.empty ()
     | Some _ -> e
   in    
   function
