@@ -10,18 +10,22 @@ module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
 module CSharp = Gen.Make(Gen_csharp)
 
-let generate = ref Cxx.process
+(* 
+  special workaround for usecase:
+     -gen none ddl.sql -gen cxx dml.sql
+*)
+let generate = ref (Some Cxx.process)
 let name = ref "sqlgg"
 
 let set_out s =
   generate :=
   match (String.lowercase s) with
-  | "cxx" | "c++" | "cpp" -> Cxx.process
-  | "caml" | "ocaml" | "ml" -> Caml.process
-  | "xml" -> Xml_gen.process
-  | "java" -> Java.process
-  | "csharp" | "c#" | "cs" -> CSharp.process
-  | "none" -> (fun _ e -> Enum.force e)
+  | "cxx" | "c++" | "cpp" -> Some Cxx.process
+  | "caml" | "ocaml" | "ml" -> Some Caml.process
+  | "xml" -> Some Xml_gen.process
+  | "java" -> Some Java.process
+  | "csharp" | "c#" | "cs" -> Some CSharp.process
+  | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let set_params_mode s =
@@ -32,18 +36,27 @@ let set_params_mode s =
   | "oracle" -> Some Gen.Oracle
   | _ -> None
 
-let process l =
-  let each =
-    let run = function Some ch -> Main.get_statements ch | None -> Enum.empty () in
-    function
-    | "-" -> run (Some stdin)
-    | filename -> Main.with_channel filename run
-  in
-  List.enum (List.map each l) >> Enum.concat >> !generate !name
+let each_input =
+  let run = function Some ch -> Main.get_statements ch | None -> Enum.empty () in
+  let run x =
+    let e = run x in
+    match !generate with
+    | None -> Enum.force e; Enum.empty ()
+    | Some _ -> e
+  in    
+  function
+  | "-" -> run (Some stdin)
+  | filename -> Main.with_channel filename run
+
+let process l = 
+  let e = Enum.concat (List.enum l) in
+  match !generate with
+  | None -> Enum.force e
+  | Some f -> f !name e
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
-  let s2 = sprintf "Usage: %s <options> <file.sql>\n" (Filename.basename Sys.executable_name) in
+  let s2 = sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]\n" (Filename.basename Sys.executable_name) in
   let s3 = "Options are:" in
   s1 ^ s2 ^ s3
 
@@ -51,7 +64,7 @@ let show_version () = print_endline Config.version
 
 let main () =
   let l = ref [] in
-  let work s = l := s :: !l in
+  let work s = l := each_input s :: !l in
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
@@ -64,7 +77,7 @@ let main () =
   ]
   in
   Arg.parse (Arg.align args) work usage_msg;
-  process !l
+  if !l <> [] then process !l
 
 let _ = Printexc.print main ()
 
