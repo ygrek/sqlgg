@@ -268,7 +268,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | ADD index_type IDENT? sequence(IDENT) { `None }
             | DROP INDEX IDENT { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
-index_type: INDEX | FULLTEXT { }
+index_type: INDEX | FULLTEXT | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }
          | { `Last }
