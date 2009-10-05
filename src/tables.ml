@@ -29,6 +29,7 @@ let add v =
 let drop name = check name; all := List.remove_if (by_name name) !all
 
 let alter name f =
+  check name;
   let alter_scheme ((n,s) as table) =
     if n = name then
       name, f s
@@ -39,6 +40,7 @@ let alter name f =
 
 let alter_add name col pos = alter name (fun s -> RA.Schema.add s col pos)
 let alter_drop name col = alter name (fun s -> RA.Schema.drop s col)
+let alter_change name oldcol col pos = alter name (fun s -> RA.Schema.change s oldcol col pos)
 
 let print () = List.iter RA.print_table !all
 

@@ -58,7 +58,7 @@
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
-       CASE WHEN THEN ELSE END
+       CASE WHEN THEN ELSE END CHANGE
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -100,6 +100,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 List.iter (function
                 | `Add (col,pos) -> Tables.alter_add name col pos
                 | `Drop col -> Tables.alter_drop name col
+                | `Change (oldcol,col,pos) -> Tables.alter_change name oldcol col pos
                 | `None -> ()) actions;
                 ([],[],Alter name)
               }
@@ -268,10 +269,11 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | ADD index_type IDENT? sequence(IDENT) { `None }
             | DROP INDEX IDENT { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
+            | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
 index_type: INDEX | FULLTEXT | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }
-         | { `Last }
+         | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
 column_def: name=IDENT t=sql_type? column_def_extra*

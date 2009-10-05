@@ -36,11 +36,11 @@ struct
 
   let project names t = List.map (find t) names
 
-  let rename t before after =
+  let change_inplace t before after =
     List.map (fun attr ->
-      match attr.name with
-      | x when x = before -> { attr with name=after }
-      | _ -> attr ) t
+      match by_name before attr with
+      | true -> after
+      | false -> attr ) t
 
   let cross t1 t2 = t1 @ t2
 
@@ -85,7 +85,7 @@ struct
       begin
       match pos with
       | `First -> col::t
-      | `Last -> t @ [col]
+      | `Default -> t @ [col]
       | `After name -> 
         try
           let (i,_) = List.findi (fun _ attr -> by_name name attr) t in
@@ -99,6 +99,11 @@ struct
   let drop t col =
     ignore (find t col);
     List.remove_if (by_name col) t
+
+  let change t oldcol col pos =
+    match pos with
+    | `Default -> change_inplace t oldcol col
+    | _ -> add (drop t oldcol) col pos
 
   let to_string x = Show.show<t>(x)
   let print x = prerr_endline (to_string x)
