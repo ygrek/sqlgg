@@ -78,7 +78,7 @@ let main () =
   ]
   in
   Arg.parse (Arg.align args) work usage_msg;
-  if !l <> [] then process !l
+  if !l <> [] then process (List.rev !l)
 
 let _ = Printexc.print main ()
 
