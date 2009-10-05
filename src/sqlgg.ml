@@ -2,6 +2,7 @@
 
 open Printf
 open Operators
+open ExtLib
 
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml)
@@ -31,11 +32,14 @@ let set_params_mode s =
   | "oracle" -> Some Gen.Oracle
   | _ -> None
 
-let work =
-  let run ch = ch >> Main.get_statements >> !generate !name in
-  function
-  | "-" -> run stdin
-  | filename -> Main.with_channel filename run
+let process l =
+  let each =
+    let run = function Some ch -> Main.get_statements ch | None -> Enum.empty () in
+    function
+    | "-" -> run (Some stdin)
+    | filename -> Main.with_channel filename run
+  in
+  List.enum (List.map each l) >> Enum.concat >> !generate !name
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
@@ -46,6 +50,8 @@ let usage_msg =
 let show_version () = print_endline Config.version
 
 let main () =
+  let l = ref [] in
+  let work s = l := s :: !l in
   let args =
   [
     "-version", Arg.Unit show_version, " Show version";
@@ -57,7 +63,8 @@ let main () =
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in
-  Arg.parse (Arg.align args) work usage_msg
+  Arg.parse (Arg.align args) work usage_msg;
+  process !l
 
 let _ = Printexc.print main ()
 

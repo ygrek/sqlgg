@@ -81,13 +81,8 @@ let get_statements ch =
   in
   Enum.from next
 
-let with_file filename f =
-  match catch Std.input_file filename with
-  | None -> Error.log "cannot open file : %s" filename
-  | Some s -> f s
-
 let with_channel filename f =
   match catch open_in filename with
-  | None -> Error.log "cannot open file : %s" filename
-  | Some ch -> Std.finally (fun () -> close_in_noerr ch) f ch
+  | None -> Error.log "cannot open file : %s" filename; f None
+  | Some ch -> Std.finally (fun () -> close_in_noerr ch) f (Some ch)
 
