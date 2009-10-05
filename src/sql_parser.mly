@@ -47,7 +47,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Stmt.param_id> PARAM
-%token <Sql.Type.t * bool> FUNCTION
+%token <Sql.Type.t * bool> FUNCTION /* return type * is grouping function? */
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
