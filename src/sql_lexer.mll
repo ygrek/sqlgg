@@ -111,6 +111,7 @@ let keywords =
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];
   all (FUNCTION (T.Int,false)) ["length"; "random";"unix_timestamp"];
+  all (FUNCTION (T.Int,false)) ["least"; "greatest"];
   all (FUNCTION (T.Text,false)) ["concat";"lower";"upper"];
   all (FUNCTION (T.Any,false)) ["coalesce"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now"];
