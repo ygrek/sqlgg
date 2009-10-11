@@ -4,6 +4,8 @@ echo ---------- C++ mysql
 ./demo_cxx_mysql
 echo ---------- Caml sqlite3
 ./demo_caml
+echo ---------- Caml mysql
+./demo_caml_mysql
 echo ---------- Java mysql
 java -cp /usr/share/java/mysql.jar:. demo_java
 echo ---------- C# mysql

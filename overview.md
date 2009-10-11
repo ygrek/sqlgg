@@ -4,7 +4,7 @@
 sqlgg: SQL Guided (code) Generator
 ==================================
 
-*SQL query parser and binding code generator for C#, C++, Java, Objective Caml.*
+*SQL query parser and binding code generator for C#, C++, Java, OCaml.*
 
 * [Problem](#problem)
 * [Solution](#solution)
