@@ -1,6 +1,12 @@
 sqlgg changelog
 ---------------
 
+0.2.4
+?
+	+ sql: more SQL
+	+ sqlgg: -gen none to suppress output, treat all input files as one stream of statements
+	+ ocaml: mysql traits
+
 0.2.3
 2009-08-24
 	+ sql: detect single-row SELECT (LIMIT 1, grouping without GROUP BY)
