@@ -28,15 +28,18 @@ let comment () fmt = Printf.kprintf (indent_endline & make_comment) fmt
 
 let empty_line () = print_newline ()
 
-let get_column index attr =
-  sprintf "(T.get_column_%s stmt %u)"
-    (Type.to_string attr.RA.domain)
-    index
-
 module L = struct
-  let as_lang_type = Type.to_string
+  let as_lang_type = function
+  | Type.Blob -> Type.to_string Type.String
+  | t -> Type.to_string t
+
   let as_api_type = as_lang_type
 end
+
+let get_column index attr =
+  sprintf "(T.get_column_%s stmt %u)"
+    (L.as_lang_type attr.RA.domain)
+    index
 
 module T = Translate(L)
 
