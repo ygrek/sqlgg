@@ -30,7 +30,7 @@ let empty_line () = print_newline ()
 
 module L = struct
   let as_lang_type = function
-  | Type.Blob -> Type.to_string Type.String
+  | Type.Blob -> Type.to_string Type.Text
   | t -> Type.to_string t
 
   let as_api_type = as_lang_type
