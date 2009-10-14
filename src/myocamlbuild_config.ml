@@ -1,5 +1,5 @@
 (**
-  r1 (2009-08-11)
+  r2 (2009-09-02)
 
   This ocamlbuild plugin will try to find libraries by name using (in order)
   - local myocamlbuild.config file
@@ -50,8 +50,15 @@ let read_config name =
     let index = String.index s '=' in
     (String.sub s 0 index, String.sub s (index+1) ((String.length s) - index - 1))
   in
-  let split s = try split s with _ -> "","" in
-  List.map split l
+  let check path =
+    if not (Sys.file_exists path) then 
+      (prerr_endline ("Path not found : " ^ path); raise Not_found)
+  in
+  let rec loop acc = function
+    | [] -> acc
+    | h::t -> loop (acc @ try let x = split h in check (snd x); [x] with _ -> []) t
+  in
+  loop [] l
 
 (** usage *)
 
