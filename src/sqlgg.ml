@@ -44,7 +44,7 @@ let each_input =
     match !generate with
     | None -> Enum.empty ()
     | Some _ -> e
-  in    
+  in
   function
   | "-" -> run (Some stdin)
   | filename -> Main.with_channel filename run
@@ -57,19 +57,20 @@ let process l =
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
+  let s1' = sprintf "Visit http://ygrek.org.ua/p/sqlgg/\n" in
   let s2 = sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]\n" (Filename.basename Sys.executable_name) in
   let s3 = "Options are:" in
-  s1 ^ s2 ^ s3
+  s1 ^ s1' ^ s2 ^ s3
 
 let show_version () = print_endline Config.version
 
 let main () =
   let l = ref [] in
   let work s = l := each_input s :: !l in
-  let args =
+  let args = Arg.align
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: cxx)";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: c++)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
@@ -77,8 +78,10 @@ let main () =
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in
-  Arg.parse (Arg.align args) work usage_msg;
-  if !l <> [] then process (List.rev !l)
+  Arg.parse args work usage_msg;
+  match !l with
+  | [] -> if Array.length Sys.argv = 1 then Arg.usage args usage_msg
+  | l -> process (List.rev l)
 
 let _ = Printexc.print main ()
 
