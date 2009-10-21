@@ -203,12 +203,13 @@ select_core: SELECT select_type? r=commas(column1)
              h=having?
               {
                 let (tbls,p2,joined_schema) = Syntax.join t in
-                let singlerow = g = [] && Syntax.test_singlerow r in
+                let singlerow = g = [] && Syntax.test_all_grouping r in
+                let singlerow2 = w = None && g = [] && Syntax.test_all_const r in
                 let p1 = Syntax.params_of_columns tbls joined_schema r in
                 let p3 = Syntax.get_params_opt tbls joined_schema w in
                 let p4 = Syntax.get_params_l tbls joined_schema g in
                 let p5 = Syntax.get_params_opt tbls joined_schema h in
-                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, singlerow)
+                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, singlerow || singlerow2)
               }
 
 table_list: src=source joins=join_source* { (src,joins) }

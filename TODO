@@ -5,7 +5,7 @@
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
 * camlp4 syntax extension for inline sql
 * allow to tolerate errors in query
-* detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE)
+* detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE (done))
 * support BULK INSERTs (how?)
 * decide what to do with unquoted identifiers matching keywords
 * provide ways to extend lexer with tokens in runtime

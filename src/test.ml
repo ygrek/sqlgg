@@ -86,12 +86,18 @@ let test3 () =
   ()
 
 let test4  () =
+  let a = [attr "" Int] in
   tt "CREATE TABLE test4 (x INT, y INT)" [] [];
-  tt "select max(*) from test4" [attr "" Int] [] ~kind:(Select true);
+  tt "select max(*) from test4" a [] ~kind:(Select true);
   tt "select max(x) as q from test4" [attr "q" Int] [] ~kind:(Select true);
-  tt "select max(x,y) from test4" [attr "" Int] [] ~kind:(Select false);
-  tt "select max(x,y) from test4 limit 1" [attr "" Int] [] ~kind:(Select true);
-  tt "select max(x,y) from test4 limit 2" [attr "" Int] [] ~kind:(Select false);
+  tt "select max(x,y) from test4" a [] ~kind:(Select false);
+  tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select true);
+  tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select false);
+  tt "select 1+2 from test4" a [] ~kind:(Select true);
+  tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test" 
+    [attr "" Int; attr "" Text] [] ~kind:(Select true);
+  tt "select greatest(10,x) from test4" a [] ~kind:(Select false);
+  tt "select 1+2 from test4 where x=y" a [] ~kind:(Select false);
   ()
 
 (*

@@ -99,9 +99,22 @@ let infer_schema columns tables joined_schema =
   in
   collect resolve1 columns
 
-let test_singlerow columns =
+let test_all_grouping columns =
   let test = function
-  | Expr (`Func ((_,true),args),_) when List.length args <= 1 -> true (* grouping function of zero or single parameter results in single row *)
+  (* grouping function of zero or single parameter *)
+  | Expr (`Func ((_,true),args),_) when List.length args <= 1 -> true 
+  | _ -> false
+  in
+  List.for_all test columns
+
+let test_all_const columns =
+  let rec is_const = function
+  | `Func (_,args) -> List.for_all is_const args
+  | `Column _ -> false
+  | _ -> true
+  in
+  let test = function
+  | Expr (e,_) -> is_const e
   | _ -> false
   in
   List.for_all test columns
