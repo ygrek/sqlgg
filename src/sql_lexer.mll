@@ -180,8 +180,8 @@ rule ruleStatement props = parse
       }
   | cmnt { ignore (ruleComment "" lexbuf); ruleStatement props lexbuf }
   | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleStatement props lexbuf }
-  | alpha [^ ';']+ as stmt ';' { Some (stmt,props) } (* FIXME strings *)
-  | _ { None }
+  | alpha [^ ';']+ as stmt (';'|eof) { Some (stmt,props) } (* FIXME strings *)
+  | eof { None }
 and
 ruleTail acc = parse
   | eof { acc }

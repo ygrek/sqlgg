@@ -66,7 +66,7 @@ let parse_one (sql,props as x) =
 
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
-  let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with _ -> None in
+  let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with _ -> Error.log "lexer failed"; None in
   let rec next () =
     match f () with
     | None -> raise Enum.No_more_elements
