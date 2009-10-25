@@ -1,9 +1,8 @@
 (** SQL syntax and RA *)
 
 open Stmt
-open Operators
+open Prelude
 open ListMore
-open Apply
 open Sql
 open Printf
 
@@ -79,7 +78,7 @@ let resolve_types tables joined_schema expr =
   >> resolve_columns tables joined_schema
   >> tee (if Config.debug1 () then show_e else ignore)
   >> assign_types
-  >> tee (if Config.debug1 () then print_newline & show_e & fst else ignore)
+  >> tee (if Config.debug1 () then print_newline $ show_e $ fst else ignore)
 
 let infer_schema columns tables joined_schema =
 (*   let all = tables >> List.map snd >> List.flatten in *)
@@ -174,8 +173,8 @@ let cross = List.fold_left RA.Schema.cross []
 
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
-let all_columns = RA.Schema.make_unique & cross
-let all_tbl_columns = all_columns & List.map snd
+let all_columns = RA.Schema.make_unique $ cross
+let all_tbl_columns = all_columns $ List.map snd
 
 let split_column_assignments tables l =
   let cols = ref [] in

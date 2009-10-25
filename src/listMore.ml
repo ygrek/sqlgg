@@ -1,6 +1,6 @@
 (* *)
 
-open Apply
+open Prelude
 
 module List = 
 struct
@@ -11,6 +11,6 @@ struct
     (*List.fold_left (fun l elem -> match elem with | Some x -> x::l | None -> l) [] (List.rev lst)*)
     filter_map id lst
 
-  let find_option f l = try Some (find f l) with Not_found -> None
+  let find_option f = catch (find f)
 
 end (* List *)

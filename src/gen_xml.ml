@@ -1,8 +1,7 @@
 (** XML generation *)
 
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Printf
 
 open Stmt
@@ -53,8 +52,8 @@ let value n t = Node ("value",["name",n; "type",t;],[])
 open Gen_caml.L
 open Gen_caml.T
 
-let params_to_values = List.map (fun (n,t) -> value n t) & all_params_to_values
-let schema_to_values = List.map (fun (n,t) -> value n t) & schema_to_values
+let params_to_values = List.map (fun (n,t) -> value n t) $ all_params_to_values
+let schema_to_values = List.map (fun (n,t) -> value n t) $ schema_to_values
 
 type t = xml list ref * xml list ref
 

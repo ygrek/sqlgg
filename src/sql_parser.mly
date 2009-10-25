@@ -10,7 +10,7 @@
   open ListMore
   open Stmt
   open Syntax
-  open Operators
+  open Prelude
 
   let params_of select = List.map (fun x -> `Param x) (snd select)
 

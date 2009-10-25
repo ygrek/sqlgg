@@ -1,9 +1,8 @@
 (* Code generation *)
 
 open Printf
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle
@@ -97,10 +96,10 @@ module Translate(T : LangTypes) = struct
 
 let param_type_to_string = T.as_api_type
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.RA.domain)
-(* let schema_to_string = G.Values.to_string & schema_to_values  *)
+(* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
-let params_to_values = List.rev & List.unique & List.rev & all_params_to_values
+let params_to_values = List.rev $ List.unique $ List.rev $ all_params_to_values
 
 end
 

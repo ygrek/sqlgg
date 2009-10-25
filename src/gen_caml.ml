@@ -1,8 +1,7 @@
 (* OCaml code generation *)
 
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Printf
 
 open Stmt
@@ -24,7 +23,7 @@ let quote_comment_inline str =
   replace_all ~str ~sub:"(*" ~by:"( *"
 
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
-let comment () fmt = Printf.kprintf (indent_endline & make_comment) fmt
+let comment () fmt = Printf.kprintf (indent_endline $ make_comment) fmt
 
 let empty_line () = print_newline ()
 
@@ -77,7 +76,7 @@ let is_callback stmt =
   | _,Select true -> false
   | _ -> true
 
-let params_to_values = List.map fst & params_to_values
+let params_to_values = List.map fst $ params_to_values
 
 let set_param index param =
   let (id,t) = param in

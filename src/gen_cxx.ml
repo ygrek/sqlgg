@@ -1,10 +1,8 @@
 (* C++ code generation *)
 
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Printf
-open Apply
 
 open Stmt
 open Gen
@@ -14,8 +12,8 @@ module Values = struct
 
 let names = List.map fst
 let join = String.concat ", "
-let inline = join & names
-let to_string = join & (List.map (fun (n,t) -> t ^ " " ^ n))
+let inline = join $ names
+let to_string = join $ (List.map (fun (n,t) -> t ^ " " ^ n))
 
 end
 
@@ -28,7 +26,7 @@ let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' 
 let quote s = "\"" ^ quote s ^ "\""
 
 let quote_comment_inline = String.replace_chars (function '\n' -> "\n// " | c -> String.make 1 c)
-let comment () fmt = Printf.kprintf (indent_endline & quote_comment_inline & (^) "// ") fmt
+let comment () fmt = Printf.kprintf (indent_endline $ quote_comment_inline $ (^) "// ") fmt
 let empty_line () = print_newline ()
 let open_curly () = output "{"; inc_indent ()
 let close_curly fmt = dec_indent (); indent "}"; print fmt
@@ -136,7 +134,7 @@ let struct_params name values k =
 
 let struct_ctor name values k =
   struct_params name values (fun () ->
-    func "" name values ~tail:(value_inits values) Apply.id;
+    func "" name values ~tail:(value_inits values) id;
     empty_line ();
     k ())
 
@@ -168,7 +166,7 @@ let make_stmt index stmt =
    let name = choose_name stmt.props stmt.kind index in
    let sql = quote (get_sql stmt) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
-    func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) Apply.id;
+    func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) id;
    let schema_binder_name = output_schema_binder index stmt.schema in
    let params_binder_name = output_params_binder index stmt.params in
 (*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
@@ -194,7 +192,7 @@ let make_all name names =
   | [] -> ""
   | _ -> ": " ^ (String.concat ", " (List.map (fun name -> sprintf "%s(db)" name) names))
   in
-  func "" name ["db","typename Traits::connection"] ~tail Apply.id
+  func "" name ["db","typename Traits::connection"] ~tail id
 
 let generate () name stmts =
   output "#pragma once";

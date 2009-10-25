@@ -1,8 +1,7 @@
 (* Java code generation *)
 
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Printf
 
 open Stmt
@@ -42,7 +41,7 @@ let as_lang_type = function
   | Type.Bool -> "boolean"
   | Type.Datetime -> "Timestamp"
 
-let as_api_type = String.capitalize & as_lang_type
+let as_api_type = String.capitalize $ as_lang_type
 
 end
 

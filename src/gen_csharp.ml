@@ -1,8 +1,7 @@
 (* C# code generation *)
 
-open ExtList
-open ExtString
-open Operators
+open ExtLib
+open Prelude
 open Printf
 
 open Stmt
@@ -56,7 +55,7 @@ let get_column attr index =
     (attr.RA.domain >> as_api_type)
     index
 
-let schema_to_string = G.Values.to_string & schema_to_values
+let schema_to_string = G.Values.to_string $ schema_to_values
 
 let output_schema_binder _ schema =
   let name = "callback" in

@@ -1,7 +1,7 @@
 (** command-line *)
 
 open Printf
-open Operators
+open Prelude
 open ExtLib
 
 module Cxx = Gen.Make(Gen_cxx)
@@ -11,7 +11,7 @@ module Java = Gen.Make(Gen_java)
 module CSharp = Gen.Make(Gen_csharp)
 
 (* 
-  special workaround for usecase:
+  common usecase:
      -gen none ddl.sql -gen cxx dml.sql
 *)
 let generate = ref (Some Cxx.process)

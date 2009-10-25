@@ -3,10 +3,9 @@
 *)
 
 open Printf
-open Operators
+open Prelude
 open ListMore
-open ExtString
-open Apply
+open ExtLib
 
 module L = List
 module S = String
