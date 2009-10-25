@@ -270,7 +270,8 @@ and
 ruleCommentMulti acc = parse
   | '\n'	{ advance_line lexbuf; ruleCommentMulti (acc ^ "\n") lexbuf }
   | "*/"	{ acc }
-  | [^'\n']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
+  | "*"
+  | [^'\n' '*']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
   | _	        { error lexbuf "ruleCommentMulti" }
 
 {
