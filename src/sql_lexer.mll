@@ -2,6 +2,7 @@
 {
   open Sql_parser
   open Lexing
+  open ExtLib
   module T = Sql.Type
 
 let error _ callerID =
@@ -159,6 +160,10 @@ let keywords =
 let get_ident str =
   let str = String.lowercase str in
   try Keywords.find str keywords with Not_found -> IDENT str
+
+let as_literal ch s =
+  let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in
+  Printf.sprintf "%c%s%c" ch s ch
 }
 
 let digit = ['0'-'9']
@@ -167,22 +172,20 @@ let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\r' '\t']
 let cmnt = "--" | "//" | "#"
 
-rule ruleStatement props = parse
-  | ['\n' ' ' '\r' '\t']+ { ruleStatement props lexbuf }
-(* fixme strings *)
-  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n'
-      {
-        ruleStatement (Props.set props n v) lexbuf
-      }
-  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n'
-      {
-        ruleStatement (Props.set props "name" name) lexbuf
-      }
-  | cmnt { ignore (ruleComment "" lexbuf); ruleStatement props lexbuf }
-  | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleStatement props lexbuf }
-  | alpha [^ ';']+ as stmt (';'|eof) { Some (stmt,props) } (* FIXME strings *)
-  | eof { None }
+(* extract separate statements *)
+rule ruleStatement = parse
+  | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Prop (n,v) }
+  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Prop ("name",name) }
+  | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
+  | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
+  | cmnt as s { `Comment (s ^ ruleComment "" lexbuf) }
+  | "/*" { `Comment ("/*" ^ ruleCommentMulti "" lexbuf ^ "*/") }
+  | ';' { `Semicolon }
+  | [^ ';'] as c { `Char c }
+  | eof { `Eof }
 and
+(* extract tail of the input *)
 ruleTail acc = parse
   | eof { acc }
   | _* as str { ruleTail (acc ^ str) lexbuf }
@@ -233,8 +236,8 @@ ruleInQuotes acc = parse
   | '"'	        { acc }
   | eof	        { error lexbuf "no terminating quote" }
   | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote" }
-  | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf }
-  | [^'"' '\n']+  { ruleInQuotes (acc ^ lexeme lexbuf) lexbuf }
+  | "\"\""      { ruleInQuotes (acc^"\"") lexbuf }
+  | [^'"' '\n']+ as s { ruleInQuotes (acc^s) lexbuf }
   | _		{ error lexbuf "ruleInQuotes" }
 and
 ruleInBrackets acc = parse
@@ -270,7 +273,8 @@ and
 ruleCommentMulti acc = parse
   | '\n'	{ advance_line lexbuf; ruleCommentMulti (acc ^ "\n") lexbuf }
   | "*/"	{ acc }
-  | [^'\n']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
+  | "*"
+  | [^'\n' '*']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
   | _	        { error lexbuf "ruleCommentMulti" }
 
 {

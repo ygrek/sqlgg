@@ -57,10 +57,9 @@ let process l =
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
-  let s1' = sprintf "Visit http://ygrek.org.ua/p/sqlgg/\n" in
   let s2 = sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]\n" (Filename.basename Sys.executable_name) in
   let s3 = "Options are:" in
-  s1 ^ s1' ^ s2 ^ s3
+  s1 ^ s2 ^ s3
 
 let show_version () = print_endline Config.version
 

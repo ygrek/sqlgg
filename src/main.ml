@@ -63,11 +63,44 @@ let parse_one (sql,props as x) =
   | Some _ -> Some { Stmt.schema=[]; params=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
   | None -> parse_one x
 
+let drop_while p e =
+  while Option.map p (Enum.peek e) = Some true do
+    Enum.junk e
+  done
+
+type token = [`Comment of string | `Token of string | `Char of char | 
+              `Space of string | `Prop of string * string | `Semicolon ]
+
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
-  let f () = try Sql_lexer.ruleStatement Props.empty lexbuf with _ -> Error.log "lexer failed"; None in
+  let tokens = Enum.from (fun () ->
+    if lexbuf.Lexing.lex_eof_reached then raise Enum.No_more_elements else
+    match Sql_lexer.ruleStatement lexbuf with
+    | `Eof -> raise Enum.No_more_elements
+    | #token as x -> x)
+  in
+  let extract () =
+(*     drop_while (function `Space _ -> true | _ -> false) tokens; (* drop leading whitespaces *) *)
+    let b = Buffer.create 1024 in
+    let props = ref Props.empty in
+    let answer () = Buffer.contents b, !props in
+    let rec loop smth =
+      match Enum.get tokens with
+      | None -> if smth then Some (answer ()) else None
+      | Some x ->
+        match x with
+        | `Comment s -> ignore s; loop smth (* do not include comments (option?) *)
+        | `Char c -> Buffer.add_char b c; loop true
+        | `Space _ when smth = false -> loop smth (* drop leading whitespaces *)
+        | `Token s | `Space s -> Buffer.add_string b s; loop true
+        | `Prop (n,v) -> props := Props.set !props n v; loop smth
+        | `Semicolon -> Some (answer ())
+    in
+    loop false
+  in
+  let extract () = try extract () with e -> Error.log "lexer failed (%s)" (Printexc.to_string e); None in
   let rec next () =
-    match f () with
+    match extract () with
     | None -> raise Enum.No_more_elements
     | Some sql ->
       begin match parse_one sql with
