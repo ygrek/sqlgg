@@ -2,13 +2,12 @@
 
 open Printf
 
-module M = Mysql
-module P = Mysql.P
+module P = Mysql.Prepared
 
 module Make(Number : sig type t val of_string : string -> t val to_string : t -> string end) = struct
 
 type statement = P.stmt
-type connection = M.dbd
+type connection = Mysql.dbd
 type params = statement * string array
 type row = string option array
 type result = P.result
@@ -58,7 +57,7 @@ let finally final f x =
     r
 
 let bracket res dtor k = finally (fun () -> dtor res) k res
-let with_stmt db sql = bracket (P.prepare db sql) P.close
+let with_stmt db sql = bracket (P.create db sql) P.close
 
 let select db sql set_params callback =
   with_stmt db sql (fun stmt ->
