@@ -234,7 +234,7 @@ source: src=source1 alias=maybe_as
       | None -> src
     }
 
-insert_cmd: INSERT OR conflict_algo INTO | INSERT INTO | REPLACE INTO { }
+insert_cmd: INSERT OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
 
