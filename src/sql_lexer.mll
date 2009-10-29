@@ -115,7 +115,8 @@ let keywords =
   all (FUNCTION (T.Int,false)) ["least"; "greatest"];
   all (FUNCTION (T.Text,false)) ["concat";"lower";"upper"];
   all (FUNCTION (T.Any,false)) ["coalesce"];
-  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now"];
+  all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
+  all DATETIME_FUNC ["getdate"]; (* mssql? *)
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
   all JOIN_TYPE1 ["left";"right";"full"];
   all JOIN_TYPE2 ["inner";"outer"];
@@ -157,9 +158,13 @@ let keywords =
   in
   List.fold_left add Keywords.empty keywords
 
+(* FIXME case sensitivity??! *)
+
 let get_ident str =
   let str = String.lowercase str in
   try Keywords.find str keywords with Not_found -> IDENT str
+
+let ident str = IDENT (String.lowercase str)
 
 let as_literal ch s =
   let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in
@@ -219,10 +224,10 @@ ruleMain = parse
   | "?" { PARAM (None,pos lexbuf) }
   | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }
 
-  | '"' { IDENT (ruleInQuotes "" lexbuf) }
+  | '"' { ident (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
-  | "`" { IDENT (ruleInBackQuotes "" lexbuf) }
-  | "[" { IDENT (ruleInBrackets "" lexbuf) }
+  | "`" { ident (ruleInBackQuotes "" lexbuf) }
+  | "[" { ident (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
   | ident as str { get_ident str }

@@ -17,7 +17,7 @@
 * track NULLs
 * detect statements on single tables and group the corresponding generated code together
 * use prepared statements in all traits
-* check function names for uniqueness
+* check all generated names for uniqueness and validity with regard to target language
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
