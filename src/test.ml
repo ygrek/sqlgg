@@ -100,6 +100,10 @@ let test4  () =
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select false);
   ()
 
+let test_parsing () =
+  tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT DEFAULT -1) ENGINE=MEMORY" [] [];
+  ()
+
 (*
   see MySQL 5.4 refman -- 12.2.8.1. JOIN Syntax
   see SQL:2008 -- 7.7 <joined table>
@@ -142,6 +146,7 @@ let run () =
     "multi-table UPDATE" >:: test2;
     "gotchas" >:: test3;
     "single-row SELECT" >:: test4;
+    "parsing" >:: test_parsing;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
   ]
