@@ -166,7 +166,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 let p = get_params_opt [t] (snd t) w in
                 [], p, Delete table
               }
-         | SET IDENT EQUAL either(literal_value,IDENT) { [], [], Other }
+         | SET IDENT EQUAL e=expr
+              {
+                let p = match e with
+                  | `Column _ -> [] (* this is not column but some db-specific identifier *)
+                  | _ -> get_params_q (ensure_simple_expr e)
+                in
+                [], p, Other
+              }
 
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_column: name=IDENT collate? order_type? { name }
@@ -294,7 +301,7 @@ column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | DEFAULT default_value { None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
 
-default_value: literal_value | datetime_value { }
+default_value: literal_value | datetime_value { } (* sub expr ? *)
 
 (* FIXME check columns *)
 table_constraint_1:
@@ -405,3 +412,4 @@ sql_type: t=sql_type_flavor
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 
 maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
+

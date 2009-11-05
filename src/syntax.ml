@@ -118,7 +118,7 @@ let test_all_const columns =
   in
   List.for_all test columns
 
-let get_params e =
+let get_params_q e =
   let rec loop acc e =
     match e with
     | `Param p -> p::acc
@@ -128,7 +128,7 @@ let get_params e =
   loop [] e >> List.rev
 
 let get_params tables joined_schema e =
-  e >> resolve_types tables joined_schema >> fst >> get_params
+  e >> resolve_types tables joined_schema >> fst >> get_params_q
 
 (*
 let _ =
@@ -198,4 +198,10 @@ let params_of_assigns tables ss =
 
 let params_of_order o final_schema tables =
   get_params_l tables (final_schema :: (List.map snd tables) >> all_columns) o
+
+let rec ensure_simple_expr = function
+  | `Value _ | `Param _ as x -> x
+  | `Column _ -> failwith "Not a simple expression"
+  | `Func ((_,grouping),_) when grouping -> failwith "Grouping function not allowed in simple expression"
+  | `Func (x,l) -> `Func(x,List.map ensure_simple_expr l)
 
