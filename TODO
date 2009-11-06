@@ -1,3 +1,4 @@
+* do not generate any code on errors
 * write tutorial (for all languages), start documentation
 * native-type annotations in queries
 * output params syntax for different DB
@@ -7,12 +8,12 @@
 * allow to tolerate errors in query
 * detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE (done))
 * support BULK INSERTs (how?)
-* decide what to do with unquoted identifiers matching keywords
+* decide what to do with unquoted identifiers matching keywords (better error reporting at least)
 * provide ways to extend lexer with tokens in runtime
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
-* enhance error reporting
-* calculate types more precisely, type-inferrer is too primitive
+* enhance error reporting (take into account target language)
+* calculate types more precisely, type inference is too primitive
 * verify that each parameter gets one type inferred
 * track NULLs
 * detect statements on single tables and group the corresponding generated code together
