@@ -6,7 +6,7 @@
   module T = Sql.Type
 
 let error _ callerID =
-  Error.report "Lexer error : %s" callerID;
+  Error.log "Lexer error : %s" callerID;
 (*	update_pos buf;*)
 	raise Parsing.Parse_error
 

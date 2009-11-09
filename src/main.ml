@@ -80,7 +80,6 @@ let get_statements ch =
     | #token as x -> x)
   in
   let extract () =
-(*     drop_while (function `Space _ -> true | _ -> false) tokens; (* drop leading whitespaces *) *)
     let b = Buffer.create 1024 in
     let props = ref Props.empty in
     let answer () = Buffer.contents b, !props in
@@ -111,7 +110,7 @@ let get_statements ch =
           stmt
       end
   in
-  Enum.from next
+  Enum.from next >> List.of_enum
 
 let with_channel filename f =
   match catch open_in filename with

@@ -1,4 +1,3 @@
-* do not generate any code on errors
 * write tutorial (for all languages), start documentation
 * native-type annotations in queries
 * output params syntax for different DB

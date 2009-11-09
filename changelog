@@ -4,7 +4,8 @@ sqlgg changelog
 0.2.4
 ?
 	+ sql: more SQL
-	+ sqlgg: -gen none to suppress output, treat all input files as one stream of statements
+	+ sqlgg: -gen none to suppress output, treat all input files as one stream
+	of statements, do not generate code on errors
 	+ ocaml: mysql traits
 
 0.2.3

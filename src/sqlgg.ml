@@ -12,9 +12,9 @@ module CSharp = Gen.Make(Gen_csharp)
 
 (* 
   common usecase:
-     -gen none ddl.sql -gen cxx dml.sql
+     sqlgg [-gen none] ddl.sql -gen cxx dml.sql
 *)
-let generate = ref (Some Cxx.process)
+let generate = ref None
 let name = ref "sqlgg"
 
 let set_out s =
@@ -37,23 +37,20 @@ let set_params_mode s =
   | _ -> None
 
 let each_input =
-  let run = function Some ch -> Main.get_statements ch | None -> Enum.empty () in
-  let run x =
-    let e = run x in
-    Enum.force e;
+  let run input =
+    let l = match input with Some ch -> Main.get_statements ch | None -> [] in
     match !generate with
-    | None -> Enum.empty ()
-    | Some _ -> e
+    | None -> []
+    | Some _ -> l
   in
   function
   | "-" -> run (Some stdin)
   | filename -> Main.with_channel filename run
 
-let process l = 
-  let e = Enum.concat (List.enum l) in
+let generate l = 
   match !generate with
-  | None -> Enum.force e
-  | Some f -> f !name e
+  | None -> ()
+  | Some f -> f !name (List.enum l)
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
@@ -69,7 +66,7 @@ let main () =
   let args = Arg.align
   [
     "-version", Arg.Unit show_version, " Show version";
-    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: c++)";
+    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
@@ -79,8 +76,18 @@ let main () =
   in
   Arg.parse args work usage_msg;
   match !l with
-  | [] -> if Array.length Sys.argv = 1 then Arg.usage args usage_msg
-  | l -> process (List.rev l)
+  | [] -> if Array.length Sys.argv = 1 then Arg.usage args usage_msg; 0
+  | l -> 
+    if !Error.errors then
+      begin Error.log "Errors encountered, no code generated"; 1 end
+    else
+      begin generate & List.concat & List.rev & l; 0 end
 
-let _ = Printexc.print main ()
+let main () = 
+  try
+    main ()
+  with
+    exn -> Error.logs (Printexc.to_string exn); 2
+
+let () = exit (main ())
 
