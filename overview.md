@@ -344,24 +344,27 @@ Get the [source](http://repo.or.cz/w/sqlgg.git).
 TODO
 ----
 
+* do not generate any code on errors
+* write tutorial (for all languages), start documentation
+* native-type annotations in queries
 * output params syntax for different DB
 * guarantee correct duplicate params usage
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
 * camlp4 syntax extension for inline sql
 * allow to tolerate errors in query
-* special code for queries returning single values (COUNT(*) without GROUP BY, LIMIT 1, SELECT and UNIQUE INDEX, etc)
+* detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE (done))
 * support BULK INSERTs (how?)
-* decide what to do with unquoted identifiers matching keywords
+* decide what to do with unquoted identifiers matching keywords (better error reporting at least)
 * provide ways to extend lexer with tokens in runtime
-* split overview into several pages
-* some database API are inadequately strict about data types (notably ADO.NET), need native-type annotations in queries
 * choose better names for some common cases (WHERE id = ? etc)
 * fix line numbers in error output
-* enhance error reporting
-* calculate types more precisely, type-inferrer is too primitive
+* enhance error reporting (take into account target language)
+* calculate types more precisely, type inference is too primitive
+* verify that each parameter gets one type inferred
 * track NULLs
 * detect statements on single tables and group the corresponding generated code together
-* check function names for uniqueness
+* use prepared statements in all traits
+* check all generated names for uniqueness and validity with regard to target language
 * support/test other SQL engines
 * generate code for more languages
 * read SQL spec
@@ -369,7 +372,7 @@ TODO
 * type check expressions
 
 ----
-2009-08-24
+2009-11-08
 <span class="right">[sqlgg&#x40;ygrek&#x2E;org&#x2E;ua](mailto:sqlgg&#x40;ygrek&#x2E;org&#x2E;ua)</span>
 
 <style>
