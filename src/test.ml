@@ -98,9 +98,13 @@ let test4  () =
     [attr "" Int; attr "" Text] [] ~kind:(Select true);
   tt "select greatest(10,x) from test4" a [] ~kind:(Select false);
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select false);
+  tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select true);
+  todo "single row";
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select true);
   ()
 
 let test_parsing () =
+  todo "parsing -1";
   tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT DEFAULT -1) ENGINE=MEMORY" [] [];
   ()
 
