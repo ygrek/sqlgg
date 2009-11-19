@@ -29,6 +29,7 @@ let main () =
   (* summarize by person and output *)
   print_endline "Total transfers:";
   G.calc_total db (printf "%s = %Lu\n");
+  printf "Total total: %Lu\n" (G.Fold.calc_total db (fun _ -> Int64.add) 0L);
 
   (* list donors *)
   print_endline "Donors:";

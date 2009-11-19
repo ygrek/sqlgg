@@ -106,16 +106,20 @@ type t = unit
 
 let start () = ()
 
-let generate_stmt index stmt =
+let generate_stmt fold index stmt =
   let name = choose_name stmt.props stmt.kind index >> String.uncapitalize in
   let values = params_to_values stmt.params >> List.map (prepend "~") >> inline_values in
-  let all_params = values ^ (if is_callback stmt then " callback" else "") in
+  let fold = fold && is_callback stmt in
+  let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql stmt) in
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
-  output "T.%s db %s %s %s" func sql params_binder_name callback;
+  if fold then output "let r_acc = ref acc in";
+  output "T.%s db %s %s %s" func sql params_binder_name 
+    (if fold then "(fun x -> r_acc := " ^ callback ^ " x !r_acc);" else callback);
+  if fold then output "!r_acc";
   dec_indent ();
   empty_line ()
 
@@ -128,7 +132,12 @@ let generate () name stmts =
   output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
   empty_line ();
   inc_indent ();
-  Enum.iteri generate_stmt stmts;
+  Enum.iteri (generate_stmt false) (Enum.clone stmts);
+  output "module Fold = struct";
+  inc_indent ();
+  Enum.iteri (generate_stmt true) (Enum.clone stmts);
+  dec_indent ();
+  output "end (* module Fold *)";
   dec_indent ();
   output "end (* module %s *)" (String.capitalize name)
 
