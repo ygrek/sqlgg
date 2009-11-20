@@ -70,6 +70,7 @@ let main () =
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
+    "-show-tables", Arg.Unit Tables.print, " Show current SQL tables";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]

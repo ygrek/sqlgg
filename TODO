@@ -2,7 +2,7 @@
 * native-type annotations in queries
 * output params syntax for different DB
 * guarantee correct duplicate params usage
-* allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe and enumeration
+* allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe/enumeration/option params
 * camlp4 syntax extension for inline sql
 * allow to tolerate errors in query
 * detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE (done))
