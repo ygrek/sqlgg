@@ -58,7 +58,7 @@
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
-       CASE WHEN THEN ELSE END CHANGE
+       CASE WHEN THEN ELSE END CHANGE MODIFY
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -276,8 +276,10 @@ maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD index_type IDENT? sequence(IDENT) { `None }
             | DROP INDEX IDENT { `None }
+            | DROP PRIMARY KEY { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
+            | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.RA.name,column,pos) }
 index_type: INDEX | FULLTEXT | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }

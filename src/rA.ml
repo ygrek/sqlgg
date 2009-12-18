@@ -103,7 +103,7 @@ struct
   let change t oldcol col pos =
     match pos with
     | `Default -> change_inplace t oldcol col
-    | _ -> add (drop t oldcol) col pos
+    | `First | `After _ -> add (drop t oldcol) col pos
 
   let to_string x = Show.show<t>(x)
   let print x = prerr_endline (to_string x)
