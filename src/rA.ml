@@ -73,7 +73,9 @@ struct
     common @ sub t1 common @ sub t2 common
 
   let compound t1 t2 =
-    let types = List.map (fun attr -> attr.domain) in
+    let types = List.map (fun attr -> 
+      (* FIXME ASAP *)
+      match attr.domain with | Type.Any -> Type.Text | t -> t) in
     if types t1 <> types t2 then
       raise (Error (t1, (to_string t1) ^ " not equal to " ^ (to_string t2)))
      else
