@@ -104,8 +104,8 @@ let test4  () =
   ()
 
 let test_parsing () =
-  todo "parsing -1";
   tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT DEFAULT -1) ENGINE=MEMORY" [] [];
+  tt "SELECT 2+3, 2+-3, -10 FROM test5_1" [attr "" Int; attr "" Int; attr "" Int] [];
   ()
 
 (*

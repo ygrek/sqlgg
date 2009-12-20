@@ -77,6 +77,7 @@
 %left PLUS MINUS
 %left ASTERISK NUM_DIV_OP
 %left CONCAT_OP
+%nonassoc UNARY_MINUS
 
 %type <Syntax.expr> expr
 
@@ -301,7 +302,7 @@ column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | DEFAULT default_value { None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
 
-default_value: literal_value | datetime_value { } (* sub expr ? *)
+default_value: single_literal_value | datetime_value { } (* sub expr ? *)
 
 (* FIXME check columns *)
 table_constraint_1:
@@ -332,6 +333,7 @@ expr:
     | e1=expr mnot(like) e2=expr e3=escape?
       { `Func ((Any,false),(List.filter_valid [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
+    | MINUS expr %prec UNARY_MINUS { $2 }
     | LPAREN expr RPAREN { $2 }
     | attr_name { `Column $1 }
     | v=literal_value | v=datetime_value { v }
@@ -370,6 +372,11 @@ literal_value:
     | TIME TEXT
     | TIMESTAMP TEXT { `Value Datetime }
 
+single_literal_value: 
+    | literal_value { $1 }
+    | MINUS INTEGER { `Value Int }
+    | MINUS FLOAT { `Value Float }
+
 expr_list: l=commas(expr) { l }
 func_params: expr_list { $1 }
            | ASTERISK { [] }
@@ -380,8 +387,6 @@ comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
 boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }
-        | PLUS { }
-        | MINUS { }
         | TILDE { }
         | NOT { }
 
