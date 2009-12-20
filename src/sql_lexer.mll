@@ -108,6 +108,7 @@ let keywords =
    "else", ELSE;
    "end", END;
    "change", CHANGE;
+   "modify", MODIFY;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];
