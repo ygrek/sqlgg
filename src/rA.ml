@@ -114,7 +114,11 @@ end
 
 type table = string * Schema.t deriving (Show)
 
-let print_table t = print_endline (Show.show<table>(t))
+let print_table out (name,schema) =
+  IO.write_line out name;
+  schema >> List.iter (fun {name=name;domain=domain} ->
+    IO.printf out "%10s %s\n" (Type.to_string domain) name);
+  IO.write_line out ""
 
 (*
 open Schema

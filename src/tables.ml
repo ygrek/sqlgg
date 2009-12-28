@@ -42,7 +42,7 @@ let alter_add name col pos = alter name (fun s -> RA.Schema.add s col pos)
 let alter_drop name col = alter name (fun s -> RA.Schema.drop s col)
 let alter_change name oldcol col pos = alter name (fun s -> RA.Schema.change s oldcol col pos)
 
-let print () = List.iter RA.print_table !all
+let print () = let out = IO.output_channel stdout in List.iter (RA.print_table out) !all
 
 let reset () = all := []
 
