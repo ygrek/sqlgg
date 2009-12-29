@@ -53,7 +53,8 @@ struct
 
   let sub l a = List.filter (fun x -> not (List.mem x a)) l
 
-  let to_string v = Show.show<t>(v)
+  let to_string v = v >> List.map (fun attr -> sprintf "%s %s" (Type.to_string attr.domain) attr.name) >>
+    String.concat ", " >> sprintf "[%s]"
   let names t = t >> List.map (fun attr -> attr.name) >> String.concat "," >> sprintf "[%s]"
 
   let natural_ t1 t2 =
@@ -72,14 +73,21 @@ struct
     List.iter (check_contains t2) common;
     common @ sub t1 common @ sub t2 common
 
-  let compound t1 t2 =
-    let types = List.map (fun attr -> 
-      (* FIXME ASAP *)
-      match attr.domain with | Type.Any -> Type.Text | t -> t) in
-    if types t1 <> types t2 then
-      raise (Error (t1, (to_string t1) ^ " not equal to " ^ (to_string t2)))
-     else
-      t1
+  let check_types t1 t2 =
+    List.iter2 (fun a1 a2 ->
+      match a1.domain, a2.domain with
+      | Type.Any, _
+      | _, Type.Any -> ()
+      | x, y when x = y -> ()
+      | _ -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s" 
+        a1.name (Type.to_string a1.domain)
+        a2.name (Type.to_string a2.domain)))) t1 t2
+
+  let check_types t1 t2 = 
+    try check_types t1 t2 with 
+    | List.Different_list_size _ -> raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)))
+
+  let compound t1 t2 = check_types t1 t2; t1
 
   let add t col pos =
     match find_by_name t col.name with

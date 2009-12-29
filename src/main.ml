@@ -48,13 +48,16 @@ let parse_one x =
   with
   | Parser_utils.Error (exn,(line,cnum,tok,tail)) ->
     begin
-     let extra = Printexc.to_string exn in
+     let extra = match exn with
+     | RA.Schema.Error (_,msg) -> msg
+     | exn -> Printexc.to_string exn 
+     in
      let sql = fst x in
      Error.log "==> %s" sql;
      if cnum = String.length sql && tok = "" then
-       Error.log "Exception %s" extra
+       Error.log "Error: %s" extra
      else
-       Error.log "Exception %s in %u:%u at \"%s%s\"" extra line cnum tok (String.slice ~last:32 tail);
+       Error.log "Position %u:%u Tokens: %s%s\nError: %s" line cnum tok (String.slice ~last:32 tail) extra;
      None
     end
 
