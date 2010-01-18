@@ -49,3 +49,6 @@ http://eigenclass.org/hiki/addressing-orm-problem-typed-relational-algebra
 Typed relational algebra: schemas, CRUD, source code
 http://eigenclass.org/hiki/typed-relational-algebra-in-OCaml
 
+MySQL gotchas
+http://sql-info.de/mysql/gotchas.html
+

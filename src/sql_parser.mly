@@ -373,6 +373,7 @@ literal_value:
     | DATE TEXT
     | TIME TEXT
     | TIMESTAMP TEXT { `Value Datetime }
+    | NULL { `Value Any } (* he he *)
 
 single_literal_value: 
     | literal_value { $1 }
