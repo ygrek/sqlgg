@@ -110,7 +110,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 Tables.drop name;
                 ([],[],Drop name)
               }
-         | CREATE either(TABLE,VIEW) name=IDENT AS select=select_stmt
+         | CREATE either(TABLE,VIEW) name=IDENT AS select=maybe_parenth(select_stmt)
               {
                 let (s,p) = select in
                 Tables.add (name,s);
