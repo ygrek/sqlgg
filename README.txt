@@ -9,14 +9,23 @@ Dependencies
 * extlib
 * oUnit
 * deriving
+* ocamlfind (optional)
 
-NB `deriving` is not available in Debian packages
+`deriving` is special. There are two ways :
 
-`deriving` causes linking conflicts with `extLib`.
-See http://code.google.com/p/deriving/issues/detail?id=1
-So you have to rebuild `deriving` : 
-remove the `enum.ml enum.mli` line (SOURCES variable) 
-in `deriving/lib/Makefile`.
+* Use patched version available at <http://repo.or.cz/w/deriving.git>.
+  It is a recommended approach as everything should work out of the box.
+
+* Otherwise, get the original version from <http://code.google.com/p/deriving>.
+  It will cause linking conflicts with `extLib` (see 
+  <http://code.google.com/p/deriving/issues/detail?id=1>).
+  So you have to edit `deriving/lib/Makefile` (remove the `enum.ml enum.mli` 
+  line from SOURCES variable) and rebuild. Mind that it won't
+  [build cleanly on Windows](http://code.google.com/p/deriving/issues/detail?id=3).
+  Also it doesn't install via ocamlfind and only provides a standalone
+  preprocessor. So make sure ocamlbuild will find `deriving.cma` and edit
+  `src/_tags` to invoke preprocessor directly - replace flags `camlp4o, pa_deriving`
+  with `pp(path/to/deriving/preprocessor)`.
 
 Dependencies will be found with ocamlfind by default.
 Additionaly you can create `src/myocamlbuild.config` and manually 
@@ -26,11 +35,10 @@ specify paths to some libraries as follows :
     deriving=C:/my/contrib/deriving-0.1.1/lib
     oUnit=C:/my/contrib/ounit-1.0.3
 
-sqlgg
+Build
 -----
 
-    make -C src
-    (or src\build.bat for Windows)
+Change to `src` directory and run `make` (or `build.bat` on Windows).
 
 Windows users
 =============
@@ -39,4 +47,4 @@ Install VS2005 SP1 redistributable
 <http://www.microsoft.com/downloads/details.aspx?FamilyID=200b2fd9-ae1a-4a14-984d-389c36f85647>
 
 ----
-2009-12-27
+2010-02-26

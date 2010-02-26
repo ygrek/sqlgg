@@ -28,7 +28,11 @@ dispatch begin function
      C.extern "deriving";
      C.extern "oUnit";
 
+     flag ["ocaml"; "pp"; "pa_deriving"] (S[A"-I"; A (C.lib "deriving"); A"pa_deriving.cma"]);
+
      flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A (C.lib "extlib")]);
+     flag ["ocaml"; "doc"; "use_deriving"] (S[A"-I"; A (C.lib "deriving")]);
+     flag ["ocaml"; "doc"; "use_oUnit"] (S[A"-I"; A (C.lib "oUnit")]);
 
 | _ -> ()
 end
