@@ -34,7 +34,8 @@ let set_params_mode s =
   | "named" -> Some Gen.Named
   | "unnamed" -> Some Gen.Unnamed
   | "oracle" -> Some Gen.Oracle
-  | _ -> None
+  | "none" -> None
+  | _ -> failwith (sprintf "Unknown params mode: %s" s)
 
 let each_input =
   let run input =
