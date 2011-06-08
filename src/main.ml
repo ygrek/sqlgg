@@ -18,6 +18,19 @@ let repeat f x k =
   in
   loop ()
 
+let common_prefix = function
+| [] -> 0
+| x::_ as l ->
+  let rec loop i =
+    if String.length x <= i then i
+    else
+      if List.for_all (fun s -> i < String.length s && s.[i] = x.[i]) l then
+        loop (i+1)
+      else
+        i
+  in
+  loop 0
+
 let parse_one_exn (sql,props) =
     if Config.debug1 () then  prerr_endline sql;
     let (s,p,k) = Parser.parse_stmt sql in
@@ -29,11 +42,13 @@ let parse_one_exn (sql,props) =
       B.add_string b sql;
       B.add_string b " (";
       let params = ref [] in
+      let first = common_prefix & List.map (fun attr -> attr.RA.name) s in
       s >> List.iter (fun attr ->
         if !params <> [] then B.add_string b ",";
-        let name = "@" ^ attr.RA.name in
-        let param = ((Some attr.RA.name,(B.length b,B.length b + String.length name)),attr.RA.domain) in
-        B.add_string b name;
+        let attr_name = String.slice ~first attr.RA.name in
+        let attr_ref = "@" ^ attr_name in
+        let param = ((Some attr_name,(B.length b,B.length b + String.length attr_ref)),attr.RA.domain) in
+        B.add_string b attr_ref;
         params := param :: !params
       );
       B.add_string b ")";
