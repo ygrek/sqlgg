@@ -281,6 +281,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.RA.name,column,pos) }
+            | SET IDENT IDENT { `None }
 index_type: INDEX | FULLTEXT | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }
