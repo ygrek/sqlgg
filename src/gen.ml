@@ -38,15 +38,19 @@ let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
 
 let choose_name props kind index =
+  let fix = String.map begin function
+  | ('a'..'z' | 'A'..'Z' | '0'..'9' | '_' as c) -> c
+  | _ -> '_'
+  end in
   let name = match kind with
-  | Create t -> sprintf "create_%s" t
-  | CreateIndex t -> sprintf "create_index_%s" t
-  | Update (Some t) -> sprintf "update_%s_%u" t index
+  | Create t -> sprintf "create_%s" (fix t)
+  | CreateIndex t -> sprintf "create_index_%s" (fix t)
+  | Update (Some t) -> sprintf "update_%s_%u" (fix t) index
   | Update None -> sprintf "update_%u" index
-  | Insert (_,t) -> sprintf "insert_%s_%u" t index
-  | Delete t -> sprintf "delete_%s_%u" t index
-  | Alter t -> sprintf "alter_%s_%u" t index
-  | Drop t -> sprintf "drop_%s" t
+  | Insert (_,t) -> sprintf "insert_%s_%u" (fix t) index
+  | Delete t -> sprintf "delete_%s_%u" (fix t) index
+  | Alter t -> sprintf "alter_%s_%u" (fix t) index
+  | Drop t -> sprintf "drop_%s" (fix t)
   | Select _  -> sprintf "select_%u" index
   | Other -> sprintf "statement_%u" index
   in
