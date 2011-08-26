@@ -10,7 +10,7 @@ type statement = P.stmt
 type connection = Mysql.dbd
 type params = statement * string array
 type row = string option array
-type result = P.result
+type result = P.stmt_result
 
 type num = Number.t
 type text = string
