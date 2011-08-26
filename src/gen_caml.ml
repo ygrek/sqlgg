@@ -108,12 +108,28 @@ let start () = ()
 
 let generate_stmt fold index stmt =
   let name = choose_name stmt.props stmt.kind index >> String.uncapitalize in
-  let values = params_to_values stmt.params >> List.map (prepend "~") >> inline_values in
+  let subst = Props.get stmt.props "subst" in
+  let values = ((match subst with None -> [] | Some x -> [x]) @ params_to_values stmt.params) >> List.map (prepend "~") >> inline_values in
   let fold = fold && is_callback stmt in
   let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql stmt) in
+  let sql = match subst with
+  | None -> sql
+  | Some var ->
+    output "let __sqlgg_sql =";
+    output "  let replace_all ~str ~sub ~by =";
+    output "    let rec loop str = match ExtString.String.replace ~str ~sub ~by with";
+    output "    | true, str -> loop str";
+    output "    | false, s -> s";
+    output "    in loop str";
+    output "  in";
+    output "  let sql = %s in" sql;
+    output "  replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s" var var;
+    output "in";
+    "__sqlgg_sql"
+  in
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
   if fold then output "let r_acc = ref acc in";

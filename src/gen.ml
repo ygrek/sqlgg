@@ -42,6 +42,11 @@ let choose_name props kind index =
   | ('a'..'z' | 'A'..'Z' | '0'..'9' | '_' as c) -> c
   | _ -> '_'
   end in
+  let fix s =
+    match Props.get props "subst" with
+    | Some x -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in fix s
+    | None -> fix s
+  in
   let name = match kind with
   | Create t -> sprintf "create_%s" (fix t)
   | CreateIndex t -> sprintf "create_index_%s" (fix t)
