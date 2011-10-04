@@ -9,6 +9,7 @@
 #define SQLGG_STR(x) x
 #endif
 #include <assert.h>
+#include <stdio.h>
 #include <string>
 
 struct sqlite3_traits
