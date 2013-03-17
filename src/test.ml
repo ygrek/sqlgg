@@ -143,6 +143,12 @@ let test_misc () =
   test [1;2;3;4] [5;2;2] [2;1;3;4;5]; (* ?! *)
   ()
 
+let test_enum () =
+  tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
+  tt "SELECT * FROM test6" [attr "x" Text; attr "y" Int] [];
+  tt "SELECT x, y+10 FROM test6" [attr "x" Text; attr "" Int] [];
+  ()
+
 let run () =
   let tests =
   [
@@ -153,6 +159,7 @@ let run () =
     "parsing" >:: test_parsing;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
+    "enum" >:: test_enum;
   ]
   in
   let test_suite = "main" >::: tests in

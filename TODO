@@ -1,3 +1,4 @@
+* map enum strings to values
 * write tutorial (for all languages), start documentation
 * native-type annotations in queries
 * output params syntax for different DB
