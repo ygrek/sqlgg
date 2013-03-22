@@ -2,10 +2,14 @@
 .PHONY: build clean install
 
 DESTDIR=/usr/local
+OCAMLBUILD=ocamlbuild -j 0
 MODE=byte
 
 build:
-		ocamlbuild -j 0 sqlgg.$(MODE)
+		$(OCAMLBUILD) sqlgg.$(MODE)
+
+top:
+		$(OCAMLBUILD) sqlgg.top
 
 test:
 		./sqlgg.$(MODE) -test
