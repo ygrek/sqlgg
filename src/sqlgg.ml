@@ -54,12 +54,12 @@ let generate l =
   | Some f -> f !name (List.enum l)
 
 let usage_msg =
-  let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Config.version in
+  let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Sqlgg_config.version in
   let s2 = sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]\n" (Filename.basename Sys.executable_name) in
   let s3 = "Options are:" in
   s1 ^ s2 ^ s3
 
-let show_version () = print_endline Config.version
+let show_version () = print_endline Sqlgg_config.version
 
 let main () =
   let l = ref [] in
@@ -70,7 +70,7 @@ let main () =
     "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
-    "-debug", Arg.Int (fun x -> Config.debug_level := x), "<N> set debug level";
+    "-debug", Arg.Int (fun x -> Sqlgg_config.debug_level := x), "<N> set debug level";
     "-show-tables", Arg.Unit Tables.print, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";

@@ -32,7 +32,7 @@ let common_prefix = function
   loop 0
 
 let parse_one_exn (sql,props) =
-    if Config.debug1 () then  prerr_endline sql;
+    if Sqlgg_config.debug1 () then  prerr_endline sql;
     let (s,p,k) = Parser.parse_stmt sql in
     (* fill VALUES *)
     let (sql,p) = match k with

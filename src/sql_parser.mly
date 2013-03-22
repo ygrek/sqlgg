@@ -192,7 +192,8 @@ select_stmt_t: select_core other=list(preceded(compound_op,select_core))
               {
                 let (s1,p1,tbls,singlerow1) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) other) in
-                if Config.debug1 () then eprintf "singlerow=%b other=%u\n%!" singlerow1 (List.length other);
+                if Sqlgg_config.debug1 () then
+                  eprintf "singlerow=%b other=%u\n%!" singlerow1 (List.length other);
                 let singlerow1 = singlerow1 && other = [] in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let final_schema = List.fold_left RA.Schema.compound s1 s2l in
