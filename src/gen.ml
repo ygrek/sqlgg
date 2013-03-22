@@ -37,15 +37,30 @@ let param_name_to_string ((name,_):param_id) index =
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
 
-let choose_name props kind index =
-  let fix = String.map begin function
+let make_basic_identifier =
+  String.map begin function
   | ('a'..'z' | 'A'..'Z' | '0'..'9' | '_' as c) -> c
   | _ -> '_'
-  end in
+  end
+
+let make_unique_identifiers l =
+  let module Set = Set.Make(String) in
+  let m = ref Set.empty in
+  List.map (fun s ->
+    let cur = ref s in
+    let i = ref 1 in
+    while Set.mem !cur !m do
+      cur := sprintf "%s_%d" s !i
+    done;
+    m := Set.add !cur !m;
+    !cur) l
+
+let choose_name props kind index =
   let fix s =
+    make_basic_identifier &
     match Props.get props "subst" with
-    | Some x -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in fix s
-    | None -> fix s
+    | Some x -> snd (String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x)
+    | None -> s
   in
   let name = match kind with
   | Create t -> sprintf "create_%s" (fix t)
@@ -98,6 +113,7 @@ module type LangTypes = sig
 
 val as_api_type : Sql.Type.t -> string
 val as_lang_type : Sql.Type.t -> string
+val as_sql_value : Sql.Type.t -> string option
 
 end
 
@@ -107,8 +123,10 @@ let param_type_to_string = T.as_api_type
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.RA.domain)
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
-(* rev unique rev -- to preserve ordering with respect to first occurrences *)
+(** rev unique rev -- to preserve ordering with respect to first occurrences *)
 let params_to_values = List.rev $ List.unique $ List.rev $ all_params_to_values
+(** generate code to convert value of given type from language level to sql level *)
+let promote_value = T.as_sql_value
 
 end
 

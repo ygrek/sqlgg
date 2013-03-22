@@ -398,7 +398,7 @@ unary_op: EXCL { }
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }
-               | ENUM sequence(TEXT) charset? collate? { Text }
+               | ENUM l=sequence(TEXT) charset? collate? { Enum l }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
                | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }

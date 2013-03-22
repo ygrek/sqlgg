@@ -2,7 +2,7 @@
 
 module Type =
 struct
-  type t = | Int | Text | Blob | Float | Bool | Datetime | Any
+  type t = | Int | Text | Blob | Float | Bool | Datetime | Any | Enum of string list
         deriving (Show)
 
   let to_string = Show.show<t>

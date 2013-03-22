@@ -28,9 +28,25 @@ let comment () fmt = Printf.kprintf (indent_endline $ make_comment) fmt
 let empty_line () = print_newline ()
 
 module L = struct
+  open Type
+
+  let as_sql_value = function
+  | Enum names ->
+    let names' = names >> List.map make_basic_identifier >>
+      List.map String.capitalize >>
+      make_unique_identifiers >>
+      List.map (sprintf "`%s")
+    in
+    List.combine names names' >>
+    List.map (fun (name,name') -> sprintf "%s -> %S" name' name) >>
+    String.concat " | " >>
+    sprintf "(function %s)" >> (fun x -> Some x)
+  | _ -> None
+
   let as_lang_type = function
-  | Type.Blob -> Type.to_string Type.Text
-  | t -> Type.to_string t
+  | Blob -> to_string Text
+  | Enum _ -> to_string Text
+  | t -> to_string t
 
   let as_api_type = as_lang_type
 end
@@ -80,10 +96,13 @@ let params_to_values = List.map fst $ params_to_values
 
 let set_param index param =
   let (id,t) = param in
+  let name = param_name_to_string id index in
   output "T.set_param_%s p %u %s;"
     (param_type_to_string t)
     index
-    (param_name_to_string id index)
+    (match promote_value t with
+    | None -> name
+    | Some f -> sprintf "(%s %s)" f name)
 
 let output_params_binder _ params =
   output "let set_params stmt =";

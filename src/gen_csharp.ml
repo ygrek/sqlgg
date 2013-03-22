@@ -40,8 +40,11 @@ let as_api_type = function
   | Type.Bool -> "Boolean"
   | Type.Datetime -> "Datetime"
   | Type.Any -> "String"
+  | Type.Enum _ -> "String"
 
 let as_lang_type = as_api_type
+
+let as_sql_value _ = None
 
 end
 

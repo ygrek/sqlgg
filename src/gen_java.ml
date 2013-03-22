@@ -40,8 +40,11 @@ let as_lang_type = function
   | Type.Blob -> "Blob"
   | Type.Bool -> "boolean"
   | Type.Datetime -> "Timestamp"
+  | Type.Enum _ -> "String"
 
 let as_api_type = String.capitalize $ as_lang_type
+
+let as_sql_value _ = None
 
 end
 
