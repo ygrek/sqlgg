@@ -33,29 +33,38 @@ let common_prefix = function
 
 let parse_one_exn (sql,props) =
     if Sqlgg_config.debug1 () then  prerr_endline sql;
-    let (s,p,k) = Parser.parse_stmt sql in
-    (* fill VALUES *)
-    let (sql,p) = match k with
-    | Stmt.Insert (Some s,_) ->
+    let (schema,params,kind) = Parser.parse_stmt sql in
+    (* fill inferred sql for VALUES or SET *)
+    let (sql,params) = match kind with
+    | Stmt.Insert (Some (kind,schema), _) ->
+      let (pre,each,post) = match kind with
+      | Stmt.Values -> "(", (fun _ -> ""), ")"
+      | Stmt.Assign -> "", (fun name -> name ^" = "), ""
+      in
       let module B = Buffer in
       let b = B.create 100 in
       B.add_string b sql;
-      B.add_string b " (";
-      let params = ref [] in
-      let first = common_prefix & List.map (fun attr -> attr.RA.name) s in
-      s >> List.iter (fun attr ->
-        if !params <> [] then B.add_string b ",";
+      B.add_string b " ";
+      B.add_string b pre;
+      let params' = ref [] in
+      let first = common_prefix & List.map (fun attr -> attr.RA.name) schema in
+      schema >> List.iter (fun attr ->
+        if !params' <> [] then B.add_string b ",";
         let attr_name = String.slice ~first attr.RA.name in
+        let attr_ref_prefix = each attr_name in
         let attr_ref = "@" ^ attr_name in
-        let param = ((Some attr_name,(B.length b,B.length b + String.length attr_ref)),attr.RA.domain) in
+        let pos_start = B.length b + String.length attr_ref_prefix in
+        let pos_end = pos_start + String.length attr_ref in
+        let param = ((Some attr_name,(pos_start,pos_end)),attr.RA.domain) in
+        B.add_string b attr_ref_prefix;
         B.add_string b attr_ref;
-        params := param :: !params
+        params' := param :: !params'
       );
-      B.add_string b ")";
-      (B.contents b, p @ (List.rev !params))
-    | _ -> (sql,p)
+      B.add_string b post;
+      (B.contents b, params @ (List.rev !params'))
+    | _ -> (sql,params)
     in
-    {Stmt.schema=s; params=p; kind=k; props=Props.set props "sql" sql}
+    {Stmt.schema=schema; params=params; kind=kind; props=Props.set props "sql" sql}
 
 let parse_one x =
   try

@@ -11,8 +11,13 @@ type params = param list deriving (Show)
 
 let params_to_string ps = Show.show<params>(ps)
 
+type insert_kind = Values | Assign deriving(Show)
+
+(** inferred inserted values to complete sql statement *) 
+type inferred = (insert_kind * RA.Schema.t) option deriving(Show)
+
 type kind = | Select of bool (** true if result is single row *)
-            | Insert of RA.Schema.t option (** inserted *) * string (** table name *)
+            | Insert of inferred * string (** table *)
             | Create of string
             | CreateIndex of string
             | Update of string option (** name for single-table UPDATEs *)

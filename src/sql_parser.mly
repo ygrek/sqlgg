@@ -126,28 +126,32 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
          | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
               {
                 let expect = values_or_all table names in
-                let params, values = match values with
-                | None -> [], Some expect
+                let params, inferred = match values with
+                | None -> [], Some (Values, expect)
                 | Some values ->
                   let vl = List.length values in
                   let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  Syntax.params_of_assigns [Tables.get table] (List.combine (List.map (fun a -> a.RA.name, None) expect) values), None
+                  let assigns = List.combine (List.map (fun a -> a.RA.name, None) expect) values in
+                  Syntax.params_of_assigns [Tables.get table] assigns, None
                 in
-                [], params, Insert (values,table)
+                [], params, Insert (inferred,table)
               }
          | insert_cmd table=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt)
               {
                 let (schema,params) = select in
                 let expect = values_or_all table names in
                 ignore (RA.Schema.compound expect schema); (* test equal types *)
-                [], params, Insert(None,table)
+                [], params, Insert (None,table)
               }
-         | insert_cmd table=IDENT SET ss=commas(set_column)
+         | insert_cmd table=IDENT SET ss=commas(set_column)?
               {
-                let p1 = Syntax.params_of_assigns [Tables.get table] ss in
-                [], p1, Insert (None,table)
+                let (params,inferred) = match ss with
+                | None -> [], Some (Assign, Tables.get_schema table)
+                | Some ss -> Syntax.params_of_assigns [Tables.get table] ss, None
+                in
+                [], params, Insert (inferred,table)
               }
          | update_cmd table=IDENT SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
