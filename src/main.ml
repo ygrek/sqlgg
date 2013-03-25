@@ -50,8 +50,8 @@ let parse_one_exn (sql,props) =
       let first = common_prefix & List.map (fun attr -> attr.RA.name) schema in
       schema >> List.iter (fun attr ->
         if !params' <> [] then B.add_string b ",";
+        let attr_ref_prefix = each attr.RA.name in
         let attr_name = String.slice ~first attr.RA.name in
-        let attr_ref_prefix = each attr_name in
         let attr_ref = "@" ^ attr_name in
         let pos_start = B.length b + String.length attr_ref_prefix in
         let pos_end = pos_start + String.length attr_ref in
