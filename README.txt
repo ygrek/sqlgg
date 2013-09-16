@@ -1,3 +1,6 @@
+sqlgg: SQL Guided (code) Generator
+
+Homepage at http://ygrek.org.ua/p/sqlgg/
 
 Build
 =====
@@ -11,10 +14,10 @@ Dependencies
 * deriving
 * ocamlfind (optional)
 
-`deriving` is special. There are two ways :
+`deriving` is special - there are several forks floating around.
 
-* Use patched version available at <http://repo.or.cz/w/deriving.git>.
-  It is a recommended approach as everything should work out of the box.
+* Patched version available at <http://repo.or.cz/w/deriving.git> or
+  deriving-ocsigen are recommended - everything should work out of the box.
 
 * Otherwise, get the original version from <http://code.google.com/p/deriving>.
   It will cause linking conflicts with `extLib` (see 
@@ -28,8 +31,8 @@ Dependencies
   with `pp(path/to/deriving/preprocessor)`.
 
 Dependencies will be found with ocamlfind by default.
-Additionaly you can create `src/myocamlbuild.config` and manually 
-specify paths to some libraries as follows :
+Additionaly it is possible to specify paths to dependencies in `src/myocamlbuild.config`,
+e.g.:
 
     extlib=C:/my/contrib/extlib-1.5.1
     deriving=C:/my/contrib/deriving-0.1.1/lib
@@ -47,4 +50,4 @@ Install VS2005 SP1 redistributable
 <http://www.microsoft.com/downloads/details.aspx?FamilyID=200b2fd9-ae1a-4a14-984d-389c36f85647>
 
 ----
-2010-02-26
+2013-09-16
