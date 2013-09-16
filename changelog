@@ -2,11 +2,15 @@ sqlgg changelog
 ---------------
 
 0.2.4
-?
+2013-09-16
 	+ sql: more SQL
-	+ sqlgg: -gen none to suppress output, treat all input files as one stream
-	of statements, do not generate code on errors
-	+ ocaml: mysql traits
+	+ `-gen none` to suppress output
+	+ `-show-tables` to list tables
+	* treat all input files as one stream of statements
+	* do not generate code on errors
+	+ ocaml: mysql traits, Fold callbacks
+	* simplify build
+	* allow ad-hoc substitution in generated sql (experimental)
 
 0.2.3
 2009-08-24
@@ -40,4 +44,3 @@ sqlgg changelog
 0.1.0
 2009-05-05
 	+ cleaned up old code
-
