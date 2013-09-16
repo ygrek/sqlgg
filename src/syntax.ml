@@ -4,7 +4,6 @@ open Stmt
 open Prelude
 open ListMore
 open Sql
-open Printf
 
 type expr = [ `Value of Type.t (** literal value *)
             | `Param of param

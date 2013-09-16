@@ -6,7 +6,6 @@ open Printf
 
 open Stmt
 open Gen
-open Sql
 
 type xml = | Node of (string * (string * string) list * xml list)
            | Comment of string
@@ -49,7 +48,7 @@ let empty_line _ = ()
 
 let value n t = Node ("value",["name",n; "type",t;],[])
 
-open Gen_caml.L
+(* open Gen_caml.L *)
 open Gen_caml.T
 
 let params_to_values = List.map (fun (n,t) -> value n t) $ all_params_to_values

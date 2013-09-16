@@ -2,21 +2,11 @@
   Main
 *)
 
-open Printf
 open Prelude
-open ListMore
 open ExtLib
 
 module L = List
 module S = String
-
-let repeat f x k =
-  let rec loop () =
-    match f x with
-    | Some z -> k z
-    | None -> ()
-  in
-  loop ()
 
 let common_prefix = function
 | [] -> 0
