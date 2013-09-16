@@ -33,6 +33,7 @@ dispatch begin function
      flag ["ocaml"; "doc"; "use_extLib"] (S[A"-I"; A (C.lib "extlib")]);
      flag ["ocaml"; "doc"; "use_deriving"] (S[A"-I"; A (C.lib "deriving")]);
      flag ["ocaml"; "doc"; "use_oUnit"] (S[A"-I"; A (C.lib "oUnit")]);
+     flag ["compile"; "ocaml"; "warn_no_44"] (S[A"-w";A"-44"]);
 
 | _ -> ()
 end
