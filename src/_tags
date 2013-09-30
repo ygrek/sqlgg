@@ -1,6 +1,6 @@
 true: use_menhir
-true: dtypes, warn_A, warn_e, warn_no_44
-<*.ml> and not "sql_parser.ml": camlp4o, pa_deriving, use_deriving, use_extLib
-<test.ml>: use_oUnit
-<*.{byte,native,top}>: use_extLib, use_nums, use_unix, use_deriving, use_oUnit
-<sql_parser.ml>: warn_e, -dtypes
+true: annot, warn_A, warn_e, warn_no_44
+<*.ml> and not "sql_parser.ml": syntax(camlp4o), package(deriving.syntax,extlib)
+<test.ml>: package(oUnit)
+<*.{byte,native,top}>: package(extlib,deriving,oUnit)
+<sql_parser.ml>: -annot

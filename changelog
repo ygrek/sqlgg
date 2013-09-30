@@ -1,6 +1,10 @@
 sqlgg changelog
 ---------------
 
+?
+?
+	* require ocamlfind, OUnit2 compatibility
+
 0.2.4
 2013-09-16
 	+ sql: more SQL

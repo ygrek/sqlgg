@@ -2,7 +2,7 @@
 .PHONY: build clean install release
 
 DESTDIR=/usr/local
-OCAMLBUILD=ocamlbuild -j 0
+OCAMLBUILD=ocamlbuild -use-ocamlfind -j 0
 MODE=byte
 
 build:
