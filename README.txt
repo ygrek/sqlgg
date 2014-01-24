@@ -14,9 +14,9 @@ Dependencies
 * deriving
 * ocamlfind
 
-`deriving` is special - there are several forks floating around.
-Everything should work out of the box with
-either <http://repo.or.cz/w/deriving.git> or deriving-ocsigen.
+`deriving` is special - there were several forks floating around for a long time.
+Everything should work out of the box with either
+<https://github.com/ocsigen/deriving> or <http://repo.or.cz/w/deriving.git>
 
 Build
 -----
@@ -30,4 +30,4 @@ Install VS2005 SP1 redistributable
 <http://www.microsoft.com/downloads/details.aspx?FamilyID=200b2fd9-ae1a-4a14-984d-389c36f85647>
 
 ----
-2013-09-30
+2014-01-24
