@@ -47,6 +47,7 @@ let keywords =
    "distinct",DISTINCT;
    "character",CHARACTER;
    "binary",BINARY;
+   "bytea",BINARY;
    "all",ALL;
    "any",ANY;
    "some",SOME;

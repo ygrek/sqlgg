@@ -5,7 +5,7 @@ open ExtLib
 open Prelude
 open Stmt
 
-type subst_mode = | Named | Unnamed | Oracle
+type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -75,6 +75,7 @@ let substitute_params s params f =
 
 let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
 let subst_oracle index (id,_) = ":" ^ (param_name_to_string id index)
+let subst_postgresql index _ = "$" ^ string_of_int (index + 1)
 let subst_unnamed _ _ = "?"
 
 let get_sql stmt =
@@ -86,6 +87,7 @@ let get_sql stmt =
     | Named -> subst_named
     | Unnamed -> subst_unnamed
     | Oracle -> subst_oracle 
+    | PostgreSQL -> subst_postgresql
     in
     substitute_params sql stmt.params f
 
