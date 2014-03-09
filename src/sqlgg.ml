@@ -34,6 +34,7 @@ let set_params_mode s =
   | "named" -> Some Gen.Named
   | "unnamed" -> Some Gen.Unnamed
   | "oracle" -> Some Gen.Oracle
+  | "postgresql" -> Some Gen.PostgreSQL
   | "none" -> None
   | _ -> failwith (sprintf "Unknown params mode: %s" s)
 
@@ -69,7 +70,7 @@ let main () =
     "-version", Arg.Unit show_version, " Show version";
     "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-    "-params", Arg.String set_params_mode, "named|unnamed|oracle|none Output query parameters substitution (default: none)";
+    "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Sqlgg_config.debug_level := x), "<N> set debug level";
     "-show-tables", Arg.Unit Tables.print, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
