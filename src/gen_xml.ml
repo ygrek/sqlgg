@@ -63,7 +63,21 @@ let generate_code (x,_) index stmt =
   let input = Node ("in",[],params_to_values stmt.params) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
   let sql = get_sql stmt in
-  x := Node ("stmt",["name",name; "sql",sql;],[input; output]) :: !x
+  let attrs =
+    match stmt.kind with
+    | Select `Nat      -> ["kind", "select"; "cardinality", "n"]
+    | Select `Zero_one -> ["kind", "select"; "cardinality", "0,1"]
+    | Select `One      -> ["kind", "select"; "cardinality", "1"]
+    | Insert (_, t)    -> ["kind", "insert"; "target", t; "cardinality", "0"]
+    | Create t         -> ["kind", "create"; "target", t; "cardinality", "0"]
+    | CreateIndex t    -> ["kind", "create_index"; "target",t;"cardinality","0"]
+    | Update None      -> ["kind", "update"; "cardinality", "0"]
+    | Update (Some t)  -> ["kind", "update"; "target", t; "cardinality", "0"]
+    | Delete t         -> ["kind", "delete"; "target", t; "cardinality", "0"]
+    | Alter t          -> ["kind", "alter"; "target", t; "cardinality", "0"]
+    | Drop t           -> ["kind", "drop"; "target", t; "cardinality", "0"]
+    | Other            -> [] in
+  x := Node ("stmt", ("name",name)::("sql",sql)::attrs, [input; output]) :: !x
 
 let start_output (x,pre) = pre := !x; x := []
 
