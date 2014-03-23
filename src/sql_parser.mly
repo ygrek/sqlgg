@@ -194,17 +194,22 @@ table_def_done1: { Parser_state.mode_ignore () }
 select_stmt_t: select_core other=list(preceded(compound_op,select_core)) 
                o=loption(order) lim=limit_t?
               {
-                let (s1,p1,tbls,singlerow1) = $1 in
+                let (s1,p1,tbls,cardinality) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) other) in
                 if Sqlgg_config.debug1 () then
-                  eprintf "singlerow=%b other=%u\n%!" singlerow1 (List.length other);
-                let singlerow1 = singlerow1 && other = [] in
+                  eprintf "cardinality=%s other=%u\n%!"
+                          (cardinality_to_string cardinality)
+                          (List.length other);
+                let cardinality = if other = [] then cardinality else `Nat in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
                 let final_schema = List.fold_left RA.Schema.compound s1 s2l in
                 let p3 = Syntax.params_of_order o final_schema tbls in
-                let (p4,singlerow) = match lim with | Some x -> x | None -> [],false in
+                let (p4,limit1) = match lim with | Some x -> x | None -> [],false in
 (*                 RA.Schema.check_unique schema; *)
-                final_schema,(p1@(List.flatten p2l)@p3@p4), Select (singlerow || singlerow1)
+                let cardinality =
+                  if limit1 && cardinality = `Nat then `Zero_one
+                                                  else cardinality in
+                final_schema,(p1@(List.flatten p2l)@p3@p4), Select cardinality
               }
 
 select_stmt: select_stmt_t { let (s,p,_) = $1 in s,p }
@@ -222,7 +227,9 @@ select_core: SELECT select_type? r=commas(column1)
                 let p3 = Syntax.get_params_opt tbls joined_schema w in
                 let p4 = Syntax.get_params_l tbls joined_schema g in
                 let p5 = Syntax.get_params_opt tbls joined_schema h in
-                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, singlerow || singlerow2)
+                let cardinality = if singlerow then `One else
+                                  if singlerow2 then `Zero_one else `Nat in
+                (Syntax.infer_schema r tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, cardinality)
               }
 
 table_list: src=source joins=join_source* { (src,joins) }

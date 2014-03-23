@@ -67,13 +67,13 @@ let output_schema_binder index schema kind =
   match schema with
   | [] -> "execute",""
   | _ -> match kind with 
-         | Select true -> "select1", output_select1_cb index schema
+         | Select (`Zero_one | `One) -> "select1", output_select1_cb index schema
          | _ -> "select",output_schema_binder index schema
 
 let is_callback stmt =
   match stmt.schema, stmt.kind with
   | [],_ -> false
-  | _,Select true -> false
+  | _,Select (`Zero_one | `One) -> false
   | _ -> true
 
 let params_to_values = List.map fst $ params_to_values
