@@ -12,7 +12,11 @@ type insert_kind = Values | Assign deriving(Show)
 (** inferred inserted values to complete sql statement *) 
 type inferred = (insert_kind * RA.Schema.t) option deriving(Show)
 
-type kind = | Select of bool (** true if result is single row *)
+type cardinality = [`Zero_one | `One | `Nat] deriving(Show)
+
+let cardinality_to_string c = Show.show<cardinality>(c)
+
+type kind = | Select of cardinality (** possible number of rows *)
             | Insert of inferred * string (** table *)
             | Create of string
             | CreateIndex of string
