@@ -8,6 +8,11 @@ open ExtLib
 module L = List
 module S = String
 
+let is_alpha = function
+| 'a'..'z' -> true
+| 'A'..'Z' -> true
+| _ -> false
+
 let common_prefix = function
 | [] -> 0
 | x::_ as l ->
@@ -19,7 +24,9 @@ let common_prefix = function
       else
         i
   in
-  loop 0
+  let i = loop 0 in
+  (* do not allow empty names or starting not with alpha *)
+  if List.exists (fun s -> i = String.length s || not (is_alpha s.[i])) l then 0 else i
 
 let parse_one_exn (sql,props) =
     if Sqlgg_config.debug1 () then  prerr_endline sql;
