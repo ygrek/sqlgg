@@ -1,4 +1,17 @@
-(** sqlgg + ocaml + sqlite3 *)
+(**
+  Sqlite3 OCaml traits for sqlgg
+  by ygrek
+  2014-06-08
+
+  This is free and unencumbered software released into the public domain.
+
+  Anyone is free to copy, modify, publish, use, compile, sell, or
+  distribute this software, either in source code form or as a compiled
+  binary, for any purpose, commercial or non-commercial, and by any
+  means.
+
+  For more information, please refer to <http://unlicense.org/>
+*)
 
 open Printf
 
@@ -80,4 +93,3 @@ let select1 db sql set_params callback =
       Some (callback stmt)
     else
       None)
-
