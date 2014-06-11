@@ -1,7 +1,7 @@
 (**
   Mysql OCaml traits for sqlgg
   by ygrek
-  2014-06-08
+  2014-06-12
 
   This is free and unencumbered software released into the public domain.
 
@@ -62,14 +62,14 @@ let set_param_Int stmt index v = bind_param (Some (Number.to_string v)) stmt ind
 
 let no_params stmt = P.execute stmt [||]
 
-let finally final f x =
+let try_finally final f x =
   let r =
     try f x with exn -> final (); raise exn
   in
     final ();
     r
 
-let bracket res dtor k = finally (fun () -> dtor res) k res
+let bracket res dtor k = try_finally (fun () -> dtor res) k res
 let with_stmt db sql = bracket (P.create db sql) P.close
 
 let select db sql set_params callback =

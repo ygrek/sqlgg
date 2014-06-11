@@ -1,7 +1,7 @@
 (**
   Sqlite3 OCaml traits for sqlgg
   by ygrek
-  2014-06-08
+  2014-06-12
 
   This is free and unencumbered software released into the public domain.
 
@@ -58,7 +58,7 @@ let set_param_Int stmt index v = bind_param (S.Data.INT v) stmt index
 
 let no_params _ = ()
 
-let finally final f x =
+let try_finally final f x =
   let r =
     try f x with exn -> final (); raise exn
   in
@@ -67,7 +67,7 @@ let finally final f x =
 
 let with_sql db sql f =
   let stmt = S.prepare db sql in
-  finally
+  try_finally
     (fun () -> test_ok sql (S.finalize stmt))
     f (stmt,sql)
 
