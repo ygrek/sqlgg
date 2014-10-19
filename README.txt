@@ -13,6 +13,7 @@ Dependencies
 * oUnit
 * deriving
 * ocamlfind
+* oasis (when building from git checkout)
 
 `deriving` is special - there were several forks floating around for a long time.
 Everything should work out of the box with either
@@ -20,12 +21,12 @@ Everything should work out of the box with either
 
 Via OPAM:
 
-  opam install menhir extlib ounit deriving
+  opam install menhir extlib ounit deriving oasis
 
 Build
 -----
 
-Change to `src` directory and run `make` (or `build.bat` on Windows).
+Run `make` (or `build.bat` on Windows).
 
 Windows users
 -------------
@@ -46,4 +47,4 @@ See UNLICENSE file in each of the above directories for more information.
 NB the output of sqlgg, i.e. the generated code, is all yours of course :)
 
 ----
-2014-06-08
+2014-10-19
