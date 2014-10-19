@@ -21,3 +21,7 @@ Executable sqlgg
 Test main
   Command: $sqlgg -test
   TestTools: sqlgg
+
+Test regression
+  Command: ./run_test
+  TestTools: sqlgg

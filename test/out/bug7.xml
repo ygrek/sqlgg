@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test1" sql="create table test1 (x1 integer not null, x2 integer)" kind="create" target="test1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="ins1" sql="insert into test1 values (@x1,@x2)" kind="insert" target="test1" cardinality="0">
+  <in>
+   <value name="x1" type="Int"/>
+   <value name="x2" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="ins2" sql="insert into test1 (x1,x2) values (@x1,@x2)" kind="insert" target="test1" cardinality="0">
+  <in>
+   <value name="x1" type="Int"/>
+   <value name="x2" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+</sqlgg>

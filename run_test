@@ -1,0 +1,15 @@
+#! /bin/sh
+
+set -e -u
+
+echo Running regression tests
+
+mkdir -p test/out test/tmp
+for file in test/*.sql; do
+  basename=${file#test/}
+  ./sqlgg.native -no-header -gen xml $file > test/tmp/${basename%.sql}.xml
+done
+
+diff -u test/out test/tmp
+
+echo OK
