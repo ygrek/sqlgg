@@ -132,7 +132,7 @@ let generate_header out =
 
 let process name stmts =
   let out = S.start () in
-  generate_header out;
+  if !Sqlgg_config.gen_header then generate_header out;
   S.generate out name stmts
 
 end
