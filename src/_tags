@@ -1,6 +1,0 @@
-true: use_menhir
-true: annot, warn_A, warn_e, warn_no_44
-<*.ml> and not "sql_parser.ml": syntax(camlp4o), package(deriving.syntax,extlib)
-<test.ml>: package(oUnit)
-<*.{byte,native,top}>: package(extlib,deriving,oUnit)
-<sql_parser.ml>: -annot

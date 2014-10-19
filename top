@@ -1,0 +1,4 @@
+#! /bin/sh
+
+make top
+rlwrap ./sqlgg.top -init - -I _build/src

@@ -1,0 +1,23 @@
+OASISFormat:  0.4
+Name:         sqlgg
+Version:      0.2.6
+License:      GPL-2
+Authors:      ygrek
+Copyrights:   (C) 2009 ygrek
+Homepage:     http://ygrek.org.ua/p/sqlgg/
+BuildTools:   ocamlbuild, camlp4, menhir
+Plugins:      DevFiles (0.4), META (0.4)
+FilesAB:      src/version_release.ml.ab
+
+Synopsis: SQL guided (code) generator
+
+Executable sqlgg
+  Path: src/
+  Install: true
+  CompiledObject: best
+  MainIs: sqlgg.ml
+  BuildDepends: extlib, deriving, oUnit
+
+Test main
+  Command: $sqlgg -test
+  TestTools: sqlgg

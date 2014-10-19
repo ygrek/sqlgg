@@ -1,0 +1,7 @@
+# OASIS_START
+# OASIS_STOP
+true: use_menhir
+true: annot, warn_A, warn_e, warn_no_44
+<src/*.ml> and not "src/sql_parser.ml": syntax_camlp4o, pkg_deriving.syntax
+<src/sql_parser.ml>: -annot
+<src/*.top>: pkg_deriving, pkg_extlib, pkg_unix
