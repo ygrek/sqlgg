@@ -26,6 +26,7 @@ type result = unit
 type num = int64
 type text = string
 type any = string
+type datetime = float
 
 exception Oops of string
 
@@ -39,6 +40,13 @@ let get_column_Text (stmt,_) index =
   S.Data.to_string x
 
 let get_column_Any = get_column_Text
+
+let get_column_Float (stmt,sql) index =
+  match S.column stmt index with
+  | S.Data.FLOAT i -> i
+  | _ -> raise (Oops (sprintf "get_column_Float %u for %s" index sql))
+
+let get_column_Datetime = get_column_Float
 
 let test_ok sql rc =
   if rc <> S.Rc.OK then
@@ -55,6 +63,8 @@ let set_param_null = bind_param S.Data.NULL
 let set_param_Text stmt index v = bind_param (S.Data.TEXT v) stmt index
 let set_param_Any = set_param_Text
 let set_param_Int stmt index v = bind_param (S.Data.INT v) stmt index
+let set_param_Float stmt index v = bind_param (S.Data.FLOAT v) stmt index
+let set_param_Datetime = set_param_Float
 
 let no_params _ = ()
 

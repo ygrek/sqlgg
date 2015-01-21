@@ -25,12 +25,15 @@ module type M = sig
   type num = int64
   type text = string
   type any = text
+  type datetime = float
 
   exception Oops of string
 
   val get_column_Int : row -> int -> num
   val get_column_Text : row -> int -> text
   val get_column_Any : row -> int -> any
+  val get_column_Float : row -> int -> float
+  val get_column_Datetime : row -> int -> datetime
 
   val start_params : statement -> int -> params
   val finish_params : params -> result
@@ -41,6 +44,8 @@ module type M = sig
   val set_param_Text : params -> int -> text -> unit
   val set_param_Any : params -> int -> any -> unit
   val set_param_Int : params -> int -> num -> unit
+  val set_param_Float : params -> int -> float -> unit
+  val set_param_Datetime : params -> int -> datetime -> unit
 
   val no_params : statement -> result
 

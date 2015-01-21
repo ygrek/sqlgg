@@ -28,23 +28,21 @@ type result = P.stmt_result
 type num = Number.t
 type text = string
 type any = string
+type datetime = float
 
 exception Oops of string
 let oops fmt = ksprintf (fun s -> raise (Oops s)) fmt
-let opt = function Some x -> x | None -> failwith "opt"
 
-let get_column_Int row index =
+let get_column_ty name conv row index =
   try
-    Number.of_string (opt (row.(index)))
+    conv (match row.(index) with None -> failwith "no value" | Some (x:string) -> x)
   with
-    e -> oops "get_column_Int %i (%s)" index (Printexc.to_string e)
+    e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
 
-let get_column_Text row index =
-  try
-    opt (row.(index))
-  with
-    e -> oops "get_column_Text %i (%s)" index (Printexc.to_string e)
-
+let get_column_Int = get_column_ty "Int" Number.of_string
+let get_column_Text = get_column_ty "Text" (fun x -> x)
+let get_column_Float = get_column_ty "Float" float_of_string
+let get_column_Datetime = get_column_ty "Datetime" float_of_string
 let get_column_Any = get_column_Text
 
 let bind_param data (_,params) index =
@@ -59,6 +57,8 @@ let set_param_Text stmt index v = bind_param (Some v) stmt index
 let set_param_null stmt index = bind_param None stmt index
 let set_param_Any = set_param_Text
 let set_param_Int stmt index v = bind_param (Some (Number.to_string v)) stmt index
+let set_param_Float stmt index v = bind_param (Some (string_of_float v)) stmt index
+let set_param_Datetime = set_param_Float
 
 let no_params stmt = P.execute stmt [||]
 
