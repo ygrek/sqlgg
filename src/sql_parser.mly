@@ -341,7 +341,7 @@ attr_name: name=IDENT { (name,None) }
          | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
 
 expr:
-     expr numeric_bin_op expr %prec PLUS { `Func ((Int,false),[$1;$3]) }
+      expr numeric_bin_op expr %prec PLUS { `Func ((Any,false),[$1;$3]) } (* TODO default Int *)
     | expr boolean_bin_op expr %prec AND { `Func ((Bool,false),[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Bool,false),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Text,false),[$1;$3]) }
@@ -365,9 +365,9 @@ expr:
     | PARAM { `Param ($1,Any) }
     | f=FUNCTION LPAREN p=func_params RPAREN { `Func (f,p) }
     | expr TEST_NULL { $1 }
-    | expr mnot(BETWEEN) expr AND expr { `Func ((Int,false),[$1;$3;$5]) }
+    | expr mnot(BETWEEN) expr AND expr { `Func ((Any,false),[$1;$3;$5]) } (* TODO default Int *)
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { `Func ((Bool,false),params_of select) }
-    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END 
+    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END
       {
         let l = function None -> [] | Some x -> [x] in
         `Func ((Any,false),l e1 @ List.flatten branches @ l e2)
@@ -388,7 +388,7 @@ literal_value:
     | TIMESTAMP TEXT { `Value Datetime }
     | NULL { `Value Any } (* he he *)
 
-single_literal_value: 
+single_literal_value:
     | literal_value { $1 }
     | MINUS INTEGER { `Value Int }
     | MINUS FLOAT { `Value Float }

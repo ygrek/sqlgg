@@ -110,7 +110,7 @@ let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type a
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
-let params_to_values = List.rev $ List.unique $ List.rev $ all_params_to_values
+let params_to_values = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
 
 end
 
