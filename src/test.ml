@@ -3,7 +3,6 @@ open OUnit
 open RA
 open Sql.Type
 open Stmt
-open ListMore
 
 let named s = (Some s,(0,0))
 let param = (None,(0,0))

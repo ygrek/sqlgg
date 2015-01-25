@@ -5,9 +5,9 @@
 
 %{
   open Printf
+  open ExtLib
   open Sql.Constraint
   open Sql.Type
-  open ListMore
   open Stmt
   open Syntax
   open Prelude
@@ -346,7 +346,7 @@ expr:
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Bool,false),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Text,false),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
-      { `Func ((Any,false),(List.filter_valid [Some e1; Some e2; e3])) }
+      { `Func ((Any,false),(List.filter_map id [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
     | LPAREN expr RPAREN { $2 }

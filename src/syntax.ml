@@ -2,7 +2,6 @@
 
 open Stmt
 open Prelude
-open ListMore
 open Sql
 
 type expr = [ `Value of Type.t (** literal value *)
