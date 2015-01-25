@@ -74,9 +74,9 @@ let show_e e = Show.show<expr_q> (e) >> print_endline
 let resolve_types tables joined_schema expr =
   expr
   >> resolve_columns tables joined_schema
-  >> tee (if Sqlgg_config.debug1 () then show_e else ignore)
+  >> tee (if false then show_e else ignore)
   >> assign_types
-  >> tee (if Sqlgg_config.debug1 () then print_newline $ show_e $ fst else ignore)
+  >> tee (if false then print_newline $ show_e $ fst else ignore)
 
 let infer_schema columns tables joined_schema =
 (*   let all = tables >> List.map snd >> List.flatten in *)

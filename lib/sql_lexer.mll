@@ -1,12 +1,13 @@
 
 {
-  open Sql_parser
+  open Printf
   open Lexing
   open ExtLib
+  open Sql_parser
   module T = Sql.Type
 
 let error _ callerID =
-  Error.log "Lexer error : %s" callerID;
+  prerr_endline (sprintf "Lexer error : %s" callerID);
 (*	update_pos buf;*)
 	raise Parsing.Parse_error
 
@@ -156,7 +157,7 @@ let keywords =
   let add map (k,v) =
     let k = String.lowercase k in
     if Keywords.mem k map then
-      failwith (Printf.sprintf "Lexeme %s is already associated with keyword." k)
+      failwith (sprintf "Lexeme %s is already associated with keyword." k)
     else
       Keywords.add k v map
   in
@@ -172,7 +173,7 @@ let ident str = IDENT (String.lowercase str)
 
 let as_literal ch s =
   let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in
-  Printf.sprintf "%c%s%c" ch s ch
+  sprintf "%c%s%c" ch s ch
 }
 
 let digit = ['0'-'9']
@@ -294,7 +295,7 @@ ruleCommentMulti acc = parse
     match !P.mode with
     | P.Normal -> token
     | P.Ignore ->
-(*         Printf.eprintf "ignored: %s\n" (lexeme lexbuf); *)
+(*         eprintf "ignored: %s\n" (lexeme lexbuf); *)
       if (token = EOF) then token else IGNORED
 
 }

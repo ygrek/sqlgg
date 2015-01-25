@@ -16,7 +16,13 @@ Executable sqlgg
   Install: true
   CompiledObject: best
   MainIs: sqlgg.ml
-  BuildDepends: extlib, deriving, oUnit
+  BuildDepends: extlib, deriving, oUnit, sqlgg
+
+Library sqlgg
+  Path: lib/
+  Modules:
+  InternalModules: 
+  BuildDepends: extlib, deriving
 
 Test main
   Command: $sqlgg -test

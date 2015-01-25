@@ -196,7 +196,7 @@ select_stmt_t: select_core other=list(preceded(compound_op,select_core))
               {
                 let (s1,p1,tbls,cardinality) = $1 in
                 let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) other) in
-                if Sqlgg_config.debug1 () then
+                if false then
                   eprintf "cardinality=%s other=%u\n%!"
                           (cardinality_to_string cardinality)
                           (List.length other);
