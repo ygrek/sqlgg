@@ -215,12 +215,12 @@ select_stmt_t: select_core other=list(preceded(compound_op,select_core))
 select_stmt: select_stmt_t { let (s,p,_) = $1 in s,p }
 
 select_core: SELECT select_type? r=commas(column1)
-             FROM t=table_list
+             f=from?
              w=where?
              g=loption(group)
              h=having?
               {
-                let (tbls,p2,joined_schema) = Syntax.join t in
+                let (tbls,p2,joined_schema) = match f with Some t -> Syntax.join t | None -> [], [], [] in
                 let singlerow = g = [] && Syntax.test_all_grouping r in
                 let singlerow2 = w = None && g = [] && Syntax.test_all_const r in
                 let p1 = Syntax.params_of_columns tbls joined_schema r in
@@ -272,6 +272,7 @@ limit: limit_t { fst $1 }
 order: ORDER BY l=commas(terminated(expr,order_type?)) { l }
 order_type: DESC | ASC { }
 
+from: FROM t=table_list { t }
 where: WHERE e=expr { e }
 group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
