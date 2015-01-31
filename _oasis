@@ -15,13 +15,14 @@ Executable sqlgg
   Path: src/
   Install: true
   CompiledObject: best
-  MainIs: sqlgg.ml
+  MainIs: cli.ml
   BuildDepends: extlib, deriving, oUnit, sqlgg
 
 Library sqlgg
+  Pack: true
   Path: lib/
-  Modules:
-  InternalModules: 
+  Modules: RA, Props, Sql, Stmt, Tables, Syntax
+  InternalModules: Prelude
   BuildDepends: extlib, deriving
 
 Test main
