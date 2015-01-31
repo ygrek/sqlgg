@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="select_0" sql="SELECT strftime('%s','now')" kind="select" cardinality="0,1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
+</sqlgg>
