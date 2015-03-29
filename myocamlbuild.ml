@@ -623,4 +623,6 @@ let dispatch = function
 | t -> dispatch_default t
 ;;
 
+let () = mark_tag_used "tests";;
+
 Ocamlbuild_plugin.dispatch dispatch;;
