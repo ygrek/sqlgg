@@ -59,7 +59,7 @@ WHERE x = @val;" STYPE
    S" clear:left" sdiv
 
 ( << `div tag S" Output query parameters substitution :" TYPE
-   << 
+   <<
     %[ `params `name $$ ]% `select atag
     `input S" As is" option
     `named S" Only named" option

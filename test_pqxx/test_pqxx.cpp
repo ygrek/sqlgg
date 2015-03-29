@@ -19,7 +19,7 @@ int main()
     result R;
     R = W.exec("DROP TABLE employee");
     gen::create_employee(W);
-   
+
     gen::insert_employee(W,"john",2);
     gen::insert_employee(W,"jack",3);
     gen::insert_employee(W,"bob",4);
@@ -47,4 +47,3 @@ int main()
 	}
 	return 0;
 }
-

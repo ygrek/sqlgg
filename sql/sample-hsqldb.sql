@@ -40,7 +40,7 @@ create table PRODUCT  (
    CONSTRAINT FK_M2M FOREIGN KEY (MANUFACTURER_ID) REFERENCES MANUFACTURER (MANUFACTURER_ID)
 );
 
--- test junction table 
+-- test junction table
 create table DELIVERY  (
    CUSTOMER_ID          INTEGER,
    PRODUCT_ID           INTEGER,

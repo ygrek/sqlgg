@@ -9,7 +9,7 @@ module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
 module CSharp = Gen.Make(Gen_csharp)
 
-(* 
+(*
   common usecase:
      sqlgg [-gen none] ddl.sql -gen cxx dml.sql
 *)
@@ -48,7 +48,7 @@ let each_input =
   | "-" -> run (Some stdin)
   | filename -> Main.with_channel filename run
 
-let generate l = 
+let generate l =
   match !generate with
   | None -> ()
   | Some f -> f !name (List.enum l)
@@ -81,17 +81,16 @@ let main () =
   Arg.parse args work usage_msg;
   match !l with
   | [] -> if Array.length Sys.argv = 1 then Arg.usage args usage_msg; 0
-  | l -> 
+  | l ->
     if !Error.errors then
       begin Error.log "Errors encountered, no code generated"; 1 end
     else
       begin generate @@ List.concat @@ List.rev l; 0 end
 
-let main () = 
+let main () =
   try
     main ()
   with
     exn -> Error.logs (Printexc.to_string exn); 2
 
 let () = exit (main ())
-

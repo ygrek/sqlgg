@@ -141,7 +141,7 @@ let func_execute index stmt =
       | _ ->
       start_class "row";
       List.iteri (fun index attr ->
-        output "public readonly %s %s;" 
+        output "public readonly %s %s;"
           (as_lang_type attr.RA.domain)
           (name_of attr index)
       ) stmt.schema;
@@ -207,4 +207,3 @@ let generate () name stmts =
   let names = List.mapi generate_code (List.of_enum stmts) in
   generate_all names;
   end_ns name
-

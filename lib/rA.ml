@@ -64,7 +64,7 @@ struct
 
   let natural t1 t2 =
     try natural_ t1 t2 with
-    | _ -> raise (Error (t1,"no common attributes for natural join of " ^ 
+    | _ -> raise (Error (t1,"no common attributes for natural join of " ^
                              (names t1) ^ " and " ^ (names t2)))
 
   let join_using l t1 t2 =
@@ -78,12 +78,12 @@ struct
       | Type.Any, _
       | _, Type.Any -> ()
       | x, y when x = y -> ()
-      | _ -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s" 
+      | _ -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s"
         a1.name (Type.to_string a1.domain)
         a2.name (Type.to_string a2.domain)))) t1 t2
 
-  let check_types t1 t2 = 
-    try check_types t1 t2 with 
+  let check_types t1 t2 =
+    try check_types t1 t2 with
     | List.Different_list_size _ -> raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)))
 
   let compound t1 t2 = check_types t1 t2; t1
@@ -95,7 +95,7 @@ struct
       match pos with
       | `First -> col::t
       | `Default -> t @ [col]
-      | `After name -> 
+      | `After name ->
         try
           let (i,_) = List.findi (fun _ attr -> by_name name attr) t in
           let (l1,l2) = List.split_nth (i+1) t in

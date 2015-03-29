@@ -66,7 +66,7 @@ let output_select1_cb _ schema =
 let output_schema_binder index schema kind =
   match schema with
   | [] -> "execute",""
-  | _ -> match kind with 
+  | _ -> match kind with
          | Select (`Zero_one | `One) -> "select1", output_select1_cb index schema
          | _ -> "select",output_schema_binder index schema
 
@@ -133,7 +133,7 @@ let generate_stmt fold index stmt =
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
   if fold then output "let r_acc = ref acc in";
-  output "T.%s db %s %s %s" func sql params_binder_name 
+  output "T.%s db %s %s %s" func sql params_binder_name
     (if fold then "(fun x -> r_acc := " ^ callback ^ " x !r_acc);" else callback);
   if fold then output "!r_acc";
   dec_indent ();
@@ -141,8 +141,8 @@ let generate_stmt fold index stmt =
 
 let generate () name stmts =
 (*
-  let types = 
-    String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"]) 
+  let types =
+    String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
   in
 *)
   output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
@@ -156,4 +156,3 @@ let generate () name stmts =
   output "end (* module Fold *)";
   dec_indent ();
   output "end (* module %s *)" (String.capitalize name)
-

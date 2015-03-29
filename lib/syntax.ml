@@ -99,7 +99,7 @@ let infer_schema columns tables joined_schema =
 let test_all_grouping columns =
   let test = function
   (* grouping function of zero or single parameter *)
-  | Expr (`Func ((_,true),args),_) when List.length args <= 1 -> true 
+  | Expr (`Func ((_,true),args),_) when List.length args <= 1 -> true
   | _ -> false
   in
   List.for_all test columns
@@ -177,10 +177,10 @@ let all_tbl_columns = all_columns $ List.map snd
 let split_column_assignments tables l =
   let cols = ref [] in
   let exprs = ref [] in
-  let all = all_tbl_columns tables in 
+  let all = all_tbl_columns tables in
   List.iter (fun ((cname,tname as col),expr) ->
     cols := col :: !cols;
-    let schema = 
+    let schema =
       match tname with
       | Some name -> Tables.get_from tables name |> snd
       | None -> all
@@ -202,4 +202,3 @@ let rec ensure_simple_expr = function
   | `Column _ -> failwith "Not a simple expression"
   | `Func ((_,grouping),_) when grouping -> failwith "Grouping function not allowed in simple expression"
   | `Func (x,l) -> `Func(x,List.map ensure_simple_expr l)
-

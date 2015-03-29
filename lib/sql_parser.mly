@@ -116,7 +116,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 Tables.add (name,s);
                 ([],p,Create name)
               }
-         | CREATE UNIQUE? INDEX if_not_exists? name=table_name 
+         | CREATE UNIQUE? INDEX if_not_exists? name=table_name
                 ON table=table_name cols=sequence(index_column)
               {
                 RA.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
@@ -191,7 +191,7 @@ table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (fun
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
 
-select_stmt_t: select_core other=list(preceded(compound_op,select_core)) 
+select_stmt_t: select_core other=list(preceded(compound_op,select_core))
                o=loption(order) lim=limit_t?
               {
                 let (s1,p1,tbls,cardinality) = $1 in

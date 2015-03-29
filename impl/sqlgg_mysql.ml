@@ -82,7 +82,7 @@ let select db sql set_params callback =
     in
     loop ())
 
-let execute db sql set_params = 
+let execute db sql set_params =
   with_stmt db sql (fun stmt ->
     let _ = set_params stmt in
     if 0 <> P.real_status stmt then oops "execute : %s" sql;
@@ -95,4 +95,3 @@ let select1 db sql set_params callback =
     | None -> None)
 
 end
-

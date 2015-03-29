@@ -90,7 +90,7 @@ let output_schema_binder _ schema =
   empty_line ();
 
   let mthd action active =
-    func "void" action 
+    func "void" action
       (["row","typename Traits::row"] @ (if active then ["result","T"] else []))
       (fun () ->
         List.iteri (fun index attr -> column_action action attr index) schema;
@@ -203,4 +203,3 @@ let generate () name stmts =
   let names = List.mapi make_stmt stmts in
   make_all name names;
   end_struct name
-

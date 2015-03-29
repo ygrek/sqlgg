@@ -48,6 +48,5 @@ let main () =
 
   ()
 
-let _ = 
+let _ =
   Printexc.print main ()
-

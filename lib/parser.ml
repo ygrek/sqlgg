@@ -1,6 +1,6 @@
 
-module T_SQL_parser = 
-  struct 
+module T_SQL_parser =
+  struct
     type token = Sql_parser.token
     type result = RA.Schema.t * Stmt.params * Stmt.kind
     let rule = Sql_lexer.parse_rule
@@ -10,4 +10,3 @@ module T_SQL_parser =
 module T = Parser_utils.Make (T_SQL_parser)
 
 let parse_stmt stmt = T.parse_buf_exn (Lexing.from_string stmt)
-

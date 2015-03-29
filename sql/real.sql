@@ -1,12 +1,12 @@
  create table codeTable (locat INT, code TEXT, descript TEXT);
 
- select * 
+ select *
  from codeTable
  where locat not in (@lim1, @lim2)
  and code not in
    (
     select code
-    from 
+    from
       (select code, descript     // gets unique code-and-descript combos
        from codeTable
        where locat not in (@lim1, @lim2)

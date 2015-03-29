@@ -1,7 +1,7 @@
 create table [OrderLine] (Id int, OrderId int, ProductId int, Qty int, Status int);
 create table [Product] (Id int, Name text, Price float);
 
-select OrderId, count(*) 
+select OrderId, count(*)
 from OrderLine
 group by OrderId
 having count(*) > @cnt;

@@ -23,7 +23,7 @@ let tt ?msg sql ?kind schema params =
   | Some stmt ->
       assert_equal ~msg ~printer:RA.Schema.to_string schema stmt.schema;
       assert_equal ~msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params;
-      match kind with 
+      match kind with
       | Some k -> assert_equal ~msg ~printer:Show.show<Stmt.kind> k stmt.kind
       | None -> ()
 
@@ -93,7 +93,7 @@ let test4  () =
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
   tt "select 1+2 from test4" a [] ~kind:(Select `Zero_one);
-  tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test" 
+  tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
     [attr "" Int; attr "" Text] [] ~kind:(Select `Zero_one);
   tt "select greatest(10,x) from test4" a [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select `Nat);
@@ -122,12 +122,12 @@ let test_join_result_cols () =
   tt ~msg:"JOIN USING"
     "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
   tt ~msg:"NATURAL JOIN with common column in WHERE"
-    "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x" 
-    (ints ["j";"i";"k"]) 
+    "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x"
+    (ints ["j";"i";"k"])
     [named "x",Int];
   tt ~msg:"NATURAL JOIN with common column qualified in WHERE"
-    "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x" 
-    (ints ["j";"i";"k"]) 
+    "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
+    (ints ["j";"i";"k"])
     [named "x",Int];
   ()
 

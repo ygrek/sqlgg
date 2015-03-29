@@ -15,7 +15,7 @@ int main()
     result R;
     R = W.exec("DROP TABLE employee");
     R = W.exec("CREATE TABLE employee (id SERIAL PRIMARY KEY, name TEXT, salary INT)");
-    
+
     C.prepare("ins","INSERT INTO employee (name,salary) VALUES($1,$2)")
         ("varchar",prepare::treat_string)
         ("varchar",prepare::treat_direct);
@@ -49,4 +49,3 @@ int main()
 	}
 	return 0;
 }
-

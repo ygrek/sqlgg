@@ -49,7 +49,7 @@ module type M = sig
 
   val no_params : statement -> result
 
-  (** 
+  (**
     Perform query and return results via callback for each row
     @raise Oops on error
   *)
@@ -61,7 +61,7 @@ module type M = sig
   *)
   val select1 : connection -> string -> (statement -> result) -> (row -> 'b) -> 'b option
 
-  (** Execute non-query. 
+  (** Execute non-query.
     @raise Oops on error
     @return number of affected rows
   *)

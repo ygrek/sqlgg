@@ -83,15 +83,15 @@ let get_sql stmt =
   match !params_mode with
   | None -> sql
   | Some subst ->
-    let f = match subst with 
+    let f = match subst with
     | Named -> subst_named
     | Unnamed -> subst_unnamed
-    | Oracle -> subst_oracle 
+    | Oracle -> subst_oracle
     | PostgreSQL -> subst_postgresql
     in
     substitute_params sql stmt.params f
 
-let time_string () = 
+let time_string () =
   let module U = Unix in
   let t = U.time () |> U.gmtime in
   sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) (t.U.tm_mon+1) t.U.tm_mday t.U.tm_hour t.U.tm_min
@@ -136,4 +136,3 @@ let process name stmts =
   S.generate out name stmts
 
 end
-

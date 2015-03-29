@@ -70,7 +70,7 @@ let parse_one x =
     begin
      let extra = match exn with
      | RA.Schema.Error (_,msg) -> msg
-     | exn -> Printexc.to_string exn 
+     | exn -> Printexc.to_string exn
      in
      let sql = fst x in
      Error.log "==> %s" sql;
@@ -91,7 +91,7 @@ let drop_while p e =
     Enum.junk e
   done
 
-type token = [`Comment of string | `Token of string | `Char of char | 
+type token = [`Comment of string | `Token of string | `Char of char |
               `Space of string | `Prop of string * string | `Semicolon ]
 
 let get_statements ch =
@@ -139,4 +139,3 @@ let with_channel filename f =
   match try Some (open_in filename) with _ -> None with
   | None -> Error.log "cannot open file : %s" filename; f None
   | Some ch -> Std.finally (fun () -> close_in_noerr ch) f (Some ch)
-
