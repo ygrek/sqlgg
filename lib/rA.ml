@@ -4,7 +4,6 @@
 
 open Printf
 open ExtLib
-open Prelude
 
 module Type = Sql.Type
 
@@ -53,9 +52,9 @@ struct
 
   let sub l a = List.filter (fun x -> not (List.mem x a)) l
 
-  let to_string v = v >> List.map (fun attr -> sprintf "%s %s" (Type.to_string attr.domain) attr.name) >>
-    String.concat ", " >> sprintf "[%s]"
-  let names t = t >> List.map (fun attr -> attr.name) >> String.concat "," >> sprintf "[%s]"
+  let to_string v = v |> List.map (fun attr -> sprintf "%s %s" (Type.to_string attr.domain) attr.name) |>
+    String.concat ", " |> sprintf "[%s]"
+  let names t = t |> List.map (fun attr -> attr.name) |> String.concat "," |> sprintf "[%s]"
 
   let natural_ t1 t2 =
     let (common,t1only) = List.partition (fun x -> List.mem x t2) t1 in
@@ -124,7 +123,7 @@ type table = string * Schema.t deriving (Show)
 
 let print_table out (name,schema) =
   IO.write_line out name;
-  schema >> List.iter (fun {name=name;domain=domain} ->
+  schema |> List.iter (fun {name=name;domain=domain} ->
     IO.printf out "%10s %s\n" (Type.to_string domain) name);
   IO.write_line out ""
 

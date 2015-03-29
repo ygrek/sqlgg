@@ -40,7 +40,7 @@ let xml_to_string xml =
 
 (*
 let _ =
-  Node ("test",["name","d\"s&quot;ds"],[]) >> xml_to_string >> print_endline
+  Node ("test",["name","d\"s&quot;ds"],[]) |> xml_to_string |> print_endline
 *)
 
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
@@ -83,8 +83,8 @@ let start_output (x,pre) = pre := !x; x := []
 
 let finish_output (x,pre) =
   print_endline "<?xml version=\"1.0\"?>";
-  List.iter (fun z -> z >> xml_to_string >> print_endline) (List.rev !pre);
-  Node ("sqlgg",[],List.rev !x) >> xml_to_string >> print_endline;
+  List.iter (fun z -> z |> xml_to_string |> print_endline) (List.rev !pre);
+  Node ("sqlgg",[],List.rev !x) |> xml_to_string |> print_endline;
   x := [];
   pre := []
 

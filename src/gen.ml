@@ -79,7 +79,7 @@ let subst_postgresql index _ = "$" ^ string_of_int (index + 1)
 let subst_unnamed _ _ = "?"
 
 let get_sql stmt =
-  let sql = Props.get stmt.props "sql" >> Option.get in
+  let sql = Props.get stmt.props "sql" |> Option.get in
   match !params_mode with
   | None -> sql
   | Some subst ->
@@ -93,7 +93,7 @@ let get_sql stmt =
 
 let time_string () = 
   let module U = Unix in
-  let t = U.time () >> U.gmtime in
+  let t = U.time () |> U.gmtime in
   sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) (t.U.tm_mon+1) t.U.tm_mday t.U.tm_hour t.U.tm_min
 
 module type LangTypes = sig

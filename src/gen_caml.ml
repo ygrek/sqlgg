@@ -59,7 +59,7 @@ let output_select1_cb _ schema =
   let name = "get_row" in
   output "let %s stmt =" name;
   indented (fun () ->
-    List.mapi get_column schema >> String.concat ", " >> indent_endline);
+    List.mapi get_column schema |> String.concat ", " |> indent_endline);
   output "in";
   name
 
@@ -107,9 +107,9 @@ type t = unit
 let start () = ()
 
 let generate_stmt fold index stmt =
-  let name = choose_name stmt.props stmt.kind index >> String.uncapitalize in
+  let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get stmt.props "subst" in
-  let values = ((match subst with None -> [] | Some x -> [x]) @ params_to_values stmt.params) >> List.map (prepend "~") >> inline_values in
+  let values = ((match subst with None -> [] | Some x -> [x]) @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
   let fold = fold && is_callback stmt in
   let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
   output "let %s db %s =" name all_params;

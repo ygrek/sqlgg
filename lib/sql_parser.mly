@@ -119,7 +119,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
          | CREATE UNIQUE? INDEX if_not_exists? name=table_name 
                 ON table=table_name cols=sequence(index_column)
               {
-                RA.Schema.project cols (Tables.get_schema table) >> ignore; (* just check *)
+                RA.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
                 [],[],CreateIndex name
               }
          | select_stmt_t { $1 }
@@ -184,7 +184,7 @@ table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_column: name=IDENT collate? order_type? { name }
 
 table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
-                | LIKE name=maybe_parenth(IDENT) { Tables.get name >> snd } (* mysql *)
+                | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)
 
 (* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
@@ -331,7 +331,7 @@ key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=attr_name EQUAL e=expr { name,e }
 
-(* expr: expr1 { $1 >> Syntax.expr_to_string >> prerr_endline; $1 } *)
+(* expr: expr1 { $1 |> Syntax.expr_to_string |> prerr_endline; $1 } *)
 
 anyall: ANY | ALL | SOME { }
 
@@ -347,7 +347,7 @@ expr:
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Bool,false),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Text,false),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
-      { `Func ((Any,false),(List.filter_map id [Some e1; Some e2; e3])) }
+      { `Func ((Any,false),(List.filter_map identity [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
     | LPAREN expr RPAREN { $2 }

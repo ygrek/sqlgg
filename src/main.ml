@@ -2,7 +2,6 @@
   Main
 *)
 
-open Prelude
 open ExtLib
 
 module L = List
@@ -44,8 +43,8 @@ let parse_one_exn (sql,props) =
       B.add_string b " ";
       B.add_string b pre;
       let params' = ref [] in
-      let first = common_prefix & List.map (fun attr -> attr.RA.name) schema in
-      schema >> List.iter (fun attr ->
+      let first = common_prefix @@ List.map (fun attr -> attr.RA.name) schema in
+      schema |> List.iter (fun attr ->
         if !params' <> [] then B.add_string b ",";
         let attr_ref_prefix = each attr.RA.name in
         let attr_name = String.slice ~first attr.RA.name in
@@ -134,10 +133,10 @@ let get_statements ch =
           stmt
       end
   in
-  Enum.from next >> List.of_enum
+  Enum.from next |> List.of_enum
 
 let with_channel filename f =
-  match catch open_in filename with
+  match try Some (open_in filename) with _ -> None with
   | None -> Error.log "cannot open file : %s" filename; f None
   | Some ch -> Std.finally (fun () -> close_in_noerr ch) f (Some ch)
 

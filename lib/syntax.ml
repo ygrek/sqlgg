@@ -34,7 +34,7 @@ let schema_as_params = List.map (fun attr -> (Some attr.RA.name,(0,0)), Some att
 
 (** replace every Column with Value of corresponding type *)
 let resolve_columns tables joined_schema expr =
-  let schema_of_table name = name >> Tables.get_from tables >> snd in
+  let schema_of_table name = name |> Tables.get_from tables |> snd in
   let rec each e =
     match e with
     | `Value x -> `Value x
@@ -54,7 +54,7 @@ let assign_types expr =
     | `Func ((ret,g),l) ->
 (** Assumption: sql functions/operators have type schema 'a -> ... -> 'a -> 'a -> 'b
     i.e. all parameters of some equal type *)
-        let (l,t) = l >> List.map typeof >> List.split in
+        let (l,t) = l |> List.map typeof |> List.split in
         let t = match List.filter ((<>) Type.Any) t with
         | [] -> Type.Any
         | h::t -> if List.for_all ((=) h) t then h else Type.Any
@@ -69,18 +69,18 @@ let assign_types expr =
   in
   typeof expr
 
-let show_e e = Show.show<expr_q> (e) >> print_endline
+let show_e e = Show.show<expr_q> (e) |> print_endline
 
 let resolve_types tables joined_schema expr =
-  expr
-  >> resolve_columns tables joined_schema
-  >> tee (if false then show_e else ignore)
-  >> assign_types
-  >> tee (if false then print_newline $ show_e $ fst else ignore)
+  let expr = resolve_columns tables joined_schema expr in
+  if false then show_e expr;
+  let (expr,_ as r) = assign_types expr in
+  if false then print_newline @@ show_e expr;
+  r
 
 let infer_schema columns tables joined_schema =
-(*   let all = tables >> List.map snd >> List.flatten in *)
-  let schema name = name >> Tables.get_from tables >> snd in
+(*   let all = tables |> List.map snd |> List.flatten in *)
+  let schema name = name |> Tables.get_from tables |> snd in
   let resolve1 = function
     | All -> joined_schema
     | AllOf t -> schema t
@@ -89,7 +89,7 @@ let infer_schema columns tables joined_schema =
       match e with
       | `Column (name,Some t) -> RA.Schema.find (schema t) name
       | `Column (name,None) -> RA.Schema.find joined_schema name
-      | _ -> RA.attr "" (resolve_types tables joined_schema e >> snd)
+      | _ -> RA.attr "" (resolve_types tables joined_schema e |> snd)
       end in
       let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
       [ col ]
@@ -123,15 +123,15 @@ let get_params_q e =
     | `Func (_,l) -> List.fold_left loop acc l
     | `Value _ -> acc
   in
-  loop [] e >> List.rev
+  loop [] e |> List.rev
 
 let get_params tables joined_schema e =
-  e >> resolve_types tables joined_schema >> fst >> get_params_q
+  e |> resolve_types tables joined_schema |> fst |> get_params_q
 
 (*
 let _ =
   let e = Sub [Value Type.Text; Param (Next,None); Sub []; Param (Named "ds", Some Type.Int);] in
-  e >> get_params >> to_string >> print_endline
+  e |> get_params |> to_string |> print_endline
 *)
 
 let params_of_column tables j_s = function
@@ -164,7 +164,7 @@ let do_join (tables,params,schema) ((table1,params1),kind) =
 
 let join ((t0,p0),joins) =
   let (tables,params,joined_schema) = List.fold_left do_join ([t0],p0,snd t0) joins in
-(*   let joined_schema = tables >> List.map snd >> List.flatten in *)
+(*   let joined_schema = tables |> List.map snd |> List.flatten in *)
   (tables,params,joined_schema)
 
 let cross = List.fold_left RA.Schema.cross []
@@ -182,7 +182,7 @@ let split_column_assignments tables l =
     cols := col :: !cols;
     let schema = 
       match tname with
-      | Some name -> Tables.get_from tables name >> snd
+      | Some name -> Tables.get_from tables name |> snd
       | None -> all
     in
     (* hint expression to unify with the column type *)
@@ -195,7 +195,7 @@ let params_of_assigns tables ss =
   get_params_l tables (cross (List.map snd tables)) exprs
 
 let params_of_order o final_schema tables =
-  get_params_l tables (final_schema :: (List.map snd tables) >> all_columns) o
+  get_params_l tables (final_schema :: (List.map snd tables) |> all_columns) o
 
 let rec ensure_simple_expr = function
   | `Value _ | `Param _ as x -> x

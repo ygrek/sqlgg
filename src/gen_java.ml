@@ -52,7 +52,7 @@ open T
 
 let get_column attr index =
   sprintf "res.get%s(%u)"
-    (attr.RA.domain >> as_api_type)
+    (attr.RA.domain |> as_api_type)
     (index + 1)
 
 let output_schema_binder name _ schema =
@@ -68,19 +68,19 @@ let output_schema_binder name index schema =
   | _ -> Some (output_schema_binder name index schema)
 
 let output_value_defs vals =
-  vals >> List.iter (fun (name,t) -> output "%s %s;" t name)
+  vals |> List.iter (fun (name,t) -> output "%s %s;" t name)
 
 let output_schema_data index schema =
   let name = default_name "data" index in
   start_class name;
-  schema >> schema_to_values >> output_value_defs;
+  schema |> schema_to_values |> output_value_defs;
   end_class name
 
 let set_param name index param =
   let (id,t) = param in
   output "pstmt_%s.set%s(%u, %s);"
     name
-    (t >> param_type_to_string >> String.capitalize)
+    (t |> param_type_to_string |> String.capitalize)
     (index+1)
     (param_name_to_string id index)
 

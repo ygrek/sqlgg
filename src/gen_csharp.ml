@@ -52,7 +52,7 @@ open T
 
 let get_column attr index =
   sprintf "reader.Get%s(%u)"
-    (attr.RA.domain >> as_api_type)
+    (attr.RA.domain |> as_api_type)
     index
 
 let schema_to_string = G.Values.to_string $ schema_to_values
@@ -163,7 +163,7 @@ let func_execute index stmt =
       match stmt.kind with
       | Insert _ when List.length values > 1 ->
           G.func "public int" "execute<T>" ["v","T"] (fun () ->
-            output "return execute(%s);" (values >> Values.names >> List.map ((^) "v.") >> Values.join)
+            output "return execute(%s);" (values |> Values.names |> List.map ((^) "v.") |> Values.join)
           )
       | _ -> ()
     end

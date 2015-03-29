@@ -74,7 +74,7 @@ let set_param arg index param =
     index
 
 let output_value_defs vals =
-  vals >> List.iter (fun (name,t) -> output "%s %s;" t name)
+  vals |> List.iter (fun (name,t) -> output "%s %s;" t name)
 
 let output_schema_binder _ schema =
   out_private ();
@@ -116,7 +116,7 @@ let output_schema_data index schema =
   out_public ();
   let name = "data" in
   start_struct name;
-  schema >> schema_to_values >> output_value_defs;
+  schema |> schema_to_values |> output_value_defs;
   end_struct name
 *)
 
@@ -134,7 +134,7 @@ let struct_params name values k =
 
 let struct_ctor name values k =
   struct_params name values (fun () ->
-    func "" name values ~tail:(value_inits values) id;
+    func "" name values ~tail:(value_inits values) identity;
     empty_line ();
     k ())
 
@@ -166,7 +166,7 @@ let make_stmt index stmt =
    let name = choose_name stmt.props stmt.kind index in
    let sql = quote (get_sql stmt) in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
-    func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) id;
+    func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) identity;
    let schema_binder_name = output_schema_binder index stmt.schema in
    let params_binder_name = output_params_binder index stmt.params in
 (*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
@@ -192,7 +192,7 @@ let make_all name names =
   | [] -> ""
   | _ -> ": " ^ (String.concat ", " (List.map (fun name -> sprintf "%s(db)" name) names))
   in
-  func "" name ["db","typename Traits::connection"] ~tail id
+  func "" name ["db","typename Traits::connection"] ~tail identity
 
 let generate () name stmts =
   output "#pragma once";

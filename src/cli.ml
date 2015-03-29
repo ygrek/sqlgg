@@ -1,7 +1,6 @@
 (** command-line *)
 
 open Printf
-open Prelude
 open ExtLib
 
 module Cxx = Gen.Make(Gen_cxx)
@@ -86,7 +85,7 @@ let main () =
     if !Error.errors then
       begin Error.log "Errors encountered, no code generated"; 1 end
     else
-      begin generate & List.concat & List.rev & l; 0 end
+      begin generate @@ List.concat @@ List.rev l; 0 end
 
 let main () = 
   try
