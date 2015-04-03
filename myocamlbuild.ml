@@ -623,6 +623,7 @@ let dispatch = function
 | t -> dispatch_default t
 ;;
 
-let () = mark_tag_used "tests";;
+(* mark_tag_used is not available in ocaml < 4.02 *)
+(* let () = mark_tag_used "tests";; *)
 
 Ocamlbuild_plugin.dispatch dispatch;;

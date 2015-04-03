@@ -202,3 +202,5 @@ let rec ensure_simple_expr = function
   | `Column _ -> failwith "Not a simple expression"
   | `Func ((_,grouping),_) when grouping -> failwith "Grouping function not allowed in simple expression"
   | `Func (x,l) -> `Func(x,List.map ensure_simple_expr l)
+
+let list_filter_map = ExtList.List.filter_map

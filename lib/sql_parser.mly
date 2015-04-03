@@ -5,7 +5,6 @@
 
 %{
   open Printf
-  open ExtLib
   open Sql.Constraint
   open Sql.Type
   open Stmt
@@ -39,7 +38,7 @@
       | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos),Int)
       | _, `Param p -> Some (p,Int)
     in
-    List.filter_map param l, List.mem (`Limit,`Const 1) l
+    list_filter_map param l, List.mem (`Limit,`Const 1) l
 
 %}
 
@@ -183,7 +182,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_column: name=IDENT collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
+table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
                 | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)
 
 (* ugly, can you fixme? *)
@@ -347,7 +346,7 @@ expr:
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { `Func ((Bool,false),[e1;e2]) }
     | expr CONCAT_OP expr { `Func ((Text,false),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
-      { `Func ((Any,false),(List.filter_map identity [Some e1; Some e2; e3])) }
+      { `Func ((Any,false),(list_filter_map identity [Some e1; Some e2; e3])) }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
     | LPAREN expr RPAREN { $2 }
