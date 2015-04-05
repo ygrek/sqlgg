@@ -3,7 +3,7 @@
 open Printf
 open ExtLib
 
-type table = RA.table
+type table = Sql.table
 
 let all : table list ref = ref []
 
@@ -38,12 +38,12 @@ let alter name f =
   in
   all := List.map alter_scheme !all
 
-let alter_add name col pos = alter name (fun s -> RA.Schema.add s col pos)
-let alter_drop name col = alter name (fun s -> RA.Schema.drop s col)
-let alter_change name oldcol col pos = alter name (fun s -> RA.Schema.change s oldcol col pos)
+let alter_add name col pos = alter name (fun s -> Sql.Schema.add s col pos)
+let alter_drop name col = alter name (fun s -> Sql.Schema.drop s col)
+let alter_change name oldcol col pos = alter name (fun s -> Sql.Schema.change s oldcol col pos)
 
-let print () = let out = IO.output_channel stdout in List.iter (RA.print_table out) !all
-let print1 name = RA.print_table (IO.output_channel stdout) (get name)
+let print () = let out = IO.output_channel stdout in List.iter (Sql.print_table out) !all
+let print1 name = Sql.print_table (IO.output_channel stdout) (get name)
 
 let reset () = all := []
 

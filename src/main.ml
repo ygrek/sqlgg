@@ -44,15 +44,15 @@ let parse_one_exn (sql,props) =
       B.add_string b " ";
       B.add_string b pre;
       let params' = ref [] in
-      let first = common_prefix @@ List.map (fun attr -> attr.RA.name) schema in
+      let first = common_prefix @@ List.map (fun attr -> attr.Sql.name) schema in
       schema |> List.iter (fun attr ->
         if !params' <> [] then B.add_string b ",";
-        let attr_ref_prefix = each attr.RA.name in
-        let attr_name = String.slice ~first attr.RA.name in
+        let attr_ref_prefix = each attr.Sql.name in
+        let attr_name = String.slice ~first attr.Sql.name in
         let attr_ref = "@" ^ attr_name in
         let pos_start = B.length b + String.length attr_ref_prefix in
         let pos_end = pos_start + String.length attr_ref in
-        let param = ((Some attr_name,(pos_start,pos_end)),attr.RA.domain) in
+        let param = ((Some attr_name,(pos_start,pos_end)),attr.Sql.domain) in
         B.add_string b attr_ref_prefix;
         B.add_string b attr_ref;
         params' := param :: !params'
@@ -70,7 +70,7 @@ let parse_one x =
   | Parser_utils.Error (exn,(line,cnum,tok,tail)) ->
     begin
      let extra = match exn with
-     | RA.Schema.Error (_,msg) -> msg
+     | Sql.Schema.Error (_,msg) -> msg
      | exn -> Printexc.to_string exn
      in
      let sql = fst x in
@@ -129,7 +129,7 @@ let get_statements ch =
       begin match parse_one sql with
       | None -> next ()
       | Some stmt ->
-          if not (RA.Schema.is_unique stmt.Stmt.schema) then
+          if not (Sql.Schema.is_unique stmt.Stmt.schema) then
             Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
           stmt
       end

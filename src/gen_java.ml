@@ -52,7 +52,7 @@ open T
 
 let get_column attr index =
   sprintf "res.get%s(%u)"
-    (attr.RA.domain |> as_api_type)
+    (attr.domain |> as_api_type)
     (index + 1)
 
 let output_schema_binder name _ schema =

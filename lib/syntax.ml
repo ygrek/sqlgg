@@ -30,7 +30,7 @@ type columns = column list deriving (Show)
 let collect f l = List.flatten (List.map f l)
 
 (* FIXME *)
-let schema_as_params = List.map (fun attr -> (Some attr.RA.name,(0,0)), Some attr.RA.domain)
+let schema_as_params = List.map (fun attr -> (Some attr.name,(0,0)), Some attr.domain)
 
 (** replace every Column with Value of corresponding type *)
 let resolve_columns tables joined_schema expr =
@@ -39,8 +39,8 @@ let resolve_columns tables joined_schema expr =
     match e with
     | `Value x -> `Value x
     | `Column (name,table) ->
-      let attr = RA.Schema.find (Option.map_default schema_of_table joined_schema table) name in
-      `Value attr.RA.domain
+      let attr = Schema.find (Option.map_default schema_of_table joined_schema table) name in
+      `Value attr.domain
     | `Param x -> `Param x
     | `Func (r,l) -> `Func (r,(List.map each l))
   in
@@ -87,11 +87,11 @@ let infer_schema columns tables joined_schema =
     | Expr (e,name) ->
       let col = begin
       match e with
-      | `Column (name,Some t) -> RA.Schema.find (schema t) name
-      | `Column (name,None) -> RA.Schema.find joined_schema name
-      | _ -> RA.attr "" (resolve_types tables joined_schema e |> snd)
+      | `Column (name,Some t) -> Schema.find (schema t) name
+      | `Column (name,None) -> Schema.find joined_schema name
+      | _ -> attr "" (resolve_types tables joined_schema e |> snd)
       end in
-      let col = Option.map_default (fun n -> {col with RA.name = n}) col name in
+      let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
   in
   collect resolve1 columns
@@ -152,9 +152,9 @@ let do_join (tables,params,schema) ((table1,params1),kind) =
   let schema = match kind with
   | `Cross
   | `Search _
-  | `Default -> RA.Schema.cross schema schema1
-  | `Natural -> RA.Schema.natural schema schema1
-  | `Using l -> RA.Schema.join_using l schema schema1
+  | `Default -> Schema.cross schema schema1
+  | `Natural -> Schema.natural schema schema1
+  | `Using l -> Schema.join_using l schema schema1
   in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
@@ -167,11 +167,11 @@ let join ((t0,p0),joins) =
 (*   let joined_schema = tables |> List.map snd |> List.flatten in *)
   (tables,params,joined_schema)
 
-let cross = List.fold_left RA.Schema.cross []
+let cross = List.fold_left Schema.cross []
 
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
-let all_columns = RA.Schema.make_unique $ cross
+let all_columns = Schema.make_unique $ cross
 let all_tbl_columns = all_columns $ List.map snd
 
 let split_column_assignments tables l =
@@ -186,7 +186,7 @@ let split_column_assignments tables l =
       | None -> all
     in
     (* hint expression to unify with the column type *)
-    let typ = (RA.Schema.find schema cname).RA.domain in
+    let typ = (Schema.find schema cname).domain in
     exprs := (`Func ((Type.Any,false), [`Value typ;expr])) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
 

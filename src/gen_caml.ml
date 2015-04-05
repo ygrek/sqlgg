@@ -37,7 +37,7 @@ end
 
 let get_column index attr =
   sprintf "(T.get_column_%s stmt %u)"
-    (L.as_lang_type attr.RA.domain)
+    (L.as_lang_type attr.domain)
     index
 
 module T = Translate(L)

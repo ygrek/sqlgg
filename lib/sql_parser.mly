@@ -5,8 +5,9 @@
 
 %{
   open Printf
-  open Sql.Constraint
+  open Sql
   open Sql.Type
+  open Sql.Constraint
   open Stmt
   open Syntax
   open Prelude
@@ -16,13 +17,13 @@
   let select_value select =
     let (s,_) = select in
     if (List.length s <> 1) then
-      raise (RA.Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
+      raise (Schema.Error (s,"only one column allowed for SELECT operator in this expression"));
     params_of select
 
   let values_or_all table names =
     let schema = Tables.get_schema table in
     match names with
-    | Some names -> RA.Schema.project names schema
+    | Some names -> Schema.project names schema
     | None -> schema
 
   let update_tables tables ss w =
@@ -80,7 +81,7 @@
 
 %type <Syntax.expr> expr
 
-%start <RA.Schema.t * Stmt.params * Stmt.kind> input
+%start <Sql.Schema.t * Stmt.params * Stmt.kind> input
 
 %%
 
@@ -92,11 +93,13 @@ temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT schema=table_definition
               {
+(*                 Create (name,schema) *)
                 Tables.add (name,schema);
                 ([],[],Create name)
               }
          | ALTER TABLE name=table_name actions=commas(alter_action)
               {
+(*                 Alter (name,actions) *)
                 List.iter (function
                 | `Add (col,pos) -> Tables.alter_add name col pos
                 | `Drop col -> Tables.alter_drop name col
@@ -106,11 +109,13 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               }
          | DROP TABLE if_exists? name=IDENT
               {
+(*                 Drop name *)
                 Tables.drop name;
                 ([],[],Drop name)
               }
          | CREATE either(TABLE,VIEW) name=IDENT AS select=maybe_parenth(select_stmt)
               {
+(*                 CreateSelect (name,select) *)
                 let (s,p) = select in
                 Tables.add (name,s);
                 ([],p,Create name)
@@ -118,7 +123,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
          | CREATE UNIQUE? INDEX if_not_exists? name=table_name
                 ON table=table_name cols=sequence(index_column)
               {
-                RA.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
+                Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
                 [],[],CreateIndex name
               }
          | select_stmt_t { $1 }
@@ -132,7 +137,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                   let cl = List.length expect in
                   if vl <> cl then
                     failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
-                  let assigns = List.combine (List.map (fun a -> a.RA.name, None) expect) values in
+                  let assigns = List.combine (List.map (fun a -> a.name, None) expect) values in
                   Syntax.params_of_assigns [Tables.get table] assigns, None
                 in
                 [], params, Insert (inferred,table)
@@ -141,7 +146,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               {
                 let (schema,params) = select in
                 let expect = values_or_all table names in
-                ignore (RA.Schema.compound expect schema); (* test equal types *)
+                ignore (Schema.compound expect schema); (* test equal types *)
                 [], params, Insert (None,table)
               }
          | insert_cmd table=IDENT SET ss=commas(set_column)?
@@ -201,10 +206,10 @@ select_stmt_t: select_core other=list(preceded(compound_op,select_core))
                           (List.length other);
                 let cardinality = if other = [] then cardinality else `Nat in
                 (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-                let final_schema = List.fold_left RA.Schema.compound s1 s2l in
+                let final_schema = List.fold_left Schema.compound s1 s2l in
                 let p3 = Syntax.params_of_order o final_schema tbls in
                 let (p4,limit1) = match lim with | Some x -> x | None -> [],false in
-(*                 RA.Schema.check_unique schema; *)
+(*                 Schema.check_unique schema; *)
                 let cardinality =
                   if limit1 && cardinality = `Nat then `Zero_one
                                                   else cardinality in
@@ -292,7 +297,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP PRIMARY KEY { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
-            | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.RA.name,column,pos) }
+            | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
 index_type: INDEX | FULLTEXT | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
@@ -301,7 +306,7 @@ alter_pos: AFTER col=IDENT { `After col }
 drop_behavior: CASCADE | RESTRICT { }
 
 column_def: name=IDENT t=sql_type? column_def_extra*
-    { RA.attr name (match t with Some x -> x | None -> Int) }
+    { attr name (match t with Some x -> x | None -> Int) }
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }

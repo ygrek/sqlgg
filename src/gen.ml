@@ -25,7 +25,7 @@ let print fmt = kprintf print_endline fmt
 let indented k = inc_indent (); k (); dec_indent ()
 
 let name_of attr index =
-  match attr.RA.name with
+  match attr.Sql.name with
   | "" -> sprintf "_%u" index
   | s -> s
 
@@ -106,7 +106,7 @@ end
 module Translate(T : LangTypes) = struct
 
 let param_type_to_string = T.as_api_type
-let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.RA.domain)
+let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.Sql.domain)
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)

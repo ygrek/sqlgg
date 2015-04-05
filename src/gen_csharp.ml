@@ -52,7 +52,7 @@ open T
 
 let get_column attr index =
   sprintf "reader.Get%s(%u)"
-    (attr.RA.domain |> as_api_type)
+    (attr.domain |> as_api_type)
     index
 
 let schema_to_string = G.Values.to_string $ schema_to_values
@@ -131,7 +131,7 @@ let func_execute index stmt =
       empty_line ();
       match stmt.schema with
       | [attr] ->
-        let t = as_lang_type attr.RA.domain in
+        let t = as_lang_type attr.domain in
         G.func ("public IEnumerable<" ^ t ^ ">") "rows" values (fun () ->
         output "foreach (var reader in execute_reader(%s))" (Values.inline values);
         G.open_curly ();
@@ -142,7 +142,7 @@ let func_execute index stmt =
       start_class "row";
       List.iteri (fun index attr ->
         output "public readonly %s %s;"
-          (as_lang_type attr.RA.domain)
+          (as_lang_type attr.domain)
           (name_of attr index)
       ) stmt.schema;
       empty_line ();

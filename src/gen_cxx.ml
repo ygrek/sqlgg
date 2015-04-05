@@ -50,7 +50,7 @@ open L
 open T
 
 let column_action action attr index =
-  let typ = as_api_type attr.RA.domain in
+  let typ = as_api_type attr.domain in
   let name = name_of attr index in
   output "Traits::%s_column_%s(row, %u, %s);" action typ index name
 
