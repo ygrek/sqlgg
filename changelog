@@ -1,6 +1,15 @@
 sqlgg changelog
 ---------------
 
+0.3.0
+2015-04-14
+	* fix common prefix truncation for automatic variable names
+	* -no-header option
+	* ocaml: support datetime and float types
+	* sql: allow SELECT without FROM
+	* switch build system to oasis
+	* start split out sql parsing library
+
 0.2.5
 2014-04-25
 	* require ocamlfind, OUnit2 compatibility
