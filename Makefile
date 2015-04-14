@@ -49,13 +49,13 @@ NAME=sqlgg-$(VERSION)
 
 .PHONY: release
 release:
-	git checkout -b release
-	oasis setup
-	git commit -m "oasis setup" setup.ml _tags
 	git tag -a -m $(VERSION) $(VERSION)
-	git archive --prefix=$(NAME)/ $(VERSION) | gzip > $(NAME).tar.gz
+	git checkout -b release-$(VERSION)
+	oasis setup
+	git add lib/META lib/sqlgg.* setup.ml _tags
+	git commit -m "oasis setup"
+	git archive --prefix=$(NAME)/ release-$(VERSION) | gzip > $(NAME).tar.gz
 	git checkout master
-	git branch -d release
 	gpg -a -b $(NAME).tar.gz
 
 .PHONY: oasis

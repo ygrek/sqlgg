@@ -627,7 +627,7 @@ let () =
 
   bracket (open_out "src/version.ml") close_out (fun out ->
     try
-     let revision = get_line (Unix.open_process_in "git describe --always") (Unix.close_process_in) in
+     let revision = get_line (Unix.open_process_in "git describe --always 2> /dev/null") (Unix.close_process_in) in
      Printf.fprintf out "let id=%S\n" revision
     with
      _ -> Printf.fprintf out "let id = Version_release.id\n"
