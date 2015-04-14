@@ -59,5 +59,8 @@ release:
 	gpg -a -b $(NAME).tar.gz
 
 .PHONY: oasis
+# partially dynamic setup
 oasis:
-	oasis setup -setup-update dynamic
+	oasis setup
+	git checkout setup.ml _tags
+	rm -f lib/*.mlpack lib/*.mllib lib/*.mldylib lib/META
