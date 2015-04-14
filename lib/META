@@ -1,0 +1,12 @@
+# OASIS_START
+# DO NOT EDIT (digest: 97dc04ddc8840513f2802f63622fa7dd)
+version = "0.3.0"
+description = "SQL guided (code) generator"
+requires = "extlib deriving"
+archive(byte) = "sqlgg.cma"
+archive(byte, plugin) = "sqlgg.cma"
+archive(native) = "sqlgg.cmxa"
+archive(native, plugin) = "sqlgg.cmxs"
+exists_if = "sqlgg.cma"
+# OASIS_STOP
+
