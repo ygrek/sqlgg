@@ -23,6 +23,10 @@
 #include <string>
 #include <vector>
 
+#if defined(SQLGG_DEBUG)
+#include <stdio.h>
+#endif
+
 struct mysql_traits
 {
   typedef int Int;
@@ -287,7 +291,7 @@ struct mysql_traits
     template<class Params>
     bool execute(Params params)
     {
-      int dummy;
+      int dummy = 0;
       return select(dummy,no_binder<int>(),params);
     }
 
