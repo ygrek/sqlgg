@@ -30,7 +30,7 @@ let common_prefix = function
 
 let parse_one_exn (sql,props) =
     if Sqlgg_config.debug1 () then  prerr_endline sql;
-    let (schema,params,kind) = Parser.parse_stmt sql in
+    let (schema,params,kind) = Syntax.eval @@ Parser.parse_stmt sql in
     (* fill inferred sql for VALUES or SET *)
     let (sql,params) = match kind with
     | Stmt.Insert (Some (kind,schema), _) ->

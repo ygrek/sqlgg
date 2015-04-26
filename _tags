@@ -1,6 +1,6 @@
 # OASIS_START
 # OASIS_STOP
-true: annot, warn_A, warn_e, warn_no_44
+true: annot, warn_A, warn_e, my_warnings
 true: use_menhir
 <src/*.ml> or <lib/*.ml> and not "lib/sql_parser.ml": syntax_camlp4o, pkg_deriving.syntax
 <lib/sql_parser.ml>: -annot

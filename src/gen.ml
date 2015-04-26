@@ -29,7 +29,7 @@ let name_of attr index =
   | "" -> sprintf "_%u" index
   | s -> s
 
-let param_name_to_string ((name,_):param_id) index =
+let param_name_to_string ((name,_):Sql.param_id) index =
   match name with
   | None -> sprintf "_%u" index
   | Some s -> s

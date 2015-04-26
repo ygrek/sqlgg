@@ -134,12 +134,81 @@ struct
 end
 
 type table = string * Schema.t deriving (Show)
+type schema = Schema.t
 
 let print_table out (name,schema) =
   IO.write_line out name;
   schema |> List.iter (fun {name=name;domain=domain} ->
     IO.printf out "%10s %s\n" (Type.to_string domain) name);
   IO.write_line out ""
+
+(** optional name and start/end position in string *)
+type param_id = string option * (int * int) deriving (Show)
+type param = param_id * Type.t deriving (Show)
+type params = param list deriving (Show)
+
+let params_to_string ps = Show.show<params>(ps)
+
+type alter_pos = [ `After of string | `Default | `First ]
+type alter_action = [ `Add of attr * alter_pos | `Drop of string | `Change of string * attr * alter_pos | `None ]
+
+type select_result = (schema * param list)
+
+type col_name = string * string option (* column name + table name *)
+
+
+type int_or_param = [`Const of int | `Limit of param]
+type limit_t = [ `Limit | `Offset ]
+type limit = ((string option * (int * int)) * Type.t) list * bool
+and source1 = [ `Select of select | `Table of string ]
+and source = source1 * string option
+and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
+and select = {
+  columns : column list;
+  from : (source * (source * join_cond) list) option;
+  where : expr option;
+  group : expr list;
+  having : expr option;
+}
+and select_full = select * select list * expr list * limit option
+and expr =
+  | Value of Type.t (** literal value *)
+  | Param of param
+  | Fun of
+    (Type.t * bool) (** return type, grouping *)
+    * expr list (** parameters *)
+    * [ `Single of select_full | `Select of select_full | `None ]
+  | Column of (string * string option) (** name, table *)
+and column =
+  | All
+  | AllOf of string
+  | Expr of expr * string option (** name *)
+  deriving (Show)
+
+type columns = column list deriving (Show)
+
+type expr_q = [ `Value of Type.t (** literal value *)
+            | `Param of param
+            | `Func of (Type.t * bool) * expr_q list (** return type, grouping, parameters *)
+            ]
+            deriving (Show)
+
+let expr_to_string = Show.show<expr>
+
+type stmt =
+| Create of string * [ `Schema of schema | `Select of select_full ]
+| Drop of string
+| Alter of string * alter_action list
+| CreateIndex of string * string * string list (* index name, table name, columns *)
+| Insert of string *
+    [ `Set of (col_name * expr) list option
+    | `Values of (string list option * expr list option)
+    | `Select of (string list option * select_full) ]
+| Delete of string * expr option
+| Set of string * expr
+| Update of string * (col_name * expr) list * expr option * expr list * param list (* where, order, limit *)
+| UpdateMulti of source list * (col_name * expr) list * expr option
+| Select of select_full
 
 (*
 open Schema

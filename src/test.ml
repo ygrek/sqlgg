@@ -22,7 +22,7 @@ let tt ?msg sql ?kind schema params =
   | None -> assert_failure "Failed to parse"
   | Some stmt ->
       assert_equal ~msg ~printer:Sql.Schema.to_string schema stmt.schema;
-      assert_equal ~msg ~cmp:cmp_params ~printer:Stmt.params_to_string params stmt.params;
+      assert_equal ~msg ~cmp:cmp_params ~printer:Sql.params_to_string params stmt.params;
       match kind with
       | Some k -> assert_equal ~msg ~printer:Show.show<Stmt.kind> k stmt.kind
       | None -> ()

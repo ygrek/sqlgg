@@ -636,7 +636,7 @@ let () =
 
 let dispatch = function
 | After_rules as t ->
-  flag ["compile"; "ocaml"; "warn_no_44"] (S[A"-w";A"-44"]);
+  flag ["compile"; "ocaml"; "my_warnings"] (S[A"-w";A"-40-41-42-44-45"]);
   flag ["ocaml"; "link"; "toplevel"] (A"-linkpkg");
   dispatch_default t
 | t -> dispatch_default t
