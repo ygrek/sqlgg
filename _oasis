@@ -2,10 +2,10 @@ OASISFormat:  0.4
 Name:         sqlgg
 Version:      0.3.0
 License:      GPL-2
-Authors:      ygrek
+Authors:      ygrek <ygrek@autistici.org>
 Copyrights:   (C) 2009 ygrek
 Homepage:     http://ygrek.org.ua/p/sqlgg/
-BuildTools:   ocamlbuild, camlp4, menhir
+BuildTools:   ocamlbuild, camlp4, menhir, mybuild
 Plugins:      DevFiles (0.4), META (0.4)
 FilesAB:      src/version_release.ml.ab
 
@@ -32,3 +32,7 @@ Test main
 Test regression
   Command: ./run_test
   TestTools: sqlgg
+
+SourceRepository head
+  Type: git
+  Location: git://github.com/ygrek/sqlgg.git

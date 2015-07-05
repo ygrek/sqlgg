@@ -1,3 +1,6 @@
+
+override BUILDFLAGS = "-use-ocamlfind -plugin-tags package\(mybuild\)"
+
 # OASIS_START
 # DO NOT EDIT (digest: a3c674b4239234cbbe53afe090018954)
 
@@ -59,8 +62,5 @@ release:
 	gpg -a -b $(NAME).tar.gz
 
 .PHONY: oasis
-# partially dynamic setup
 oasis:
-	oasis setup
-	git checkout setup.ml _tags
-	rm -f lib/*.mlpack lib/*.mllib lib/*.mldylib lib/META
+	oasis setup -setup-update dynamic
