@@ -59,7 +59,7 @@
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
-       OF WITH NOWAIT
+       OF WITH NOWAIT ACTION NO
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -342,8 +342,16 @@ default_value: single_literal_value | datetime_value { } (* sub expr ? *)
 (* FIXME check columns *)
 table_constraint_1:
       | some_key IDENT? key_arg { [] }
-      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)? { [] }
+      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
+        reference_action_clause*
+          { [] }
       | CHECK LPAREN expr RPAREN { [] }
+
+reference_action_clause:
+  ON either(DELETE, UPDATE) reference_action { }
+
+reference_action:
+  RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
 
 some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
 key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
