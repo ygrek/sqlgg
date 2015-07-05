@@ -113,6 +113,13 @@ let keywords =
    "modify", MODIFY;
    "delayed", DELAYED;
    "enum", ENUM;
+   "for", FOR;
+   "share", SHARE;
+   "mode", MODE;
+   "lock", LOCK;
+   "of", OF;
+   "with", WITH;
+   "nowait", NOWAIT;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];

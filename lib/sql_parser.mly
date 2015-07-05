@@ -58,7 +58,8 @@
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
-       CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM
+       CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
+       OF WITH NOWAIT
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -223,6 +224,7 @@ select_core: SELECT select_type? r=commas(column1)
              w=where?
              g=loption(group)
              h=having?
+             select_row_locking?
               {
                 let (tbls,p2,joined_schema) = match f with Some t -> Syntax.join t | None -> [], [], [] in
                 let singlerow = g = [] && Syntax.test_all_grouping r in
@@ -263,6 +265,19 @@ update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
 
 select_type: DISTINCT | ALL { }
+
+select_row_locking: 
+    for_update_or_share+
+      { }
+  | LOCK IN SHARE MODE
+      { }
+
+for_update_or_share:
+  FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
+
+update_or_share_of: OF commas(IDENT) { }
+
+with_lock: WITH LOCK { }
 
 int_or_param: i=INTEGER { `Const i }
             | p=PARAM { `Param p }
