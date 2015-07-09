@@ -1,7 +1,7 @@
 (**
   Sqlite3 OCaml traits for sqlgg
   by ygrek
-  2014-06-12
+  2015-07-09
 
   This is free and unencumbered software released into the public domain.
 
@@ -29,6 +29,11 @@ type any = string
 type datetime = float
 
 exception Oops of string
+
+let get_column_Bool (stmt,sql) index =
+  match S.column stmt index with
+  | S.Data.INT i -> i <> 0L
+  | _ -> raise (Oops (sprintf "get_column_Bool %u for %s" index sql))
 
 let get_column_Int (stmt,sql) index =
   match S.column stmt index with
@@ -62,6 +67,7 @@ let finish_params _ = ()
 let set_param_null = bind_param S.Data.NULL
 let set_param_Text stmt index v = bind_param (S.Data.TEXT v) stmt index
 let set_param_Any = set_param_Text
+let set_param_Bool stmt index v = bind_param (S.Data.INT (if v then 1L else 0L)) stmt index
 let set_param_Int stmt index v = bind_param (S.Data.INT v) stmt index
 let set_param_Float stmt index v = bind_param (S.Data.FLOAT v) stmt index
 let set_param_Datetime = set_param_Float

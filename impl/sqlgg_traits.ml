@@ -29,6 +29,7 @@ module type M = sig
 
   exception Oops of string
 
+  val get_column_Bool : row -> int -> bool
   val get_column_Int : row -> int -> num
   val get_column_Text : row -> int -> text
   val get_column_Any : row -> int -> any
@@ -43,6 +44,7 @@ module type M = sig
   val set_param_null : params -> int -> unit
   val set_param_Text : params -> int -> text -> unit
   val set_param_Any : params -> int -> any -> unit
+  val set_param_Bool : params -> int -> bool -> unit
   val set_param_Int : params -> int -> num -> unit
   val set_param_Float : params -> int -> float -> unit
   val set_param_Datetime : params -> int -> datetime -> unit

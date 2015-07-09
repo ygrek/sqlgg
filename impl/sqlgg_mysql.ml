@@ -1,7 +1,7 @@
 (**
   Mysql OCaml traits for sqlgg
   by ygrek
-  2014-06-12
+  2015-07-09
 
   This is free and unencumbered software released into the public domain.
 
@@ -39,6 +39,7 @@ let get_column_ty name conv row index =
   with
     e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
 
+let get_column_Bool = get_column_ty "Bool" (fun s -> s <> "0")
 let get_column_Int = get_column_ty "Int" Number.of_string
 let get_column_Text = get_column_ty "Text" (fun x -> x)
 let get_column_Float = get_column_ty "Float" float_of_string
@@ -56,6 +57,7 @@ let finish_params (stmt,params) = P.execute stmt params
 let set_param_Text stmt index v = bind_param (Some v) stmt index
 let set_param_null stmt index = bind_param None stmt index
 let set_param_Any = set_param_Text
+let set_param_Bool stmt index v = bind_param (Some (if v then "1" else "0")) stmt index
 let set_param_Int stmt index v = bind_param (Some (Number.to_string v)) stmt index
 let set_param_Float stmt index v = bind_param (Some (string_of_float v)) stmt index
 let set_param_Datetime = set_param_Float
