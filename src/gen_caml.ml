@@ -133,8 +133,9 @@ let generate_stmt fold index stmt =
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
   if fold then output "let r_acc = ref acc in";
-  output "T.%s db %s %s %s" func sql params_binder_name
-    (if fold then "(fun x -> r_acc := " ^ callback ^ " x !r_acc);" else callback);
+  let s_callback = if callback = "" then "" else " " ^ callback in
+  output "T.%s db %s %s%s" func sql params_binder_name
+    (if fold then " (fun x -> r_acc := " ^ callback ^ " x !r_acc);" else s_callback);
   if fold then output "!r_acc";
   dec_indent ();
   empty_line ()
