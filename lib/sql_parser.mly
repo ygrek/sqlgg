@@ -136,12 +136,12 @@ table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (fun
 table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
 table_def_done1: { Parser_state.mode_ignore () }
 
-select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t?
+select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
               {
                 ($1, other, o, lim)
               }
 
-select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having? select_row_locking?
+select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
               {
                 { columns=r; from=f; where=w; group=g; having=h; }
               }
