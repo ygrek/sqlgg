@@ -7,4 +7,14 @@
    <value name="_0" type="Text"/>
   </out>
  </stmt>
+ <stmt name="create_issue20" sql="CREATE TABLE issue20 (x INT)" kind="create" target="issue20" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT * FROM issue20 WHERE x IS NOT NULL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="x" type="Int"/>
+  </out>
+ </stmt>
 </sqlgg>
