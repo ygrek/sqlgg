@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTO_INCREMENT, stamp TIMESTAMP, `interval` INTEGER);
+
+SELECT * FROM events WHERE stamp + INTERVAL `interval` MICROSECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` SECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` WEEK < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` MONTH < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` QUARTER < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` YEAR < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` SECOND_MICROSECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE_MICROSECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE_SECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_MICROSECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_SECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_MINUTE < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_MICROSECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_SECOND < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_MINUTE < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_HOUR < NOW();
+SELECT * FROM events WHERE stamp + INTERVAL `interval` YEAR_MONTH < NOW();

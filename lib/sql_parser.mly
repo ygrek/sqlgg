@@ -37,7 +37,12 @@
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
-       OF WITH NOWAIT ACTION NO IS
+       OF WITH NOWAIT ACTION NO IS INTERVAL
+%token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
+       SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
+       HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
+       DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
+       YEAR_MONTH
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -275,6 +280,7 @@ expr:
       { Fun ((Any,false),(list_filter_map identity [Some e1; Some e2; e3]),`None) }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
+    | INTERVAL expr interval_unit { $2 }
     | LPAREN expr RPAREN { $2 }
     | attr_name { Column $1 }
     | v=literal_value | v=datetime_value { v }
@@ -332,13 +338,19 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
+interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR
+             | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
+             | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
+             | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
+             | YEAR_MONTH { }
+
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }
                | ENUM sequence(TEXT) charset? collate? { Text }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
-               | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
+               | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
