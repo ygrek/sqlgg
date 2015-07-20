@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_master" sql="CREATE TABLE IF NOT EXISTS `master` (&#x0A;  `id` INTEGER PRIMARY KEY&#x0A;)" kind="create" target="master" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_detail" sql="CREATE TABLE IF NOT EXISTS `detail` (&#x0A;  `id` INTEGER PRIMARY KEY,&#x0A;  `master_id` INTEGER,&#x0A;  FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)&#x0A;)" kind="create" target="detail" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT m.`id` m_id, d.`id` d_id&#x0A;FROM `master` m&#x0A;LEFT JOIN `detail` d ON d.`id` = (&#x0A;  SELECT dd.`id`&#x0A;  FROM `detail` dd&#x0A;  WHERE dd.`master_id` = m.`id`&#x0A;  ORDER BY dd.`id` DESC&#x0A;  LIMIT 1&#x0A;)" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="m_id" type="Int"/>
+   <value name="d_id" type="Int"/>
+  </out>
+ </stmt>
+</sqlgg>

@@ -4,6 +4,10 @@ open Printf
 open Prelude
 open Sql
 
+type env = { tables : Tables.table list; }
+
+let empty_env = { tables = [] }
+
 let collect f l = List.flatten (List.map f l)
 
 (* FIXME *)
@@ -62,6 +66,11 @@ let split_column_assignments tables l =
 
 (** replace every Column with Value of corresponding type *)
 let rec resolve_columns tables joined_schema expr =
+(*
+  eprintf "\nRESOLVE COLUMNS\n%s\n%!" (expr_to_string expr);
+  Tables.print stderr tables;
+  Sql.Schema.print joined_schema;
+*)
   let schema_of_table name = name |> Tables.get_from tables |> snd in
   let rec each e =
     match e with
@@ -71,7 +80,7 @@ let rec resolve_columns tables joined_schema expr =
       `Value attr.domain
     | Param x -> `Param x
     | Fun (r,l,select) ->
-      let p = params_of_select select in
+      let p = params_of_select {tables} select in
       `Func (r,p @ List.map each l)
   in
   each expr
@@ -159,7 +168,7 @@ and get_params_opt tables j_s = function
 
 and get_params_l tables j_s l = collect (get_params tables j_s) l
 
-and do_join (tables,params,schema) ((table1,params1),kind) =
+and do_join env (tables,params,schema) ((table1,params1),kind) =
   let (_,schema1) = table1 in
   let tables = tables @ [table1] in
   let schema = match kind with
@@ -171,12 +180,14 @@ and do_join (tables,params,schema) ((table1,params1),kind) =
   in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
-  | `Search e -> get_params tables schema e
+  | `Search e -> get_params env.tables schema e
   in
   tables,params @ params1 @ p , schema
 
-and join ((t0,p0),joins) =
-  let (tables,params,joined_schema) = List.fold_left do_join ([t0],p0,snd t0) joins in
+and join env ((t0,p0),joins) =
+  let all_tables = List.fold_left (fun acc ((table,_),_) -> table::acc) [t0] joins in
+  let env = {tables = env.tables @ all_tables} in
+  let (tables,params,joined_schema) = List.fold_left (do_join env) ([t0],p0,snd t0) joins in
 (*   let joined_schema = tables |> List.map snd |> List.flatten in *)
   (tables,params,joined_schema)
 
@@ -195,12 +206,13 @@ and ensure_simple_expr = function
   | Fun (x,l,`None) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
   | Fun (_,_,_) -> failwith "not implemented : ensure_simple_expr with SELECT"
 
-and eval_select { columns; from; where; group; having; } =
+and eval_select env { columns; from; where; group; having; } =
   let (tbls,p2,joined_schema) =
     match from with
-    | Some (t,l) -> join (resolve_source t, List.map (fun (x,k) -> resolve_source x, k) l)
+    | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
     | None -> [], [], []
   in
+  let tbls = env.tables @ tbls in
   let singlerow = group = [] && test_all_grouping columns in
   let singlerow2 = where = None && group = [] && test_all_const columns in
   let p1 = params_of_columns tbls joined_schema columns in
@@ -211,18 +223,18 @@ and eval_select { columns; from; where; group; having; } =
                     if singlerow2 then `Zero_one else `Nat in
   (infer_schema columns tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, cardinality)
 
-and resolve_source (x,alias) =
+and resolve_source env (x,alias) =
   let src = match x with
-  | `Select select -> let (s,p,_,_) = eval_select select in ("",s), p
+  | `Select select -> let (s,p,_,_) = eval_select env select in ("",s), p
   | `Table s -> Tables.get s, []
   in
   match alias with
   | Some name -> let ((_,s),p) = src in ((name,s),p)
   | None -> src
 
-and eval_select_full (select,other,order,limit) =
-  let (s1,p1,tbls,cardinality) = eval_select select in
-  let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map eval_select other) in
+and eval_select_full env (select,other,order,limit) =
+  let (s1,p1,tbls,cardinality) = eval_select env select in
+  let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
   if false then
     eprintf "cardinality=%s other=%u\n%!"
             (Stmt.cardinality_to_string cardinality)
@@ -238,13 +250,13 @@ and eval_select_full (select,other,order,limit) =
                                     else cardinality in
   final_schema,(p1@(List.flatten p2l)@p3@p4), Stmt.Select cardinality
 
-and params_of_select s =
+and params_of_select env s =
   let make = List.map (fun x -> `Param x) in
   match s with
   | `None -> []
-  | `Select s -> let (_,p,_) = eval_select_full s in make p
+  | `Select s -> let (_,p,_) = eval_select_full env s in make p
   | `Single select ->
-    match eval_select_full select with
+    match eval_select_full env select with
     | [_],p,_ -> make p
     | s,_,_ -> raise (Schema.Error (s,"only one column allowed for SELECT operator in this expression"))
 
@@ -262,7 +274,7 @@ let eval (stmt:Sql.stmt) =
       Tables.add (name,schema);
       ([],[],Create name)
   | Create (name,`Select select) ->
-      let (schema,params,_) = eval_select_full select in
+      let (schema,params,_) = eval_select_full empty_env select in
       Tables.add (name,schema);
       ([],params,Create name)
   | Alter (name,actions) ->
@@ -292,7 +304,7 @@ let eval (stmt:Sql.stmt) =
     in
     [], params, Insert (inferred,table)
   | Insert (table,`Select (names, select)) ->
-    let (schema,params,_) = eval_select_full select in
+    let (schema,params,_) = eval_select_full empty_env select in
     let expect = values_or_all table names in
     ignore (Schema.compound expect schema); (* test equal types *)
     [], params, Insert (None,table)
@@ -317,7 +329,7 @@ let eval (stmt:Sql.stmt) =
     let p3 = params_of_order o [] [Tables.get table] in
     [], params @ p3 @ lim, Update (Some table)
   | UpdateMulti (tables,ss,w) ->
-    let tables = List.map resolve_source tables in
+    let tables = List.map (resolve_source empty_env) tables in
     let params = update_tables tables ss w in
     [], params, Update None
-  | Select select -> eval_select_full select
+  | Select select -> eval_select_full empty_env select

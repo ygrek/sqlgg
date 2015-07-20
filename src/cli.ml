@@ -73,7 +73,7 @@ let main () =
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Sqlgg_config.debug_level := x), "<N> set debug level";
     "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := false), "do not put version header in generated output";
-    "-show-tables", Arg.Unit Tables.print, " Show all current tables";
+    "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
@@ -88,10 +88,4 @@ let main () =
     else
       begin generate @@ List.concat @@ List.rev l; 0 end
 
-let main () =
-  try
-    main ()
-  with
-    exn -> Error.logs (Printexc.to_string exn); 2
-
-let () = exit (main ())
+let () = exit @@ main ()

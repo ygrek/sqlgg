@@ -42,8 +42,9 @@ let alter_add name col pos = alter name (fun s -> Sql.Schema.add s col pos)
 let alter_drop name col = alter name (fun s -> Sql.Schema.drop s col)
 let alter_change name oldcol col pos = alter name (fun s -> Sql.Schema.change s oldcol col pos)
 
-let print () = let out = IO.output_channel stdout in List.iter (Sql.print_table out) !all
-let print1 name = Sql.print_table (IO.output_channel stdout) (get name)
+let print ch tables = let out = IO.output_channel ch in List.iter (Sql.print_table out) tables; IO.flush out
+let print_all () = print stdout !all
+let print1 name = print stdout [get name]
 
 let reset () = all := []
 
