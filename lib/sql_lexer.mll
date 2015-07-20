@@ -121,6 +121,27 @@ let keywords =
    "action", ACTION;
    "no", NO;
    "is", IS;
+   "interval", INTERVAL;
+   "microsecond", MICROSECOND;
+   "second", SECOND;
+   "minute", MINUTE;
+   "hour", HOUR;
+   "day", DAY;
+   "week", WEEK;
+   "month", MONTH;
+   "quarter", QUARTER;
+   "year", YEAR;
+   "second_microsecond", SECOND_MICROSECOND;
+   "minute_microsecond", MINUTE_MICROSECOND;
+   "minute_second", MINUTE_SECOND;
+   "hour_microsecond", HOUR_MICROSECOND;
+   "hour_second", HOUR_SECOND;
+   "hour_minute", HOUR_MINUTE;
+   "day_microsecond", DAY_MICROSECOND;
+   "day_second", DAY_SECOND;
+   "day_minute", DAY_MINUTE;
+   "day_hour", DAY_HOUR;
+   "year_month", YEAR_MONTH;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];
@@ -151,7 +172,7 @@ let keywords =
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
   all T_TEXT ["varchar2"]; (* oracle *)
-  all T_DATETIME ["datetime";"year";];
+  all T_DATETIME ["datetime"];
   !k
 
 (*
