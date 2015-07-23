@@ -8,6 +8,10 @@ Homepage:     http://ygrek.org.ua/p/sqlgg/
 BuildTools:   ocamlbuild, camlp4, menhir
 Plugins:      DevFiles (0.4), META (0.4)
 FilesAB:      src/version_release.ml.ab
+AlphaFeatures: ocamlbuild_more_args
+XOCamlbuildPluginTags: package(mybuild)
+XOCamlbuildExtraArgs: -j 0
+OCamlVersion: >= 4.01
 
 Synopsis: SQL guided (code) generator
 
