@@ -2,7 +2,6 @@
 
 open Printf
 open ExtLib
-open Prelude
 
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml)

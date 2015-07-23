@@ -2,7 +2,6 @@
 
 open Printf
 open ExtLib
-open Prelude
 
 module Type =
 struct
