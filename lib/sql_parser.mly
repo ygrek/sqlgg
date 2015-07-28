@@ -126,7 +126,8 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               }
 
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
-index_column: name=IDENT collate? order_type? { name }
+index_prefix: LPAREN n=INTEGER RPAREN { n }
+index_column: name=IDENT index_prefix? collate? order_type? { name }
 
 table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
                 | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)

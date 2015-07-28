@@ -7,7 +7,7 @@
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="create_issue20" sql="CREATE TABLE issue20 (x INT)" kind="create" target="issue20" cardinality="0">
+ <stmt name="create_issue20" sql="CREATE TABLE issue20 (x INT, `key` VARBINARY(200))" kind="create" target="issue20" cardinality="0">
   <in/>
   <out/>
  </stmt>
@@ -15,6 +15,11 @@
   <in/>
   <out>
    <value name="x" type="Int"/>
+   <value name="key" type="Text"/>
   </out>
+ </stmt>
+ <stmt name="create_index_key" sql="CREATE INDEX `key` ON issue20(`key`(20))" kind="create_index" target="key" cardinality="0">
+  <in/>
+  <out/>
  </stmt>
 </sqlgg>
