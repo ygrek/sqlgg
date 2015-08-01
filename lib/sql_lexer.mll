@@ -144,7 +144,8 @@ let keywords =
    "year_month", YEAR_MONTH;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum";"avg"];
+  all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum"];
+  all (FUNCTION (T.Float,true)) ["avg"];
   all (FUNCTION (T.Int,false)) ["length"; "random";"unix_timestamp"];
   all (FUNCTION (T.Int,false)) ["least"; "greatest"];
   all (FUNCTION (T.Text,false)) ["concat";"lower";"upper";"strftime"];
