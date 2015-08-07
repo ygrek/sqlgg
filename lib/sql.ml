@@ -18,7 +18,7 @@ struct
   type func =
   | Group of t * bool (* 'a -> t ; bool = multi-column *)
   | Agg (* 'a -> 'a *)
-  | Func of t * t list (* ret, params *)
+  | Fixed of t * t list (* ret, params *)
   | Poly of t (* 'a -> 'a -> t *)
   | Ret of t (* _ -> t *)
   deriving (Show)
@@ -27,11 +27,7 @@ struct
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Func _ | Ret _ | Poly _ -> false
-
-  let return_type = function
-  | Group (t,_) | Func (t,_) | Ret t | Poly t -> Some t
-  | Agg -> None
+  | Fixed _ | Ret _ | Poly _ -> false
 end
 
 module Constraint =

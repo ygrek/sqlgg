@@ -148,8 +148,8 @@ let keywords =
   func T.Agg ["max";"min";"sum"];
   func T.(Group (Int,true)) ["count"];
   func T.(Group (Float,false)) ["avg"];
-  func T.(Func (Text, [Text;Text])) ["strftime"];
-  func T.(Func (Text, [Text])) ["lower";"upper"];
+  func T.(Fixed (Text, [Text;Text])) ["strftime"];
+  func T.(Fixed (Text, [Text])) ["lower";"upper"];
   func T.(Ret Text) ["concat"];
   func T.(Ret Any) ["coalesce"];
   func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];

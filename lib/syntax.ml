@@ -108,21 +108,21 @@ and assign_types expr =
         | Type.Group (ret,false), [_]
         | Type.Group (ret,true), _ -> ret, types
         | (Type.Agg | Type.Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | Type.Func (ret,args), _ when List.length args = List.length types
+        | Type.Fixed (ret,args), _ when List.length args = List.length types
                                     && List.fold_left (&&) true (List.map2 Type.matches args types) -> ret, args
-        | Type.Func _, _ ->
+        | Type.Fixed _, _ ->
           fail "types do not match : %s" (show ())
-        | Type.Ret Type.Any, _ -> (* lame - make a best guest, return type same as for parameters *)
+        | Type.Ret Type.Any, _ -> (* lame - make a best guess, return type same as for parameters *)
           begin match List.filter ((<>) Type.Any) types with
           | [] -> Type.Any, types
-          | h::tl when List.for_all ((=) h) tl -> h, List.map (fun _ -> h) types
+          | h::tl when List.for_all (Type.matches h) tl -> h, List.map (fun _ -> h) types
           | _ -> Type.Any, types
           end
         | Type.Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
         | Type.Poly ret, _ ->
           match List.filter ((<>) Type.Any) types with
           | [] -> ret, types
-          | h::tl when List.for_all ((=) h) tl -> ret, List.map (fun _ -> h) types
+          | h::tl when List.for_all (Type.matches h) tl -> ret, List.map (fun _ -> h) types
           | _ -> fail "all parameters should have same type : %s" (show ())
         in
         let assign inferred x =

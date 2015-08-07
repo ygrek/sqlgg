@@ -273,14 +273,14 @@ attr_name: name=IDENT { (name,None) }
 
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
-    | expr boolean_bin_op expr %prec AND { Fun ((Func (Bool,[Bool;Bool])),[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { Fun ((Fixed (Bool,[Bool;Bool])),[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun ((Poly Bool),[e1;e2]) }
-    | expr CONCAT_OP expr { Fun ((Func (Text,[Text;Text])),[$1;$3]) }
+    | expr CONCAT_OP expr { Fun ((Fixed (Text,[Text;Text])),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
       {
         match e3 with
-        | None -> Fun ((Func (Bool, [Text; Text])), [e1;e2])
-        | Some e3 -> Fun ((Func (Bool, [Text; Text; Text])), [e1;e2;e3])
+        | None -> Fun ((Fixed (Bool, [Text; Text])), [e1;e2])
+        | Some e3 -> Fun ((Fixed (Bool, [Text; Text; Text])), [e1;e2;e3])
       }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
