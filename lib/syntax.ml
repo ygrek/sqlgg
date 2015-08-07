@@ -35,7 +35,7 @@ let get_params_q e =
 let test_all_grouping columns =
   let test = function
   (* grouping function of zero or single parameter *)
-  | Expr (Fun (func,args,_),_) when Type.is_grouping func && List.length args <= 1 -> true
+  | Expr (Fun (func,args),_) when Type.is_grouping func && List.length args <= 1 -> true
   | _ -> false
   in
   List.for_all test columns
@@ -60,7 +60,7 @@ let split_column_assignments tables l =
     in
     (* hint expression to unify with the column type *)
     let typ = (Schema.find schema cname).domain in
-    exprs := (Fun (Type.(Ret Any), [Value typ;expr], `None)) :: !exprs) l;
+    exprs := (Fun (Type.(Ret Any), [Value typ;expr])) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
 
 (** replace every Column with Value of corresponding type *)
@@ -78,9 +78,15 @@ let rec resolve_columns tables joined_schema expr =
       let attr = Schema.find (Option.map_default schema_of_table joined_schema table) name in
       `Value attr.domain
     | Param x -> `Param x
-    | Fun (r,l,select) ->
-      let p = params_of_select {tables} select in
-      `Func (r,p @ List.map each l)
+    | Fun (r,l) ->
+      `Func (r,List.map each l)
+    | Select (select,single) ->
+      let as_params = List.map (fun x -> `Param x) in
+      let (schema,p,_) = eval_select_full {tables} select in
+      match schema,single with
+      | [ {domain;_} ], true -> `Func (Type.Ret domain, as_params p)
+      | s, true -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
+      | _ -> fail "not implemented: multi-column select in expression"
   in
   each expr
 
@@ -133,8 +139,8 @@ and resolve_types tables joined_schema expr =
     assign_types expr
   with
     exn ->
-      printfn "resolve_types failed with %s at:" (Printexc.to_string exn);
-      printfn "%s" (show_expr_q expr);
+      eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+      eprintfn "%s" (show_expr_q expr);
       raise exn
 
 and infer_schema columns tables joined_schema =
@@ -157,8 +163,8 @@ and infer_schema columns tables joined_schema =
 
 and test_all_const columns =
   let rec is_const = function
-  | Fun (_,args,`None) -> List.for_all is_const args
-  | Fun (_,_,_) -> false (* FIXME ? *)
+  | Fun (_,args) -> List.for_all is_const args
+  | Select _ -> false (* FIXME ? *)
   | Column _ -> false
   | _ -> true
   in
@@ -224,9 +230,9 @@ and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
   | Column _ -> failwith "Not a simple expression"
-  | Fun (func,_,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
-  | Fun (x,l,`None) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
-  | Fun (_,_,_) -> failwith "not implemented : ensure_simple_expr with SELECT"
+  | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
+  | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
+  | Select _ -> failwith "not implemented : ensure_simple_expr for SELECT"
 
 and eval_select env { columns; from; where; group; having; } =
   let (tbls,p2,joined_schema) =
@@ -271,16 +277,6 @@ and eval_select_full env (select,other,order,limit) =
     if limit1 && cardinality = `Nat then `Zero_one
                                     else cardinality in
   final_schema,(p1@(List.flatten p2l)@p3@p4), Stmt.Select cardinality
-
-and params_of_select env s =
-  let make = List.map (fun x -> `Param x) in
-  match s with
-  | `None -> []
-  | `Select s -> let (_,p,_) = eval_select_full env s in make p
-  | `Single select ->
-    match eval_select_full env select with
-    | [_],p,_ -> make p
-    | s,_,_ -> raise (Schema.Error (s,"only one column allowed for SELECT operator in this expression"))
 
 
 let update_tables tables ss w =

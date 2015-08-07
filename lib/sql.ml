@@ -195,7 +195,8 @@ and select_full = select * select list * expr list * limit option
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
-  | Fun of Type.func * expr list (** parameters *) * [ `Single of select_full | `Select of select_full | `None ]
+  | Fun of Type.func * expr list (** parameters *)
+  | Select of select_full * bool (* single *)
   | Column of (string * string option) (** name, table *)
 and column =
   | All
