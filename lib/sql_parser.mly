@@ -8,7 +8,6 @@
   open Sql.Type
   open Sql.Constraint
   open Syntax
-  open Prelude
 
   (* preserve order *)
   let make_limit l =
@@ -25,7 +24,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
-%token <Sql.Type.t * bool> FUNCTION /* return type * is grouping function? */
+%token <Sql.Type.func> FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -273,37 +272,41 @@ attr_name: name=IDENT { (name,None) }
          | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
 
 expr:
-      expr numeric_bin_op expr %prec PLUS { Fun ((Any,false),[$1;$3],`None) } (* TODO default Int *)
-    | expr boolean_bin_op expr %prec AND { Fun ((Bool,false),[$1;$3],`None) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun ((Bool,false),[e1;e2],`None) }
-    | expr CONCAT_OP expr { Fun ((Text,false),[$1;$3],`None) }
+      expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3],`None) } (* TODO default Int *)
+    | expr boolean_bin_op expr %prec AND { Fun ((Func (Bool,[Bool;Bool])),[$1;$3],`None) }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun ((Poly Bool),[e1;e2],`None) }
+    | expr CONCAT_OP expr { Fun ((Func (Text,[Text;Text])),[$1;$3],`None) }
     | e1=expr mnot(like) e2=expr e3=escape?
-      { Fun ((Any,false),(list_filter_map identity [Some e1; Some e2; e3]),`None) }
+      {
+        match e3 with
+        | None -> Fun ((Func (Bool, [Text; Text])), [e1;e2], `None)
+        | Some e3 -> Fun ((Func (Bool, [Text; Text; Text])), [e1;e2;e3], `None)
+      }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
     | INTERVAL expr interval_unit { $2 }
     | LPAREN expr RPAREN { $2 }
     | attr_name { Column $1 }
     | v=literal_value | v=datetime_value { v }
-    | e1=expr mnot(IN) l=sequence(expr) { Fun ((Any,false),e1::l,`None) }
+    | e1=expr mnot(IN) l=sequence(expr) { Fun ((Poly Bool),e1::l,`None) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
-        Fun ((Any,false),[e1],`Single select)
+        Fun ((Poly Bool),[e1],`Single select)
       }
-    | e1=expr IN table=IDENT { Tables.check(table); e1 }
+    | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN
       {
-        Fun ((Any,false),[],`Single select)
+        Fun ((Ret Any),[],`Single select) (* FIXME typeof select *)
       }
     | PARAM { Param ($1,Any) }
     | f=FUNCTION LPAREN p=func_params RPAREN { Fun (f,p,`None) }
-    | expr IS NOT? NULL { $1 }
-    | expr mnot(BETWEEN) expr AND expr { Fun ((Any,false),[$1;$3;$5],`None) } (* TODO default Int *)
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Bool,false),[],`Select select) }
-    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END
+    | expr IS NOT? NULL { Fun (Ret Bool, [$1], `None) }
+    | expr mnot(BETWEEN) expr AND expr { Fun ((Poly Bool),[$1;$3;$5],`None) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[],`Select select) } (* FIXME Poly Bool *)
+    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
         let l = function None -> [] | Some x -> [x] in
-        Fun ((Any,false),l e1 @ List.flatten branches @ l e2, `None)
+        Fun ((Ret Any),l e1 @ List.flatten branches @ l e2, `None)
       }
 
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }

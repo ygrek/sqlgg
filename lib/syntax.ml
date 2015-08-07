@@ -21,7 +21,7 @@ let values_or_all table names =
 
 let list_filter_map = ExtList.List.filter_map
 
-let show_expr_q e = Show.show<expr_q> (e) |> print_endline
+let show_expr_q e = Show.show<expr_q> (e)
 
 let get_params_q e =
   let rec loop acc e =
@@ -35,7 +35,7 @@ let get_params_q e =
 let test_all_grouping columns =
   let test = function
   (* grouping function of zero or single parameter *)
-  | Expr (Fun ((_,true),args,_),_) when List.length args <= 1 -> true
+  | Expr (Fun (func,args,_),_) when Type.is_grouping func && List.length args <= 1 -> true
   | _ -> false
   in
   List.for_all test columns
@@ -60,9 +60,8 @@ let split_column_assignments tables l =
     in
     (* hint expression to unify with the column type *)
     let typ = (Schema.find schema cname).domain in
-    exprs := (Fun ((Type.Any,false), [Value typ;expr], `None)) :: !exprs) l;
+    exprs := (Fun (Type.(Ret Any), [Value typ;expr], `None)) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
-
 
 (** replace every Column with Value of corresponding type *)
 let rec resolve_columns tables joined_schema expr =
@@ -90,30 +89,53 @@ and assign_types expr =
   let rec typeof e = (* FIXME simplify *)
     match e with
     | `Value t -> e, t
-    | `Func ((ret,g),l) ->
-(** Assumption: sql functions/operators have type schema 'a -> ... -> 'a -> 'a -> 'b
-    i.e. all parameters of some equal type *)
-        let (l,t) = l |> List.map typeof |> List.split in
-        let t = match List.filter ((<>) Type.Any) t with
-        | [] -> Type.Any
-        | h::t -> if List.for_all ((=) h) t then h else Type.Any
-        in
-        let assign = function
-        | `Param (n,Type.Any) -> `Param (n,t)
-        | x -> x
-        in
-        let ret = if Type.Any <> ret then ret else t in
-        `Func ((ret,g),(List.map assign l)),ret
     | `Param (_,t) -> e, t
+    | `Func (func,params) ->
+        let (params,types) = params |> List.map typeof |> List.split in
+        let show () =
+          sprintf "%s (%s)"
+            (Type.string_of_func func)
+            (String.concat ", " @@ List.map Type.to_string types)
+        in
+        let (ret,inferred_params) = match func, types with
+        | Type.Agg, [typ] -> typ, types
+        | Type.Group ret, [_] -> ret, types
+        | (Type.Agg | Type.Group _), _ -> fail "cannot use grouping function with %d parameters" (List.length types)
+        | Type.Func (ret,args), _ when List.length args = List.length types
+                                    && List.fold_left (&&) true (List.map2 Type.matches args types) -> ret, args
+        | Type.Func _, _ ->
+          fail "types do not match : %s" (show ())
+        | Type.Ret Type.Any, _ -> (* lame - make a best guest, return type same as for parameters *)
+          begin match List.filter ((<>) Type.Any) types with
+          | [] -> Type.Any, types
+          | h::tl when List.for_all ((=) h) tl -> h, List.map (fun _ -> h) types
+          | _ -> Type.Any, types
+          end
+        | Type.Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
+        | Type.Poly ret, _ ->
+          match List.filter ((<>) Type.Any) types with
+          | [] -> ret, types
+          | h::tl when List.for_all ((=) h) tl -> ret, List.map (fun _ -> h) types
+          | _ -> fail "all parameters should have same type : %s" (show ())
+        in
+        let assign inferred x =
+          match x with
+          | `Param (n,Type.Any) -> `Param (n, inferred)
+          | x -> x
+        in
+        `Func (func,(List.map2 assign inferred_params params)), ret
   in
   typeof expr
 
 and resolve_types tables joined_schema expr =
   let expr = resolve_columns tables joined_schema expr in
-  if false then show_expr_q expr;
-  let (expr,_ as r) = assign_types expr in
-  if false then print_newline @@ show_expr_q expr;
-  r
+  try
+    assign_types expr
+  with
+    exn ->
+      printfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+      printfn "%s" (show_expr_q expr);
+      raise exn
 
 and infer_schema columns tables joined_schema =
 (*   let all = tables |> List.map snd |> List.flatten in *)
@@ -202,7 +224,7 @@ and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
   | Column _ -> failwith "Not a simple expression"
-  | Fun ((_,grouping),_,_) when grouping -> failwith "Grouping function not allowed in simple expression"
+  | Fun (func,_,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l,`None) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
   | Fun (_,_,_) -> failwith "not implemented : ensure_simple_expr with SELECT"
 
@@ -298,7 +320,7 @@ let eval (stmt:Sql.stmt) =
       let vl = List.length values in
       let cl = List.length expect in
       if vl <> cl then
-        failwith (sprintf "Expected %u expressions in VALUES list, %u provided" cl vl);
+        fail "Expected %u expressions in VALUES list, %u provided" cl vl;
       let assigns = List.combine (List.map (fun a -> a.name, None) expect) values in
       params_of_assigns [Tables.get table] assigns, None
     in

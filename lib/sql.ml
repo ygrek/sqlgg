@@ -9,6 +9,29 @@ struct
         deriving (Show)
 
   let to_string = Show.show<t>
+
+  let matches x y =
+    match x,y with
+    | Any, _ | _, Any -> true
+    | _ -> x = y
+
+  type func =
+  | Group of t (* 'a -> t *)
+  | Agg (* 'a -> 'a *)
+  | Func of t * t list (* ret, params *)
+  | Poly of t (* 'a -> 'a -> t *)
+  | Ret of t (* _ -> t *)
+  deriving (Show)
+
+  let string_of_func = Show.show<func>
+
+  let is_grouping = function
+  | Group _ | Agg -> true
+  | Func _ | Ret _ | Poly _ -> false
+
+  let return_type = function
+  | Group t | Func (t,_) | Ret t | Poly t -> Some t
+  | Agg -> None
 end
 
 module Constraint =
@@ -155,7 +178,6 @@ type select_result = (schema * param list)
 
 type col_name = string * string option (* column name + table name *)
 
-
 type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
 type limit = ((string option * (int * int)) * Type.t) list * bool
@@ -173,10 +195,7 @@ and select_full = select * select list * expr list * limit option
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
-  | Fun of
-    (Type.t * bool) (** return type, grouping *)
-    * expr list (** parameters *)
-    * [ `Single of select_full | `Select of select_full | `None ]
+  | Fun of Type.func * expr list (** parameters *) * [ `Single of select_full | `Select of select_full | `None ]
   | Column of (string * string option) (** name, table *)
 and column =
   | All
@@ -188,7 +207,7 @@ type columns = column list deriving (Show)
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
-            | `Func of (Type.t * bool) * expr_q list (** return type, grouping, parameters *)
+            | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]
             deriving (Show)
 
