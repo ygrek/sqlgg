@@ -146,8 +146,8 @@ let keywords =
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   let func x l = all (FUNCTION x) l in
   func T.Agg ["max";"min";"sum"];
-  func T.(Group Int) ["count"];
-  func T.(Group Float) ["avg"];
+  func T.(Group (Int,true)) ["count"];
+  func T.(Group (Float,false)) ["avg"];
   func T.(Func (Text, [Text;Text])) ["strftime"];
   func T.(Func (Text, [Text])) ["lower";"upper"];
   func T.(Ret Text) ["concat"];

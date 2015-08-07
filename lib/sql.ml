@@ -16,7 +16,7 @@ struct
     | _ -> x = y
 
   type func =
-  | Group of t (* 'a -> t *)
+  | Group of t * bool (* 'a -> t ; bool = multi-column *)
   | Agg (* 'a -> 'a *)
   | Func of t * t list (* ret, params *)
   | Poly of t (* 'a -> 'a -> t *)
@@ -30,7 +30,7 @@ struct
   | Func _ | Ret _ | Poly _ -> false
 
   let return_type = function
-  | Group t | Func (t,_) | Ret t | Poly t -> Some t
+  | Group (t,_) | Func (t,_) | Ret t | Poly t -> Some t
   | Agg -> None
 end
 

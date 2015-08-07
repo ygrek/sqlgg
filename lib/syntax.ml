@@ -99,14 +99,15 @@ and assign_types expr =
     | `Func (func,params) ->
         let (params,types) = params |> List.map typeof |> List.split in
         let show () =
-          sprintf "%s (%s)"
+          sprintf "%s applied to (%s)"
             (Type.string_of_func func)
             (String.concat ", " @@ List.map Type.to_string types)
         in
         let (ret,inferred_params) = match func, types with
         | Type.Agg, [typ] -> typ, types
-        | Type.Group ret, [_] -> ret, types
-        | (Type.Agg | Type.Group _), _ -> fail "cannot use grouping function with %d parameters" (List.length types)
+        | Type.Group (ret,false), [_]
+        | Type.Group (ret,true), _ -> ret, types
+        | (Type.Agg | Type.Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | Type.Func (ret,args), _ when List.length args = List.length types
                                     && List.fold_left (&&) true (List.map2 Type.matches args types) -> ret, args
         | Type.Func _, _ ->
