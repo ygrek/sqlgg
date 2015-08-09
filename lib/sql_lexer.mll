@@ -142,6 +142,8 @@ let keywords =
    "day_minute", DAY_MINUTE;
    "day_hour", DAY_HOUR;
    "year_month", YEAR_MONTH;
+   "false", FALSE;
+   "true", TRUE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum"];
