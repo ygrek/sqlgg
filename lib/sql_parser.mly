@@ -129,7 +129,7 @@ table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (function `Attr a -> Some a | `Constraint _ -> None) t }
+table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
                 | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)
 
 (* ugly, can you fixme? *)
@@ -229,6 +229,7 @@ column_def: name=IDENT t=sql_type? column_def_extra*
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }
+           | INDEX cols=sequence(index_column) { `Index cols }
 
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY KEY { Some PrimaryKey }
