@@ -2,7 +2,7 @@ open Mybuild
 
 let () =
   OCaml.setup();
-  Version.save ~default:"Version_release.id" "version.ml";
+  Version.save ~default:"Version_release.id" "src/version.ml";
   ()
 
 (* mark_tag_used is not available in ocaml < 4.02 *)
