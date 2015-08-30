@@ -284,7 +284,7 @@ expr:
       }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
-    | INTERVAL expr interval_unit { $2 }
+    | INTERVAL expr interval_unit { Fun (Fixed (Datetime, [Int]), [$2]) }
     | LPAREN expr RPAREN { $2 }
     | attr_name { Column $1 }
     | v=literal_value | v=datetime_value { v }
