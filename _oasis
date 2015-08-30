@@ -29,6 +29,26 @@ Library sqlgg
   InternalModules: Prelude
   BuildDepends: extlib, deriving
 
+Library sqlgg_traits
+  Path: impl/
+  Modules: Sqlgg_traits
+  FindlibName: traits
+  FindlibParent: sqlgg
+
+Library sqlgg_mysql
+  Path: impl/
+  Modules: Sqlgg_mysql
+  BuildDepends: mysql, sqlgg.traits
+  FindlibName: mysql
+  FindlibParent: sqlgg
+
+Library sqlgg_sqlite3
+  Path: impl/
+  Modules: Sqlgg_sqlite3
+  BuildDepends: sqlite3, sqlgg.traits
+  FindlibName: sqlite3
+  FindlibParent: sqlgg
+
 Test main
   Command: $sqlgg -test
   TestTools: sqlgg
