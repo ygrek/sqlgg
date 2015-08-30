@@ -92,42 +92,43 @@ let rec resolve_columns tables joined_schema expr =
 
 (** assign types to parameters where possible *)
 and assign_types expr =
-  let rec typeof e = (* FIXME simplify *)
+  let rec typeof (e:expr_q) = (* FIXME simplify *)
     match e with
     | `Value t -> e, t
     | `Param (_,t) -> e, t
     | `Func (func,params) ->
+        let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
         let show () =
           sprintf "%s applied to (%s)"
-            (Type.string_of_func func)
-            (String.concat ", " @@ List.map Type.to_string types)
+            (string_of_func func)
+            (String.concat ", " @@ List.map to_string types)
         in
         let (ret,inferred_params) = match func, types with
-        | Type.Agg, [typ] -> typ, types
-        | Type.Group (ret,false), [_]
-        | Type.Group (ret,true), _ -> ret, types
-        | (Type.Agg | Type.Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | Type.Fixed (ret,args), _ when List.length args = List.length types
-                                    && List.fold_left (&&) true (List.map2 Type.matches args types) -> ret, args
-        | Type.Fixed _, _ ->
+        | Agg, [typ] -> typ, types
+        | Group (ret,false), [_]
+        | Group (ret,true), _ -> ret, types
+        | (Agg | Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | Fixed (ret,args), _ when List.length args = List.length types
+                                    && List.fold_left (&&) true (List.map2 matches args types) -> ret, args
+        | Fixed _, _ ->
           fail "types do not match : %s" (show ())
-        | Type.Ret Type.Any, _ -> (* lame - make a best guess, return type same as for parameters *)
-          begin match List.filter ((<>) Type.Any) types with
-          | [] -> Type.Any, types
-          | h::tl when List.for_all (Type.matches h) tl -> h, List.map (fun _ -> h) types
-          | _ -> Type.Any, types
+        | Ret Any, _ -> (* lame - make a best guess, return type same as for parameters *)
+          begin match List.filter ((<>) Any) types with
+          | [] -> Any, types
+          | h::tl when List.for_all (matches h) tl -> h, List.map (fun _ -> h) types
+          | _ -> Any, types
           end
-        | Type.Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
-        | Type.Poly ret, _ ->
-          match List.filter ((<>) Type.Any) types with
+        | Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
+        | Poly ret, _ ->
+          match List.filter ((<>) Any) types with
           | [] -> ret, types
-          | h::tl when List.for_all (Type.matches h) tl -> ret, List.map (fun _ -> h) types
+          | h::tl when List.for_all (matches h) tl -> ret, List.map (fun _ -> h) types
           | _ -> fail "all parameters should have same type : %s" (show ())
         in
         let assign inferred x =
           match x with
-          | `Param (n,Type.Any) -> `Param (n, inferred)
+          | `Param (n,Any) -> `Param (n, inferred)
           | x -> x
         in
         `Func (func,(List.map2 assign inferred_params params)), ret
