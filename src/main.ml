@@ -62,7 +62,7 @@ let parse_one_exn (sql,props) =
     in
     {Stmt.schema=schema; params=params; kind=kind; props=Props.set props "sql" sql}
 
-let parse_one x =
+let parse_one (sql, props as x) =
   try
     Some (parse_one_exn x)
   with
@@ -72,7 +72,6 @@ let parse_one x =
      | Sql.Schema.Error (_,msg) -> msg
      | exn -> Printexc.to_string exn
      in
-     let sql = fst x in
      Error.log "==> %s" sql;
      if cnum = String.length sql && tok = "" then
        Error.log "Error: %s" extra
@@ -80,6 +79,9 @@ let parse_one x =
        Error.log "Position %u:%u Tokens: %s%s\nError: %s" line cnum tok (String.slice ~last:32 tail) extra;
      None
     end
+  | exn ->
+    Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
+    raise exn
 
 let parse_one (sql,props as x) =
   match Props.get props "noparse" with

@@ -146,12 +146,15 @@ let keywords =
    "true", TRUE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  all (FUNCTION (T.Int,true)) ["max"; "min"; "count";"sum"];
-  all (FUNCTION (T.Float,true)) ["avg"];
-  all (FUNCTION (T.Int,false)) ["length"; "random";"unix_timestamp"];
-  all (FUNCTION (T.Int,false)) ["least"; "greatest"];
-  all (FUNCTION (T.Text,false)) ["concat";"lower";"upper";"strftime"];
-  all (FUNCTION (T.Any,false)) ["coalesce"];
+  let func x l = all (FUNCTION x) l in
+  func T.Agg ["max";"min";"sum"];
+  func T.(Group (Int,true)) ["count"];
+  func T.(Group (Float,false)) ["avg"];
+  func T.(Fixed (Text, [Text;Text])) ["strftime"];
+  func T.(Fixed (Text, [Text])) ["lower";"upper"];
+  func T.(Ret Text) ["concat"];
+  func T.(Ret Any) ["coalesce"];
+  func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
   all DATETIME_FUNC ["getdate"]; (* mssql? *)
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];

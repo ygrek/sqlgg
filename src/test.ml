@@ -1,4 +1,4 @@
-
+open Printf
 open OUnit
 open Sql
 open Sql.Type
@@ -19,7 +19,8 @@ let cmp_params p1 p2 =
 let tt ?msg sql ?kind schema params =
   let msg = Option.default sql msg in
   match Main.parse_one (sql,[]) with
-  | None -> assert_failure "Failed to parse"
+  | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
+  | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
   | Some stmt ->
       assert_equal ~msg ~printer:Sql.Schema.to_string schema stmt.schema;
       assert_equal ~msg ~cmp:cmp_params ~printer:Sql.params_to_string params stmt.params;
@@ -87,11 +88,18 @@ let test3 () =
 let test4  () =
   let a = [attr "" Int] in
   tt "CREATE TABLE test4 (x INT, y INT)" [] [];
-  tt "select max(*) from test4" a [] ~kind:(Select `One);
+(*   tt "select max( * ) from test4" a [] ~kind:(Select `One); *)
   tt "select max(x) as q from test4" [attr "q" Int] [] ~kind:(Select `One);
+  tt "select max(x) from test4" a [] ~kind:(Select `One);
+  tt "select max(x) from test4" a [] ~kind:(Select `One);
+  tt "select max(x+y) from test4 limit 1" a [] ~kind:(Select `One);
+  tt "select max(y) from test4 limit 2" a [] ~kind:(Select `One);
+(* TODO sqlite treats multi-arg max to non-grouping
+  tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
+*)
   tt "select 1+2 from test4" a [] ~kind:(Select `Zero_one);
   tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
     [attr "" Int; attr "" Text] [] ~kind:(Select `Zero_one);
