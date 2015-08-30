@@ -4,3 +4,9 @@ SELECT * FROM test WHERE x IS NOT NULL;
 CREATE INDEX `key` ON test(`key`(20));
 SELECT avg(x) FROM test;
 SELECT count(*) FROM test;
+CREATE TABLE appointments (alert_at DATETIME);
+INSERT INTO `appointments` (
+  `alert_at`
+) VALUES (
+  NOW() + INTERVAL @delay SECOND
+);

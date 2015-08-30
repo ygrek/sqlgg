@@ -34,4 +34,14 @@
    <value name="_0" type="Int"/>
   </out>
  </stmt>
+ <stmt name="create_appointments" sql="CREATE TABLE appointments (alert_at DATETIME)" kind="create" target="appointments" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_appointments_7" sql="INSERT INTO `appointments` (&#x0A;  `alert_at`&#x0A;) VALUES (&#x0A;  NOW() + INTERVAL @delay SECOND&#x0A;)" kind="insert" target="appointments" cardinality="0">
+  <in>
+   <value name="delay" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>
