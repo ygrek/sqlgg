@@ -21,9 +21,18 @@ struct
   | Fixed of t * t list (* ret, params *)
   | Poly of t (* 'a -> 'a -> t *)
   | Ret of t (* _ -> t *)
-  deriving (Show)
 
-  let string_of_func = Show.show<func>
+  module Show_func = struct
+  let show = function
+  | Agg -> "|'a| -> 'a"
+  | Group (ret,multi) -> sprintf "|%s'a| -> %s" (if multi then "{...} as " else "") (to_string ret)
+  | Fixed (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map to_string args) (to_string ret)
+  | Poly ret -> sprintf "'a -> 'a -> %s" (to_string ret)
+  | Ret ret -> sprintf "_ -> %s" (to_string ret)
+  let format pp x = Format.fprintf pp "%s" (show x)
+  end
+
+  let string_of_func = Show_func.show
 
   let is_grouping = function
   | Group _ | Agg -> true
