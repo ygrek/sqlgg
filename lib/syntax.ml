@@ -109,10 +109,6 @@ and assign_types expr =
         | Group (ret,false), [_]
         | Group (ret,true), _ -> ret, types
         | (Agg | Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | Fixed (ret,args), _ when List.length args = List.length types
-                                    && List.fold_left (&&) true (List.map2 matches args types) -> ret, args
-        | Fixed _, _ ->
-          fail "types do not match : %s" (show ())
         | F (_, args), _ when List.length args <> List.length types -> fail "types do not match : %s" (show ())
         | F (ret, args), _ ->
           let typevar = Hashtbl.create 10 in

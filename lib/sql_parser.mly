@@ -18,6 +18,7 @@
     in
     list_filter_map param l, List.mem (`Limit,`Const 1) l
 
+  let poly ret args = Fun (F (Typ ret, List.map (fun _ -> Var 0) args), args)
 %}
 
 %token <int> INTEGER
@@ -274,22 +275,22 @@ attr_name: name=IDENT { (name,None) }
 
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
-    | expr boolean_bin_op expr %prec AND { Fun ((Fixed (Bool,[Bool;Bool])),[$1;$3]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun ((Poly Bool),[e1;e2]) }
-    | expr CONCAT_OP expr { Fun ((Fixed (Text,[Text;Text])),[$1;$3]) }
+    | expr boolean_bin_op expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[$1;$3]) }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
+    | expr CONCAT_OP expr { Fun ((fixed Text [Text;Text]),[$1;$3]) }
     | e1=expr mnot(like) e2=expr e3=escape?
       {
         match e3 with
-        | None -> Fun ((Fixed (Bool, [Text; Text])), [e1;e2])
-        | Some e3 -> Fun ((Fixed (Bool, [Text; Text; Text])), [e1;e2;e3])
+        | None -> Fun ((fixed Bool [Text; Text]), [e1;e2])
+        | Some e3 -> Fun ((fixed Bool [Text; Text; Text]), [e1;e2;e3])
       }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
-    | INTERVAL expr interval_unit { Fun (Fixed (Datetime, [Int]), [$2]) }
+    | INTERVAL expr interval_unit { Fun (fixed Datetime [Int], [$2]) }
     | LPAREN expr RPAREN { $2 }
     | attr_name { Column $1 }
     | v=literal_value | v=datetime_value { v }
-    | e1=expr mnot(IN) l=sequence(expr) { Fun ((Poly Bool),e1::l) }
+    | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
       {
         Fun ((Poly Bool),[e1; Select (select, true)])
@@ -299,7 +300,7 @@ expr:
     | PARAM { Param ($1,Any) }
     | f=FUNCTION LPAREN p=func_params RPAREN { Fun (f,p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
-    | expr mnot(BETWEEN) expr AND expr { Fun ((Poly Bool),[$1;$3;$5]) }
+    | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {

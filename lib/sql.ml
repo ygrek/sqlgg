@@ -21,16 +21,16 @@ struct
   type func =
   | Group of t * bool (* 'a -> t ; bool = multi-column *)
   | Agg (* 'a -> 'a *)
-  | Fixed of t * t list (* ret, params *)
   | Poly of t (* 'a -> 'a -> t *) (* = F (Typ t, [Var 0; Var 0]) *)
   | Ret of t (* _ -> t *)
   | F of tyvar * tyvar list
+
+  let fixed ret args = F (Typ ret, List.map (fun t -> Typ t) args)
 
   module Show_func = struct
   let show = function
   | Agg -> "|'a| -> 'a"
   | Group (ret,multi) -> sprintf "|%s'a| -> %s" (if multi then "{...} as " else "") (to_string ret)
-  | Fixed (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map to_string args) (to_string ret)
   | Poly ret -> sprintf "'a -> 'a -> %s" (to_string ret)
   | Ret ret -> sprintf "_ -> %s" (to_string ret)
   | F (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
@@ -41,7 +41,7 @@ struct
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Fixed _ | Ret _ | Poly _ | F _ -> false
+  | Ret _ | Poly _ | F _ -> false
 end
 
 module Constraint =
