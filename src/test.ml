@@ -59,8 +59,8 @@ let test () =
   tt "insert or replace into test values (2,?,?)" [] [param,Text; param,Text;];
   tt "replace into test values (2,?,?)" [] [param,Text; param,Text;];
   tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
-    [attr "str" Text; attr "q" Any] (* FIXME `Func *)
-    [p "id" Int; p "id" Int; p "def" Any];
+    [attr "str" Text; attr "q" Text]
+    [p "id" Int; p "id" Int; p "def" Text];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)

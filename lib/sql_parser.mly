@@ -303,8 +303,14 @@ expr:
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
-        let l = function None -> [] | Some x -> [x] in
-        Fun ((Ret Any),l e1 @ List.flatten branches @ l e2)
+        let maybe f = function None -> [] | Some x -> [f x] in
+        let t_args =
+            maybe (fun _ -> Var 0) e1
+          @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
+          @ maybe (fun _ -> Var 1) e2
+        in
+        let v_args = maybe Prelude.identity e1 @ List.flatten branches @ maybe Prelude.identity e2 in
+        Fun (F (Var 1, t_args), v_args)
       }
 
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }

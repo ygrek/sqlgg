@@ -10,3 +10,7 @@ INSERT INTO `appointments` (
 ) VALUES (
   NOW() + INTERVAL @delay SECOND
 );
+SELECT SUM(CASE WHEN x > 10 THEN 1 ELSE 0 END) FROM test;
+-- delete from txn_ranges
+-- where id in (@tr1_id, @tr2_id)
+--   and not exists (select 1 from workareas where txn_range_id = txn_ranges.id)

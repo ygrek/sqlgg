@@ -15,12 +15,16 @@ struct
     | Any, _ | _, Any -> true
     | _ -> x = y
 
+  type tyvar = Typ of t | Var of int
+  let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+
   type func =
   | Group of t * bool (* 'a -> t ; bool = multi-column *)
   | Agg (* 'a -> 'a *)
   | Fixed of t * t list (* ret, params *)
-  | Poly of t (* 'a -> 'a -> t *)
+  | Poly of t (* 'a -> 'a -> t *) (* = F (Typ t, [Var 0; Var 0]) *)
   | Ret of t (* _ -> t *)
+  | F of tyvar * tyvar list
 
   module Show_func = struct
   let show = function
@@ -29,6 +33,7 @@ struct
   | Fixed (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map to_string args) (to_string ret)
   | Poly ret -> sprintf "'a -> 'a -> %s" (to_string ret)
   | Ret ret -> sprintf "_ -> %s" (to_string ret)
+  | F (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   let format pp x = Format.fprintf pp "%s" (show x)
   end
 
@@ -36,7 +41,7 @@ struct
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Fixed _ | Ret _ | Poly _ -> false
+  | Fixed _ | Ret _ | Poly _ | F _ -> false
 end
 
 module Constraint =

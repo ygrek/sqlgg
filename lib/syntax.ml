@@ -113,6 +113,25 @@ and assign_types expr =
                                     && List.fold_left (&&) true (List.map2 matches args types) -> ret, args
         | Fixed _, _ ->
           fail "types do not match : %s" (show ())
+        | F (_, args), _ when List.length args <> List.length types -> fail "types do not match : %s" (show ())
+        | F (ret, args), _ ->
+          let typevar = Hashtbl.create 10 in
+          let l = List.map2 begin fun arg typ ->
+            match arg with
+            | Typ arg -> matches arg typ
+            | Var i ->
+              let arg = match Hashtbl.find typevar i with
+              | exception Not_found -> Hashtbl.replace typevar i typ; typ
+              | t -> t
+              in
+              matches arg typ
+          end args types
+          in
+          let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
+          if List.fold_left (&&) true l then
+            convert ret, List.map convert args
+          else
+            fail "types do not match : %s" (show ())
         | Ret Any, _ -> (* lame - make a best guess, return type same as for parameters *)
           begin match List.filter ((<>) Any) types with
           | [] -> Any, types
