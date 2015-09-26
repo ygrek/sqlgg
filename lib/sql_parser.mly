@@ -305,10 +305,11 @@ expr:
       {
         let maybe f = function None -> [] | Some x -> [f x] in
         let t_args =
-            maybe (fun _ -> Var 0) e1
-          @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
-          @ maybe (fun _ -> Var 1) e2
+          match e1 with
+          | None -> (List.flatten @@ List.map (fun _ -> [Typ Bool; Var 1]) branches)
+          | Some _ -> [Var 0] @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
         in
+        let t_args = t_args @ maybe (fun _ -> Var 1) e2 in
         let v_args = maybe Prelude.identity e1 @ List.flatten branches @ maybe Prelude.identity e2 in
         Fun (F (Var 1, t_args), v_args)
       }
