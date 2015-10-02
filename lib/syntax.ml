@@ -4,6 +4,8 @@ open Printf
 open Prelude
 open Sql
 
+let debug = false
+
 type env = { tables : Tables.table list; }
 
 let empty_env = { tables = [] }
@@ -65,11 +67,12 @@ let split_column_assignments tables l =
 
 (** replace every Column with Value of corresponding type *)
 let rec resolve_columns tables joined_schema expr =
-(*
-  eprintf "\nRESOLVE COLUMNS\n%s\n%!" (expr_to_string expr);
-  Tables.print stderr tables;
-  Sql.Schema.print joined_schema;
-*)
+  if debug then
+  begin
+    eprintf "\nRESOLVE COLUMNS %s\n%!" (expr_to_string expr);
+    eprintf "schema: "; Sql.Schema.print joined_schema;
+    Tables.print stderr tables;
+  end;
   let schema_of_table name = name |> Tables.get_from tables |> snd in
   let rec each e =
     match e with
@@ -116,10 +119,13 @@ and assign_types expr =
             match arg with
             | Typ arg -> matches arg typ
             | Var i ->
-              let arg = match Hashtbl.find typevar i with
-              | exception Not_found -> Hashtbl.replace typevar i typ; typ
-              | t -> t
+              let arg =
+                match Hashtbl.find typevar i with
+                | exception Not_found -> Hashtbl.replace typevar i typ; typ
+                | t -> t
               in
+              (* prefer more precise type *)
+              if arg = Type.Any then Hashtbl.replace typevar i typ;
               matches arg typ
           end args types
           in
@@ -153,7 +159,9 @@ and assign_types expr =
 and resolve_types tables joined_schema expr =
   let expr = resolve_columns tables joined_schema expr in
   try
-    assign_types expr
+    let (expr',t as r) = assign_types expr in
+    if debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string t);
+    r
   with
     exn ->
       eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
