@@ -34,17 +34,33 @@
    <value name="_0" type="Int"/>
   </out>
  </stmt>
+ <stmt name="select_6" sql="SELECT x FROM test WHERE ? &gt;= `key` ORDER BY `key` DESC LIMIT 1" kind="select" cardinality="0,1">
+  <in>
+   <value name="_0" type="Text"/>
+  </in>
+  <out>
+   <value name="x" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_7" sql="SELECT x FROM test WHERE `key` &lt; ?" kind="select" cardinality="n">
+  <in>
+   <value name="_0" type="Text"/>
+  </in>
+  <out>
+   <value name="x" type="Int"/>
+  </out>
+ </stmt>
  <stmt name="create_appointments" sql="CREATE TABLE appointments (alert_at DATETIME)" kind="create" target="appointments" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert_appointments_7" sql="INSERT INTO `appointments` (&#x0A;  `alert_at`&#x0A;) VALUES (&#x0A;  NOW() + INTERVAL @delay SECOND&#x0A;)" kind="insert" target="appointments" cardinality="0">
+ <stmt name="insert_appointments_9" sql="INSERT INTO `appointments` (&#x0A;  `alert_at`&#x0A;) VALUES (&#x0A;  NOW() + INTERVAL @delay SECOND&#x0A;)" kind="insert" target="appointments" cardinality="0">
   <in>
    <value name="delay" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="select_8" sql="SELECT SUM(CASE WHEN x &gt; 10 THEN 1 ELSE 0 END) FROM test" kind="select" cardinality="1">
+ <stmt name="select_10" sql="SELECT SUM(CASE WHEN x &gt; 10 THEN 1 ELSE 0 END) FROM test" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>

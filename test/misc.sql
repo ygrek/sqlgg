@@ -4,6 +4,9 @@ SELECT * FROM test WHERE x IS NOT NULL;
 CREATE INDEX `key` ON test(`key`(20));
 SELECT avg(x) FROM test;
 SELECT count(*) FROM test;
+SELECT x FROM test WHERE ? >= `key` ORDER BY `key` DESC LIMIT 1;
+SELECT x FROM test WHERE `key` < ?;
+
 CREATE TABLE appointments (alert_at DATETIME);
 INSERT INTO `appointments` (
   `alert_at`
