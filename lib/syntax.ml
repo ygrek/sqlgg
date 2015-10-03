@@ -15,6 +15,8 @@ let collect f l = List.flatten (List.map f l)
 (* FIXME *)
 let schema_as_params = List.map (fun attr -> (Some attr.name,(0,0)), Some attr.domain)
 
+let schema_of tables name = snd @@ Tables.get_from tables name
+
 let values_or_all table names =
   let schema = Tables.get_schema table in
   match names with
@@ -49,19 +51,17 @@ let cross = List.fold_left Schema.cross []
 let all_columns = Schema.make_unique $ cross
 let all_tbl_columns = all_columns $ List.map snd
 
+let resolve_column tables joined_schema {cname;tname} =
+  Schema.find (Option.map_default (schema_of tables) joined_schema tname) cname
+
 let split_column_assignments tables l =
   let cols = ref [] in
   let exprs = ref [] in
   let all = all_tbl_columns tables in
-  List.iter (fun (({cname;tname} as col),expr) ->
+  List.iter (fun (col,expr) ->
     cols := col :: !cols;
-    let schema =
-      match tname with
-      | Some name -> Tables.get_from tables name |> snd
-      | None -> all
-    in
     (* hint expression to unify with the column type *)
-    let typ = (Schema.find schema cname).domain in
+    let typ = (resolve_column tables all col).domain in
     exprs := (Fun (Type.(Ret Any), [Value typ;expr])) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
 
@@ -73,13 +73,10 @@ let rec resolve_columns tables joined_schema expr =
     eprintf "schema: "; Sql.Schema.print joined_schema;
     Tables.print stderr tables;
   end;
-  let schema_of_table name = name |> Tables.get_from tables |> snd in
   let rec each e =
     match e with
     | Value x -> `Value x
-    | Column {cname;tname} ->
-      let attr = Schema.find (Option.map_default schema_of_table joined_schema tname) cname in
-      `Value attr.domain
+    | Column col -> `Value (resolve_column tables joined_schema col).domain
     | Param x -> `Param x
     | Fun (r,l) ->
       `Func (r,List.map each l)
@@ -170,16 +167,15 @@ and resolve_types tables joined_schema expr =
 
 and infer_schema columns tables joined_schema =
 (*   let all = tables |> List.map snd |> List.flatten in *)
-  let schema name = name |> Tables.get_from tables |> snd in
   let resolve1 = function
     | All -> joined_schema
-    | AllOf t -> schema t
+    | AllOf t -> schema_of tables t
     | Expr (e,name) ->
-      let col = begin
-      match e with
-      | Column {cname;tname} -> Schema.find (Option.map_default schema joined_schema tname) cname
-      | _ -> attr "" (resolve_types tables joined_schema e |> snd)
-      end in
+      let col =
+        match e with
+        | Column col -> resolve_column tables joined_schema col
+        | _ -> attr "" (resolve_types tables joined_schema e |> snd)
+      in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
   in
