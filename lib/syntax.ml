@@ -53,7 +53,7 @@ let split_column_assignments tables l =
   let cols = ref [] in
   let exprs = ref [] in
   let all = all_tbl_columns tables in
-  List.iter (fun ((cname,tname as col),expr) ->
+  List.iter (fun (({cname;tname} as col),expr) ->
     cols := col :: !cols;
     let schema =
       match tname with
@@ -77,8 +77,8 @@ let rec resolve_columns tables joined_schema expr =
   let rec each e =
     match e with
     | Value x -> `Value x
-    | Column (name,table) ->
-      let attr = Schema.find (Option.map_default schema_of_table joined_schema table) name in
+    | Column {cname;tname} ->
+      let attr = Schema.find (Option.map_default schema_of_table joined_schema tname) cname in
       `Value attr.domain
     | Param x -> `Param x
     | Fun (r,l) ->
@@ -177,8 +177,7 @@ and infer_schema columns tables joined_schema =
     | Expr (e,name) ->
       let col = begin
       match e with
-      | Column (name,Some t) -> Schema.find (schema t) name
-      | Column (name,None) -> Schema.find joined_schema name
+      | Column {cname;tname} -> Schema.find (Option.map_default schema joined_schema tname) cname
       | _ -> attr "" (resolve_types tables joined_schema e |> snd)
       end in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
@@ -285,7 +284,7 @@ and resolve_source env (x,alias) =
   | Some name -> let ((_,s),p) = src in ((name,s),p)
   | None -> src
 
-and eval_select_full env (select,other,order,limit) =
+and eval_select_full env { select=(select,other); order; limit; } =
   let (s1,p1,tbls,cardinality) = eval_select env select in
   let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
   if false then
@@ -342,7 +341,7 @@ let eval (stmt:Sql.stmt) =
       let cl = List.length expect in
       if vl <> cl then
         fail "Expected %u expressions in VALUES list, %u provided" cl vl;
-      let assigns = List.combine (List.map (fun a -> a.name, None) expect) values in
+      let assigns = List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) values in
       params_of_assigns [Tables.get table] assigns, None
     in
     [], params, Insert (inferred,table)

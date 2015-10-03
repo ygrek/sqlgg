@@ -139,7 +139,7 @@ table_def_done1: { Parser_state.mode_ignore () }
 
 select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
               {
-                ($1, other, o, lim)
+                { select = ($1, other); order=o; limit=lim; }
               }
 
 select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
@@ -269,9 +269,9 @@ anyall: ANY | ALL | SOME { }
 
 mnot(X): NOT x = X | x = X { x }
 
-attr_name: name=IDENT { (name,None) }
-         | table=IDENT DOT name=IDENT
-         | IDENT DOT table=IDENT DOT name=IDENT { (name,Some table) } (* FIXME database identifier *)
+attr_name: cname=IDENT { { cname; tname=None} }
+         | table=IDENT DOT cname=IDENT
+         | IDENT DOT table=IDENT DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
 
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)

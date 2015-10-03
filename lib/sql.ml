@@ -186,11 +186,13 @@ type alter_action = [ `Add of attr * alter_pos | `Drop of string | `Change of st
 
 type select_result = (schema * param list)
 
-type col_name = string * string option (* column name + table name *)
-
 type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
-type limit = ((string option * (int * int)) * Type.t) list * bool
+type col_name = {
+  cname : string; (** column name *)
+  tname : string option; (** table name *)
+}
+and limit = (param_id * Type.t) list * bool
 and source1 = [ `Select of select | `Table of string ]
 and source = source1 * string option
 and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
@@ -201,13 +203,17 @@ and select = {
   group : expr list;
   having : expr option;
 }
-and select_full = select * select list * expr list * limit option
+and select_full = {
+  select : select * select list;
+  order : expr list;
+  limit : limit option;
+}
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
   | Fun of Type.func * expr list (** parameters *)
   | Select of select_full * bool (* single *)
-  | Column of (string * string option) (** name, table *)
+  | Column of col_name
 and column =
   | All
   | AllOf of string
