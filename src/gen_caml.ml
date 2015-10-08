@@ -108,16 +108,16 @@ let start () = ()
 
 let generate_stmt fold index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
-  let subst = Props.get stmt.props "subst" in
-  let values = ((match subst with None -> [] | Some x -> [x]) @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
+  let subst = Props.get_all stmt.props "subst" in
+  let values = (subst @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
   let fold = fold && is_callback stmt in
   let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql stmt) in
   let sql = match subst with
-  | None -> sql
-  | Some var ->
+  | [] -> sql
+  | vars ->
     output "let __sqlgg_sql =";
     output "  let replace_all ~str ~sub ~by =";
     output "    let rec loop str = match ExtString.String.replace ~str ~sub ~by with";
@@ -126,7 +126,10 @@ let generate_stmt fold index stmt =
     output "    in loop str";
     output "  in";
     output "  let sql = %s in" sql;
-    output "  replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s" var var;
+    List.iter begin fun var ->
+      output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
+    end vars;
+    output "  sql";
     output "in";
     "__sqlgg_sql"
   in
