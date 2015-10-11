@@ -305,6 +305,17 @@ let update_tables tables ss w =
   let p2 = get_params_opt tables (all_tbl_columns tables) w in
   (List.flatten params) @ p1 @ p2
 
+let annotate_select select types =
+  let (select1,compound) = select.select in
+  let rec loop acc cols types =
+    match cols, types with
+    | [], [] -> List.rev acc
+    | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
+    | Expr (e,name) :: cols, t :: types -> loop (Expr (Fun (F (Typ t, [Typ t]), [e]), name) :: acc) cols types
+    | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
+  in
+  { select with select = { select1 with columns = loop [] select1.columns types }, compound }
+
 let eval (stmt:Sql.stmt) =
   let open Stmt in
   match stmt with
@@ -342,9 +353,10 @@ let eval (stmt:Sql.stmt) =
     in
     [], params, Insert (inferred,table)
   | Insert (table,`Select (names, select)) ->
-    let (schema,params,_) = eval_select_full empty_env select in
     let expect = values_or_all table names in
-    ignore (Schema.compound expect schema); (* test equal types *)
+    let select = annotate_select select (List.map (fun a -> a.domain) expect) in
+    let (schema,params,_) = eval_select_full empty_env select in
+    ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
     [], params, Insert (None,table)
   | Insert (table, `Set ss) ->
     let (params,inferred) = match ss with
