@@ -17,3 +17,8 @@ SELECT SUM(CASE WHEN x > 10 THEN 1 ELSE 0 END) FROM test;
 -- delete from txn_ranges
 -- where id in (@tr1_id, @tr2_id)
 --   and not exists (select 1 from workareas where txn_range_id = txn_ranges.id)
+
+CREATE TABLE issue14 (x integer);
+INSERT INTO issue14 (x) VALUES (@x);
+INSERT INTO issue14 SET x = @x;
+INSERT INTO issue14 (x) SELECT @x;

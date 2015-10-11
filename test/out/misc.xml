@@ -66,4 +66,26 @@
    <value name="_0" type="Int"/>
   </out>
  </stmt>
+ <stmt name="create_issue14" sql="CREATE TABLE issue14 (x integer)" kind="create" target="issue14" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_issue14_12" sql="INSERT INTO issue14 (x) VALUES (@x)" kind="insert" target="issue14" cardinality="0">
+  <in>
+   <value name="x" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="insert_issue14_13" sql="INSERT INTO issue14 SET x = @x" kind="insert" target="issue14" cardinality="0">
+  <in>
+   <value name="x" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="insert_issue14_14" sql="INSERT INTO issue14 (x) SELECT @x" kind="insert" target="issue14" cardinality="0">
+  <in>
+   <value name="x" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>
