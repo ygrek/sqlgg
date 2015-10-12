@@ -216,9 +216,8 @@ and get_params_opt tables j_s = function
 
 and get_params_l tables j_s l = collect (get_params tables j_s) l
 
-and do_join env (tables,params,schema) ((table1,params1),kind) =
+and do_join env (params,schema) ((table1,params1),kind) =
   let (_,schema1) = table1 in
-  let tables = tables @ [table1] in
   let schema = match kind with
   | `Cross
   | `Search _
@@ -230,14 +229,13 @@ and do_join env (tables,params,schema) ((table1,params1),kind) =
   | `Cross | `Default | `Natural | `Using _ -> []
   | `Search e -> get_params env.tables schema e
   in
-  tables,params @ params1 @ p , schema
+  params @ params1 @ p, schema
 
 and join env ((t0,p0),joins) =
   let all_tables = List.fold_left (fun acc ((table,_),_) -> table::acc) [t0] joins in
   let env = {tables = env.tables @ all_tables} in
-  let (tables,params,joined_schema) = List.fold_left (do_join env) ([t0],p0,snd t0) joins in
-(*   let joined_schema = tables |> List.map snd |> List.flatten in *)
-  (tables,params,joined_schema)
+  let (params,joined_schema) = List.fold_left (do_join env) (p0,snd t0) joins in
+  (all_tables,params,joined_schema)
 
 and params_of_assigns tables ss =
   let (_,exprs) = split_column_assignments tables ss in
