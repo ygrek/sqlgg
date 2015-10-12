@@ -42,7 +42,7 @@
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
-       YEAR_MONTH FALSE TRUE
+       YEAR_MONTH FALSE TRUE DUPLICATE
 %token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME
 
@@ -95,17 +95,17 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd table=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)?
+         | insert_cmd target=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)? ss=on_duplicate?
               {
-                Insert (table,`Values (names, values))
+                Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
-         | insert_cmd table=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt)
+         | insert_cmd target=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
               {
-                Insert (table,`Select (names, select))
+                Insert { target; action=`Select (names, select); on_duplicate=ss; }
               }
-         | insert_cmd table=IDENT SET ss=commas(set_column)?
+         | insert_cmd target=IDENT SET set=commas(set_column)? ss=on_duplicate?
               {
-                Insert (table, `Set ss)
+                Insert { target; action=`Set set; on_duplicate=ss; }
               }
          | update_cmd table=IDENT SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
@@ -167,10 +167,11 @@ source: src=source1 alias=maybe_as { src, alias }
 insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
+on_duplicate: ON DUPLICATE KEY UPDATE ss=commas(set_column) { ss }
 
 select_type: DISTINCT | ALL { }
 
-select_row_locking: 
+select_row_locking:
     for_update_or_share+
       { }
   | LOCK IN SHARE MODE

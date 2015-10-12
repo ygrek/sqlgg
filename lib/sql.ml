@@ -230,19 +230,27 @@ type expr_q = [ `Value of Type.t (** literal value *)
 
 let expr_to_string = Show.show<expr>
 
+type assignments = (col_name * expr) list
+
+type insert_action =
+{
+  target : string;
+  action : [ `Set of assignments option
+           | `Values of (string list option * expr list option)
+           | `Select of (string list option * select_full) ];
+  on_duplicate : assignments option;
+}
+
 type stmt =
 | Create of string * [ `Schema of schema | `Select of select_full ]
 | Drop of string
 | Alter of string * alter_action list
 | CreateIndex of string * string * string list (* index name, table name, columns *)
-| Insert of string *
-    [ `Set of (col_name * expr) list option
-    | `Values of (string list option * expr list option)
-    | `Select of (string list option * select_full) ]
+| Insert of insert_action
 | Delete of string * expr option
 | Set of string * expr
-| Update of string * (col_name * expr) list * expr option * expr list * param list (* where, order, limit *)
-| UpdateMulti of source list * (col_name * expr) list * expr option
+| Update of string * assignments * expr option * expr list * param list (* where, order, limit *)
+| UpdateMulti of source list * assignments * expr option
 | Select of select_full
 
 (*

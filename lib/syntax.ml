@@ -339,7 +339,7 @@ let eval (stmt:Sql.stmt) =
   | CreateIndex (name,table,cols) ->
       Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
       [],[],CreateIndex name
-  | Insert (table,`Values (names, values)) ->
+  | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
     let expect = values_or_all table names in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
@@ -351,19 +351,22 @@ let eval (stmt:Sql.stmt) =
       let assigns = List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) values in
       params_of_assigns [Tables.get table] assigns, None
     in
-    [], params, Insert (inferred,table)
-  | Insert (table,`Select (names, select)) ->
+    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    [], params @ params2, Insert (inferred,table)
+  | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
     let select = annotate_select select (List.map (fun a -> a.domain) expect) in
     let (schema,params,_) = eval_select_full empty_env select in
     ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
-    [], params, Insert (None,table)
-  | Insert (table, `Set ss) ->
+    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    [], params @ params2, Insert (None,table)
+  | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns [Tables.get table] ss, None
     in
-    [], params, Insert (inferred,table)
+    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
     let p = get_params_opt [t] (snd t) where in

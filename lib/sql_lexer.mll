@@ -144,6 +144,7 @@ let keywords =
    "year_month", YEAR_MONTH;
    "false", FALSE;
    "true", TRUE;
+   "duplicate", DUPLICATE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   let func x l = all (FUNCTION x) l in

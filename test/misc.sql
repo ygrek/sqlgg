@@ -22,3 +22,5 @@ CREATE TABLE issue14 (x integer);
 INSERT INTO issue14 (x) VALUES (@x);
 INSERT INTO issue14 SET x = @x;
 INSERT INTO issue14 (x) SELECT @x;
+
+INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + ?;
