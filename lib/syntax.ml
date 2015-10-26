@@ -6,9 +6,12 @@ open Sql
 
 let debug = false
 
-type env = { tables : Tables.table list; }
+type env = {
+  tables : Tables.table list;
+  joined_schema : Schema.t;
+}
 
-let empty_env = { tables = [] }
+let empty_env = { tables = []; joined_schema = []; }
 
 let collect f l = List.flatten (List.map f l)
 
@@ -66,23 +69,23 @@ let split_column_assignments tables l =
   (List.rev !cols, List.rev !exprs)
 
 (** replace every Column with Value of corresponding type *)
-let rec resolve_columns tables joined_schema expr =
+let rec resolve_columns env expr =
   if debug then
   begin
     eprintf "\nRESOLVE COLUMNS %s\n%!" (expr_to_string expr);
-    eprintf "schema: "; Sql.Schema.print joined_schema;
-    Tables.print stderr tables;
+    eprintf "schema: "; Sql.Schema.print env.joined_schema;
+    Tables.print stderr env.tables;
   end;
   let rec each e =
     match e with
     | Value x -> `Value x
-    | Column col -> `Value (resolve_column tables joined_schema col).domain
+    | Column col -> `Value (resolve_column env.tables env.joined_schema col).domain
     | Param x -> `Param x
     | Fun (r,l) ->
       `Func (r,List.map each l)
     | Select (select,single) ->
       let as_params = List.map (fun x -> `Param x) in
-      let (schema,p,_) = eval_select_full {tables} select in
+      let (schema,p,_) = eval_select_full env select in
       match schema,single with
       | [ {domain;_} ], true -> `Func (Type.Ret domain, as_params p)
       | s, true -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
@@ -153,8 +156,8 @@ and assign_types expr =
   in
   typeof expr
 
-and resolve_types tables joined_schema expr =
-  let expr = resolve_columns tables joined_schema expr in
+and resolve_types env expr =
+  let expr = resolve_columns env expr in
   try
     let (expr',t as r) = assign_types expr in
     if debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string t);
@@ -165,16 +168,16 @@ and resolve_types tables joined_schema expr =
       eprintfn "%s" (show_expr_q expr);
       raise exn
 
-and infer_schema columns tables joined_schema =
+and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let resolve1 = function
-    | All -> joined_schema
-    | AllOf t -> schema_of tables t
+    | All -> env.joined_schema
+    | AllOf t -> schema_of env.tables t
     | Expr (e,name) ->
       let col =
         match e with
-        | Column col -> resolve_column tables joined_schema col
-        | _ -> attr "" (resolve_types tables joined_schema e |> snd)
+        | Column col -> resolve_column env.tables env.joined_schema col
+        | _ -> attr "" (resolve_types env e |> snd)
       in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
@@ -194,8 +197,7 @@ and test_all_const columns =
   in
   List.for_all test columns
 
-and get_params tables joined_schema e =
-  e |> resolve_types tables joined_schema |> fst |> get_params_q
+and get_params env e = e |> resolve_types env |> fst |> get_params_q
 
 (*
 let _ =
@@ -203,46 +205,46 @@ let _ =
   e |> get_params |> to_string |> print_endline
 *)
 
-and params_of_columns tables j_s =
-  let get tables j_s = function
+and params_of_columns env =
+  let get = function
   | All | AllOf _ -> []
-  | Expr (e,_) -> get_params tables j_s e
+  | Expr (e,_) -> get_params env e
   in
-  collect (get tables j_s)
+  collect get
 
-and get_params_opt tables j_s = function
-  | Some x -> get_params tables j_s x
+and get_params_opt env = function
+  | Some x -> get_params env x
   | None -> []
 
-and get_params_l tables j_s l = collect (get_params tables j_s) l
+and get_params_l env l = collect (get_params env) l
 
-and do_join env (params,schema) ((table1,params1),kind) =
-  let (_,schema1) = table1 in
-  let schema = match kind with
+and do_join (env,params) (((_, schema1),params1),kind) =
+  let joined_schema = match kind with
   | `Cross
   | `Search _
-  | `Default -> Schema.cross schema schema1
-  | `Natural -> Schema.natural schema schema1
-  | `Using l -> Schema.join_using l schema schema1
+  | `Default -> Schema.cross env.joined_schema schema1
+  | `Natural -> Schema.natural env.joined_schema schema1
+  | `Using l -> Schema.join_using l env.joined_schema schema1
   in
+  let env = { env with joined_schema } in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
-  | `Search e -> get_params env.tables schema e
+  | `Search e -> get_params env e (* TODO should use final schema (same as tables)? *)
   in
-  params @ params1 @ p, schema
+  env, params @ params1 @ p
 
 and join env ((t0,p0),joins) =
+  assert (env.joined_schema = []);
   let all_tables = List.fold_left (fun acc ((table,_),_) -> table::acc) [t0] joins in
-  let env = {tables = env.tables @ all_tables} in
-  let (params,joined_schema) = List.fold_left (do_join env) (p0,snd t0) joins in
-  (all_tables,params,joined_schema)
+  let env = { tables = env.tables @ all_tables; joined_schema = snd t0 } in
+  List.fold_left do_join (env, p0) joins
 
 and params_of_assigns tables ss =
   let (_,exprs) = split_column_assignments tables ss in
-  get_params_l tables (cross (List.map snd tables)) exprs
+  get_params_l { tables; joined_schema=cross (List.map snd tables); } exprs
 
 and params_of_order o final_schema tables =
-  get_params_l tables (final_schema :: (List.map snd tables) |> all_columns) o
+  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); } o
 
 and ensure_simple_expr = function
   | Value x -> `Value x
@@ -253,21 +255,23 @@ and ensure_simple_expr = function
   | Select _ -> failwith "not implemented : ensure_simple_expr for SELECT"
 
 and eval_select env { columns; from; where; group; having; } =
-  let (tbls,p2,joined_schema) =
+  (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
+    but can refer to attributes of tables through `tables` *)
+  let env = { env with joined_schema = [] } in
+  let (env,p2) =
     match from with
     | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
-    | None -> [], [], []
+    | None -> env, []
   in
-  let tbls = env.tables @ tbls in
   let singlerow = group = [] && test_all_grouping columns in
   let singlerow2 = where = None && group = [] && test_all_const columns in
-  let p1 = params_of_columns tbls joined_schema columns in
-  let p3 = get_params_opt tbls joined_schema where in
-  let p4 = get_params_l tbls joined_schema group in
-  let p5 = get_params_opt tbls joined_schema having in
+  let p1 = params_of_columns env columns in
+  let p3 = get_params_opt env where in
+  let p4 = get_params_l env group in
+  let p5 = get_params_opt env having in
   let cardinality = if singlerow then `One else
                     if singlerow2 then `Zero_one else `Nat in
-  (infer_schema columns tbls joined_schema, p1 @ p2 @ p3 @ p4 @ p5, tbls, cardinality)
+  (infer_schema env columns, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
 
 and resolve_source env (x,alias) =
   let src = match x with
@@ -300,7 +304,7 @@ and eval_select_full env { select=(select,other); order; limit; } =
 let update_tables tables ss w =
   let (tables,params) = List.split tables in
   let p1 = params_of_assigns tables ss in
-  let p2 = get_params_opt tables (all_tbl_columns tables) w in
+  let p2 = get_params_opt { tables; joined_schema=all_tbl_columns tables; } w in
   (List.flatten params) @ p1 @ p2
 
 let annotate_select select types =
@@ -367,7 +371,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt [t] (snd t) where in
+    let p = get_params_opt { tables=[t]; joined_schema=snd t; } where in
     [], p, Delete table
   | Set (_name, e) ->
     let p = match e with
