@@ -24,3 +24,4 @@ INSERT INTO issue14 SET x = @x;
 INSERT INTO issue14 (x) SELECT @x;
 
 INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + ?;
+INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + ?;

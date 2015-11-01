@@ -290,6 +290,7 @@ expr:
     | INTERVAL expr interval_unit { Fun (fixed Datetime [Int], [$2]) }
     | LPAREN expr RPAREN { $2 }
     | attr_name { Column $1 }
+    | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN

@@ -9,9 +9,10 @@ let debug = false
 type env = {
   tables : Tables.table list;
   joined_schema : Schema.t;
+  insert_schema : Schema.t;
 }
 
-let empty_env = { tables = []; joined_schema = []; }
+let empty_env = { tables = []; joined_schema = []; insert_schema = []; }
 
 let collect f l = List.flatten (List.map f l)
 
@@ -68,7 +69,12 @@ let split_column_assignments tables l =
     exprs := (Fun (Type.(Ret Any), [Value typ;expr])) :: !exprs) l;
   (List.rev !cols, List.rev !exprs)
 
-(** replace every Column with Value of corresponding type *)
+let get_columns_schema tables l =
+  let all = all_tbl_columns tables in
+  (* FIXME col_name *)
+  l |> List.map (fun col -> { name = col.cname; domain = (resolve_column tables all col).domain; })
+
+(** replace each name reference (Column, Inserted, etc) with Value of corresponding type *)
 let rec resolve_columns env expr =
   if debug then
   begin
@@ -80,6 +86,9 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> `Value x
     | Column col -> `Value (resolve_column env.tables env.joined_schema col).domain
+    | Inserted name ->
+      let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
+      `Value attr.domain
     | Param x -> `Param x
     | Fun (r,l) ->
       `Func (r,List.map each l)
@@ -236,20 +245,20 @@ and do_join (env,params) (((_, schema1),params1),kind) =
 and join env ((t0,p0),joins) =
   assert (env.joined_schema = []);
   let all_tables = List.fold_left (fun acc ((table,_),_) -> table::acc) [t0] joins in
-  let env = { tables = env.tables @ all_tables; joined_schema = snd t0 } in
+  let env = { env with tables = env.tables @ all_tables; joined_schema = snd t0 } in
   List.fold_left do_join (env, p0) joins
 
-and params_of_assigns tables ss =
-  let (_,exprs) = split_column_assignments tables ss in
-  get_params_l { tables; joined_schema=cross (List.map snd tables); } exprs
+and params_of_assigns env ss =
+  let (_,exprs) = split_column_assignments env.tables ss in
+  get_params_l env exprs
 
 and params_of_order o final_schema tables =
-  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); } o
+  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } o
 
 and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
-  | Column _ -> failwith "Not a simple expression"
+  | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
   | Select _ -> failwith "not implemented : ensure_simple_expr for SELECT"
@@ -303,8 +312,9 @@ and eval_select_full env { select=(select,other); order; limit; } =
 
 let update_tables tables ss w =
   let (tables,params) = List.split tables in
-  let p1 = params_of_assigns tables ss in
-  let p2 = get_params_opt { tables; joined_schema=all_tbl_columns tables; } w in
+  let env = { tables; joined_schema=cross @@ List.map snd tables; insert_schema=get_columns_schema tables (List.map fst ss); } in
+  let p1 = params_of_assigns env ss in
+  let p2 = get_params_opt env w in
   (List.flatten params) @ p1 @ p2
 
 let annotate_select select types =
@@ -343,6 +353,7 @@ let eval (stmt:Sql.stmt) =
       [],[],CreateIndex name
   | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
     let expect = values_or_all table names in
+    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
@@ -351,27 +362,30 @@ let eval (stmt:Sql.stmt) =
       if vl <> cl then
         fail "Expected %u expressions in VALUES list, %u provided" cl vl;
       let assigns = List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) values in
-      params_of_assigns [Tables.get table] assigns, None
+      params_of_assigns env assigns, None
     in
-    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
+    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
     let select = annotate_select select (List.map (fun a -> a.domain) expect) in
-    let (schema,params,_) = eval_select_full empty_env select in
+    let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
-    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
+    let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
+    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
-    | Some ss -> params_of_assigns [Tables.get table] ss, None
+    | Some ss -> params_of_assigns env ss, None
     in
-    let params2 = params_of_assigns [Tables.get table] (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt { tables=[t]; joined_schema=snd t; } where in
+    let p = get_params_opt { tables=[t]; joined_schema=snd t; insert_schema=[]; } where in
     [], p, Delete table
   | Set (_name, e) ->
     let p = match e with

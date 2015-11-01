@@ -94,4 +94,10 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="insert_test_16" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + ?" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="_0" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>
