@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_xxx" sql="CREATE TABLE XXX (&#x0A;    id UUID PRIMARY KEY&#x0A;)" kind="create" target="xxx" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="SELECT * FROM XXX" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="id" type="Text"/>
+  </out>
+ </stmt>
+</sqlgg>

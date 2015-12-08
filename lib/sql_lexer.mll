@@ -180,6 +180,7 @@ let keywords =
   all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
   all T_TEXT ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime"];
+  all T_UUID ["uuid"]; (* http://www.postgresql.org/docs/9.4/static/datatype-uuid.html *)
   !k
 
 (*
