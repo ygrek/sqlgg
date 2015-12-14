@@ -100,4 +100,18 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="insert_test_17" sql="INSERT INTO test VALUES (20, $$twenty$$)" kind="insert" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_test_18" sql="INSERT INTO test VALUES (200,&#x0A;$$twenty&#x0A;times&#x0A;ten$$)" kind="insert" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_19" sql="SELECT $function$&#x0A;BEGIN&#x0A;    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);&#x0A;END;&#x0A;$function$" kind="select" cardinality="0,1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
 </sqlgg>

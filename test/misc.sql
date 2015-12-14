@@ -25,3 +25,14 @@ INSERT INTO issue14 (x) SELECT @x;
 
 INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + ?;
 INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + ?;
+INSERT INTO test VALUES (20, $$twenty$$);
+INSERT INTO test VALUES (200,
+$$twenty
+times
+ten$$);
+
+SELECT $function$
+BEGIN
+    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);
+END;
+$function$;

@@ -226,6 +226,7 @@ rule ruleStatement = parse
   | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Prop ("name",name) }
   | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
   | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
+  | "$" (ident? as tag) "$" { let s = ruleInDollarQuotes tag "" lexbuf in `Token (sprintf "$%s$%s$%s$" tag s tag) }
   | cmnt as s { `Comment (s ^ ruleComment "" lexbuf) }
   | "/*" { `Comment ("/*" ^ ruleCommentMulti "" lexbuf ^ "*/") }
   | ';' { `Semicolon }
@@ -268,6 +269,8 @@ ruleMain = parse
 
   | '"' { ident (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)
+  | "$" (ident? as tag) "$" { TEXT (ruleInDollarQuotes tag "" lexbuf) }
   | "`" { ident (ruleInBackQuotes "" lexbuf) }
   | "[" { ident (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
@@ -310,6 +313,14 @@ ruleInBackQuotes acc = parse
   | "``"        { ruleInBackQuotes (acc ^ "`") lexbuf }
   | [^'`' '\n']+  { ruleInBackQuotes (acc ^ lexeme lexbuf) lexbuf }
   | _		{ error lexbuf "ruleInBackQuotes" }
+and
+ruleInDollarQuotes tag acc = parse
+  | "$" (ident? as tag_) "$" { if tag_ = tag then acc else ruleInDollarQuotes tag (acc ^ sprintf "$%s$" tag_) lexbuf }
+  | eof	        { error lexbuf "no terminating dollar quote" }
+  | '\n'        { advance_line lexbuf; ruleInDollarQuotes tag (acc ^ "\n") lexbuf }
+  (* match one char at a time to make sure delimiter matches longer *)
+  | [^'\n']     { ruleInDollarQuotes tag (acc ^ lexeme lexbuf) lexbuf }
+  | _		{ error lexbuf "ruleInDollarQuotes" }
 and
 ruleComment acc = parse
   | '\n'	{ advance_line lexbuf; acc }
