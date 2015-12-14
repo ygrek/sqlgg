@@ -25,7 +25,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
-%token <Sql.Type.func> FUNCTION
+%token <Sql.Type.func> STD_FUNCTION
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -38,6 +38,7 @@
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL
+%token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
@@ -124,6 +125,35 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               {
                 Set (name, e)
               }
+         | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
+           RETURNS ret=sql_type
+           routine_extra?
+           AS? routine_body
+           routine_extra?
+              {
+                CreateRoutine (name, Some ret, params)
+              }
+         | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
+           routine_extra?
+           AS? routine_body
+           routine_extra?
+              {
+                CreateRoutine (name, None, params)
+              }
+
+parameter_default_: DEFAULT | EQUAL { }
+parameter_default: parameter_default_ e=expr { e }
+func_parameter: n=IDENT AS? t=sql_type e=parameter_default? { (n,t,e) }
+parameter_mode: IN | OUT | INOUT { }
+proc_parameter: parameter_mode? p=func_parameter { p }
+
+or_replace: OR REPLACE { }
+
+routine_body: TEXT | compound_stmt { }
+compound_stmt: BEGIN statement+ END { } (* mysql *)
+
+routine_extra: LANGUAGE IDENT { }
+             | COMMENT TEXT { }
 
 table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_prefix: LPAREN n=INTEGER RPAREN { n }
@@ -300,7 +330,7 @@ expr:
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, true) }
     | PARAM { Param ($1,Any) }
-    | f=FUNCTION LPAREN p=func_params RPAREN { Fun (f,p) }
+    | f=STD_FUNCTION LPAREN p=func_params RPAREN { Fun (f,p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
     | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)

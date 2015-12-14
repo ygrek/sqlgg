@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="statement_0" sql="CREATE OR REPLACE FUNCTION increment(i INT) RETURNS INT AS $$&#x0A;BEGIN&#x0A;    RETURN i + 1;&#x0A;END;&#x0A;$$ LANGUAGE plpgsql">
+  <in/>
+  <out/>
+ </stmt>
+</sqlgg>

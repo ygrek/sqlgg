@@ -253,6 +253,7 @@ type stmt =
 | Update of string * assignments * expr option * expr list * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
+| CreateRoutine of string * Type.t option * (string * Type.t * expr option) list
 
 (*
 open Schema

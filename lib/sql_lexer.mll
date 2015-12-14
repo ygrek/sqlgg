@@ -145,9 +145,15 @@ let keywords =
    "false", FALSE;
    "true", TRUE;
    "duplicate", DUPLICATE;
+   "function", FUNCTION;
+   "procedure", PROCEDURE;
+   "returns", RETURNS;
+   "begin", BEGIN;
+   "comment", COMMENT;
+   "language", LANGUAGE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  let func x l = all (FUNCTION x) l in
+  let func x l = all (STD_FUNCTION x) l in
   func T.Agg ["max";"min";"sum"];
   func T.(Group (Int,true)) ["count"];
   func T.(Group (Float,false)) ["avg"];
