@@ -3,3 +3,5 @@ BEGIN
     RETURN i + 1;
 END;
 $$ LANGUAGE plpgsql;
+
+SELECT increment(2);

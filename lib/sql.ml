@@ -265,3 +265,36 @@ let () = print (project ["b";"c";"b"] test)
 let () = print (project ["b";"d"] test)
 let () = print (rename test "a" "new_a")
 *)
+
+module SMap = Map.Make(String)
+
+let functions = ref SMap.empty
+
+let add_function k ret =
+  let add map k v =
+    let k = String.lowercase k in
+    if SMap.mem k map then
+      failwith (sprintf "Function %S already defined" k)
+    else
+      SMap.add k v map
+  in
+  functions := add !functions k ret
+
+let get_function name =
+  try
+    SMap.find (String.lowercase name) !functions
+  with
+    Not_found -> failwith (sprintf "Unknown function %S" name)
+
+let () =
+  let module T = Type in
+  let func ret l = List.iter (fun x -> add_function x ret) l in
+  func T.Agg ["max";"min";"sum"];
+  func T.(Group (Int,true)) ["count"];
+  func T.(Group (Float,false)) ["avg"];
+  func T.(fixed Text [Text;Text]) ["strftime"];
+  func T.(fixed Text [Text]) ["lower";"upper"];
+  func T.(Ret Text) ["concat"];
+  func T.(Ret Any) ["coalesce"];
+  func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];
+  ()

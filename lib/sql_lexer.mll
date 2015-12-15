@@ -153,15 +153,6 @@ let keywords =
    "language", LANGUAGE;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
-  let func x l = all (STD_FUNCTION x) l in
-  func T.Agg ["max";"min";"sum"];
-  func T.(Group (Int,true)) ["count"];
-  func T.(Group (Float,false)) ["avg"];
-  func T.(fixed Text [Text;Text]) ["strftime"];
-  func T.(fixed Text [Text]) ["lower";"upper"];
-  func T.(Ret Text) ["concat"];
-  func T.(Ret Any) ["coalesce"];
-  func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
   all DATETIME_FUNC ["getdate"]; (* mssql? *)
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
