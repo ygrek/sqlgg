@@ -347,6 +347,7 @@ expr:
         let v_args = maybe Prelude.identity e1 @ List.flatten branches @ maybe Prelude.identity e2 in
         Fun (F (Var 1, t_args), v_args)
       }
+    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ Bool;Var 0;Var 0]), [e1;e2;e3]) }
 
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
