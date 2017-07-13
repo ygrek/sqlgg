@@ -1,4 +1,47 @@
 # OASIS_START
+# DO NOT EDIT (digest: 8ab06ee0b3001b2b21a3e3de45fd123d)
+# Ignore VCS directories, you can use the same kind of rule outside
+# OASIS_START/STOP if you want to exclude directories that contains
+# useless stuff for the build process
+true: annot, bin_annot
+<**/.svn>: -traverse
+<**/.svn>: not_hygienic
+".bzr": -traverse
+".bzr": not_hygienic
+".hg": -traverse
+".hg": not_hygienic
+".git": -traverse
+".git": not_hygienic
+"_darcs": -traverse
+"_darcs": not_hygienic
+# Library sqlgg
+"lib/sqlgg.cmxs": use_sqlgg
+"lib/props.cmx": for-pack(Sqlgg)
+"lib/sql.cmx": for-pack(Sqlgg)
+"lib/stmt.cmx": for-pack(Sqlgg)
+"lib/tables.cmx": for-pack(Sqlgg)
+"lib/syntax.cmx": for-pack(Sqlgg)
+"lib/prelude.cmx": for-pack(Sqlgg)
+<lib/*.ml{,i,y}>: package(deriving)
+<lib/*.ml{,i,y}>: package(extlib)
+# Executable sqlgg
+<src/cli.{native,byte}>: package(deriving)
+<src/cli.{native,byte}>: package(extlib)
+<src/cli.{native,byte}>: package(oUnit)
+<src/cli.{native,byte}>: use_sqlgg
+<src/*.ml{,i,y}>: package(deriving)
+<src/*.ml{,i,y}>: package(extlib)
+<src/*.ml{,i,y}>: package(oUnit)
+<src/*.ml{,i,y}>: use_sqlgg
+# Library sqlgg_traits
+"impl/sqlgg_traits.cmxs": use_sqlgg_traits
+# Library sqlgg_mysql
+"impl/sqlgg_mysql.cmxs": use_sqlgg_mysql
+<impl/*.ml{,i,y}>: package(mysql)
+# Library sqlgg_sqlite3
+"impl/sqlgg_sqlite3.cmxs": use_sqlgg_sqlite3
+<impl/*.ml{,i,y}>: package(sqlite3)
+<impl/*.ml{,i,y}>: use_sqlgg_traits
 # OASIS_STOP
 true: annot, warn(+A-e-40-41-42-44-45)
 true: use_menhir

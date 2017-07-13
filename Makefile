@@ -60,5 +60,9 @@ release:
 	gpg -a -b $(NAME).tar.gz
 
 .PHONY: oasis
+# partially dynamic setup
+# needed to have clean builds because of modifications to _tags
 oasis:
-	oasis setup -setup-update dynamic
+	oasis setup
+	git checkout setup.ml
+	rm -f **/*.clib **/*.mllib **/*.mldylib **/*.mlpack **/*.odocl **/META myocamlbuild.ml
