@@ -1,6 +1,10 @@
 sqlgg changelog
 ---------------
 
+0.4.3
+2017-09-30
+	* build: fix again
+
 0.4.2
 2017-09-30
 	* build: static oasis setup
