@@ -1,6 +1,17 @@
 sqlgg changelog
 ---------------
 
+0.4.0
+2017-09-30
+	* sql: many typing improvements
+	* sql: SELECT FOR UPDATE, ON UPDATE, ON DELETE, ON DUPLICATE KEY UPDATE,
+		IS NOT? NULL, INTERVAL, CREATE INDEX column(N), VALUES function, UUID,
+		SELECT IF
+	* sql: parse stored procedures
+	* sql: dynamically add functions
+	* ocaml: support multiple substitutions in queries
+	* ocaml: install traits and implementations as subpackages
+
 0.3.0
 2015-04-14
 	* fix common prefix truncation for automatic variable names
