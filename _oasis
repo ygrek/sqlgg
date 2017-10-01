@@ -35,7 +35,16 @@ Library sqlgg_traits
   FindlibName: traits
   FindlibParent: sqlgg
 
+Flag mysql
+  Description: Build mysql traits implementation
+  Default: false
+
+Flag sqlite3
+  Description: Build sqlite3 traits implementation
+  Default: false
+
 Library sqlgg_mysql
+  Build$: flag(mysql)
   Path: impl/
   Modules: Sqlgg_mysql
   BuildDepends: mysql, sqlgg.traits
@@ -43,6 +52,7 @@ Library sqlgg_mysql
   FindlibParent: sqlgg
 
 Library sqlgg_sqlite3
+  Build$: flag(sqlite3)
   Path: impl/
   Modules: Sqlgg_sqlite3
   BuildDepends: sqlite3, sqlgg.traits
