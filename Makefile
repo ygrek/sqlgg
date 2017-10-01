@@ -51,18 +51,5 @@ NAME=sqlgg-$(VERSION)
 .PHONY: release
 release:
 	git tag -a -m $(VERSION) $(VERSION)
-	git checkout -b release-$(VERSION)
-	oasis setup
-	git add lib/META lib/sqlgg.* setup.ml _tags
-	git commit -m "oasis setup"
-	git archive --prefix=$(NAME)/ release-$(VERSION) | gzip > $(NAME).tar.gz
-	git checkout master
+	git archive --prefix=$(NAME)/ $(VERSION) | gzip > $(NAME).tar.gz
 	gpg -a -b $(NAME).tar.gz
-
-.PHONY: oasis
-# partially dynamic setup
-# needed to have clean builds because of modifications to _tags
-oasis:
-	oasis setup
-	git checkout setup.ml
-	rm -f **/*.clib **/*.mllib **/*.mldylib **/*.mlpack **/*.odocl **/META myocamlbuild.ml
