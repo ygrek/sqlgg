@@ -1,6 +1,6 @@
 # OASIS_START
-# DO NOT EDIT (digest: 2f57fa5a8c5357a5d6673f23f89b0e89)
-version = "0.4.1"
+# DO NOT EDIT (digest: 7940d378edf8ddba2fc4dfc2908b9b40)
+version = "0.4.2"
 description = "SQL guided (code) generator"
 requires = "extlib deriving"
 archive(byte) = "sqlgg.cma"
@@ -9,7 +9,7 @@ archive(native) = "sqlgg.cmxa"
 archive(native, plugin) = "sqlgg.cmxs"
 exists_if = "sqlgg.cma"
 package "traits" (
- version = "0.4.1"
+ version = "0.4.2"
  description = "SQL guided (code) generator"
  archive(byte) = "sqlgg_traits.cma"
  archive(byte, plugin) = "sqlgg_traits.cma"
@@ -19,7 +19,7 @@ package "traits" (
 )
 
 package "sqlite3" (
- version = "0.4.1"
+ version = "0.4.2"
  description = "SQL guided (code) generator"
  requires = "sqlite3 sqlgg.traits"
  archive(byte) = "sqlgg_sqlite3.cma"
@@ -30,7 +30,7 @@ package "sqlite3" (
 )
 
 package "mysql" (
- version = "0.4.1"
+ version = "0.4.2"
  description = "SQL guided (code) generator"
  requires = "mysql sqlgg.traits"
  archive(byte) = "sqlgg_mysql.cma"
