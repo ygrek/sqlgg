@@ -30,7 +30,7 @@ Library sqlgg
   BuildDepends: extlib, deriving
 
 Library sqlgg_traits
-  Path: impl/
+  Path: impl/ocaml/
   Modules: Sqlgg_traits
   FindlibName: traits
   FindlibParent: sqlgg
@@ -45,7 +45,7 @@ Flag sqlite3
 
 Library sqlgg_mysql
   Build$: flag(mysql)
-  Path: impl/
+  Path: impl/ocaml/mysql
   Modules: Sqlgg_mysql
   BuildDepends: mysql, sqlgg.traits
   FindlibName: mysql
@@ -53,7 +53,7 @@ Library sqlgg_mysql
 
 Library sqlgg_sqlite3
   Build$: flag(sqlite3)
-  Path: impl/
+  Path: impl/ocaml/sqlite3
   Modules: Sqlgg_sqlite3
   BuildDepends: sqlite3, sqlgg.traits
   FindlibName: sqlite3

@@ -9,7 +9,7 @@
 cl /c /MDd /D_UNICODE /D_DEBUG /W4 /Zc:forScope,wchar_t /EHsc demo_cxx.cpp
 link /DEBUG demo_cxx.obj sqlite3.lib
 
-ocamlfind ocamlc -linkpkg -package sqlite3 -w Alse -g -o demo_caml -I ../impl ../impl/sqlgg_sqlite3.ml ../impl/sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
+ocamlfind ocamlc -linkpkg -package sqlite3 -w Alse -g -o demo_caml -I ../impl/ocaml -I ../impl/ocaml/sqlite3 ../impl/sqlgg_sqlite3.ml ../impl/sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
 
 cl /c /MDd /D_UNICODE /D_DEBUG /W4 /Zc:forScope,wchar_t /EHsc demo_cxx_mysql.cpp
 link /DEBUG demo_cxx_mysql.obj libmysqlclient.lib

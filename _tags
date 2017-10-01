@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 8ab06ee0b3001b2b21a3e3de45fd123d)
+# DO NOT EDIT (digest: ca774f53d77e791de33c5a3c14d97170)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -34,14 +34,15 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: package(oUnit)
 <src/*.ml{,i,y}>: use_sqlgg
 # Library sqlgg_traits
-"impl/sqlgg_traits.cmxs": use_sqlgg_traits
+"impl/ocaml/sqlgg_traits.cmxs": use_sqlgg_traits
 # Library sqlgg_mysql
-"impl/sqlgg_mysql.cmxs": use_sqlgg_mysql
-<impl/*.ml{,i,y}>: package(mysql)
+"impl/ocaml/mysql/sqlgg_mysql.cmxs": use_sqlgg_mysql
+<impl/ocaml/mysql/*.ml{,i,y}>: package(mysql)
+<impl/ocaml/mysql/*.ml{,i,y}>: use_sqlgg_traits
 # Library sqlgg_sqlite3
-"impl/sqlgg_sqlite3.cmxs": use_sqlgg_sqlite3
-<impl/*.ml{,i,y}>: package(sqlite3)
-<impl/*.ml{,i,y}>: use_sqlgg_traits
+"impl/ocaml/sqlite3/sqlgg_sqlite3.cmxs": use_sqlgg_sqlite3
+<impl/ocaml/sqlite3/*.ml{,i,y}>: package(sqlite3)
+<impl/ocaml/sqlite3/*.ml{,i,y}>: use_sqlgg_traits
 # OASIS_STOP
 true: annot, warn(+A-e-40-41-42-44-45)
 true: use_menhir

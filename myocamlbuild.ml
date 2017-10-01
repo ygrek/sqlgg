@@ -1,5 +1,5 @@
 (* OASIS_START *)
-(* DO NOT EDIT (digest: 8b06a149b2b4ad6a825f18b1e522a831) *)
+(* DO NOT EDIT (digest: 7cf10622f927c47688300149522910b4) *)
 module OASISGettext = struct
 (* # 22 "src/oasis/OASISGettext.ml" *)
 
@@ -882,13 +882,18 @@ let package_default =
      MyOCamlbuildBase.lib_ocaml =
        [
           ("sqlgg", ["lib"], []);
-          ("sqlgg_traits", ["impl"], []);
-          ("sqlgg_mysql", ["impl"], []);
-          ("sqlgg_sqlite3", ["impl"], [])
+          ("sqlgg_traits", ["impl/ocaml"], []);
+          ("sqlgg_mysql", ["impl/ocaml/mysql"], []);
+          ("sqlgg_sqlite3", ["impl/ocaml/sqlite3"], [])
        ];
      lib_c = [];
      flags = [];
-     includes = [("src", ["lib"])]
+     includes =
+       [
+          ("src", ["lib"]);
+          ("impl/ocaml/sqlite3", ["impl/ocaml"]);
+          ("impl/ocaml/mysql", ["impl/ocaml"])
+       ]
   }
   ;;
 
@@ -896,6 +901,6 @@ let conf = {MyOCamlbuildFindlib.no_automatic_syntax = false}
 
 let dispatch_default = MyOCamlbuildBase.dispatch_default conf package_default;;
 
-# 900 "myocamlbuild.ml"
+# 905 "myocamlbuild.ml"
 (* OASIS_STOP *)
 Ocamlbuild_plugin.dispatch dispatch_default;;
