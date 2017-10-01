@@ -1,0 +1,43 @@
+# OASIS_START
+# DO NOT EDIT (digest: 69b2b3834e455135faea9e87395eb44e)
+version = "0.4.0"
+description = "SQL guided (code) generator"
+requires = "extlib deriving"
+archive(byte) = "sqlgg.cma"
+archive(byte, plugin) = "sqlgg.cma"
+archive(native) = "sqlgg.cmxa"
+archive(native, plugin) = "sqlgg.cmxs"
+exists_if = "sqlgg.cma"
+package "traits" (
+ version = "0.4.0"
+ description = "SQL guided (code) generator"
+ archive(byte) = "sqlgg_traits.cma"
+ archive(byte, plugin) = "sqlgg_traits.cma"
+ archive(native) = "sqlgg_traits.cmxa"
+ archive(native, plugin) = "sqlgg_traits.cmxs"
+ exists_if = "sqlgg_traits.cma"
+)
+
+package "sqlite3" (
+ version = "0.4.0"
+ description = "SQL guided (code) generator"
+ requires = "sqlite3 sqlgg.traits"
+ archive(byte) = "sqlgg_sqlite3.cma"
+ archive(byte, plugin) = "sqlgg_sqlite3.cma"
+ archive(native) = "sqlgg_sqlite3.cmxa"
+ archive(native, plugin) = "sqlgg_sqlite3.cmxs"
+ exists_if = "sqlgg_sqlite3.cma"
+)
+
+package "mysql" (
+ version = "0.4.0"
+ description = "SQL guided (code) generator"
+ requires = "mysql sqlgg.traits"
+ archive(byte) = "sqlgg_mysql.cma"
+ archive(byte, plugin) = "sqlgg_mysql.cma"
+ archive(native) = "sqlgg_mysql.cmxa"
+ archive(native, plugin) = "sqlgg_mysql.cmxs"
+ exists_if = "sqlgg_mysql.cma"
+)
+# OASIS_STOP
+
