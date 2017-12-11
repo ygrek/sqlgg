@@ -25,7 +25,7 @@ let tt ?msg sql ?kind schema params =
       assert_equal ~msg ~printer:Sql.Schema.to_string schema stmt.schema;
       assert_equal ~msg ~cmp:cmp_params ~printer:Sql.params_to_string params stmt.params;
       match kind with
-      | Some k -> assert_equal ~msg ~printer:Show.show<Stmt.kind> k stmt.kind
+      | Some k -> assert_equal ~msg ~printer:[%derive.show: Stmt.kind] k stmt.kind
       | None -> ()
 
 let wrong sql =
@@ -141,7 +141,7 @@ let test_join_result_cols () =
 
 let test_misc () =
   let test =
-    let printer = Show.show<int list> in
+    let printer = [%derive.show: int list] in
     fun x y z -> assert_equal ~printer (Schema.natural_ x y) z
   in
   test [1;2;3;4] [1;2;5;6] [1;2;3;4;5;6];

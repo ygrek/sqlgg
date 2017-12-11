@@ -6,9 +6,9 @@ open ExtLib
 module Type =
 struct
   type t = | Int | Text | Blob | Float | Bool | Datetime | Any
-        deriving (Show)
+    [@@deriving show {with_path=false}]
 
-  let to_string = Show.show<t>
+  let to_string = show
 
   let matches x y =
     match x,y with
@@ -27,17 +27,16 @@ struct
 
   let fixed ret args = F (Typ ret, List.map (fun t -> Typ t) args)
 
-  module Show_func = struct
-  let show = function
-  | Agg -> "|'a| -> 'a"
-  | Group (ret,multi) -> sprintf "|%s'a| -> %s" (if multi then "{...} as " else "") (to_string ret)
-  | Poly ret -> sprintf "'a -> 'a -> %s" (to_string ret)
-  | Ret ret -> sprintf "_ -> %s" (to_string ret)
-  | F (ret, args) -> sprintf "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  let format pp x = Format.fprintf pp "%s" (show x)
-  end
+  let pp_func pp =
+    let open Format in
+  function
+  | Agg -> fprintf pp "|'a| -> 'a"
+  | Group (ret,multi) -> fprintf pp "|%s'a| -> %s" (if multi then "{...} as " else "") (to_string ret)
+  | Poly ret -> fprintf pp "'a -> 'a -> %s" (to_string ret)
+  | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
+  | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
 
-  let string_of_func = Show_func.show
+  let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
@@ -47,21 +46,21 @@ end
 module Constraint =
 struct
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
-       deriving (Show)
+    [@@deriving show {with_path=false}]
 
   type t = | PrimaryKey | NotNull | Unique | Autoincrement | OnConflict of conflict_algo
-       deriving (Show)
+    [@@deriving show {with_path=false}]
 end
 
 type attr = {name : string; domain : Type.t;}
-  deriving (Show)
+  [@@deriving show {with_path=false}]
 
 let attr n d = {name=n;domain=d}
 
 module Schema =
 struct
   type t = attr list
-    deriving (Show)
+    [@@deriving show]
 
   exception Error of t * string
 
@@ -160,12 +159,12 @@ struct
     | `Default -> change_inplace t oldcol col
     | `First | `After _ -> add (drop t oldcol) col pos
 
-  let to_string x = Show.show<t>(x)
+  let to_string = show
   let print x = prerr_endline (to_string x)
 
 end
 
-type table = string * Schema.t deriving (Show)
+type table = string * Schema.t [@@deriving show]
 type schema = Schema.t
 
 let print_table out (name,schema) =
@@ -175,11 +174,11 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = string option * (int * int) deriving (Show)
-type param = param_id * Type.t deriving (Show)
-type params = param list deriving (Show)
+type param_id = string option * (int * int) [@@deriving show]
+type param = param_id * Type.t [@@deriving show]
+type params = param list [@@deriving show]
 
-let params_to_string ps = Show.show<params>(ps)
+let params_to_string = show_params
 
 type alter_pos = [ `After of string | `Default | `First ]
 type alter_action = [ `Add of attr * alter_pos | `Drop of string | `Change of string * attr * alter_pos | `None ]
@@ -219,17 +218,17 @@ and column =
   | All
   | AllOf of string
   | Expr of expr * string option (** name *)
-  deriving (Show)
+  [@@deriving show {with_path=false}]
 
-type columns = column list deriving (Show)
+type columns = column list [@@deriving show]
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
             | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]
-            deriving (Show)
+            [@@deriving show]
 
-let expr_to_string = Show.show<expr>
+let expr_to_string = show_expr
 
 type assignments = (col_name * expr) list
 

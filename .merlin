@@ -1,3 +1,3 @@
 B _build/lib
 B _build/src
-PKG extlib deriving oUnit
+PKG extlib deriving oUnit ppx_deriving.std

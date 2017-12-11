@@ -11,7 +11,7 @@ FilesAB:      src/version_release.ml.ab
 AlphaFeatures: ocamlbuild_more_args
 XOCamlbuildPluginTags: package(mybuild)
 XOCamlbuildExtraArgs: -j 0
-OCamlVersion: >= 4.01
+OCamlVersion: >= 4.02
 
 Synopsis: SQL guided (code) generator
 
@@ -20,14 +20,14 @@ Executable sqlgg
   Install: true
   CompiledObject: best
   MainIs: cli.ml
-  BuildDepends: extlib, deriving, oUnit, sqlgg
+  BuildDepends: extlib, ppx_deriving.std, oUnit, sqlgg
 
 Library sqlgg
   Pack: true
   Path: lib/
   Modules: Props, Sql, Stmt, Tables, Syntax
   InternalModules: Prelude
-  BuildDepends: extlib, deriving
+  BuildDepends: extlib, ppx_deriving.std
 
 Library sqlgg_traits
   Path: impl/ocaml/

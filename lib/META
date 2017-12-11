@@ -1,8 +1,8 @@
 # OASIS_START
-# DO NOT EDIT (digest: ec80e4bbb70710657044cf504898cc6f)
+# DO NOT EDIT (digest: 639e57921111acaa7f68bb926bf13675)
 version = "0.4.3"
 description = "SQL guided (code) generator"
-requires = "extlib deriving"
+requires = "extlib ppx_deriving.std"
 archive(byte) = "sqlgg.cma"
 archive(byte, plugin) = "sqlgg.cma"
 archive(native) = "sqlgg.cmxa"

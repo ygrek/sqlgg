@@ -29,8 +29,6 @@ let values_or_all table names =
 
 let list_filter_map = ExtList.List.filter_map
 
-let show_expr_q e = Show.show<expr_q> (e)
-
 let get_params_q e =
   let rec loop acc e =
     match e with
