@@ -44,9 +44,7 @@ true: annot, bin_annot
 <impl/ocaml/sqlite3/*.ml{,i,y}>: package(sqlite3)
 <impl/ocaml/sqlite3/*.ml{,i,y}>: use_sqlgg_traits
 # OASIS_STOP
-true: annot, warn(+A-e-40-41-42-44-45)
+true: warn(+A-e-40-41-42-44-45)
+true: -annot
 true: use_menhir
-#<src/*.ml> or <lib/*.ml> and not "lib/sql_parser.ml": syntax_camlp4o, pkg_deriving.syntax
-<lib/sql_parser.ml>: -annot
-#<src/*.top>: pkg_deriving, pkg_extlib, pkg_unix
 "example" or "demo" or "impl": -traverse
