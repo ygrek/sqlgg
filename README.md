@@ -11,20 +11,7 @@ Get the code at http://repo.or.cz/w/sqlgg.git or https://github.com/ygrek/sqlgg
 Dependencies
 ------------
 
-* menhir
-* extlib
-* oUnit
-* deriving
-* ocamlfind
-* oasis (when building from git checkout)
-
-`deriving` is special - there were several forks floating around for a long time.
-Everything should work out of the box with either
-<https://github.com/ocsigen/deriving> or <http://repo.or.cz/w/deriving.git>
-
-Via OPAM:
-
-  opam install menhir extlib ounit deriving oasis
+Install with OPAM: `opam install menhir extlib ounit ppx_deriving oasis`
 
 Build
 -----
@@ -51,4 +38,4 @@ See UNLICENSE file in each of the above directories for more information.
 NB the output of sqlgg, i.e. the generated code, is all yours of course :)
 
 ----
-2014-10-19
+2018-03-10
