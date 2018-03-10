@@ -1,6 +1,10 @@
 sqlgg changelog
 ---------------
 
+0.4.4
+2018-03-10
+	* build: switch to ppx_deriving, fixes build with OCaml 4.06
+
 0.4.3
 2017-09-30
 	* build: fix again

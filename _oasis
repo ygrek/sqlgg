@@ -1,11 +1,11 @@
 OASISFormat:  0.4
 Name:         sqlgg
-Version:      0.4.3
+Version:      0.4.4
 License:      GPL-2
 Authors:      ygrek <ygrek@autistici.org>
 Copyrights:   (C) 2009 ygrek
 Homepage:     http://ygrek.org.ua/p/sqlgg/
-BuildTools:   ocamlbuild, camlp4, menhir
+BuildTools:   ocamlbuild, menhir
 Plugins:      DevFiles (0.4), META (0.4)
 FilesAB:      src/version_release.ml.ab
 AlphaFeatures: ocamlbuild_more_args
