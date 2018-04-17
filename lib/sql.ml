@@ -23,6 +23,7 @@ struct
       | Any, t | t, Any -> `Order (t, Any)
       | Int, Float | Float, Int -> `Order (Int,Float)
       | Text, Blob | Blob, Text -> `Order (Text,Blob)
+      | Int, Datetime | Datetime, Int -> `Order (Int,Datetime)
       | _ -> `No
 
   let common_type f x y =
@@ -33,6 +34,7 @@ struct
 
   let common_supertype = common_type snd
   let common_subtype = common_type fst
+  let common_type x y = Option.is_some @@ common_subtype x y
 
   type tyvar = Typ of t | Var of int
   let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
@@ -315,4 +317,5 @@ let () =
   func T.(Ret Text) ["concat"];
   func T.(Ret Any) ["coalesce"];
   func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];
+  func T.(F (Var 0, [Var 0; Var 0])) ["nullif";"ifnull"];
   ()

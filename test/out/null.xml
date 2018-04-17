@@ -5,10 +5,23 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="create" sql="INSERT INTO `test` (`nullable`) VALUES (&#x0A;  `nullable` = CASE @nullable WHEN 0 THEN NULL ELSE @nullable END&#x0A;)" kind="insert" target="test" cardinality="0">
+ <stmt name="create" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @nullable WHEN 0 THEN NULL ELSE @nullable END&#x0A;" kind="insert" target="test" cardinality="0">
   <in>
    <value name="nullable" type="Int"/>
   </in>
   <out/>
+ </stmt>
+ <stmt name="create2" sql="INSERT INTO `test` SET `nullable` = IFNULL(@nullable, 0)" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="nullable" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="list" sql="SELECT `id`, NULLIF(`nullable`, 0) `nullable` FROM `test`" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="nullable" type="Datetime"/>
+  </out>
  </stmt>
 </sqlgg>

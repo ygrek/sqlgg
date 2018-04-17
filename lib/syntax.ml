@@ -127,7 +127,7 @@ and assign_types expr =
           let typevar = Hashtbl.create 10 in
           let l = List.map2 begin fun arg typ ->
             match arg with
-            | Typ arg -> matches arg typ
+            | Typ arg -> common_type arg typ
             | Var i ->
               let arg =
                 match Hashtbl.find typevar i with
@@ -136,7 +136,7 @@ and assign_types expr =
               in
               (* prefer more precise type *)
               if arg = Type.Any then Hashtbl.replace typevar i typ;
-              matches arg typ
+              common_type arg typ
           end args types
           in
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
