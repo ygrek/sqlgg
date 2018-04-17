@@ -117,7 +117,13 @@ and assign_types expr =
             (string_of_func func)
             (String.concat ", " @@ List.map to_string types)
         in
+        let func =
+          match func with
+          | Multi (ret,each_arg) -> F (ret, List.map (fun _ -> each_arg) types)
+          | x -> x
+        in
         let (ret,inferred_params) = match func, types with
+        | Multi _, _ -> assert false (* rewritten into F above *)
         | Agg, [typ] -> typ, types
         | Group (ret,false), [_]
         | Group (ret,true), _ -> ret, types

@@ -43,7 +43,8 @@ struct
   | Group of t * bool (* 'a -> t ; bool = multi-column *)
   | Agg (* 'a -> 'a *)
   | Poly of t (* 'a -> 'a -> t *) (* = F (Typ t, [Var 0; Var 0]) *)
-  | Ret of t (* _ -> t *)
+  | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
+  | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
   let fixed ret args = F (Typ ret, List.map (fun t -> Typ t) args)
@@ -56,12 +57,13 @@ struct
   | Poly ret -> fprintf pp "'a -> 'a -> %s" (to_string ret)
   | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
+  | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | Poly _ | F _ -> false
+  | Ret _ | Poly _ | F _ | Multi _ -> false
 end
 
 module Constraint =
@@ -314,8 +316,9 @@ let () =
   func T.(Group (Float,false)) ["avg"];
   func T.(fixed Text [Text;Text]) ["strftime"];
   func T.(fixed Text [Text]) ["lower";"upper"];
-  func T.(Ret Text) ["concat"];
   func T.(Ret Any) ["coalesce"];
-  func T.(Ret Int) ["length"; "random";"unix_timestamp";"least";"greatest"];
+  func T.(Ret Int) ["length"; "random";"unix_timestamp"];
   func T.(F (Var 0, [Var 0; Var 0])) ["nullif";"ifnull"];
+  func T.(Multi (Var 0, Var 0)) ["least";"greatest"];
+  func T.(Multi (Typ Text, Typ Text)) ["concat"];
   ()

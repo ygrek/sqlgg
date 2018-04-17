@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_table_files" sql="CREATE TABLE `%%tablename%%` (&#x0A;  first_key varbinary(30000) NOT NULL DEFAULT ''&#x0A;) ENGINE=INNODB" kind="create" target="%%tablename%%" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="by_prefix" sql="select *&#x0A;  from `%%tablename%%`&#x0A; where 'k' &lt; first_key or        first_key like concat(@k,'%')" kind="select" cardinality="n">
+  <in>
+   <value name="k" type="Text"/>
+  </in>
+  <out>
+   <value name="first_key" type="Text"/>
+  </out>
+ </stmt>
+</sqlgg>
