@@ -143,10 +143,13 @@ and assign_types expr =
             convert ret, List.map convert args
           else
             fail "types do not match : %s" (show ())
-        | Ret Any, _ -> (* lame - make a best guess, return type same as for parameters *)
+        | Ret Any, _ -> (* lame *)
           begin match List.filter ((<>) Any) types with
           | [] -> Any, types
+          (* make a best guess, return type same as for parameters when all of single type *)
           | h::tl when List.for_all (matches h) tl -> h, List.map (fun _ -> h) types
+          (* "expand" to floats, when all parameters numeric and above rule didn't match *)
+          | l when List.for_all (function Int | Float -> true | _ -> false) l -> Float, List.map (function Any -> Float | x -> x) types
           | _ -> Any, types
           end
         | Ret ret, _ -> ret, types (* ignoring arguments FIXME *)

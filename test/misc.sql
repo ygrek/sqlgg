@@ -49,3 +49,4 @@ INSERT INTO test VALUES
 
 -- @issue47
 SELECT count(*) > 0 FROM test;
+SELECT count(*) * avg(x) FROM test;
