@@ -7,7 +7,7 @@ echo Running regression tests
 mkdir -p test/out test/tmp
 for file in test/*.sql; do
   basename=${file#test/}
-  ./cli.native -no-header -gen xml $file > test/tmp/${basename%.sql}.xml || echo FAILED $file
+  ./cli.native -no-header -gen xml $file > test/tmp/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
 done
 
 diff -u test/out test/tmp
