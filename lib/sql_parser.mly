@@ -95,7 +95,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=IDENT names=sequence(IDENT)? VALUES values=sequence(expr)? ss=on_duplicate?
+         | insert_cmd target=IDENT names=sequence(IDENT)? VALUES values=commas(sequence(expr))? ss=on_duplicate?
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }

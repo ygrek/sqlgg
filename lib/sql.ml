@@ -236,7 +236,7 @@ type insert_action =
 {
   target : string;
   action : [ `Set of assignments option
-           | `Values of (string list option * expr list option)
+           | `Values of (string list option * expr list list option) (* column names * list of value tuples *)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
 }

@@ -56,16 +56,13 @@ let all_tbl_columns = all_columns $ List.map snd
 let resolve_column tables joined_schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) joined_schema tname) cname
 
-let split_column_assignments tables l =
-  let cols = ref [] in
-  let exprs = ref [] in
+let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
-  List.iter (fun (col,expr) ->
-    cols := col :: !cols;
+  l |> List.map begin fun (col,expr) ->
     (* hint expression to unify with the column type *)
     let typ = (resolve_column tables all col).domain in
-    exprs := (Fun (Type.(Ret Any), [Value typ;expr])) :: !exprs) l;
-  (List.rev !cols, List.rev !exprs)
+    Fun (Type.(Ret Any), [Value typ;expr])
+  end
 
 let get_columns_schema tables l =
   let all = all_tbl_columns tables in
@@ -247,7 +244,7 @@ and join env ((t0,p0),joins) =
   List.fold_left do_join (env, p0) joins
 
 and params_of_assigns env ss =
-  let (_,exprs) = split_column_assignments env.tables ss in
+  let exprs = resolve_column_assignments env.tables ss in
   get_params_l env exprs
 
 and params_of_order o final_schema tables =
@@ -355,12 +352,12 @@ let eval (stmt:Sql.stmt) =
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
-      let vl = List.length values in
+      let vl = List.map List.length values in
       let cl = List.length expect in
-      if vl <> cl then
-        fail "Expected %u expressions in VALUES list, %u provided" cl vl;
-      let assigns = List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) values in
-      params_of_assigns env assigns, None
+      if List.exists (fun n -> n <> cl) vl then
+        fail "Expecting %u expressions in every VALUES tuple" cl;
+      let assigns = List.map (fun tuple -> List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple) values in
+      params_of_assigns env (List.concat assigns), None
     in
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)

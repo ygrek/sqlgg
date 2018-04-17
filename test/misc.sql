@@ -36,3 +36,13 @@ BEGIN
     RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);
 END;
 $function$;
+
+INSERT INTO `test` (`x`, `key`) VALUES
+(1, 'one'),
+(2, 'two'),
+(3, 'three');
+
+INSERT INTO test VALUES
+(1, 'one'),
+(2, 'two'),
+(3, 'three');

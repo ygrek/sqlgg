@@ -114,4 +114,12 @@
    <value name="_0" type="Text"/>
   </out>
  </stmt>
+ <stmt name="insert_test_20" sql="INSERT INTO `test` (`x`, `key`) VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" kind="insert" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_test_21" sql="INSERT INTO test VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" kind="insert" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
 </sqlgg>
