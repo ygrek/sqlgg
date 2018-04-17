@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test" sql="CREATE TABLE IF NOT EXISTS `test` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `nullable` TIMESTAMP NULL&#x0A;)" kind="create" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create" sql="INSERT INTO `test` (`nullable`) VALUES (&#x0A;  `nullable` = CASE @nullable WHEN 0 THEN NULL ELSE @nullable END&#x0A;)" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="nullable" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
+</sqlgg>

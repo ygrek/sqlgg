@@ -108,7 +108,9 @@ module Translate(T : LangTypes) = struct
 let param_type_to_string = T.as_api_type
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.Sql.domain)
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
-let all_params_to_values = List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
+let all_params_to_values l =
+  l |> List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
+  |> List.unique ~cmp:(fun (n1,_) (n2,_) -> String.equal n1 n2)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let params_to_values = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
 

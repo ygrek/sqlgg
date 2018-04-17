@@ -134,4 +134,11 @@
    <value name="_0" type="Float"/>
   </out>
  </stmt>
+ <stmt name="issue45" sql="INSERT INTO test VALUES&#x0A;(1, @one),&#x0A;(2, @two),&#x0A;(3, @one)" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="two" type="Text"/>
+   <value name="one" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>

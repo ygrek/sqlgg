@@ -1,6 +1,7 @@
 (** SQL syntax and RA *)
 
 open Printf
+open ExtLib
 open Prelude
 open Sql
 
@@ -407,3 +408,22 @@ let eval (stmt:Sql.stmt) =
   | Select select -> eval_select_full empty_env select
   | CreateRoutine _ ->
     [], [], Other
+
+let unify_params l =
+  let h = Hashtbl.create 10 in
+  l |> List.iter begin fun ((name,_loc),t) ->
+    match name with
+    | None -> ()
+    | Some name ->
+    match Hashtbl.find h name with
+    | exception _ -> Hashtbl.add h name t
+    | t' ->
+    match Sql.Type.common_subtype t t' with
+    | Some x -> Hashtbl.replace h name x
+    | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
+  end;
+  l |> List.map (function ((None,_),_ as x) -> x | ((Some name,_ as id),_) -> id, try Hashtbl.find h name with _ -> assert false)
+
+let eval stmt =
+  let (schema,p,kind) = eval stmt in
+  (schema, unify_params p, kind)

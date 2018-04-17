@@ -15,6 +15,25 @@ struct
     | Any, _ | _, Any -> true
     | _ -> x = y
 
+  let order x y =
+    if x = y then
+      `Equal
+    else
+      match x,y with
+      | Any, t | t, Any -> `Order (t, Any)
+      | Int, Float | Float, Int -> `Order (Int,Float)
+      | Text, Blob | Blob, Text -> `Order (Text,Blob)
+      | _ -> `No
+
+  let common_type f x y =
+    match order x y with
+    | `Equal -> Some x
+    | `Order p -> Some (f p)
+    | `No -> None
+
+  let common_supertype = common_type snd
+  let common_subtype = common_type fst
+
   type tyvar = Typ of t | Var of int
   let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 

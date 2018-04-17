@@ -57,7 +57,7 @@ let parse_one_exn (sql,props) =
         params' := param :: !params'
       );
       B.add_string b post;
-      (B.contents b, params @ (List.rev !params'))
+      (B.contents b, Syntax.unify_params (params @ List.rev !params'))
     | _ -> (sql,params)
     in
     {Stmt.schema=schema; params=params; kind=kind; props=Props.set props "sql" sql}

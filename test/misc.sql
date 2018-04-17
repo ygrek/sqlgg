@@ -50,3 +50,9 @@ INSERT INTO test VALUES
 -- @issue47
 SELECT count(*) > 0 FROM test;
 SELECT count(*) * avg(x) FROM test;
+
+-- @issue45
+INSERT INTO test VALUES
+(1, @one),
+(2, @two),
+(3, @one);
