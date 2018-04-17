@@ -46,3 +46,6 @@ INSERT INTO test VALUES
 (1, 'one'),
 (2, 'two'),
 (3, 'three');
+
+-- @issue47
+SELECT count(*) > 0 FROM test;

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="select_0" sql="SELECT strftime('%s','now')" kind="select" cardinality="0,1">
+ <stmt name="select_0" sql="SELECT strftime('%s','now')" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
@@ -108,7 +108,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="select_19" sql="SELECT $function$&#x0A;BEGIN&#x0A;    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);&#x0A;END;&#x0A;$function$" kind="select" cardinality="0,1">
+ <stmt name="select_19" sql="SELECT $function$&#x0A;BEGIN&#x0A;    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);&#x0A;END;&#x0A;$function$" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
@@ -121,5 +121,11 @@
  <stmt name="insert_test_21" sql="INSERT INTO test VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" kind="insert" target="test" cardinality="0">
   <in/>
   <out/>
+ </stmt>
+ <stmt name="issue47" sql="SELECT count(*) &gt; 0 FROM test" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Bool"/>
+  </out>
  </stmt>
 </sqlgg>

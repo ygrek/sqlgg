@@ -38,13 +38,18 @@ let get_params_q e =
   in
   loop [] e |> List.rev
 
+let rec is_singular = function
+| Value _
+| Param _ -> true
+| Column _ -> false
+| Fun (func,args) ->
+  (* grouping function of zero or single parameter or function of all singular values *)
+  (Type.is_grouping func && List.length args <= 1) || List.for_all is_singular args
+| Select _ -> false (* ? *)
+| Inserted _ -> false (* ? *)
+
 let test_all_grouping columns =
-  let test = function
-  (* grouping function of zero or single parameter *)
-  | Expr (Fun (func,args),_) when Type.is_grouping func && List.length args <= 1 -> true
-  | _ -> false
-  in
-  List.for_all test columns
+  List.for_all (function Expr (e,_) -> is_singular e | All | AllOf _ -> false) columns
 
 let cross = List.fold_left Schema.cross []
 

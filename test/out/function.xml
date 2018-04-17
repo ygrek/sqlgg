@@ -5,7 +5,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="select_1" sql="SELECT increment(2)" kind="select" cardinality="0,1">
+ <stmt name="select_1" sql="SELECT increment(2)" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>
