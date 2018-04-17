@@ -288,7 +288,7 @@ let get_function name =
 let () =
   let module T = Type in
   let func ret l = List.iter (fun x -> add_function x ret) l in
-  func T.Agg ["max";"min";"sum"];
+  func T.Agg ["max";"min";"sum"]; (* TODO in sqlite3 min(a,b) acts as least(a,b), while min(a) is grouping *)
   func T.(Group (Int,true)) ["count"];
   func T.(Group (Float,false)) ["avg"];
   func T.(fixed Text [Text;Text]) ["strftime"];

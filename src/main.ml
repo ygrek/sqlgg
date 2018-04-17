@@ -28,7 +28,7 @@ let common_prefix = function
   if List.exists (fun s -> i = String.length s || not (is_alpha s.[i])) l then 0 else i
 
 let parse_one_exn (sql,props) =
-    if Sqlgg_config.debug1 () then  prerr_endline sql;
+    if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
     let (schema,params,kind) = Syntax.eval @@ Parser.parse_stmt sql in
     (* fill inferred sql for VALUES or SET *)
     let (sql,params) = match kind with

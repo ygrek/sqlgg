@@ -4,7 +4,7 @@ open Printf
 open Prelude
 open Sql
 
-let debug = false
+let debug = ref false
 
 type env = {
   tables : Tables.table list;
@@ -76,7 +76,7 @@ let get_columns_schema tables l =
 
 (** replace each name reference (Column, Inserted, etc) with Value of corresponding type *)
 let rec resolve_columns env expr =
-  if debug then
+  if !debug then
   begin
     eprintf "\nRESOLVE COLUMNS %s\n%!" (expr_to_string expr);
     eprintf "schema: "; Sql.Schema.print env.joined_schema;
@@ -169,7 +169,7 @@ and resolve_types env expr =
   let expr = resolve_columns env expr in
   try
     let (expr',t as r) = assign_types expr in
-    if debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string t);
+    if !debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string t);
     r
   with
     exn ->
