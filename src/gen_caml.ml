@@ -110,6 +110,9 @@ let generate_stmt fold index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
   let values = (subst @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
+  match fold, is_callback stmt with
+  | true, false -> output "let %s = %s" name name (* alias non-fold impl, identical *)
+  | _ ->
   let fold = fold && is_callback stmt in
   let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
   output "let %s db %s =" name all_params;
