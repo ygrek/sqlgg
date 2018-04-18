@@ -5,7 +5,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="by_prefix" sql="select *&#x0A;  from `%%tablename%%`&#x0A; where 'k' &lt; first_key or        first_key like concat(@k,'%')" kind="select" cardinality="n">
+ <stmt name="by_prefix" sql="select *&#x0A;  from `%%tablename%%`&#x0A; where 'k' &lt; first_key or first_key like concat(@k,'%')" kind="select" cardinality="n">
   <in>
    <value name="k" type="Text"/>
   </in>

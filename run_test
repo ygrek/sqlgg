@@ -2,14 +2,20 @@
 
 set -e -u
 
-echo Running regression tests
+if [ "$1" = "init" ] ; then
+  OUTDIR=test/out
+  echo Initializing test outputs in $OUTDIR
+else
+  OUTDIR=test/tmp
+  echo Running regression tests
+fi
 
 mkdir -p test/out test/tmp
 for file in test/*.sql; do
   basename=${file#test/}
-  ./cli.native -no-header -gen xml $file > test/tmp/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
+  ./cli.native -no-header -gen xml $file > $OUTDIR/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
 done
 
-diff -u test/out test/tmp
+[ "$1" = "init" ] || diff -u test/out test/tmp
 
 echo OK
