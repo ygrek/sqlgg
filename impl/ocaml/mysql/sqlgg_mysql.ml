@@ -17,7 +17,42 @@ open Printf
 
 module P = Mysql.Prepared
 
-module Make(Number : sig type t val of_string : string -> t val to_string : t -> string end) = struct
+module type Value = sig
+  type t
+  val of_string : string -> t
+  val to_string : t -> string
+end
+
+module type Types = sig
+  module Bool : Value
+  module Int : Value
+  module Float : Value
+  module Text : Value
+  module Datetime : Value
+  module Any : Value
+end
+
+module Default_types = struct
+  module Bool = struct type t = bool let of_string s = s <> "0" let to_string x = if x then "1" else "0" end
+  module Int = Int64
+  module Text = struct type t = string let of_string s = s let to_string s = s end
+  module Float = struct type t = float let of_string = float_of_string let to_string = string_of_float end
+  module Datetime = Text
+  module Any = Text
+end
+
+(*
+example: Datetime as timestamp
+see below how to create Types based on Default_types with overridden submodule
+
+module Datetime = struct
+  type t = private float
+  let of_string = function "0000-00-00 00:00:00" -> 0. | s -> ExtUnix.Specific.(timegm (strptime "%Y-%m-%d %H:%M:%S" s))
+  let to_string = ExtUnix.Specific.strftime "%Y-%m-%d %H:%M:%S" (Unix.gmtime v)
+end
+*)
+
+module Make_(T : Types) = struct
 
 type statement = P.stmt
 type connection = Mysql.dbd
@@ -25,10 +60,14 @@ type params = statement * string array
 type row = string option array
 type result = P.stmt_result
 
-type num = Number.t
-type text = string
-type any = string
-type datetime = float
+module Types = T
+open Types
+
+(* compatibility *)
+type num = Int.t
+type text = Text.t
+type any = Any.t
+type datetime = Datetime.t
 
 exception Oops of string
 let oops fmt = ksprintf (fun s -> raise (Oops s)) fmt
@@ -39,12 +78,12 @@ let get_column_ty name conv row index =
   with
     e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
 
-let get_column_Bool = get_column_ty "Bool" (fun s -> s <> "0")
-let get_column_Int = get_column_ty "Int" Number.of_string
-let get_column_Text = get_column_ty "Text" (fun x -> x)
-let get_column_Float = get_column_ty "Float" float_of_string
-let get_column_Datetime = get_column_ty "Datetime" float_of_string
-let get_column_Any = get_column_Text
+let get_column_Bool = get_column_ty "Bool" Bool.of_string
+let get_column_Int = get_column_ty "Int" Int.of_string
+let get_column_Text = get_column_ty "Text" Text.of_string
+let get_column_Float = get_column_ty "Float" Float.of_string
+let get_column_Datetime = get_column_ty "Datetime" Datetime.of_string
+let get_column_Any = get_column_ty "Any" Any.of_string
 
 let bind_param data (_,params) index =
   match data with
@@ -54,13 +93,15 @@ let bind_param data (_,params) index =
 let start_params stmt n = (stmt,Array.make n "")
 let finish_params (stmt,params) = P.execute stmt params
 
-let set_param_Text stmt index v = bind_param (Some v) stmt index
+let set_param_ty f = fun (p:params) index v -> bind_param (Some (f v)) p index
+
 let set_param_null stmt index = bind_param None stmt index
-let set_param_Any = set_param_Text
-let set_param_Bool stmt index v = bind_param (Some (if v then "1" else "0")) stmt index
-let set_param_Int stmt index v = bind_param (Some (Number.to_string v)) stmt index
-let set_param_Float stmt index v = bind_param (Some (string_of_float v)) stmt index
-let set_param_Datetime = set_param_Float
+let set_param_Text = set_param_ty Text.to_string
+let set_param_Any = set_param_ty Any.to_string
+let set_param_Bool = set_param_ty Bool.to_string
+let set_param_Int = set_param_ty Int.to_string
+let set_param_Float = set_param_ty Float.to_string
+let set_param_Datetime = set_param_ty Datetime.to_string
 
 let no_params stmt = P.execute stmt [||]
 
@@ -96,4 +137,16 @@ let select1 db sql set_params callback =
     | Some row -> Some (callback row)
     | None -> None)
 
+end
+
+module Default = Make_(Default_types)
+
+(* compatibility *)
+module Make(Number : Value) = struct
+  (* ref http://gallium.inria.fr/blog/overriding-submodules/ *)
+  module Types_ = struct
+    include (Default_types : module type of Default_types with module Int := Default_types.Int)
+    module Int = Number
+  end
+  include Make_(Types_)
 end

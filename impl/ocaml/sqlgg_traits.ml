@@ -13,6 +13,8 @@
   For more information, please refer to <http://unlicense.org/>
 *)
 
+module type Value = sig type t end
+
 module type M = sig
 
   type statement
@@ -22,19 +24,30 @@ module type M = sig
   type result
 
   (** datatypes *)
-  type num = int64
-  type text = string
-  type any = text
-  type datetime = float
+  module Types : sig
+    module Bool : Value
+    module Int : Value
+    module Float : Value
+    module Text : Value
+    module Datetime : Value
+    module Any : Value
+  end
+
+  open Types
+
+  type num = Int.t
+  type text = Text.t
+  type any = Any.t
+  type datetime = Datetime.t
 
   exception Oops of string
 
-  val get_column_Bool : row -> int -> bool
-  val get_column_Int : row -> int -> num
-  val get_column_Text : row -> int -> text
-  val get_column_Any : row -> int -> any
-  val get_column_Float : row -> int -> float
-  val get_column_Datetime : row -> int -> datetime
+  val get_column_Bool : row -> int -> Bool.t
+  val get_column_Int : row -> int -> Int.t
+  val get_column_Text : row -> int -> Text.t
+  val get_column_Any : row -> int -> Any.t
+  val get_column_Float : row -> int -> Float.t
+  val get_column_Datetime : row -> int -> Datetime.t
 
   val start_params : statement -> int -> params
   val finish_params : params -> result
@@ -42,12 +55,12 @@ module type M = sig
   (** [set_param_* stmt index val]. [index] is 0-based,
     @raise Oops on error *)
   val set_param_null : params -> int -> unit
-  val set_param_Text : params -> int -> text -> unit
-  val set_param_Any : params -> int -> any -> unit
-  val set_param_Bool : params -> int -> bool -> unit
-  val set_param_Int : params -> int -> num -> unit
-  val set_param_Float : params -> int -> float -> unit
-  val set_param_Datetime : params -> int -> datetime -> unit
+  val set_param_Text : params -> int -> Text.t -> unit
+  val set_param_Any : params -> int -> Any.t -> unit
+  val set_param_Bool : params -> int -> Bool.t -> unit
+  val set_param_Int : params -> int -> Int.t -> unit
+  val set_param_Float : params -> int -> Float.t -> unit
+  val set_param_Datetime : params -> int -> Datetime.t -> unit
 
   val no_params : statement -> result
 

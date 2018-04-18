@@ -15,6 +15,15 @@
 
 open Printf
 
+module Types = struct
+  module Bool = struct type t = bool end
+  module Int = Int64
+  module Text = struct type t = string end
+  module Float = struct type t = float end
+  module Datetime = Float (* ? *)
+  module Any = Text
+end
+
 module S = Sqlite3
 
 type statement = S.stmt * string
