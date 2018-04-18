@@ -56,3 +56,6 @@ INSERT INTO test VALUES
 (1, @one),
 (2, @two),
 (3, @one);
+
+INSERT INTO `appointments` ( `alert_at`) VALUES (@alert);
+INSERT INTO `appointments` ( `alert_at`) VALUES (FROM_UNIXTIME(@alert));

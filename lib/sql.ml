@@ -321,4 +321,6 @@ let () =
   func T.(F (Var 0, [Var 0; Var 0])) ["nullif";"ifnull"];
   func T.(Multi (Var 0, Var 0)) ["least";"greatest"];
   func T.(Multi (Typ Text, Typ Text)) ["concat"];
+  func T.(fixed Datetime [Int]) ["from_unixtime"];
+(*   func T.(fixed Text [Int;Text]) ["from_unixtime"]; *)
   ()

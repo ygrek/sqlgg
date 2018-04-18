@@ -141,4 +141,16 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="insert_appointments_25" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (@alert)" kind="insert" target="appointments" cardinality="0">
+  <in>
+   <value name="alert" type="Datetime"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="insert_appointments_26" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (FROM_UNIXTIME(@alert))" kind="insert" target="appointments" cardinality="0">
+  <in>
+   <value name="alert" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>
