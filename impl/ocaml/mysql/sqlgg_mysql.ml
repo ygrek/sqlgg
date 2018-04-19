@@ -45,10 +45,16 @@ end
 example: Datetime as timestamp
 see below how to create Types based on Default_types with overridden submodule
 
-module Datetime = struct
+module Datetime
+: sig (* optionally constrain with a signature for moar typing *)
   type t = private float
+  val of_string : string -> t
+  val to_string : t -> string
+end
+= struct
+  type t = float
   let of_string = function "0000-00-00 00:00:00" -> 0. | s -> ExtUnix.Specific.(timegm (strptime "%Y-%m-%d %H:%M:%S" s))
-  let to_string = ExtUnix.Specific.strftime "%Y-%m-%d %H:%M:%S" (Unix.gmtime v)
+  let to_string = function 0. -> "0000-00-00 00:00:00" | t -> ExtUnix.Specific.strftime "%Y-%m-%d %H:%M:%S" (Unix.gmtime t)
 end
 *)
 
