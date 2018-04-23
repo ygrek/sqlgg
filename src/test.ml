@@ -100,9 +100,13 @@ let test4  () =
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
 *)
-  tt "select 1+2 from test4" a [] ~kind:(Select `Zero_one);
+  tt "select 1" a [] ~kind:(Select `One);
+  tt "select greatest(1+2,10)" a [] ~kind:(Select `One);
+  tt "select greatest(1+2,10) where 1 = 2" a [] ~kind:(Select `Zero_one);
+  tt "select 1 from test4" a [] ~kind:(Select `Nat);
+  tt "select 1+2 from test4" a [] ~kind:(Select `Nat);
   tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
-    [attr "" Int; attr "" Text] [] ~kind:(Select `Zero_one);
+    [attr "" Int; attr "" Text] [] ~kind:(Select `Nat);
   tt "select greatest(10,x) from test4" a [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select `Nat);
   tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select `One);

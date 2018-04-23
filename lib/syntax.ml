@@ -39,18 +39,18 @@ let get_params_q e =
   in
   loop [] e |> List.rev
 
-let rec is_singular = function
+let rec is_grouping = function
 | Value _
-| Param _ -> true
-| Column _ -> false
+| Param _
+| Column _
+| Select _
+| Inserted _ -> false
 | Fun (func,args) ->
-  (* grouping function of zero or single parameter or function of all singular values *)
-  (Type.is_grouping func && List.length args <= 1) || List.for_all is_singular args
-| Select _ -> false (* ? *)
-| Inserted _ -> false (* ? *)
+  (* grouping function of zero or single parameter or function on grouping result *)
+  (Type.is_grouping func && List.length args <= 1) || List.exists is_grouping args
 
-let test_all_grouping columns =
-  List.for_all (function Expr (e,_) -> is_singular e | All | AllOf _ -> false) columns
+let exists_grouping columns =
+  List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
 
 let cross = List.fold_left Schema.cross []
 
@@ -282,14 +282,15 @@ and eval_select env { columns; from; where; group; having; } =
     | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
     | None -> env, []
   in
-  let singlerow = group = [] && test_all_grouping columns in
-  let singlerow2 = where = None && group = [] && test_all_const columns in
+  let cardinality =
+    if from = None then (if where = None then `One else `Zero_one)
+    else if group = [] && exists_grouping columns then `One
+    else `Nat
+  in
   let p1 = params_of_columns env columns in
   let p3 = get_params_opt env where in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
-  let cardinality = if singlerow then `One else
-                    if singlerow2 then `Zero_one else `Nat in
   (infer_schema env columns, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
 
 and resolve_source env (x,alias) =
