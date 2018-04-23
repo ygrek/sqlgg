@@ -16,24 +16,28 @@ let cmp_params p1 p2 =
   with
     _ -> false
 
-let tt ?msg sql ?kind schema params =
-  let msg = Option.default sql msg in
+let parse sql =
   match Main.parse_one (sql,[]) with
   | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
   | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
-  | Some stmt ->
-      assert_equal ~msg ~printer:Sql.Schema.to_string schema stmt.schema;
-      assert_equal ~msg ~cmp:cmp_params ~printer:Sql.params_to_string params stmt.params;
-      match kind with
-      | Some k -> assert_equal ~msg ~printer:[%derive.show: Stmt.kind] k stmt.kind
-      | None -> ()
+  | Some stmt -> stmt
+
+let do_test sql ?kind schema params =
+  let stmt = parse sql in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+  assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.params_to_string params stmt.params;
+  match kind with
+  | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
+  | None -> ()
+
+let tt sql ?kind schema params =
+  let test () = do_test sql ?kind schema params in
+  sql >:: test
 
 let wrong sql =
-  ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true)
+  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true))
 
-(* let wrong sql = assert_equal None (Main.parse_one (sql,[])) *)
-
-let test () =
+let test = [
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
@@ -67,26 +71,27 @@ let test () =
   tt "select str from test where id>=@id and id-@x<@id"
     [attr "str" Text;]
     [p "id" Int; p "x" Int; p "id" Int];
-  ()
+]
 
-let test2 () =
+let test2 = [
   tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
   tt    "update test, (select * from test2) as x set str = x.str where test.id=x.id" [] [];
   tt    "update test, (select * from test2) as x set name = x.str where test.id=x.id" [] [];
   tt    "update test, (select * from test2) as x set test.str = x.str where test.id=x.id" [] [];
   wrong "update test, (select * from test2) as x set test.name = x.name where test.id=x.id";
   wrong "update test, (select * from test2) as x set test.str = str where test.id=x.id";
-  ()
+]
 
-let test3 () =
+let test3 = [
   tt "SELECT id FROM test WHERE str IN ( SELECT str FROM test2 )" [attr "id" Int] [];
-  todo "tuples";
+  "tuples" >:: (fun () -> todo "tuples");
   (* from http://stackoverflow.com/questions/1063866/sql-portability-gotchas/1063946#1063946 *)
-  tt "SELECT id FROM test WHERE (id, str) IN ( SELECT id, str FROM test2)" [attr "id" Int] [];
-  ()
+(*   tt "SELECT id FROM test WHERE (id, str) IN ( SELECT id, str FROM test2)" [attr "id" Int] []; *)
+]
 
-let test4  () =
+let test4 =
   let a = [attr "" Int] in
+  [
   tt "CREATE TABLE test4 (x INT, y INT)" [] [];
 (*   tt "select max( * ) from test4" a [] ~kind:(Select `One); *)
   tt "select max(x) as q from test4" [attr "q" Int] [] ~kind:(Select `One);
@@ -110,14 +115,13 @@ let test4  () =
   tt "select greatest(10,x) from test4" a [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select `Nat);
   tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select `One);
-  todo "single row";
   tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select `One);
-  ()
+]
 
-let test_parsing () =
+let test_parsing = [
   tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT DEFAULT -1) ENGINE=MEMORY" [] [];
   tt "SELECT 2+3, 2+-3, -10 FROM test5_1" [attr "" Int; attr "" Int; attr "" Int] [];
-  ()
+]
 
 (*
   see MySQL 5.4 refman -- 12.2.8.1. JOIN Syntax
@@ -126,18 +130,18 @@ let test_parsing () =
 let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name -> attr name Int) in
-  tt "CREATE TABLE t1 (i INT, j INT)" [] [];
-  tt "CREATE TABLE t2 (k INT, j INT)" [] [];
-  tt "SELECT * FROM t1 JOIN t2 ON i=t1.j" (ints ["i";"j";"k";"j"]) [];
-  tt ~msg:"NATURAL JOIN"
-    "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
-  tt ~msg:"JOIN USING"
-    "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
-  tt ~msg:"NATURAL JOIN with common column in WHERE"
+  do_test "CREATE TABLE t1 (i INT, j INT)" [] [];
+  do_test "CREATE TABLE t2 (k INT, j INT)" [] [];
+  do_test "SELECT * FROM t1 JOIN t2 ON i=t1.j" (ints ["i";"j";"k";"j"]) [];
+  do_test "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
+  do_test "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
+(*   NATURAL JOIN with common column in WHERE *)
+  do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x"
     (ints ["j";"i";"k"])
     [named "x",Int];
-  tt ~msg:"NATURAL JOIN with common column qualified in WHERE"
+(*   NATURAL JOIN with common column qualified in WHERE *)
+  do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
     (ints ["j";"i";"k"])
     [named "x",Int];
@@ -154,23 +158,23 @@ let test_misc () =
   test [1;2;3;4] [5;2;2] [2;1;3;4;5]; (* ?! *)
   ()
 
-let test_enum () =
+let test_enum = [
   tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
   tt "SELECT * FROM test6" [attr "x" Text; attr "y" Int] [];
   tt "SELECT x, y+10 FROM test6" [attr "x" Text; attr "" Int] [];
-  ()
+]
 
 let run () =
   let tests =
   [
-    "simple" >:: test;
-    "multi-table UPDATE" >:: test2;
-    "gotchas" >:: test3;
-    "single-row SELECT" >:: test4;
-    "parsing" >:: test_parsing;
+    "simple" >::: test;
+    "multi-table UPDATE" >::: test2;
+    "gotchas" >::: test3;
+    "single-row SELECT" >::: test4;
+    "parsing" >::: test_parsing;
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
-    "enum" >:: test_enum;
+    "enum" >::: test_enum;
   ]
   in
   let test_suite = "main" >::: tests in
