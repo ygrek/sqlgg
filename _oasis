@@ -64,7 +64,7 @@ Test main
   TestTools: sqlgg
 
 Test regression
-  Command: ./run_test
+  Command: sh ./run_test
   TestTools: sqlgg
 
 SourceRepository head
