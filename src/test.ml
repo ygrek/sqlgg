@@ -178,4 +178,5 @@ let run () =
   ]
   in
   let test_suite = "main" >::: tests in
-  ignore (run_test_tt test_suite)
+  let results = run_test_tt test_suite in
+  exit @@ if List.exists (function RFailure _ | RError _ -> true | _ -> false) results then 1 else 0
