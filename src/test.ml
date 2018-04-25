@@ -93,18 +93,15 @@ let test4 =
   let a = [attr "" Int] in
   [
   tt "CREATE TABLE test4 (x INT, y INT)" [] [];
-(*   tt "select max( * ) from test4" a [] ~kind:(Select `One); *)
   tt "select max(x) as q from test4" [attr "q" Int] [] ~kind:(Select `One);
   tt "select max(x) from test4" a [] ~kind:(Select `One);
   tt "select max(x) from test4" a [] ~kind:(Select `One);
   tt "select max(x+y) from test4 limit 1" a [] ~kind:(Select `One);
   tt "select max(y) from test4 limit 2" a [] ~kind:(Select `One);
-(* TODO sqlite treats multi-arg max to non-grouping
   tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
-*)
   tt "select 1" a [] ~kind:(Select `One);
   tt "select greatest(1+2,10)" a [] ~kind:(Select `One);
   tt "select greatest(1+2,10) where 1 = 2" a [] ~kind:(Select `Zero_one);

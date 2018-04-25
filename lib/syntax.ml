@@ -124,10 +124,9 @@ and assign_types expr =
         in
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ] -> typ, types
-        | Group (ret,false), [_]
-        | Group (ret,true), _ -> ret, types
-        | (Agg | Group _), _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | Agg, [typ]
+        | Group typ, _ -> typ, types
+        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "types do not match : %s" (show ())
         | F (ret, args), _ ->
           let typevar = Hashtbl.create 10 in

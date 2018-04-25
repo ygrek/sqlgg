@@ -130,7 +130,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
            AS? routine_body
            routine_extra?
               {
-                add_function name (Ret ret);
+                Function.add (List.length params) (Ret ret) name;
                 CreateRoutine (name, Some ret, params)
               }
          | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
@@ -138,7 +138,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
            AS? routine_body
            routine_extra?
               {
-                add_function name (Ret Any); (* FIXME void *)
+                Function.add (List.length params) (Ret Any) name; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -331,7 +331,7 @@ expr:
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, true) }
     | PARAM { Param ($1,Any) }
-    | f=IDENT LPAREN p=func_params RPAREN { Fun (get_function f, p) }
+    | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
     | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)

@@ -2,6 +2,7 @@
 
 open Printf
 open ExtLib
+open Prelude
 
 module Type =
 struct
@@ -40,20 +41,21 @@ struct
   let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 
   type func =
-  | Group of t * bool (* 'a -> t ; bool = multi-column *)
+  | Group of t (* _ -> t *)
   | Agg (* 'a -> 'a *)
   | Poly of t (* 'a -> 'a -> t *) (* = F (Typ t, [Var 0; Var 0]) *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
-  let fixed ret args = F (Typ ret, List.map (fun t -> Typ t) args)
+  let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
+  let fixed = monomorphic
 
   let pp_func pp =
     let open Format in
   function
   | Agg -> fprintf pp "|'a| -> 'a"
-  | Group (ret,multi) -> fprintf pp "|%s'a| -> %s" (if multi then "{...} as " else "") (to_string ret)
+  | Group ret -> fprintf pp "|_| -> %s" (to_string ret)
   | Poly ret -> fprintf pp "'a -> 'a -> %s" (to_string ret)
   | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
@@ -288,39 +290,64 @@ let () = print (project ["b";"d"] test)
 let () = print (rename test "a" "new_a")
 *)
 
-module SMap = Map.Make(String)
+module Function : sig
 
-let functions = ref SMap.empty
+val lookup : string -> int -> Type.func
 
-let add_function k ret =
-  let add map k v =
-    let k = String.lowercase k in
-    if SMap.mem k map then
-      failwith (sprintf "Function %S already defined" k)
-    else
-      SMap.add k v map
-  in
-  functions := add !functions k ret
+val add : int -> Type.func -> string -> unit
+val monomorphic : Type.t -> Type.t list -> string -> unit
+val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
+val multi_polymorphic : string -> unit
 
-let get_function name =
-  try
-    SMap.find (String.lowercase name) !functions
-  with
-    Not_found -> failwith (sprintf "Unknown function %S" name)
+end = struct
+
+let h_fixed_arity = Hashtbl.create 10
+let h_multi = Hashtbl.create 10
+
+let add narg typ name =
+  let name = String.lowercase name in
+  if Hashtbl.mem h_fixed_arity (name,narg) then
+    fail "Function %S of %d arguments already registered" name narg
+  else
+    Hashtbl.add h_fixed_arity (name,narg) typ
+
+let add_multi typ name =
+  let name = String.lowercase name in
+  if Hashtbl.mem h_multi name then
+    fail "Function %S already registered" name
+  else
+    Hashtbl.add h_multi name typ
+
+let lookup name narg =
+  let name = String.lowercase name in
+  match Hashtbl.find h_fixed_arity (name,narg) with
+  | t -> t
+  | exception _ ->
+  match Hashtbl.find h_multi name with
+  | t -> t
+  | exception _ -> fail "Unknown function %S of %d arguments" name narg
+
+let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
+let multi_polymorphic name = add_multi Type.(Multi (Var 0, Var 0)) name
+let multi ~ret args name = add_multi Type.(Multi (ret, args)) name
+
+end
 
 let () =
-  let module T = Type in
-  let func ret l = List.iter (fun x -> add_function x ret) l in
-  func T.Agg ["max";"min";"sum"]; (* TODO in sqlite3 min(a,b) acts as least(a,b), while min(a) is grouping *)
-  func T.(Group (Int,true)) ["count"];
-  func T.(Group (Float,false)) ["avg"];
-  func T.(fixed Text [Text;Text]) ["strftime"];
-  func T.(fixed Text [Text]) ["lower";"upper"];
-  func T.(Ret Any) ["coalesce"];
-  func T.(Ret Int) ["length"; "random";"unix_timestamp"];
-  func T.(F (Var 0, [Var 0; Var 0])) ["nullif";"ifnull"];
-  func T.(Multi (Var 0, Var 0)) ["least";"greatest"];
-  func T.(Multi (Typ Text, Typ Text)) ["concat"];
-  func T.(fixed Datetime [Int]) ["from_unixtime"];
-(*   func T.(fixed Text [Int;Text]) ["from_unixtime"]; *)
+  let open Type in
+  let open Function in
+  let (||>) x f = List.iter f x in
+  "count" |> add 0 (Group Int); (* asterisk is treated as no parameters in parser *)
+  "avg" |> add 1 (Group Float);
+  ["max";"min";"sum"] ||> add 1 Agg;
+  ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
+  "strftime" |> monomorphic Text [Text;Text];
+  ["lower";"upper"] ||> monomorphic Text [Text];
+  "length" |> monomorphic Int [Text];
+  ["random";"unix_timestamp"] ||> monomorphic Int [];
+  ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
+  ["least";"greatest";"coalesce"] ||> multi_polymorphic;
+  "concat" |> multi ~ret:(Typ Text) (Typ Text);
+  "from_unixtime" |> monomorphic Datetime [Int];
+  "from_unixtime" |> monomorphic Text [Int;Text];
   ()
