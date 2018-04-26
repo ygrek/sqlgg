@@ -6,22 +6,17 @@ sqlgg: SQL Guided (code) Generator
 
 Homepage at http://ygrek.org.ua/p/sqlgg/
 
-Get the code at http://repo.or.cz/w/sqlgg.git or https://github.com/ygrek/sqlgg
+Install with `opam install sqlgg`
 
-Dependencies
-------------
+sqlgg is sql query parser and code generator.
+See homepage for detailed description and rationale.
 
-Install with OPAM: `opam install menhir extlib ounit ppx_deriving oasis`
+Development
+-----------
 
-Build
------
+Install dependencies with `opam install --deps-only .`
 
-Run `make` (or `build.bat` on Windows).
-
-Windows users
--------------
-
-Install [VS2005 SP1 redistributable](http://www.microsoft.com/downloads/details.aspx?FamilyID=200b2fd9-ae1a-4a14-984d-389c36f85647)
+Buld with `make`
 
 Conditions
 ----------
@@ -38,4 +33,4 @@ See UNLICENSE file in each of the above directories for more information.
 NB the output of sqlgg, i.e. the generated code, is all yours of course :)
 
 ----
-2018-03-10
+2018-04-26

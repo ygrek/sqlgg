@@ -1,22 +1,10 @@
-* map enum strings to values
-* write tutorial (for all languages), start documentation
 * native-type annotations in queries
-* output params syntax for different DB
-* guarantee correct duplicate params usage
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe/enumeration/option params
-* camlp4 syntax extension for inline sql
+* ocaml ppx syntax extension for inline sql
 * allow to tolerate errors in query
-* detect single-row queries (COUNT(*) without GROUP BY (done), LIMIT 1 (done), SELECT and UNIQUE INDEX, SELECT const without WHERE (done))
 * support BULK INSERTs (how?)
-* decide what to do with unquoted identifiers matching keywords (better error reporting at least)
 * provide ways to extend lexer with tokens in runtime
 * choose better names for some common cases (WHERE id = ? etc)
-* fix line numbers in error output
-* enhance error reporting (take into account target language)
-* calculate types more precisely, type inference is too primitive
-* verify that each parameter gets one type inferred
-* track NULLs
-* detect statements on single tables and group the corresponding generated code together
 * use prepared statements in all traits
 * check all generated names for uniqueness and validity with regard to target language
 * support/test other SQL engines
