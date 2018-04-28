@@ -25,7 +25,7 @@ Executable sqlgg
 Library sqlgg
   Pack: true
   Path: lib/
-  Modules: Props, Sql, Stmt, Tables, Syntax
+  Modules: Parser, Parser_utils, Parser_state, Sql_lexer, Sql_parser, Sql, Stmt, Tables, Syntax
   InternalModules: Prelude
   BuildDepends: extlib, ppx_deriving.std
 

@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: b2138a54609e481138a6091255f0218a)
+# DO NOT EDIT (digest: 32bf20024ab7bd131229b573f9043ea1)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -16,7 +16,11 @@ true: annot, bin_annot
 "_darcs": not_hygienic
 # Library sqlgg
 "lib/sqlgg.cmxs": use_sqlgg
-"lib/props.cmx": for-pack(Sqlgg)
+"lib/parser.cmx": for-pack(Sqlgg)
+"lib/parser_utils.cmx": for-pack(Sqlgg)
+"lib/parser_state.cmx": for-pack(Sqlgg)
+"lib/sql_lexer.cmx": for-pack(Sqlgg)
+"lib/sql_parser.cmx": for-pack(Sqlgg)
 "lib/sql.cmx": for-pack(Sqlgg)
 "lib/stmt.cmx": for-pack(Sqlgg)
 "lib/tables.cmx": for-pack(Sqlgg)

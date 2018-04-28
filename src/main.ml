@@ -7,60 +7,11 @@ open ExtLib
 module L = List
 module S = String
 
-let is_alpha = function
-| 'a'..'z' -> true
-| 'A'..'Z' -> true
-| _ -> false
-
-let common_prefix = function
-| [] -> 0
-| x::_ as l ->
-  let rec loop i =
-    if String.length x <= i then i
-    else
-      if List.for_all (fun s -> i < String.length s && s.[i] = x.[i]) l then
-        loop (i+1)
-      else
-        i
-  in
-  let i = loop 0 in
-  (* do not allow empty names or starting not with alpha *)
-  if List.exists (fun s -> i = String.length s || not (is_alpha s.[i])) l then 0 else i
-
 let parse_one_exn (sql,props) =
     if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
-    let (schema,params,kind) = Syntax.eval @@ Parser.parse_stmt sql in
-    (* fill inferred sql for VALUES or SET *)
-    let (sql,params) = match kind with
-    | Stmt.Insert (Some (kind,schema), _) ->
-      let (pre,each,post) = match kind with
-      | Stmt.Values -> "(", (fun _ -> ""), ")"
-      | Stmt.Assign -> "", (fun name -> name ^" = "), ""
-      in
-      let module B = Buffer in
-      let b = B.create 100 in
-      B.add_string b sql;
-      B.add_string b " ";
-      B.add_string b pre;
-      let params' = ref [] in
-      let first = common_prefix @@ List.map (fun attr -> attr.Sql.name) schema in
-      schema |> List.iter (fun attr ->
-        if !params' <> [] then B.add_string b ",";
-        let attr_ref_prefix = each attr.Sql.name in
-        let attr_name = String.slice ~first attr.Sql.name in
-        let attr_ref = "@" ^ attr_name in
-        let pos_start = B.length b + String.length attr_ref_prefix in
-        let pos_end = pos_start + String.length attr_ref in
-        let param = ((Some attr_name,(pos_start,pos_end)),attr.Sql.domain) in
-        B.add_string b attr_ref_prefix;
-        B.add_string b attr_ref;
-        params' := param :: !params'
-      );
-      B.add_string b post;
-      (B.contents b, Syntax.unify_params (params @ List.rev !params'))
-    | _ -> (sql,params)
-    in
-    {Stmt.schema=schema; params=params; kind=kind; props=Props.set props "sql" sql}
+    let (sql,schema,params,kind) = Syntax.parse sql in
+    let props = Props.set props "sql" sql in
+    { Gen.schema; params; kind; props }
 
 let parse_one (sql, props as x) =
   try
@@ -85,7 +36,7 @@ let parse_one (sql, props as x) =
 
 let parse_one (sql,props as x) =
   match Props.get props "noparse" with
-  | Some _ -> Some { Stmt.schema=[]; params=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
+  | Some _ -> Some { Gen.schema=[]; params=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
   | None -> parse_one x
 
 let drop_while p e =
@@ -130,7 +81,7 @@ let get_statements ch =
       begin match parse_one sql with
       | None -> next ()
       | Some stmt ->
-          if not (Sql.Schema.is_unique stmt.Stmt.schema) then
+          if not (Sql.Schema.is_unique stmt.schema) then
             Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
           stmt
       end

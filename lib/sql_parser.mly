@@ -7,7 +7,7 @@
   open Sql
   open Sql.Type
   open Sql.Constraint
-  open Syntax
+  open ExtLib
 
   (* preserve order *)
   let make_limit l =
@@ -16,7 +16,7 @@
       | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos),Int)
       | _, `Param p -> Some (p,Int)
     in
-    list_filter_map param l, List.mem (`Limit,`Const 1) l
+    List.filter_map param l, List.mem (`Limit,`Const 1) l
 
   let poly ret args = Fun (F (Typ ret, List.map (fun _ -> Var 0) args), args)
 %}
@@ -160,7 +160,7 @@ table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { list_filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
+table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
                 | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)
 
 (* ugly, can you fixme? *)
@@ -294,8 +294,6 @@ some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
 key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=attr_name EQUAL e=expr { name,e }
-
-(* expr: expr1 { $1 |> Syntax.expr_to_string |> prerr_endline; $1 } *)
 
 anyall: ANY | ALL | SOME { }
 

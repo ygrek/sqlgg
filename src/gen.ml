@@ -7,6 +7,8 @@ open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
+type stmt = { schema : Sql.Schema.t; params : Sql.params; kind : kind; props : Props.t; }
+
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
 
@@ -118,7 +120,7 @@ end
 
 module type Generator = sig
   type t
-  val generate : t -> string -> Stmt.t Enum.t -> unit
+  val generate : t -> string -> stmt Enum.t -> unit
   val start : unit -> t
   val comment : t -> ('a,unit,string,unit) format4 -> 'a
   val empty_line : t -> unit

@@ -19,5 +19,3 @@ type kind = | Select of cardinality (** possible number of rows *)
             | Drop of string
             | Other
             [@@deriving show {with_path=false}]
-
-type t = { schema : Sql.Schema.t; params : Sql.params; kind : kind; props : Props.t; }

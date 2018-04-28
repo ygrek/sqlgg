@@ -4,7 +4,6 @@ open ExtLib
 open Prelude
 open Printf
 
-open Stmt
 open Gen
 open Sql
 
