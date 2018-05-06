@@ -295,36 +295,36 @@ module Function : sig
 val lookup : string -> int -> Type.func
 
 val add : int -> Type.func -> string -> unit
+val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
 
 end = struct
 
-let h_fixed_arity = Hashtbl.create 10
-let h_multi = Hashtbl.create 10
+let h = Hashtbl.create 10
 
-let add narg typ name =
+let add_ narg typ name =
   let name = String.lowercase name in
-  if Hashtbl.mem h_fixed_arity (name,narg) then
-    fail "Function %S of %d arguments already registered" name narg
+  if Hashtbl.mem h (name,narg) then
+    let func = match narg with None -> sprintf "%S" name | Some n -> sprintf "%S of %d arguments" name n in
+    fail "Function %s already registered" func
   else
-    Hashtbl.add h_fixed_arity (name,narg) typ
+    Hashtbl.add h (name,narg) typ
 
-let add_multi typ name =
-  let name = String.lowercase name in
-  if Hashtbl.mem h_multi name then
-    fail "Function %S already registered" name
-  else
-    Hashtbl.add h_multi name typ
+let exclude narg name = add_ (Some narg) None name
+let add_multi typ name = add_ None (Some typ) name
+let add narg typ name = add_ (Some narg) (Some typ) name
 
 let lookup name narg =
   let name = String.lowercase name in
-  match Hashtbl.find h_fixed_arity (name,narg) with
-  | t -> t
+  match Hashtbl.find h (name,Some narg) with
+  | None -> fail "Wrong number of arguments for function %S" name
+  | Some t -> t
   | exception _ ->
-  match Hashtbl.find h_multi name with
-  | t -> t
+  match Hashtbl.find h (name,None) with
+  | None -> assert false
+  | Some t -> t
   | exception _ -> fail "Unknown function %S of %d arguments" name narg
 
 let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
@@ -341,13 +341,14 @@ let () =
   "avg" |> add 1 (Group Float);
   ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
-  "strftime" |> monomorphic Text [Text;Text];
   ["lower";"upper"] ||> monomorphic Text [Text];
   "length" |> monomorphic Int [Text];
   ["random";"unix_timestamp"] ||> monomorphic Int [];
   ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
-  "concat" |> multi ~ret:(Typ Text) (Typ Text);
+  "strftime" |> exclude 1; (* requires at least 2 arguments *)
+  ["concat";"date";"time";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
+  "julianday" |> multi ~ret:(Typ Float) (Typ Text);
   "from_unixtime" |> monomorphic Datetime [Int];
   "from_unixtime" |> monomorphic Text [Int;Text];
   ()
