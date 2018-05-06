@@ -15,7 +15,7 @@ fi
 mkdir -p test/out test/tmp
 for file in test/*.sql; do
   basename=${file#test/}
-  _build/src/cli.native -no-header -gen xml $file > $OUTDIR/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
+  _build/src/cli.native -no-header -params named -gen xml $file > $OUTDIR/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
 done
 
 [ "$mode" = "init" ] || diff --strip-trailing-cr -u test/out test/tmp

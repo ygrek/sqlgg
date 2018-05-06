@@ -31,7 +31,7 @@
    <value name="total" type="Int"/>
   </out>
  </stmt>
- <stmt name="list_donors" sql="SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE ?) LIMIT ?" kind="select" cardinality="n">
+ <stmt name="list_donors" sql="SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @_0) LIMIT @limit" kind="select" cardinality="n">
   <in>
    <value name="_0" type="Text"/>
    <value name="limit" type="Int"/>
