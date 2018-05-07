@@ -105,15 +105,14 @@ type t = unit
 
 let start () = ()
 
-let generate_stmt fold index stmt =
+let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
   let values = (subst @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
-  match fold, is_callback stmt with
-  | true, false -> output "let %s = %s" name name (* alias non-fold impl, identical *)
+  match style, is_callback stmt with
+  | (`List | `Fold), false -> ()
   | _ ->
-  let fold = fold && is_callback stmt in
-  let all_params = values ^ (if is_callback stmt then " callback" else "") ^ (if fold then " acc" else "") in
+  let all_params = values ^ (if style = `List || is_callback stmt then " callback" else "") ^ (if style = `Fold then " acc" else "") in
   output "let %s db %s =" name all_params;
   inc_indent ();
   let sql = quote (get_sql stmt) in
@@ -137,11 +136,17 @@ let generate_stmt fold index stmt =
   in
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.params in
-  if fold then output "let r_acc = ref acc in";
-  let s_callback = if callback = "" then "" else " " ^ callback in
-  output "T.%s db %s %s%s" func sql params_binder_name
-    (if fold then " (fun x -> r_acc := " ^ callback ^ " x !r_acc);" else s_callback);
-  if fold then output "!r_acc";
+  if style = `Fold then output "let r_acc = ref acc in";
+  if style = `List then output "let r_acc = ref [] in";
+  let callback =
+    match style with
+    | `Fold -> sprintf "(fun x -> r_acc := %s x !r_acc);" callback
+    | `List -> sprintf "(fun x -> r_acc := %s x :: !r_acc);" callback
+    | `Direct -> callback (* or empty string *)
+  in
+  output "T.%s db %s %s %s" func sql params_binder_name callback;
+  if style = `Fold then output "!r_acc";
+  if style = `List then output "List.rev !r_acc";
   dec_indent ();
   empty_line ()
 
@@ -154,11 +159,17 @@ let generate () name stmts =
   output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
   empty_line ();
   inc_indent ();
-  Enum.iteri (generate_stmt false) (Enum.clone stmts);
+  List.iteri (generate_stmt `Direct) stmts;
   output "module Fold = struct";
   inc_indent ();
-  Enum.iteri (generate_stmt true) (Enum.clone stmts);
+  List.iteri (generate_stmt `Fold) stmts;
   dec_indent ();
   output "end (* module Fold *)";
+  output "";
+  output "module List = struct";
+  inc_indent ();
+  List.iteri (generate_stmt `List) stmts;
+  dec_indent ();
+  output "end (* module List *)";
   dec_indent ();
   output "end (* module %s *)" (String.capitalize name)

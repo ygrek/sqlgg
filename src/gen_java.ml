@@ -129,6 +129,5 @@ let generate () name stmts =
     output "db = aDb;";
   );
   empty_line ();
-  Enum.iteri generate_code stmts;
+  List.iteri generate_code stmts;
   end_class name
-

@@ -51,7 +51,7 @@ let each_input =
 let generate l =
   match !generate with
   | None -> ()
-  | Some f -> f !name (List.enum l)
+  | Some f -> f !name l
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Sqlgg_config.version in

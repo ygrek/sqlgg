@@ -120,7 +120,7 @@ end
 
 module type Generator = sig
   type t
-  val generate : t -> string -> stmt Enum.t -> unit
+  val generate : t -> string -> stmt list -> unit
   val start : unit -> t
   val comment : t -> ('a,unit,string,unit) format4 -> 'a
   val empty_line : t -> unit

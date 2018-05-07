@@ -203,6 +203,6 @@ let generate () name stmts =
   List.iter (fun s -> output "using %s;" s) using;
   empty_line ();
   start_ns name;
-  let names = List.mapi generate_code (List.of_enum stmts) in
+  let names = List.mapi generate_code stmts in
   generate_all names;
   end_ns name

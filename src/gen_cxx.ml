@@ -198,7 +198,6 @@ let generate () name stmts =
   empty_line ();
   output "template <class Traits>";
   start_struct name;
-  let stmts = List.of_enum stmts in
   let names = List.mapi make_stmt stmts in
   make_all name names;
   end_struct name

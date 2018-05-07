@@ -90,6 +90,5 @@ let finish_output (x,pre) =
 
 let generate out _ stmts =
   start_output out;
-  Enum.iteri (generate_code out) stmts;
+  List.iteri (generate_code out) stmts;
   finish_output out
-
