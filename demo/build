@@ -5,23 +5,29 @@ set -e -u
 sed -r 's/%([^%]*)%([^%]*)%/\1/' demo.sql.pp > demo_mysql.sql
 sed -r 's/%([^%]*)%([^%]*)%/\2/' demo.sql.pp > demo_sqlite3.sql
 
-sqlgg -gen cxx demo_sqlite3.sql > demo_cxx_gen.hpp
-sqlgg -gen cxx -params unnamed demo_mysql.sql > demo_cxx_gen_mysql.hpp
-sqlgg -gen caml demo_sqlite3.sql > demo_caml_gen.ml
-sqlgg -gen caml -params unnamed demo_mysql.sql > demo_caml_gen_mysql.ml
-sqlgg -gen xml demo_sqlite3.sql > demo_xml_gen.xml
-sqlgg -gen java -name demo_java_gen demo_mysql.sql > demo_java_gen.java
-sqlgg -gen csharp demo_mysql.sql > demo_csharp_gen.cs
+SQLGG=../_build/src/cli.native
+[ -x "$SQLGG" ] || SQLGG=sqlgg
+
+$SQLGG -gen cxx  -params named demo_sqlite3.sql > demo_cxx_gen.hpp
+$SQLGG -gen caml -params named demo_sqlite3.sql > demo_caml_gen.ml
+$SQLGG -gen xml  -params named demo_sqlite3.sql > demo_xml_gen.xml
+
+$SQLGG -gen cxx    -params unnamed demo_mysql.sql > demo_cxx_gen_mysql.hpp
+$SQLGG -gen caml   -params unnamed demo_mysql.sql > demo_caml_gen_mysql.ml
+$SQLGG -gen java   -params unnamed -name demo_java_gen demo_mysql.sql > demo_java_gen.java
+$SQLGG -gen csharp -params unnamed demo_mysql.sql > demo_csharp_gen.cs
 
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx demo_cxx.cpp -lsqlite3
 
-ocamlfind ocamlc -linkpkg -package sqlite3 -w Alse -g -o demo_caml -I ../impl/ocaml -I ../impl/ocaml/sqlite3 ../impl/ocaml/sqlite3/sqlgg_sqlite3.ml ../impl/ocaml/sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
+cp ../impl/ocaml/sqlgg_traits.ml .
+cp ../impl/ocaml/sqlite3/sqlgg_sqlite3.ml .
+cp ../impl/ocaml/mysql/sqlgg_mysql.ml .
+ocamlfind c -linkpkg -package sqlite3 -w Alse -g -o demo_caml sqlgg_sqlite3.ml sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
 # requires ocaml-mysql >= 1.1.0
-ocamlfind ocamlc -linkpkg -package mysql -w Alse -g -o demo_caml_mysql -I ../impl/ocaml -I ../impl/ocaml/mysql ../impl/ocaml/mysql/sqlgg_mysql.ml ../impl/ocaml/sqlgg_traits.ml demo_caml_gen_mysql.ml demo_caml_mysql.ml
+ocamlfind c -linkpkg -package mysql -w Alse -g -o demo_caml_mysql sqlgg_mysql.ml sqlgg_traits.ml demo_caml_gen_mysql.ml demo_caml_mysql.ml
 
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmariadbclient
 
 javac demo_java.java
 
 gmcs -r:System.Data -r:MySql.Data demo_csharp.cs demo_csharp_gen.cs
-

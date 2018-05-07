@@ -162,6 +162,7 @@ let test_enum = [
 ]
 
 let run () =
+  Gen.params_mode := Some Named;
   let tests =
   [
     "simple" >::: test;

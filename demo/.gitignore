@@ -8,3 +8,4 @@ demo_mysql.sql
 demo_sqlite3.sql
 *.class
 *.exe
+sqlgg_*.ml
