@@ -166,4 +166,29 @@
    <value name="_1" type="Int"/>
   </out>
  </stmt>
+ <stmt name="issue54_mysql" sql="SELECT 0 &lt;=&gt; 0, 0 &lt;=&gt; null, null &lt;=&gt; 0, null &lt;=&gt; null" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Bool"/>
+   <value name="_1" type="Bool"/>
+   <value name="_2" type="Bool"/>
+   <value name="_3" type="Bool"/>
+  </out>
+ </stmt>
+ <stmt name="issue54_sqlite" sql="SELECT 0 is 0, 0 is null, null is 0, null is null" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Bool"/>
+   <value name="_1" type="Bool"/>
+   <value name="_2" type="Bool"/>
+   <value name="_3" type="Bool"/>
+  </out>
+ </stmt>
+ <stmt name="issue54_sql" sql="SELECT 42 is not distinct from null, 42 is distinct from null" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Bool"/>
+   <value name="_1" type="Bool"/>
+  </out>
+ </stmt>
 </sqlgg>

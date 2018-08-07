@@ -260,6 +260,7 @@ ruleMain = parse
   | "<<" | ">>" | "|" | "&" { NUM_BIT_OP }
   | ">" | ">=" | "<=" | "<" { NUM_CMP_OP }
   | "<>" | "!=" | "==" { NUM_EQ_OP }
+  | "<=>" { NOT_DISTINCT_OP }
 
   | "?" { PARAM (None,pos lexbuf) }
   | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }

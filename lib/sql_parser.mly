@@ -43,7 +43,7 @@
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
        YEAR_MONTH FALSE TRUE DUPLICATE
-%token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS
+%token NUM_DIV_OP NUM_BIT_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID
 
 (*
@@ -54,7 +54,7 @@
 
 %left OR
 %left AND
-%nonassoc EQUAL NUM_EQ_OP
+%nonassoc EQUAL NUM_EQ_OP NOT_DISTINCT_OP
 %nonassoc NUM_CMP_OP
 %nonassoc NUM_BIT_OP
 %left PLUS MINUS
@@ -303,6 +303,8 @@ attr_name: cname=IDENT { { cname; tname=None} }
          | table=IDENT DOT cname=IDENT
          | IDENT DOT table=IDENT DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
 
+distinct_from: DISTINCT FROM { }
+
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
     | expr boolean_bin_op expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[$1;$3]) }
@@ -331,6 +333,7 @@ expr:
     | PARAM { Param ($1,Any) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
+    | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
     | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
@@ -375,7 +378,7 @@ func_params: DISTINCT? l=expr_list { l }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_DIV_OP | NUM_BIT_OP { }
-comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
+comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP | NOT_DISTINCT_OP { }
 boolean_bin_op: AND | OR { }
 
 unary_op: EXCL { }

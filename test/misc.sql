@@ -65,3 +65,12 @@ SELECT COUNT(x) FROM test;
 
 -- @count_distinct
 SELECT COUNT(DISTINCT x), SUM(DISTINCT x) FROM test;
+
+-- @issue54_mysql
+SELECT 0 <=> 0, 0 <=> null, null <=> 0, null <=> null;
+
+-- @issue54_sqlite
+SELECT 0 is 0, 0 is null, null is 0, null is null;
+
+-- @issue54_sql
+SELECT 42 is not distinct from null, 42 is distinct from null;
