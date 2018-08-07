@@ -337,7 +337,8 @@ let () =
   let open Type in
   let open Function in
   let (||>) x f = List.iter f x in
-  "count" |> add 0 (Group Int); (* asterisk is treated as no parameters in parser *)
+  "count" |> add 0 (Group Int); (* count( * ) - asterisk is treated as no parameters in parser *)
+  "count" |> add 1 (Group Int);
   "avg" |> add 1 (Group Float);
   ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)

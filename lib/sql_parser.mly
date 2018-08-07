@@ -370,7 +370,7 @@ single_literal_value:
     | MINUS FLOAT { Value Float }
 
 expr_list: l=commas(expr) { l }
-func_params: expr_list { $1 }
+func_params: DISTINCT? l=expr_list { l }
            | ASTERISK { [] }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }

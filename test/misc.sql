@@ -59,3 +59,9 @@ INSERT INTO test VALUES
 
 INSERT INTO `appointments` ( `alert_at`) VALUES (@alert);
 INSERT INTO `appointments` ( `alert_at`) VALUES (FROM_UNIXTIME(@alert));
+
+-- @count_x
+SELECT COUNT(x) FROM test;
+
+-- @count_distinct
+SELECT COUNT(DISTINCT x), SUM(DISTINCT x) FROM test;
