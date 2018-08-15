@@ -352,4 +352,5 @@ let () =
   "julianday" |> multi ~ret:(Typ Float) (Typ Text);
   "from_unixtime" |> monomorphic Datetime [Int];
   "from_unixtime" |> monomorphic Text [Int;Text];
+  "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
   ()
