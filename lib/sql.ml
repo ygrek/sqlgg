@@ -43,7 +43,6 @@ struct
   type func =
   | Group of t (* _ -> t *)
   | Agg (* 'a -> 'a *)
-  | Poly of t (* 'a -> 'a -> t *) (* = F (Typ t, [Var 0; Var 0]) *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
@@ -56,7 +55,6 @@ struct
   function
   | Agg -> fprintf pp "|'a| -> 'a"
   | Group ret -> fprintf pp "|_| -> %s" (to_string ret)
-  | Poly ret -> fprintf pp "'a -> 'a -> %s" (to_string ret)
   | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
@@ -65,7 +63,7 @@ struct
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | Poly _ | F _ | Multi _ -> false
+  | Ret _ | F _ | Multi _ -> false
 end
 
 module Constraint =

@@ -324,10 +324,7 @@ expr:
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN
-      {
-        Fun ((Poly Bool),[e1; Select (select, true)])
-      }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, true)] }
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, true) }
     | PARAM { Param ($1,Any) }

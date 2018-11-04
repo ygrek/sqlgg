@@ -159,11 +159,6 @@ and assign_types expr =
           | _ -> Any, types
           end
         | Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
-        | Poly ret, _ ->
-          match List.filter ((<>) Any) types with
-          | [] -> ret, types
-          | h::tl when List.for_all (matches h) tl -> ret, List.map (fun _ -> h) types
-          | _ -> fail "all parameters should have same type : %s" (show ())
         in
         let assign inferred x =
           match x with
