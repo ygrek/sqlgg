@@ -191,4 +191,15 @@
    <value name="_1" type="Bool"/>
   </out>
  </stmt>
+ <stmt name="create_workareas" sql="CREATE TABLE workareas (work_id int, about text)" kind="create" target="workareas" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="delete_test_33" sql="delete from test&#x0A;where x in (@x1, @x2)&#x0A;  and not exists (select 1 from workareas where work_id = test.x)" kind="delete" target="test" cardinality="0">
+  <in>
+   <value name="x1" type="Int"/>
+   <value name="x2" type="Int"/>
+  </in>
+  <out/>
+ </stmt>
 </sqlgg>

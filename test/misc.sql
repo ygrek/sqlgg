@@ -14,9 +14,6 @@ INSERT INTO `appointments` (
   NOW() + INTERVAL @delay SECOND
 );
 SELECT SUM(CASE WHEN x > 10 THEN 1 ELSE 0 END) FROM test;
--- delete from txn_ranges
--- where id in (@tr1_id, @tr2_id)
---   and not exists (select 1 from workareas where txn_range_id = txn_ranges.id)
 
 CREATE TABLE issue14 (x integer);
 INSERT INTO issue14 (x) VALUES (@x);
@@ -74,3 +71,8 @@ SELECT 0 is 0, 0 is null, null is 0, null is null;
 
 -- @issue54_sql
 SELECT 42 is not distinct from null, 42 is distinct from null;
+
+CREATE TABLE workareas (work_id int, about text);
+delete from test
+where x in (@x1, @x2)
+  and not exists (select 1 from workareas where work_id = test.x);

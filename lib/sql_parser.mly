@@ -324,15 +324,15 @@ expr:
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, true)] }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=IDENT { Tables.check table; e1 }
-    | LPAREN select=select_stmt RPAREN { Select (select, true) }
+    | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | PARAM { Param ($1,Any) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
     | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun ((Ret Bool),[Select (select,false)]) } (* FIXME Poly Bool *)
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[Select (select,`Exists)]) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
         let maybe f = function None -> [] | Some x -> [f x] in

@@ -234,7 +234,7 @@ and expr =
   | Value of Type.t (** literal value *)
   | Param of param
   | Fun of Type.func * expr list (** parameters *)
-  | Select of select_full * bool (* single *)
+  | Select of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
 and column =

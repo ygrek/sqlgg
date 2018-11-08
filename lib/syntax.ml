@@ -93,13 +93,13 @@ let rec resolve_columns env expr =
     | Param x -> `Param x
     | Fun (r,l) ->
       `Func (r,List.map each l)
-    | Select (select,single) ->
+    | Select (select, usage) ->
       let as_params = List.map (fun x -> `Param x) in
       let (schema,p,_) = eval_select_full env select in
-      match schema,single with
-      | [ {domain;_} ], true -> `Func (Type.Ret domain, as_params p)
-      | s, true -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _ -> fail "not implemented: multi-column select in expression"
+      match schema, usage with
+      | [ {domain;_} ], `AsValue -> `Func (Type.Ret domain, as_params p)
+      | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
+      | _, `Exists -> `Func (Type.Ret Any, as_params p)
   in
   each expr
 
