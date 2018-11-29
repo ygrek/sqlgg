@@ -192,6 +192,7 @@ join_cond: ON e=expr { `Search e }
 
 source1: IDENT { `Table $1 }
        | LPAREN s=select_core RPAREN { `Select s }
+       | LPAREN s=table_list RPAREN { `Nested s }
 
 source: src=source1 alias=maybe_as { src, alias }
 

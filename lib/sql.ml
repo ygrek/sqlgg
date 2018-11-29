@@ -215,12 +215,13 @@ type col_name = {
   tname : string option; (** table name *)
 }
 and limit = (param_id * Type.t) list * bool
-and source1 = [ `Select of select | `Table of string ]
+and nested = source * (source * join_cond) list
+and source1 = [ `Select of select | `Table of string | `Nested of nested ]
 and source = source1 * string option
 and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
 and select = {
   columns : column list;
-  from : (source * (source * join_cond) list) option;
+  from : nested option;
   where : expr option;
   group : expr list;
   having : expr option;

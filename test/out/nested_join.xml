@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_t1" sql="CREATE TABLE t1 (a INTEGER)" kind="create" target="t1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_t2" sql="CREATE TABLE t2 (a2 INTEGER, b2 INTEGER)" kind="create" target="t2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_t3" sql="CREATE TABLE t3 (b INTEGER)" kind="create" target="t3" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_t1_3" sql="INSERT INTO t1 VALUES (1), (2)" kind="insert" target="t1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_t2_4" sql="INSERT INTO t2 VALUES (1, 101)" kind="insert" target="t2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_t3_5" sql="INSERT INTO t3 VALUES (101)" kind="insert" target="t3" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_6" sql="SELECT * FROM t1 LEFT JOIN t2 ON t1.a = t2.a2 LEFT JOIN t3 ON t2.b2 = t3.b OR t2.b2 IS NULL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="a" type="Int"/>
+   <value name="a2" type="Int"/>
+   <value name="b2" type="Int"/>
+   <value name="b" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_7" sql="SELECT * FROM t1 LEFT JOIN (t2 LEFT JOIN t3 ON t2.b2 = t3.b OR t2.b2 IS NULL) ON t1.a = t2.a2" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="a" type="Int"/>
+   <value name="a2" type="Int"/>
+   <value name="b2" type="Int"/>
+   <value name="b" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_8" sql="SELECT * FROM (t1 LEFT JOIN t2 ON t1.a = t2.a2) LEFT JOIN t3 ON t2.b2 = t3.b OR t2.b2 IS NULL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="a" type="Int"/>
+   <value name="a2" type="Int"/>
+   <value name="b2" type="Int"/>
+   <value name="b" type="Int"/>
+  </out>
+ </stmt>
+</sqlgg>

@@ -231,7 +231,7 @@ and get_params_opt env = function
 
 and get_params_l env l = collect (get_params env) l
 
-and do_join (env,params) (((_, schema1),params1),kind) =
+and do_join (env,params) ((schema1,params1,_tables),kind) =
   let joined_schema = match kind with
   | `Cross
   | `Search _
@@ -246,10 +246,10 @@ and do_join (env,params) (((_, schema1),params1),kind) =
   in
   env, params @ params1 @ p
 
-and join env ((t0,p0),joins) =
+and join env ((joined_schema,p0,ts0),joins) =
   assert (env.joined_schema = []);
-  let all_tables = List.fold_left (fun acc ((table,_),_) -> table::acc) [t0] joins in
-  let env = { env with tables = env.tables @ all_tables; joined_schema = snd t0 } in
+  let all_tables = List.flatten (ts0 :: List.map (fun ((_,_,ts),_) -> ts) joins) in
+  let env = { env with tables = env.tables @ all_tables; joined_schema; } in
   List.fold_left do_join (env, p0) joins
 
 and params_of_assigns env ss =
@@ -267,15 +267,16 @@ and ensure_simple_expr = function
   | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
   | Select _ -> failwith "not implemented : ensure_simple_expr for SELECT"
 
-and eval_select env { columns; from; where; group; having; } =
+and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
     but can refer to attributes of tables through `tables` *)
   let env = { env with joined_schema = [] } in
-  let (env,p2) =
-    match from with
-    | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
-    | None -> env, []
-  in
+  match nested with
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
+  | None -> env, []
+
+and eval_select env { columns; from; where; group; having; } =
+  let (env,p2) = eval_nested env from in
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
     else if group = [] && exists_grouping columns then `One
@@ -287,14 +288,20 @@ and eval_select env { columns; from; where; group; having; } =
   let p5 = get_params_opt env having in
   (infer_schema env columns, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
 
+(** @return final schema, params and tables that can be referenced by outside scope *)
 and resolve_source env (x,alias) =
-  let src = match x with
-  | `Select select -> let (s,p,_,_) = eval_select env select in ("",s), p
-  | `Table s -> Tables.get s, []
-  in
-  match alias with
-  | Some name -> let ((_,s),p) = src in ((name,s),p)
-  | None -> src
+  match x with
+  | `Select select ->
+    let (s,p,_,_) = eval_select env select in
+    s, p, (match alias with None -> [] | Some name -> [name,s])
+  | `Nested s ->
+    let (env,p) = eval_nested env (Some s) in
+    let s = infer_schema env [All] in
+    if alias <> None then failwith "No alias allowed on nested tables";
+    s, p, env.tables
+  | `Table s ->
+    let (name,s) = Tables.get s in
+    s, [], [Option.default name alias, s]
 
 and eval_select_full env { select=(select,other); order; limit; } =
   let (s1,p1,tbls,cardinality) = eval_select env select in
@@ -315,12 +322,14 @@ and eval_select_full env { select=(select,other); order; limit; } =
   final_schema,(p1@(List.flatten p2l)@p3@p4), Stmt.Select cardinality
 
 
-let update_tables tables ss w =
-  let (tables,params) = List.split tables in
-  let env = { tables; joined_schema=cross @@ List.map snd tables; insert_schema=get_columns_schema tables (List.map fst ss); } in
+let update_tables sources ss w =
+  let joined_schema = cross @@ (List.map (fun (s,_,_) -> s) sources) in
+  let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
+  let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
+  let env = { tables; joined_schema; insert_schema=get_columns_schema tables (List.map fst ss); } in
   let p1 = params_of_assigns env ss in
   let p2 = get_params_opt env w in
-  (List.flatten params) @ p1 @ p2
+  p0 @ p1 @ p2
 
 let annotate_select select types =
   let (select1,compound) = select.select in
@@ -399,12 +408,13 @@ let eval (stmt:Sql.stmt) =
     in
     [], p, Other
   | Update (table,ss,w,o,lim) ->
-    let params = update_tables [Tables.get table,[]] ss w in
-    let p3 = params_of_order o [] [Tables.get table] in
+    let t = Tables.get table in
+    let params = update_tables [snd t,[],[t]] ss w in
+    let p3 = params_of_order o [] [t] in
     [], params @ p3 @ lim, Update (Some table)
   | UpdateMulti (tables,ss,w) ->
-    let tables = List.map (resolve_source empty_env) tables in
-    let params = update_tables tables ss w in
+    let sources = List.map (resolve_source empty_env) tables in
+    let params = update_tables sources ss w in
     [], params, Update None
   | Select select -> eval_select_full empty_env select
   | CreateRoutine _ ->
