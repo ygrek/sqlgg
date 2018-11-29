@@ -35,8 +35,10 @@ let parse_one (sql, props as x) =
      None
     end
   | exn ->
+(*     let bt = Printexc.get_raw_backtrace () in *)
     Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
     raise exn
+(*     Printexc.raise_with_backtrace exn bt *)
 
 let parse_one (sql,props as x) =
   match Props.get props "noparse" with
@@ -86,7 +88,7 @@ let get_statements ch =
       | None -> next ()
       | Some stmt ->
           if not (Sql.Schema.is_unique stmt.schema) then
-            Error.log "Error: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
+            Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
           stmt
       end
   in
