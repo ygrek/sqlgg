@@ -71,7 +71,10 @@ let main () =
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int (fun x -> Sqlgg_config.debug_level := x), "<N> set debug level";
-    "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := false), "do not put version header in generated output";
+    "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
+      "do not put version header in generated output";
+    "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
+      "do not put timestamp in version header in generated output";
     "-io", Arg.Set Sqlgg_config.gen_io, " generate code using monadic interface (e.g. for non-blocking queries)";
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";

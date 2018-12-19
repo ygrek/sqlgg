@@ -12,6 +12,6 @@ let set_debug_level n =
 
 let debug1 () = !debug_level > 0
 
-let gen_header = ref true
+let gen_header : [ `Full | `Without_timestamp ] option ref = ref (Some `Full)
 
 let gen_io = ref false
