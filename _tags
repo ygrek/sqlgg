@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 32bf20024ab7bd131229b573f9043ea1)
+# DO NOT EDIT (digest: 65f6906c7f92a4f73a84bf0185095bce)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -39,6 +39,10 @@ true: annot, bin_annot
 <src/*.ml{,i,y}>: use_sqlgg
 # Library sqlgg_traits
 "impl/ocaml/sqlgg_traits.cmxs": use_sqlgg_traits
+# Library sqlgg_mariadb
+"impl/ocaml/mariadb/sqlgg_mariadb.cmxs": use_sqlgg_mariadb
+<impl/ocaml/mariadb/*.ml{,i,y}>: package(mariadb)
+<impl/ocaml/mariadb/*.ml{,i,y}>: use_sqlgg_traits
 # Library sqlgg_mysql
 "impl/ocaml/mysql/sqlgg_mysql.cmxs": use_sqlgg_mysql
 <impl/ocaml/mysql/*.ml{,i,y}>: package(mysql)

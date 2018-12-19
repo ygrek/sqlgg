@@ -17,10 +17,20 @@ module type M = sig
   type 'a future
   val return : 'a -> 'a future
   val (>>=) : 'a future -> ('a -> 'b future) -> 'b future
+  val bracket : 'a future -> ('a -> unit future) -> ('a -> 'b future) -> 'b future
 end
 
 module Blocking : M with type 'a future = 'a = struct
+
   type 'a future = 'a
+
   let return x = x
+
   let (>>=) x f = f x
+
+  let bracket x dtor f =
+    let r = try f x with exn -> dtor x; raise exn in
+    dtor x;
+    r
+
 end

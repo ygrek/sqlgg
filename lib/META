@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 2b3ee9bfb4a2e545052f8a997ebfb1df)
+# DO NOT EDIT (digest: cffd481305a3ea2cd1e30445cbd4609a)
 version = "0.4.5"
 description = "SQL guided (code) generator"
 requires = "extlib ppx_deriving.std"
@@ -38,6 +38,17 @@ package "mysql" (
  archive(native) = "sqlgg_mysql.cmxa"
  archive(native, plugin) = "sqlgg_mysql.cmxs"
  exists_if = "sqlgg_mysql.cma"
+)
+
+package "mariadb" (
+ version = "0.4.5"
+ description = "SQL guided (code) generator"
+ requires = "mariadb sqlgg.traits"
+ archive(byte) = "sqlgg_mariadb.cma"
+ archive(byte, plugin) = "sqlgg_mariadb.cma"
+ archive(native) = "sqlgg_mariadb.cmxa"
+ archive(native, plugin) = "sqlgg_mariadb.cmxs"
+ exists_if = "sqlgg_mariadb.cma"
 )
 # OASIS_STOP
 

@@ -35,6 +35,10 @@ Library sqlgg_traits
   FindlibName: traits
   FindlibParent: sqlgg
 
+Flag mariadb
+  Description: Build mariadb traits implementation
+  Default: false
+
 Flag mysql
   Description: Build mysql traits implementation
   Default: false
@@ -42,6 +46,14 @@ Flag mysql
 Flag sqlite3
   Description: Build sqlite3 traits implementation
   Default: false
+
+Library sqlgg_mariadb
+  Build$: flag(mariadb)
+  Path: impl/ocaml/mariadb
+  Modules: Sqlgg_mariadb
+  BuildDepends: mariadb, sqlgg.traits
+  FindlibName: mariadb
+  FindlibParent: sqlgg
 
 Library sqlgg_mysql
   Build$: flag(mysql)

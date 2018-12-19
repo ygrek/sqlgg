@@ -9,6 +9,7 @@ build: [
     "setup.ml"
     "-configure"
     "--enable-tests"
+    "--%{mariadb:enable}%-mariadb"
     "--%{mysql:enable}%-mysql"
     "--%{sqlite3:enable}%-sqlite3"
     "--prefix" prefix
@@ -35,6 +36,7 @@ depends: [
   "ounit"
 ]
 depopts: [
+  "mariadb"
   "mysql"
   "sqlite3"
 ]
