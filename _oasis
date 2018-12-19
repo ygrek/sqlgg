@@ -31,7 +31,7 @@ Library sqlgg
 
 Library sqlgg_traits
   Path: impl/ocaml/
-  Modules: Sqlgg_traits
+  Modules: Sqlgg_traits, Sqlgg_io
   FindlibName: traits
   FindlibParent: sqlgg
 

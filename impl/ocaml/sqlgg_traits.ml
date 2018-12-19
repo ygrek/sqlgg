@@ -83,3 +83,21 @@ module type M = sig
   val execute : connection -> string -> (statement -> result) -> int64
 
 end
+
+module type M_io = sig
+
+  include M
+
+  module IO : Sqlgg_io.M
+
+  val finish_params : params -> result IO.future
+
+  val no_params : statement -> result IO.future
+
+  val select : connection -> string -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
+
+  val select1 : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
+
+  val execute : connection -> string -> (statement -> result IO.future) -> int64 IO.future
+
+end

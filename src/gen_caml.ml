@@ -138,15 +138,15 @@ let generate_stmt style index stmt =
   let params_binder_name = output_params_binder index stmt.params in
   if style = `Fold then output "let r_acc = ref acc in";
   if style = `List then output "let r_acc = ref [] in";
-  let callback =
+  let (bind, callback) =
     match style with
-    | `Fold -> sprintf "(fun x -> r_acc := %s x !r_acc);" callback
-    | `List -> sprintf "(fun x -> r_acc := %s x :: !r_acc);" callback
-    | `Direct -> callback (* or empty string *)
+    | `Fold -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x !r_acc))" callback
+    | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
+    | `Direct -> "", callback (* or empty string *)
   in
-  output "T.%s db %s %s %s" func sql params_binder_name callback;
-  if style = `Fold then output "!r_acc";
-  if style = `List then output "List.rev !r_acc";
+  output "%sT.%s db %s %s %s" bind func sql params_binder_name callback;
+  if style = `Fold then output "(fun () -> IO.return !r_acc)";
+  if style = `List then output "(fun () -> IO.return (List.rev !r_acc))";
   dec_indent ();
   empty_line ()
 
@@ -156,9 +156,16 @@ let generate () name stmts =
     String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
   in
 *)
-  output "module %s (T : Sqlgg_traits.M) = struct" (String.capitalize name);
+  let (traits, io) =
+    match !Sqlgg_config.gen_io with
+    | true -> "Sqlgg_traits.M_io", "T.IO"
+    | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
+  in
+  output "module %s (T : %s) = struct" (String.capitalize name) traits;
   empty_line ();
   inc_indent ();
+  output "module IO = %s" io;
+  empty_line ();
   List.iteri (generate_stmt `Direct) stmts;
   output "module Fold = struct";
   inc_indent ();
