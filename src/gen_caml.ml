@@ -101,10 +101,6 @@ let output_params_binder index params =
 
 let prepend prefix = function s -> prefix ^ s
 
-type t = unit
-
-let start () = ()
-
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
@@ -150,14 +146,14 @@ let generate_stmt style index stmt =
   dec_indent ();
   empty_line ()
 
-let generate () name stmts =
+let generate ~gen_io name stmts =
 (*
   let types =
     String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
   in
 *)
   let (traits, io) =
-    match !Sqlgg_config.gen_io with
+    match gen_io with
     | true -> "Sqlgg_traits.M_io", "T.IO"
     | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
   in
@@ -180,3 +176,24 @@ let generate () name stmts =
   output "end (* module List *)";
   dec_indent ();
   output "end (* module %s *)" (String.capitalize name)
+
+module Generator_base = struct
+
+  type t = unit
+
+  let start () = ()
+
+  let comment = comment
+
+  let empty_line = empty_line
+end
+
+module Generator = struct
+  include Generator_base
+  let generate () name stmts = generate ~gen_io:false name stmts
+end
+
+module Generator_io = struct
+  include Generator_base
+  let generate () name stmts = generate ~gen_io:true name stmts
+end

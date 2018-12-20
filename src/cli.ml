@@ -4,7 +4,8 @@ open Printf
 open ExtLib
 
 module Cxx = Gen.Make(Gen_cxx)
-module Caml = Gen.Make(Gen_caml)
+module Caml = Gen.Make(Gen_caml.Generator)
+module Caml_io = Gen.Make(Gen_caml.Generator_io)
 module Xml_gen = Gen.Make(Gen_xml)
 module Java = Gen.Make(Gen_java)
 module CSharp = Gen.Make(Gen_csharp)
@@ -21,6 +22,7 @@ let set_out s =
   match (String.lowercase s) with
   | "cxx" | "c++" | "cpp" -> Some Cxx.process
   | "caml" | "ocaml" | "ml" -> Some Caml.process
+  | "caml_io" -> Some Caml_io.process
   | "xml" -> Some Xml_gen.process
   | "java" -> Some Java.process
   | "csharp" | "c#" | "cs" -> Some CSharp.process
@@ -75,7 +77,6 @@ let main () =
       "do not put version header in generated output";
     "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
       "do not put timestamp in version header in generated output";
-    "-io", Arg.Set Sqlgg_config.gen_io, " generate code using monadic interface (e.g. for non-blocking queries)";
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
