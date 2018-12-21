@@ -57,12 +57,69 @@ struct
     let of_field = T.of_field
     let to_value = T.to_value
   end
-  module Bool = Make(struct type t = bool let of_field x = M.Field.int x <> 0 let to_value = function true -> `Int 1 | false -> `Int 0 end)
-  module Int = Make(struct type t = int64 let of_field x = Int64.of_int (M.Field.int x) let to_value x = `Int (Int64.to_int x) end)
-  module Text = Make(struct type t = string let of_field = M.Field.string let to_value x = `String x end)
-  module Float = Make(struct type t = float let of_field = M.Field.float let to_value x = `Float x end)
-  module Datetime = Make(struct type t = M.Time.t let of_field = M.Field.time let to_value x = `Time x end)
-  module Any = Make(struct type t = M.Field.value let of_field = M.Field.value let to_value x = x end)
+
+  let convfail expected field value =
+    let found =
+      match value with
+      | `Null -> "null"
+      | `Int x -> sprintf "int %d" x
+      | `Float x -> sprintf "float %f" x
+      | `String x -> sprintf "string %S" x
+      | `Bytes x -> sprintf "bytes %S" (Bytes.to_string x)
+      | `Time x ->
+      let open M.Time in
+      sprintf "time %04d-%02d-%02d %02d:%02d:%02d.%03d" (year x) (month x) (day x) (hour x) (minute x) (second x) (microsecond x)
+    in
+    ksprintf failwith "expected %s %s, but found %s" expected (M.Field.name field) found
+
+  module Int = Make(struct
+    type t = int64
+    let of_field field =
+      match M.Field.value field with
+      | `Int x -> Int64.of_int x
+      | `String x -> Int64.of_string x
+      | value -> convfail "int" field value
+    let to_value x = `Int (Int64.to_int x)
+  end)
+
+  module Bool = Make(struct
+    type t = bool
+    let of_field field = Int.of_field field <> 0L
+    let to_value = function true -> `Int 1 | false -> `Int 0
+  end)
+
+  module Float = Make(struct
+    type t = float
+    let of_field field =
+      match M.Field.value field with
+      | `Int x -> float_of_int x
+      | `Float x -> x
+      | `String x -> float_of_string x
+      | value -> convfail "float" field value
+    let to_value x = `Float x
+  end)
+
+  module Text = Make(struct
+    type t = string
+    let of_field field =
+      match M.Field.value field with
+      | `String x -> x
+      | `Bytes x -> Bytes.to_string x
+      | value -> convfail "string" field value
+    let to_value x = `String x
+  end)
+
+  module Datetime = Make(struct
+    type t = M.Time.t
+    let of_field = M.Field.time
+    let to_value x = `Time x
+  end)
+
+  module Any = Make(struct
+    type t = M.Field.value
+    let of_field = M.Field.value
+    let to_value x = x
+  end)
 end
 
 module Make
