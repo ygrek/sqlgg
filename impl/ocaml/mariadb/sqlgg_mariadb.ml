@@ -26,12 +26,13 @@ end
 module type Types = sig
   type field
   type value
-  module Bool : Value with type field = field and type value = value
-  module Int : Value with type field = field and type value = value
-  module Float : Value with type field = field and type value = value
-  module Text : Value with type field = field and type value = value
-  module Datetime : Value with type field = field and type value = value
-  module Any : Value with type field = field and type value = value
+  module type Value = Value with type field = field and type value = value
+  module Bool : Value
+  module Int : Value
+  module Float : Value
+  module Text : Value
+  module Datetime : Value
+  module Any : Value
 end
 
 module Default_types(M : Mariadb.Nonblocking.S) : Types with
@@ -46,10 +47,9 @@ module Default_types(M : Mariadb.Nonblocking.S) : Types with
 struct
   type field = M.Field.t
   type value = M.Field.value
+  module type Value = Value with type field = field and type value = value
   module Make(T : sig type t val of_field : field -> t val to_value : t -> value end) : Value with
-    type t = T.t and
-    type field = field and
-    type value = value =
+    type t = T.t =
   struct
     type t = T.t
     type nonrec field = field
