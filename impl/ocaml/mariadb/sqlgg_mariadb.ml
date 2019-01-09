@@ -228,4 +228,4 @@ let select1 db sql set_params callback =
 end
 
 module Default(IO : Sqlgg_io.M)(M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
-  Make(IO)(M)
+  Make(IO)(M)(Default_types(M))
