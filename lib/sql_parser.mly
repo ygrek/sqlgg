@@ -36,7 +36,7 @@
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
-       OF WITH NOWAIT ACTION NO IS INTERVAL
+       OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -330,6 +330,9 @@ expr:
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | PARAM { Param ($1,Any) }
+    | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
+    | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
+    | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
