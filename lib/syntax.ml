@@ -292,7 +292,7 @@ and eval_select env { columns; from; where; group; having; } =
 and resolve_source env (x,alias) =
   match x with
   | `Select select ->
-    let (s,p,_,_) = eval_select env select in
+    let (s,p,_) = eval_select_full env select in
     s, p, (match alias with None -> [] | Some name -> [name,s])
   | `Nested s ->
     let (env,p) = eval_nested env (Some s) in

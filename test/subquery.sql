@@ -17,3 +17,17 @@ LEFT JOIN `detail` d ON d.`id` = (
   ORDER BY dd.`id` DESC
   LIMIT 1
 );
+
+SELECT x.* FROM (
+  SELECT 1, 'foo', NULL
+) x;
+
+SELECT x.* FROM (
+  SELECT 1, 2 UNION
+  SELECT 3, 4
+) x;
+
+SELECT x.* FROM (
+  SELECT 'foo' UNION ALL
+  SELECT 'foo'
+) x;

@@ -216,7 +216,7 @@ type col_name = {
 }
 and limit = (param_id * Type.t) list * bool
 and nested = source * (source * join_cond) list
-and source1 = [ `Select of select | `Table of string | `Nested of nested ]
+and source1 = [ `Select of select_full | `Table of string | `Nested of nested ]
 and source = source1 * string option
 and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
 and select = {

@@ -16,4 +16,25 @@
    <value name="d_id" type="Int"/>
   </out>
  </stmt>
+ <stmt name="select_3" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 'foo', NULL&#x0A;) x" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Int"/>
+   <value name="_1" type="Text"/>
+   <value name="_2" type="Any"/>
+  </out>
+ </stmt>
+ <stmt name="select_4" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 2 UNION&#x0A;  SELECT 3, 4&#x0A;) x" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Int"/>
+   <value name="_1" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_5" sql="SELECT x.* FROM (&#x0A;  SELECT 'foo' UNION ALL&#x0A;  SELECT 'foo'&#x0A;) x" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
 </sqlgg>
