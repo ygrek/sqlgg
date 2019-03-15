@@ -259,7 +259,9 @@ ruleMain = parse
   | "-" { MINUS }
 
   | "/" | "%" { NUM_DIV_OP }
-  | "<<" | ">>" | "|" | "&" { NUM_BIT_OP }
+  | "<<" | ">>" { NUM_BIT_SHIFT }
+  | "|" { NUM_BIT_OR }
+  | "&" { NUM_BIT_AND }
   | ">" | ">=" | "<=" | "<" { NUM_CMP_OP }
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
