@@ -202,4 +202,15 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="create_issue63" sql="create table issue63 ( x text, y text )" kind="create" target="issue63" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="issue63" sql="select * from issue63 where x like 'hello%' or y like 'world%'" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="x" type="Text"/>
+   <value name="y" type="Text"/>
+  </out>
+ </stmt>
 </sqlgg>

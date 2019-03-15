@@ -76,3 +76,7 @@ CREATE TABLE workareas (work_id int, about text);
 delete from test
 where x in (@x1, @x2)
   and not exists (select 1 from workareas where work_id = test.x);
+
+create table issue63 ( x text, y text );
+-- @issue63
+select * from issue63 where x like 'hello%' or y like 'world%';

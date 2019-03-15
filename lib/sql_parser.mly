@@ -318,16 +318,18 @@ attr_name: cname=IDENT { { cname; tname=None} }
 
 distinct_from: DISTINCT FROM { }
 
+like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun ((fixed Bool [Text; Text]), [e1;e2]) }
+
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
     | expr boolean_bin_op expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
     | expr CONCAT_OP expr { Fun ((fixed Text [Text;Text]),[$1;$3]) }
-    | e1=expr mnot(like) e2=expr e3=escape?
+    | e=like_expr esc=escape?
       {
-        match e3 with
-        | None -> Fun ((fixed Bool [Text; Text]), [e1;e2])
-        | Some e3 -> Fun ((fixed Bool [Text; Text; Text]), [e1;e2;e3])
+        match esc with
+        | None -> e
+        | Some esc -> Fun ((fixed Bool [Bool; Text]), [e;esc])
       }
     | unary_op expr { $2 }
     | MINUS expr %prec UNARY_MINUS { $2 }
