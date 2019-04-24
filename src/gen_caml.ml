@@ -7,6 +7,98 @@ open Printf
 open Gen
 open Sql
 
+module Name = struct
+
+(* http://caml.inria.fr/pub/docs/manual-ocaml-4.07/manual049.html *)
+let reserved = [
+"and";
+"as";
+"asr";
+"assert";
+"begin";
+"class";
+"constraint";
+"do";
+"done";
+"downto";
+"else";
+"end";
+"exception";
+"external";
+"false";
+"for";
+"fun";
+"function";
+"functor";
+"if";
+"in";
+"include";
+"inherit";
+"initializer";
+"land";
+"lazy";
+"let";
+"lor";
+"lsl";
+"lsr";
+"lxor";
+"match";
+"method";
+"mod";
+"module";
+"mutable";
+"new";
+"nonrec";
+"object";
+"of";
+"open!";
+"open";
+"or";
+"private";
+"rec";
+"sig";
+"struct";
+"then";
+"to";
+"true";
+"try";
+"type";
+"val";
+"virtual";
+"when";
+"while";
+"with";
+]
+
+let ident ~prefix name =
+  assert (prefix <> "");
+  match name with
+  | "" -> prefix
+  | _ ->
+  if List.mem name reserved then
+    name ^ "_"
+  else
+    let name = String.map (function ('a'..'z' | 'A'..'Z' | '0'..'9' as c) -> c | _ -> '_') name in
+    match name.[0] with
+    | '0'..'9' | '_' -> prefix ^ name
+    | _ -> String.uncapitalize_ascii name
+
+let idents ~prefix l =
+  let rec choose acc base n =
+    let name = sprintf "%s%d" base n in
+    if List.mem name acc then choose acc base (n+1) else name
+  in
+  let rec loop acc = function
+  | [] -> List.rev acc
+  | x::xs ->
+    let x = ident ~prefix x in
+    let x = if List.mem x acc then choose acc x 0 else x in
+    loop (x::acc) xs
+  in
+  loop [] l
+
+end
+
 let inline_values = String.concat " "
 
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
@@ -47,10 +139,11 @@ open T
 let output_schema_binder _ schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
+  let args = Name.idents ~prefix:"r" (List.map (fun a -> a.name) schema) in
+  let values = List.mapi get_column schema in
   indented (fun () ->
     output "callback";
-    indented (fun () ->
-      List.iteri (fun i a -> output "%s" (get_column i a)) schema));
+    indented (fun () -> List.iter2 (output "~%s:%s") args values));
   output "in";
   name
 
