@@ -19,12 +19,13 @@ $SQLGG -gen csharp -params unnamed demo_mysql.sql > demo_csharp_gen.cs
 
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx demo_cxx.cpp -lsqlite3
 
+cp ../impl/ocaml/sqlgg_io.ml .
 cp ../impl/ocaml/sqlgg_traits.ml .
 cp ../impl/ocaml/sqlite3/sqlgg_sqlite3.ml .
 cp ../impl/ocaml/mysql/sqlgg_mysql.ml .
-ocamlfind c -linkpkg -package sqlite3 -w Alse -g -o demo_caml sqlgg_sqlite3.ml sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
+ocamlfind c -linkpkg -package sqlite3 -w Alse -g -o demo_caml sqlgg_sqlite3.ml sqlgg_io.ml sqlgg_traits.ml demo_caml_gen.ml demo_caml.ml
 # requires ocaml-mysql >= 1.1.0
-ocamlfind c -linkpkg -package mysql -w Alse -g -o demo_caml_mysql sqlgg_mysql.ml sqlgg_traits.ml demo_caml_gen_mysql.ml demo_caml_mysql.ml
+ocamlfind c -linkpkg -package mysql -w Alse -g -o demo_caml_mysql sqlgg_mysql.ml sqlgg_io.ml sqlgg_traits.ml demo_caml_gen_mysql.ml demo_caml_mysql.ml
 
 g++ -Wall -DSQLGG_DEBUG -g -o demo_cxx_mysql demo_cxx_mysql.cpp -lmariadbclient
 

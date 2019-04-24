@@ -28,15 +28,15 @@ let main () =
 
   (* summarize by person and output *)
   print_endline "Total transfers:";
-  G.calc_total db (printf "%s = %Lu\n");
-  printf "Total total: %Lu\n" (G.Fold.calc_total db (fun _ -> Int64.add) 0L);
+  G.calc_total db (fun ~fullname ~total -> printf "%s = %Lu\n" fullname total);
+  printf "Total total: %Lu\n" (G.Fold.calc_total db (fun ~fullname:_ ~total acc -> Int64.add acc total) 0L);
 
   (* list donors *)
   print_endline "Donors:";
-  G.list_donors db "petrov" 100L print_endline;
+  G.list_donors db "petrov" 100L (fun ~surname:s -> print_endline s);
 
   (* properly close database *)
-  db_close(db);
+  db_close db;
 
   ()
 
