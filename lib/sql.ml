@@ -210,8 +210,11 @@ let print_table out (name,schema) =
 type param_id = string option * (int * int) [@@deriving show]
 type param = param_id * Type.t [@@deriving show]
 type params = param list [@@deriving show]
-
-let params_to_string = show_params
+type var =
+| Single of param
+| Choice of param_id * (param_id * var list option) list
+[@@deriving show]
+type vars = var list [@@deriving show]
 
 type alter_pos = [ `After of string | `Default | `First ]
 type alter_action = [
@@ -231,7 +234,7 @@ type col_name = {
   cname : string; (** column name *)
   tname : string option; (** table name *)
 }
-and limit = (param_id * Type.t) list * bool
+and limit = param list * bool
 and nested = source * (source * join_cond) list
 and source1 = [ `Select of select_full | `Table of string | `Nested of nested ]
 and source = source1 * string option
@@ -248,9 +251,11 @@ and select_full = {
   order : expr list;
   limit : limit option;
 }
+and 'expr choices = (param_id * 'expr option) list
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
+  | Choices of param_id * expr choices
   | Fun of Type.func * expr list (** parameters *)
   | Select of select_full * [ `AsValue | `Exists ]
   | Column of col_name
@@ -265,6 +270,7 @@ type columns = column list [@@deriving show]
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
+            | `Choice of param_id * expr_q choices
             | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]
             [@@deriving show]

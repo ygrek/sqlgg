@@ -248,6 +248,8 @@ ruleMain = parse
   | ')'		{ RPAREN }
   | ','   { COMMA }
   | '.'   { DOT }
+  | '{'   { LCURLY (lexeme_start lexbuf) }
+  | '}'   { RCURLY (lexeme_start lexbuf) }
 
   | cmnt { ignore (ruleComment "" lexbuf); ruleMain lexbuf }
   | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleMain lexbuf }

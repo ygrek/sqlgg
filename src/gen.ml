@@ -7,7 +7,7 @@ open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
-type stmt = { schema : Sql.Schema.t; params : Sql.params; kind : kind; props : Props.t; }
+type stmt = { schema : Sql.Schema.t; vars : Sql.var list; kind : kind; props : Props.t; }
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -31,10 +31,14 @@ let name_of attr index =
   | "" -> sprintf "_%u" index
   | s -> s
 
-let param_name_to_string ((name,_):Sql.param_id) index =
+let make_param_name index ((name,_):Sql.param_id) =
   match name with
   | None -> sprintf "_%u" index
   | Some s -> s
+
+let show_param_name (p:Sql.param) index = make_param_name index (fst p)
+
+let param_type = snd
 
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
@@ -63,35 +67,63 @@ let choose_name props kind index =
   in
   make_name props name
 
-let substitute_params s params f =
-  let index = ref 0 in
-  let b = Buffer.create (String.length s) in
-  let last = List.fold_left (fun i ((_,(i1,i2)),_ as param) ->
-    let prefix = String.slice ~first:i ~last:i1 s in
-    Buffer.add_string b prefix;
-    Buffer.add_string b (f !index param);
-    incr index;
-    i2) 0 params in
-  Buffer.add_string b (String.slice ~first:last s);
-  Buffer.contents b
+type sql = Static of string | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
 
-let subst_named index (id,_) = "@" ^ (param_name_to_string id index)
-let subst_oracle index (id,_) = ":" ^ (param_name_to_string id index)
+let substitute_vars s vars subst_param =
+  let rec loop acc i parami vars =
+    match vars with
+    | [] -> acc, i
+    | Sql.Single ((_,(i1,i2)),_ as param) :: tl ->
+      let acc, parami =
+        match subst_param with
+        | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
+        | Some subst ->
+          Static (subst parami param) ::
+          Static (String.slice ~first:i ~last:i1 s) ::
+          acc,
+          parami + 1
+      in
+      loop acc i2 parami tl
+    | Choice ((_,(i1,i2) as name),ctors) :: tl ->
+      let acc = Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let acc = Dynamic (name, ctors |> List.map (fun ((_,(c1,c2) as ctor),args) -> ctor, args, match args with None -> [Static ""] | Some l ->
+        let (acc,last) = loop [] c1 0 l in
+        List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc))) :: acc
+      in
+      loop acc i2 parami tl
+  in
+  let (acc,last) = loop [] 0 0 vars in
+  let acc = List.rev (Static (String.slice ~first:last s) :: acc) in
+  let rec squash acc = function
+  | [] -> List.rev acc
+  | Static s1 :: Static s2 :: tl -> squash acc (Static (s1 ^ s2) :: tl)
+  | x::xs -> squash (x::acc) xs
+  in
+  squash [] acc
+
+let subst_named index p = "@" ^ (show_param_name p index)
+let subst_oracle index p = ":" ^ (show_param_name p index)
 let subst_postgresql index _ = "$" ^ string_of_int (index + 1)
 let subst_unnamed _ _ = "?"
 
 let get_sql stmt =
   let sql = Props.get stmt.props "sql" |> Option.get in
-  match !params_mode with
-  | None -> sql
-  | Some subst ->
-    let f = match subst with
-    | Named -> subst_named
-    | Unnamed -> subst_unnamed
-    | Oracle -> subst_oracle
-    | PostgreSQL -> subst_postgresql
-    in
-    substitute_params sql stmt.params f
+  let subst =
+    match !params_mode with
+    | None -> None
+    | Some subst ->
+      Some (match subst with
+      | Named -> subst_named
+      | Unnamed -> subst_unnamed
+      | Oracle -> subst_oracle
+      | PostgreSQL -> subst_postgresql)
+  in
+  substitute_vars sql stmt.vars subst
+
+let get_sql_string_only stmt =
+  match get_sql stmt with
+  | Static s :: [] -> s
+  | _ -> fail "dynamic choices not supported for this language"
 
 let time_string () =
   let module U = Unix in
@@ -107,14 +139,18 @@ end
 
 module Translate(T : LangTypes) = struct
 
-let param_type_to_string = T.as_api_type
+let show_param_type (_,t) = T.as_api_type t
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.Sql.domain)
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values l =
-  l |> List.mapi (fun i (n,t) -> param_name_to_string n i, T.as_lang_type t)
+  l |> List.mapi (fun i p -> show_param_name p i, T.as_lang_type @@ param_type p)
   |> List.unique ~cmp:(fun (n1,_) (n2,_) -> String.equal n1 n2)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
-let params_to_values = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
+let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
+let names_of_vars l =
+  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single (id,_) -> id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
+
+let params_only = List.map (function Sql.Single p -> p | Choice _ -> fail "dynamic choices not supported for this host language")
 
 end
 

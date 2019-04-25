@@ -79,9 +79,9 @@ let set_param name index param =
   let (id,t) = param in
   output "pstmt_%s.set%s(%u, %s);"
     name
-    (t |> param_type_to_string |> String.capitalize)
+    (t |> Sql.Type.show |> String.capitalize)
     (index+1)
-    (param_name_to_string id index)
+    (make_param_name index id)
 
 let output_params_binder name _ params = List.iteri (set_param name) params
 
@@ -90,9 +90,10 @@ type t = unit
 let start () = ()
 
 let generate_code index stmt =
-   let values = params_to_values stmt.params in
+   let params = params_only stmt.vars in
+   let values = values_of_params params in
    let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt) in
+   let sql = quote (get_sql_string_only stmt) in
    output "PreparedStatement pstmt_%s;" name;
    empty_line ();
    let schema_binder_name = output_schema_binder name index stmt.schema in
@@ -101,7 +102,7 @@ let generate_code index stmt =
    G.func "public int" name all_params ~tail:"throws SQLException" (fun () ->
       output "if (null == pstmt_%s)" name;
       output "  pstmt_%s = db.prepareStatement(%s);" name sql;
-      output_params_binder name index stmt.params;
+      output_params_binder name index params;
       begin match schema_binder_name with
       | None -> output "return pstmt_%s.executeUpdate();" name
       | Some _ ->

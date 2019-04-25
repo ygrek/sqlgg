@@ -27,3 +27,5 @@ CREATE TABLE zuzu AS
 SELECT x,z FROM (SELECT name as x,
   city || ' ' || descr as "y""",
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
+
+SELECT name FROM test WHERE @where{ {id=@id} | {name LIKE @name} | None };

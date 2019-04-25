@@ -28,7 +28,7 @@ module S = Sqlite3
 
 type statement = S.stmt * string
 type connection = S.db
-type params = statement
+type params = statement * int * int ref
 type row = statement
 type result = unit
 
@@ -66,19 +66,21 @@ let test_ok sql rc =
   if rc <> S.Rc.OK then
     raise (Oops (sprintf "test_ok %s for %s" (S.Rc.to_string rc) sql))
 
-let bind_param d (stmt,sql) index =
-  let rc = S.bind stmt (index+1) d in
+let bind_param d ((stmt,sql),nr_params,index) =
+  assert (!index < nr_params);
+  let rc = S.bind stmt (!index+1) d in
+  incr index;
   test_ok sql rc
 
-let start_params stmt _ = stmt
-let finish_params _ = ()
+let start_params stmt n = (stmt, n, ref 0)
+let finish_params (_,n,index) = assert (n = !index); ()
 
 let set_param_null = bind_param S.Data.NULL
-let set_param_Text stmt index v = bind_param (S.Data.TEXT v) stmt index
+let set_param_Text stmt v = bind_param (S.Data.TEXT v) stmt
 let set_param_Any = set_param_Text
-let set_param_Bool stmt index v = bind_param (S.Data.INT (if v then 1L else 0L)) stmt index
-let set_param_Int stmt index v = bind_param (S.Data.INT v) stmt index
-let set_param_Float stmt index v = bind_param (S.Data.FLOAT v) stmt index
+let set_param_Bool stmt v = bind_param (S.Data.INT (if v then 1L else 0L)) stmt
+let set_param_Int stmt v = bind_param (S.Data.INT v) stmt
+let set_param_Float stmt v = bind_param (S.Data.FLOAT v) stmt
 let set_param_Datetime = set_param_Float
 
 let no_params _ = ()

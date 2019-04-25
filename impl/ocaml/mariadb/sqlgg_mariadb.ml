@@ -132,7 +132,7 @@ module IO = IO
 
 type statement = M.Stmt.t
 type connection = M.t
-type params = statement * M.Field.value array
+type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
 type result = M.Res.t
 
@@ -164,17 +164,18 @@ let get_column_Float = get_column_ty "Float" Float.of_field
 let get_column_Datetime = get_column_ty "Datetime" Datetime.of_field
 let get_column_Any = get_column_ty "Any" Any.of_field
 
-let bind_param data (_, params) index = params.(index) <- data
+let bind_param data (_, params, index) = assert (!index < Array.length params); params.(!index) <- data; incr index
 
-let start_params stmt n = (stmt, Array.make n `Null)
-let finish_params (stmt, params) =
+let start_params stmt n = (stmt, Array.make n `Null, ref 0)
+let finish_params (stmt, params, index) =
+  assert (!index = Array.length params);
   let open IO in
   M.Stmt.execute stmt params >>=
   check
 
-let set_param_ty f = fun (p: params) index v -> bind_param (f v) p index
+let set_param_ty f = fun (p: params) v -> bind_param (f v) p
 
-let set_param_null stmt index = bind_param `Null stmt index
+let set_param_null stmt = bind_param `Null stmt
 let set_param_Text = set_param_ty Text.to_value
 let set_param_Any = set_param_ty Any.to_value
 let set_param_Bool = set_param_ty Bool.to_value

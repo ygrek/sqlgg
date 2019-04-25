@@ -84,7 +84,8 @@ type t = unit
 let start () = ()
 
 let func_execute index stmt =
-    let values = params_to_values stmt.params in
+    let params = params_only stmt.vars in
+    let values = values_of_params params in
     let schema_binder_name = output_schema_binder index stmt.schema in
     let is_select = Option.is_some schema_binder_name in
     let doc = if is_select then ["result", schema_to_string stmt.schema] else [] in
@@ -170,7 +171,7 @@ let func_execute index stmt =
 
 let generate_code index stmt =
    let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt) in
+   let sql = quote (get_sql_string_only stmt) in
    start_class name;
     output "IDbCommand _cmd;";
     output "IDbConnection _conn;";

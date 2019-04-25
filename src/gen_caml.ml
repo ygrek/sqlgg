@@ -168,43 +168,102 @@ let is_callback stmt =
   | _, Stmt.Select (`Zero_one | `One) -> false
   | _ -> true
 
-let params_to_values = List.map fst $ params_to_values
+let list_separate f l =
+  let a = ref [] in
+  let b = ref [] in
+  List.iter (fun x -> match f x with `Left x -> tuck a x | `Right x -> tuck b x) l;
+  List.rev !a, List.rev !b
+
+let make_variant_name i (name,_) =
+  "`" ^ match name with
+  | None -> sprintf "V_%d" i
+  | Some n -> String.capitalize_ascii n
+
+let match_variant_wildcard i name args =
+  sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
 
 let set_param index param =
-  let (id,t) = param in
-  output "T.set_param_%s p %u %s;"
-    (param_type_to_string t)
-    index
-    (param_name_to_string id index)
+  output "T.set_param_%s p %s;"
+    (show_param_type param)
+    (show_param_name param index)
 
-let output_params_binder _ params =
+let rec set_var index var =
+  match var with
+  | Single p -> set_param index p
+  | Choice (name,ctors) ->
+    output "begin match %s with " (make_param_name index name);
+    ctors |> List.iteri begin fun i (name,args) ->
+      output "| %s%s -> %s"
+        (make_variant_name i name)
+        (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
+        (match args with Some [] | None -> "()" | Some _ -> "");
+      inc_indent ();
+      List.iter (set_var index) (Option.default [] args);
+      dec_indent ()
+    end;
+    output "end;"
+
+let rec eval_count_params vars =
+  let (static,choices) = list_separate (function Single _ -> `Left () | Choice (name,c) -> `Right (name, c)) vars in
+  string_of_int (List.length static) ^
+  match choices with
+  | [] -> ""
+  | _ ->
+  choices |> List.mapi begin fun i (name,ctors) ->
+    sprintf " + (match %s with " (make_param_name i name) ^
+    (ctors |> List.mapi (fun i (name,args) -> sprintf "%s -> %s" (match_variant_wildcard i name args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+    ^ ")"
+  end |> String.concat ""
+
+let output_params_binder _ vars =
   output "let set_params stmt =";
   inc_indent ();
-  output "let p = T.start_params stmt %u in" (List.length params);
-  List.iteri set_param params;
+  output "let p = T.start_params stmt (%s) in" (eval_count_params vars);
+  List.iteri set_var vars;
   output "T.finish_params p";
   dec_indent ();
   output "in";
   "set_params"
 
-let output_params_binder index params =
-  match params with
+let output_params_binder index vars =
+  match vars with
   | [] -> "T.no_params"
-  | _ -> output_params_binder index params
+  | _ -> output_params_binder index vars
 
 let prepend prefix = function s -> prefix ^ s
+
+let make_sql l =
+  let b = Buffer.create 100 in
+  let rec loop app = function
+    | [] -> ()
+    | Static "" :: tl when app -> loop app tl
+    | Static s :: tl ->
+      if app then bprintf b " ^ ";
+      Buffer.add_string b (quote s);
+      loop true tl
+    | Dynamic (name, ctors) :: tl ->
+      if app then bprintf b " ^ ";
+      bprintf b "(match %s with" (make_param_name 0 name);
+      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_wildcard i name args); loop false l);
+      bprintf b ")";
+      loop true tl
+  in
+  Buffer.add_string b "(";
+  loop false l;
+  Buffer.add_string b ")";
+  Buffer.contents b
 
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
-  let values = (subst @ params_to_values stmt.params) |> List.map (prepend "~") |> inline_values in
+  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
   | _ ->
-  let all_params = values ^ (if style = `List || is_callback stmt then " callback" else "") ^ (if style = `Fold then " acc" else "") in
-  output "let %s db %s =" name all_params;
+  let all_inputs = inputs ^ (if style = `List || is_callback stmt then " callback" else "") ^ (if style = `Fold then " acc" else "") in
+  output "let %s db %s =" name all_inputs;
   inc_indent ();
-  let sql = quote (get_sql stmt) in
+  let sql = make_sql @@ get_sql stmt in
   let sql = match subst with
   | [] -> sql
   | vars ->
@@ -224,7 +283,7 @@ let generate_stmt style index stmt =
     "__sqlgg_sql"
   in
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
-  let params_binder_name = output_params_binder index stmt.params in
+  let params_binder_name = output_params_binder index stmt.vars in
   if style = `Fold then output "let r_acc = ref acc in";
   if style = `List then output "let r_acc = ref [] in";
   let (bind, callback) =

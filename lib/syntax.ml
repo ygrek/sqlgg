@@ -28,14 +28,13 @@ let values_or_all table names =
   | Some names -> Schema.project names schema
   | None -> schema
 
-let list_filter_map = ExtList.List.filter_map
-
-let get_params_q e =
+let rec get_params_q (e:expr_q) =
   let rec loop acc e =
     match e with
-    | `Param p -> p::acc
+    | `Param p -> Single p::acc
     | `Func (_,l) -> List.fold_left loop acc l
     | `Value _ -> acc
+    | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> n, Option.map get_params_q e) l) :: acc
   in
   loop [] e |> List.rev
 
@@ -45,6 +44,7 @@ let rec is_grouping = function
 | Column _
 | Select _
 | Inserted _ -> false
+| Choices _ -> fail "is_grouping Choice TBD"
 | Fun (func,args) ->
   (* grouping function of zero or single parameter or function on grouping result *)
   (Type.is_grouping func && List.length args <= 1) || List.exists is_grouping args
@@ -91,10 +91,11 @@ let rec resolve_columns env expr =
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       `Value attr.domain
     | Param x -> `Param x
+    | Choices (n,l) -> `Choice (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun (r,l) ->
       `Func (r,List.map each l)
     | Select (select, usage) ->
-      let as_params = List.map (fun x -> `Param x) in
+      let as_params p = List.map (function Single p -> `Param p | Choice _ -> fail "FIXME as_params") p in
       let (schema,p,_) = eval_select_full env select in
       match schema, usage with
       | [ {domain;_} ], `AsValue -> `Func (Type.Ret domain, as_params p)
@@ -105,10 +106,20 @@ let rec resolve_columns env expr =
 
 (** assign types to parameters where possible *)
 and assign_types expr =
+  let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
   let rec typeof (e:expr_q) = (* FIXME simplify *)
     match e with
     | `Value t -> e, t
     | `Param (_,t) -> e, t
+    | `Choice (n,l) ->
+      let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
+      let t =
+        match List.filter_map identity t with
+        | [] -> assert false
+        | t::ts ->
+          List.fold_left (fun acc t -> match Type.common_subtype acc t with None -> fail "no common subtype for all choice branches" | Some t -> t) t ts
+      in
+      `Choice (n, List.map2 (fun (n,_) e -> n,e) l e), t
     | `Func (func,params) ->
         let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
@@ -262,6 +273,7 @@ and params_of_order o final_schema tables =
 and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
+  | Choices _ -> fail "ensure_simple_expr Choices TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
@@ -314,12 +326,12 @@ and eval_select_full env { select=(select,other); order; limit; } =
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
   let p3 = params_of_order order final_schema tbls in
-  let (p4,limit1) = match limit with | Some x -> x | None -> [],false in
+  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single p) p, x | None -> [],false in
   (*                 Schema.check_unique schema; *)
   let cardinality =
     if limit1 && cardinality = `Nat then `Zero_one
                                     else cardinality in
-  final_schema,(p1@(List.flatten p2l)@p3@p4), Stmt.Select cardinality
+  final_schema,(p1@(List.flatten p2l)@p3@p4 : var list), Stmt.Select cardinality
 
 
 let update_tables sources ss w =
@@ -417,7 +429,7 @@ let eval (stmt:Sql.stmt) =
     let t = Tables.get table in
     let params = update_tables [snd t,[],[t]] ss w in
     let p3 = params_of_order o [] [t] in
-    [], params @ p3 @ lim, Update (Some table)
+    [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (resolve_source empty_env) tables in
     let params = update_tables sources ss w in
@@ -426,11 +438,18 @@ let eval (stmt:Sql.stmt) =
   | CreateRoutine _ ->
     [], [], Other
 
+(* FIXME unify each choice separately *)
 let unify_params l =
   let h = Hashtbl.create 10 in
-  l |> List.iter begin fun ((name,_loc),t) ->
+  let h_choices = Hashtbl.create 10 in
+  let check_choice_name = function
+  | None -> () (* unique *)
+  | Some n when Hashtbl.mem h_choices n -> fail "sharing choices not implemented"
+  | Some n -> Hashtbl.add h_choices n ()
+  in
+  let remember name t =
     match name with
-    | None -> ()
+    | None -> () (* anonymous ie non-shared *)
     | Some name ->
     match Hashtbl.find h name with
     | exception _ -> Hashtbl.add h name t
@@ -438,8 +457,18 @@ let unify_params l =
     match Sql.Type.common_subtype t t' with
     | Some x -> Hashtbl.replace h name x
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
-  end;
-  l |> List.map (function ((None,_),_ as x) -> x | ((Some name,_ as id),_) -> id, try Hashtbl.find h name with _ -> assert false)
+  in
+  let rec traverse = function
+  | Single ((name,_loc),t) -> remember name t
+  | Choice (n,l) -> check_choice_name (fst n); List.iter (fun (_,l) -> Option.may (List.iter traverse) l) l
+  in
+  let rec map = function
+  | Single ((None,_),_ as x) -> Single x
+  | Single ((Some name,_ as id),_) -> Single (id, (try Hashtbl.find h name with _ -> assert false))
+  | Choice (id, l) -> Choice (id, List.map (fun (n,l) -> n, Option.map (List.map map) l) l)
+  in
+  List.iter traverse l;
+  List.map map l
 
 let is_alpha = function
 | 'a'..'z' -> true
@@ -483,7 +512,7 @@ let complete_sql kind sql =
       let attr_ref = "@" ^ attr_name in
       let pos_start = B.length b + String.length attr_ref_prefix in
       let pos_end = pos_start + String.length attr_ref in
-      let param = ((Some attr_name,(pos_start,pos_end)),attr.Sql.domain) in
+      let param = Single ((Some attr_name,(pos_start,pos_end)),attr.Sql.domain) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

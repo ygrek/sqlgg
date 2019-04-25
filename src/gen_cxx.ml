@@ -69,7 +69,7 @@ let set_param arg index param =
   output "Traits::set_param(%s, %s, %u);"
 (*     (param_type_to_string t) *)
     arg
-    (param_name_to_string id index)
+    (make_param_name index id)
     index
 
 let output_value_defs vals =
@@ -140,7 +140,7 @@ let struct_ctor name values k =
 let output_params_binder _ params =
   out_private ();
   let name = "params" in
-  let values = params_to_values params in
+  let values = values_of_params params in
   struct_ctor name (make_const_values values) (fun () ->
     comment () "binding slots in a query (one param may be bound several times)";
     output "enum { count = %u };" (List.length params);
@@ -163,15 +163,16 @@ let start () = ()
 
 let make_stmt index stmt =
    let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql stmt) in
+   let sql = quote (get_sql_string_only stmt) in
+   let params = params_only stmt.vars in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) identity;
    let schema_binder_name = output_schema_binder index stmt.schema in
-   let params_binder_name = output_params_binder index stmt.params in
+   let params_binder_name = output_params_binder index params in
 (*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
    out_public ();
    if (Option.is_some schema_binder_name) then output "template<class T>";
-   let values = params_to_values stmt.params in
+   let values = values_of_params params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T"] in
    let all_params = (make_const_values values) @ result in
    let inline_params = Values.inline (make_const_values values) in

@@ -62,7 +62,7 @@ module Make_(T : Types) = struct
 
 type statement = P.stmt
 type connection = Mysql.dbd
-type params = statement * string array
+type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
 
@@ -91,17 +91,17 @@ let get_column_Float = get_column_ty "Float" Float.of_string
 let get_column_Datetime = get_column_ty "Datetime" Datetime.of_string
 let get_column_Any = get_column_ty "Any" Any.of_string
 
-let bind_param data (_,params) index =
+let bind_param data (_,params,index) =
   match data with
-  | Some s -> params.(index) <- s
+  | Some s -> assert (!index < Array.length params); params.(!index) <- s; incr index
   | None -> oops "bind_param None -- not implemented"
 
-let start_params stmt n = (stmt,Array.make n "")
-let finish_params (stmt,params) = P.execute stmt params
+let start_params stmt n = (stmt,Array.make n "",ref 0)
+let finish_params (stmt,params,index) = assert (!index = Array.length params); P.execute stmt params
 
-let set_param_ty f = fun (p:params) index v -> bind_param (Some (f v)) p index
+let set_param_ty f = fun (p:params) v -> bind_param (Some (f v)) p
 
-let set_param_null stmt index = bind_param None stmt index
+let set_param_null stmt = bind_param None stmt
 let set_param_Text = set_param_ty Text.to_string
 let set_param_Any = set_param_ty Any.to_string
 let set_param_Bool = set_param_ty Bool.to_string

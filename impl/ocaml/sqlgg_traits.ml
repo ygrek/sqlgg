@@ -54,13 +54,13 @@ module type M = sig
 
   (** [set_param_* stmt index val]. [index] is 0-based,
     @raise Oops on error *)
-  val set_param_null : params -> int -> unit
-  val set_param_Text : params -> int -> Text.t -> unit
-  val set_param_Any : params -> int -> Any.t -> unit
-  val set_param_Bool : params -> int -> Bool.t -> unit
-  val set_param_Int : params -> int -> Int.t -> unit
-  val set_param_Float : params -> int -> Float.t -> unit
-  val set_param_Datetime : params -> int -> Datetime.t -> unit
+  val set_param_null : params -> unit
+  val set_param_Text : params -> Text.t -> unit
+  val set_param_Any : params -> Any.t -> unit
+  val set_param_Bool : params -> Bool.t -> unit
+  val set_param_Int : params -> Int.t -> unit
+  val set_param_Float : params -> Float.t -> unit
+  val set_param_Datetime : params -> Datetime.t -> unit
 
   val no_params : statement -> result
 
