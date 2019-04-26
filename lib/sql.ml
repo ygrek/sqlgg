@@ -109,6 +109,16 @@ struct
       | true -> after
       | false -> attr ) t
 
+  let exists t name =
+    match (find t name : attr) with
+    | _ -> true
+    | exception _ -> false
+
+  let rename t oldname newname =
+    if not (exists t oldname) then raise @@ Error (t, "no such column : " ^ oldname);
+    if exists t newname then raise @@ Error (t, "column already exists : " ^ newname);
+    List.map (fun attr -> if attr.name = oldname then { attr with name = newname } else attr) t
+
   let cross t1 t2 = t1 @ t2
 
   (** [contains t attr] tests whether schema [t] contains attribute [attr] *)
@@ -204,7 +214,14 @@ type params = param list [@@deriving show]
 let params_to_string = show_params
 
 type alter_pos = [ `After of string | `Default | `First ]
-type alter_action = [ `Add of attr * alter_pos | `Drop of string | `Change of string * attr * alter_pos | `None ]
+type alter_action = [
+  | `Add of attr * alter_pos
+  | `RenameTable of string
+  | `RenameColumn of string * string
+  | `RenameIndex of string * string
+  | `Drop of string
+  | `Change of string * attr * alter_pos
+  | `None ]
 
 type select_result = (schema * param list)
 

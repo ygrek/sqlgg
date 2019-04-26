@@ -23,6 +23,7 @@ let keywords =
   let k = ref [
    "as",AS;
    "on",ON;
+   "to",TO;
    "conflict",CONFLICT;
    "using",USING;
    "natural",NATURAL;
@@ -90,6 +91,7 @@ let keywords =
    "time",TIME;
    "timestamp",TIMESTAMP;
    "alter",ALTER;
+   "rename",RENAME;
    "add",ADD;
    "cascade",CASCADE;
    "restrict",RESTRICT;

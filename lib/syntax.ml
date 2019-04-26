@@ -357,6 +357,9 @@ let eval (stmt:Sql.stmt) =
       | `Add (col,pos) -> Tables.alter_add name col pos
       | `Drop col -> Tables.alter_drop name col
       | `Change (oldcol,col,pos) -> Tables.alter_change name oldcol col pos
+      | `RenameColumn (oldcol,newcol) -> Tables.rename_column name oldcol newcol
+      | `RenameTable new_name -> Tables.rename name new_name
+      | `RenameIndex _ -> () (* indices are not tracked yet *)
       | `None -> ()) actions;
       ([],[],Alter name)
   | Drop name ->
