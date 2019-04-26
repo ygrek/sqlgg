@@ -286,6 +286,7 @@ type stmt =
 | Create of string * [ `Schema of schema | `Select of select_full ]
 | Drop of string
 | Alter of string * alter_action list
+| Rename of (string * string) list
 | CreateIndex of string * string * string list (* index name, table name, columns *)
 | Insert of insert_action
 | Delete of string * expr option

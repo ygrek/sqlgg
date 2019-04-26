@@ -97,6 +97,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               {
                 Alter (name,actions)
               }
+         | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(IDENT,TO,IDENT)) { Rename l }
          | DROP either(TABLE,VIEW) if_exists? name=IDENT
               {
                 Drop name
