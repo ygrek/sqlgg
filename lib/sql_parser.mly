@@ -340,7 +340,7 @@ expr:
     | MINUS expr %prec UNARY_MINUS { $2 }
     | INTERVAL expr interval_unit { Fun (fixed Datetime [Int], [$2]) }
     | LPAREN expr RPAREN { $2 }
-    | attr_name { Column $1 }
+    | attr_name collate? { Column $1 }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
@@ -381,8 +381,8 @@ choices: separated_nonempty_list(NUM_BIT_OR,choice) { $1 }
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value Datetime }
 
 literal_value:
-    | TEXT { Value Text }
-    | BLOB { Value Blob }
+    | TEXT collate? { Value Text }
+    | BLOB collate? { Value Blob }
     | INTEGER { Value Int }
     | FLOAT { Value Float }
     | TRUE
