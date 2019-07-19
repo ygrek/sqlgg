@@ -116,6 +116,8 @@ let keywords =
    "for", FOR;
    "share", SHARE;
    "mode", MODE;
+   "mod", MOD;
+   "div", DIV;
    "lock", LOCK;
    "of", OF;
    "with", WITH;

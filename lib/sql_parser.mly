@@ -37,7 +37,7 @@
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
-       OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING
+       OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -66,7 +66,7 @@
 %left NUM_BIT_AND
 %left NUM_BIT_SHIFT
 %left PLUS MINUS
-%left ASTERISK NUM_DIV_OP
+%left ASTERISK NUM_DIV_OP MOD DIV
 (* ^ *)
 %nonassoc UNARY_MINUS TILDE
 %nonassoc EXCL
@@ -327,6 +327,7 @@ like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun ((fixed Bool [Text; Text]
 
 expr:
       expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
+    | expr DIV expr %prec PLUS { Fun ((Ret Int),[$1;$3]) }
     | expr boolean_bin_op expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[$1;$3]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
     | expr CONCAT_OP expr { Fun ((fixed Text [Text;Text]),[$1;$3]) }
@@ -402,7 +403,7 @@ func_params: DISTINCT? l=expr_list { l }
            | ASTERISK { [] }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
-numeric_bin_op: PLUS | MINUS | ASTERISK | NUM_DIV_OP | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
+numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_DIV_OP | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
 comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP | NOT_DISTINCT_OP { }
 boolean_bin_op: AND | OR | XOR { }
 
