@@ -191,7 +191,7 @@
    <value name="_1" type="Bool"/>
   </out>
  </stmt>
- <stmt name="create_workareas" sql="CREATE TABLE workareas (work_id int, about text)" kind="create" target="workareas" cardinality="0">
+ <stmt name="create_workareas" sql="CREATE TABLE workareas (work_id int autoincrement, about text, k int) unique key (k)" kind="create" target="workareas" cardinality="0">
   <in/>
   <out/>
  </stmt>
@@ -212,5 +212,12 @@
    <value name="x" type="Text"/>
    <value name="y" type="Text"/>
   </out>
+ </stmt>
+ <stmt name="last_insert_id" sql="INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)&#x0A;ON DUPLICATE KEY UPDATE&#x0A;  `work_id` = LAST_INSERT_ID(`work_id`)" kind="insert" target="workareas" cardinality="0">
+  <in>
+   <value name="about" type="Text"/>
+   <value name="k" type="Int"/>
+  </in>
+  <out/>
  </stmt>
 </sqlgg>

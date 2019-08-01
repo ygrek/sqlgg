@@ -72,7 +72,7 @@ SELECT 0 is 0, 0 is null, null is 0, null is null;
 -- @issue54_sql
 SELECT 42 is not distinct from null, 42 is distinct from null;
 
-CREATE TABLE workareas (work_id int, about text);
+CREATE TABLE workareas (work_id int autoincrement, about text, k int) unique key (k);
 delete from test
 where x in (@x1, @x2)
   and not exists (select 1 from workareas where work_id = test.x);
@@ -80,3 +80,8 @@ where x in (@x1, @x2)
 create table issue63 ( x text, y text );
 -- @issue63
 select * from issue63 where x like 'hello%' or y like 'world%';
+
+-- @last_insert_id
+INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)
+ON DUPLICATE KEY UPDATE
+  `work_id` = LAST_INSERT_ID(`work_id`);
