@@ -385,7 +385,7 @@ let eval (stmt:Sql.stmt) =
       [],[],CreateIndex name
   | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
@@ -400,7 +400,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
     let select = annotate_select select (List.map (fun a -> a.domain) expect) in
     let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
@@ -408,7 +408,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
-    let env = { tables = [Tables.get table]; joined_schema = expect; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns env ss, None
