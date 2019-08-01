@@ -379,4 +379,6 @@ let () =
   "substring" |> monomorphic Text [Text; Int];
   "substring" |> monomorphic Text [Text; Int; Int];
   "substring_index" |> monomorphic Text [Text; Text; Int];
+  "last_insert_id" |> monomorphic Int [];
+  "last_insert_id" |> monomorphic Int [Int];
   ()
