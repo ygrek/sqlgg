@@ -367,7 +367,7 @@ let () =
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
   ["lower";"upper"] ||> monomorphic Text [Text];
   "length" |> monomorphic Int [Text];
-  ["random";"unix_timestamp"] ||> monomorphic Int [];
+  ["random"] ||> monomorphic Int [];
   ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
@@ -375,6 +375,8 @@ let () =
   "julianday" |> multi ~ret:(Typ Float) (Typ Text);
   "from_unixtime" |> monomorphic Datetime [Int];
   "from_unixtime" |> monomorphic Text [Int;Text];
+  "unix_timestamp" |> monomorphic Int [];
+  "unix_timestamp" |> monomorphic Int [Datetime];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
   "substring" |> monomorphic Text [Text; Int];
   "substring" |> monomorphic Text [Text; Int; Int];
