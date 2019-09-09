@@ -86,9 +86,12 @@ let substitute_vars s vars subst_param =
       loop acc i2 parami tl
     | Choice ((_,(i1,i2) as name),ctors) :: tl ->
       let acc = Static (String.slice ~first:i ~last:i1 s) :: acc in
-      let acc = Dynamic (name, ctors |> List.map (fun ((_,(c1,c2) as ctor),args) -> ctor, args, match args with None -> [Static ""] | Some l ->
-        let (acc,last) = loop [] c1 0 l in
-        List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc))) :: acc
+      let acc = Dynamic (name, ctors |> List.map (function
+      | Sql.Simple ((_,(c1,c2) as ctor),args) -> ctor, args, (match args with None -> [Static ""] | Some l ->
+          let (acc,last) = loop [] c1 0 l in
+          List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc))
+      | Verbatim (n,v) -> (Some n,(0,0)),Some [],[Static v])
+      ) :: acc
       in
       loop acc i2 parami tl
   in

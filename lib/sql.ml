@@ -210,9 +210,12 @@ let print_table out (name,schema) =
 type param_id = string option * (int * int) [@@deriving show]
 type param = param_id * Type.t [@@deriving show]
 type params = param list [@@deriving show]
-type var =
+type ctor =
+| Simple of param_id * var list option
+| Verbatim of string * string
+and var =
 | Single of param
-| Choice of param_id * (param_id * var list option) list
+| Choice of param_id * ctor list
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -227,6 +230,8 @@ type alter_action = [
   | `None ]
 
 type select_result = (schema * param list)
+
+type direction = [ `Fixed | `Param of param_id ] [@@deriving show]
 
 type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
@@ -248,9 +253,10 @@ and select = {
 }
 and select_full = {
   select : select * select list;
-  order : expr list;
+  order : order;
   limit : limit option;
 }
+and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and expr =
   | Value of Type.t (** literal value *)
@@ -297,7 +303,7 @@ type stmt =
 | Insert of insert_action
 | Delete of string * expr option
 | Set of string * expr
-| Update of string * assignments * expr option * expr list * param list (* where, order, limit *)
+| Update of string * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
 | CreateRoutine of string * Type.t option * (string * Type.t * expr option) list

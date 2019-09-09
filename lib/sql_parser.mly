@@ -238,8 +238,10 @@ limit_t: LIMIT lim=int_or_param { make_limit [`Limit,lim] }
 
 limit: limit_t { fst $1 }
 
-order: ORDER BY l=commas(terminated(expr,order_type?)) { l }
-order_type: DESC | ASC { }
+order: ORDER BY l=commas(pair(expr,order_type?)) { l }
+order_type:
+          | DESC | ASC { `Fixed }
+          | PARAM { `Param $1 }
 
 from: FROM t=table_list { t }
 where: WHERE e=expr { e }

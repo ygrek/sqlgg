@@ -36,7 +36,7 @@ let rec get_params_q (e:expr_q) =
     | `Param p -> Single p::acc
     | `Func (_,l) -> List.fold_left loop acc l
     | `Value _ -> acc
-    | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> n, Option.map get_params_q e) l) :: acc
+    | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_q e)) l) :: acc
   in
   loop [] e |> List.rev
 
@@ -270,8 +270,12 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments env.tables ss in
   get_params_l env exprs
 
-and params_of_order o final_schema tables =
-  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } o
+and params_of_order order final_schema tables =
+  let (orders,directions) = List.split order in
+  let directions = List.filter_map (function None | Some `Fixed -> None | Some (`Param p) -> Some (Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")]))) directions in
+  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } orders
+  @
+  directions
 
 and ensure_simple_expr = function
   | Value x -> `Value x
@@ -463,12 +467,12 @@ let unify_params l =
   in
   let rec traverse = function
   | Single ((name,_loc),t) -> remember name t
-  | Choice (n,l) -> check_choice_name (fst n); List.iter (fun (_,l) -> Option.may (List.iter traverse) l) l
+  | Choice (n,l) -> check_choice_name (fst n); List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
   | Single ((None,_),_ as x) -> Single x
   | Single ((Some name,_ as id),_) -> Single (id, (try Hashtbl.find h name with _ -> assert false))
-  | Choice (id, l) -> Choice (id, List.map (fun (n,l) -> n, Option.map (List.map map) l) l)
+  | Choice (id, l) -> Choice (id, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   in
   List.iter traverse l;
   List.map map l

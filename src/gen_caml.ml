@@ -179,6 +179,8 @@ let make_variant_name i (name,_) =
   | None -> sprintf "V_%d" i
   | Some n -> String.capitalize_ascii n
 
+let vname n = make_variant_name 0 (Some n,())
+
 let match_variant_wildcard i name args =
   sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
 
@@ -192,14 +194,17 @@ let rec set_var index var =
   | Single p -> set_param index p
   | Choice (name,ctors) ->
     output "begin match %s with " (make_param_name index name);
-    ctors |> List.iteri begin fun i (name,args) ->
-      output "| %s%s -> %s"
-        (make_variant_name i name)
-        (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
-        (match args with Some [] | None -> "()" | Some _ -> "");
-      inc_indent ();
-      List.iter (set_var index) (Option.default [] args);
-      dec_indent ()
+    ctors |> List.iteri begin fun i ctor ->
+      match ctor with
+      | Simple (name,args) ->
+        output "| %s%s -> %s"
+          (make_variant_name i name)
+          (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
+          (match args with Some [] | None -> "()" | Some _ -> "");
+        inc_indent ();
+        List.iter (set_var index) (Option.default [] args);
+        dec_indent ()
+      | Verbatim (n,_) -> output "| %s -> ()" (vname n)
     end;
     output "end;"
 
@@ -211,7 +216,8 @@ let rec eval_count_params vars =
   | _ ->
   choices |> List.mapi begin fun i (name,ctors) ->
     sprintf " + (match %s with " (make_param_name i name) ^
-    (ctors |> List.mapi (fun i (name,args) -> sprintf "%s -> %s" (match_variant_wildcard i name args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+    (ctors |> List.mapi (fun i ctor ->
+      match ctor with Verbatim (n,_) -> sprintf "%s -> 0" (vname n) | Simple (name,args) -> sprintf "%s -> %s" (match_variant_wildcard i name args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
     ^ ")"
   end |> String.concat ""
 

@@ -30,4 +30,4 @@ SELECT x,z FROM (SELECT name as x,
 
 SELECT name FROM test WHERE @where{ {id=@id} | {name LIKE @name} | None };
 
-SELECT name FROM test WHERE id=@id ORDER BY @order{ {descr} | {id} } ASC;
+SELECT name FROM test WHERE id=@id ORDER BY @order{ {descr} | {id} } @direction;
