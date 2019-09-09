@@ -29,3 +29,5 @@ SELECT x,z FROM (SELECT name as x,
   max(length(city),random(*)) as z FROM test LEFT JOIN (SELECT name AS city FROM test WHERE id=@id)) WHERE x > @xlo AND z < @zhi;
 
 SELECT name FROM test WHERE @where{ {id=@id} | {name LIKE @name} | None };
+
+SELECT name FROM test WHERE id=@id ORDER BY @order{ {descr} | {id} } ASC;

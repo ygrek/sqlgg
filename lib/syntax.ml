@@ -22,6 +22,8 @@ let schema_as_params = List.map (fun attr -> (Some attr.name,(0,0)), Some attr.d
 
 let schema_of tables name = snd @@ Tables.get_from tables name
 
+let get_or_failwith = function `Error s -> failwith s | `Ok t -> t
+
 let values_or_all table names =
   let schema = Tables.get_schema table in
   match names with
@@ -109,20 +111,21 @@ and assign_types expr =
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
   let rec typeof (e:expr_q) = (* FIXME simplify *)
     match e with
-    | `Value t -> e, t
-    | `Param (_,t) -> e, t
+    | `Value t -> e, `Ok t
+    | `Param (_,t) -> e, `Ok t
     | `Choice (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
-        match List.filter_map identity t with
+        match List.map get_or_failwith @@ List.filter_map identity t with
         | [] -> assert false
-        | t::ts ->
-          List.fold_left (fun acc t -> match Type.common_subtype acc t with None -> fail "no common subtype for all choice branches" | Some t -> t) t ts
+        | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> Type.common_subtype prev t) (Some t) ts
       in
+      let t = match t with None -> `Error "no common subtype for all choice branches" | Some t -> `Ok t in
       `Choice (n, List.map2 (fun (n,_) e -> n,e) l e), t
     | `Func (func,params) ->
         let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
+        let types = List.map get_or_failwith types in
         let show () =
           sprintf "%s applied to (%s)"
             (string_of_func func)
@@ -176,7 +179,7 @@ and assign_types expr =
           | `Param (n,Any) -> `Param (n, inferred)
           | x -> x
         in
-        `Func (func,(List.map2 assign inferred_params params)), ret
+        `Func (func,(List.map2 assign inferred_params params)), `Ok ret
   in
   typeof expr
 
@@ -184,7 +187,7 @@ and resolve_types env expr =
   let expr = resolve_columns env expr in
   try
     let (expr',t as r) = assign_types expr in
-    if !debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string t);
+    if !debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string @@ get_or_failwith t);
     r
   with
     exn ->
@@ -201,7 +204,7 @@ and infer_schema env columns =
       let col =
         match e with
         | Column col -> resolve_column env.tables env.joined_schema col
-        | _ -> attr "" (resolve_types env e |> snd)
+        | _ -> attr "" (resolve_types env e |> snd |> get_or_failwith)
       in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
