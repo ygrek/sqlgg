@@ -69,16 +69,22 @@ end
 module Constraint =
 struct
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
-    [@@deriving show {with_path=false}]
+    [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Unique | Autoincrement | OnConflict of conflict_algo
-    [@@deriving show {with_path=false}]
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo
+    [@@deriving show{with_path=false}, ord]
 end
 
-type attr = {name : string; domain : Type.t;}
+module Constraints = struct
+  include Set.Make(Constraint)
+  let show s = [%derive.show: Constraint.t list] (elements s)
+  let pp fmt s = Format.fprintf fmt "%s" (show s)
+end
+
+type attr = {name : string; domain : Type.t; extra : Constraints.t; }
   [@@deriving show {with_path=false}]
 
-let attr n d = {name=n;domain=d}
+let make_attribute name domain extra = {name;domain;extra}
 
 module Schema =
 struct
@@ -202,8 +208,9 @@ type schema = Schema.t
 
 let print_table out (name,schema) =
   IO.write_line out name;
-  schema |> List.iter (fun {name=name;domain=domain} ->
-    IO.printf out "%10s %s\n" (Type.to_string domain) name);
+  schema |> List.iter begin fun {name;domain;extra} ->
+    IO.printf out "%10s %s %s\n" (Type.to_string domain) name (Constraints.show extra)
+  end;
   IO.write_line out ""
 
 (** optional name and start/end position in string *)

@@ -15,7 +15,7 @@ type env = {
 
 let empty_env = { tables = []; joined_schema = []; insert_schema = []; }
 
-let collect f l = List.flatten (List.map f l)
+let flat_map f l = List.flatten (List.map f l)
 
 (* FIXME *)
 let schema_as_params = List.map (fun attr -> (Some attr.name,(0,0)), Some attr.domain)
@@ -75,7 +75,7 @@ let resolve_column_assignments tables l =
 let get_columns_schema tables l =
   let all = all_tbl_columns tables in
   (* FIXME col_name *)
-  l |> List.map (fun col -> { name = col.cname; domain = (resolve_column tables all col).domain; })
+  l |> List.map (fun col -> { (resolve_column tables all col) with name = col.cname })
 
 (** replace each name reference (Column, Inserted, etc) with Value of corresponding type *)
 let rec resolve_columns env expr =
@@ -204,12 +204,12 @@ and infer_schema env columns =
       let col =
         match e with
         | Column col -> resolve_column env.tables env.joined_schema col
-        | _ -> attr "" (resolve_types env e |> snd |> get_or_failwith)
+        | _ -> make_attribute "" (resolve_types env e |> snd |> get_or_failwith) Constraints.empty
       in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
   in
-  collect resolve1 columns
+  flat_map resolve1 columns
 
 and test_all_const columns =
   let rec is_const = function
@@ -237,13 +237,13 @@ and params_of_columns env =
   | All | AllOf _ -> []
   | Expr (e,_) -> get_params env e
   in
-  collect get
+  flat_map get
 
 and get_params_opt env = function
   | Some x -> get_params env x
   | None -> []
 
-and get_params_l env l = collect (get_params env) l
+and get_params_l env l = flat_map (get_params env) l
 
 and do_join (env,params) ((schema1,params1,_tables),kind) =
   let joined_schema = match kind with

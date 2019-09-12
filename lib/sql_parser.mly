@@ -276,8 +276,7 @@ alter_pos: AFTER col=IDENT { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT t=sql_type? column_def_extra*
-    { attr name (match t with Some x -> x | None -> Int) }
+column_def: name=IDENT t=sql_type? extra=column_def_extra* { make_attribute name (Option.default Int t) (Constraints.of_list @@ List.filter_map identity extra) }
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }
@@ -286,7 +285,7 @@ column_def1: c=column_def { `Attr c }
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
-                | NULL { None }
+                | NULL { Some Null }
                 | UNIQUE { Some Unique }
                 | AUTOINCREMENT { Some Autoincrement }
                 | on_conflict { None }

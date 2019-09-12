@@ -37,6 +37,9 @@ let tt sql ?kind schema params =
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true))
 
+
+let attr n d = make_attribute n d Constraints.empty
+
 let test = [
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
