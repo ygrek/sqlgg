@@ -17,9 +17,6 @@ let empty_env = { tables = []; joined_schema = []; insert_schema = []; }
 
 let flat_map f l = List.flatten (List.map f l)
 
-(* FIXME *)
-let schema_as_params = List.map (fun attr -> (Some attr.name,(0,0)), Some attr.domain)
-
 let schema_of tables name = snd @@ Tables.get_from tables name
 
 let get_or_failwith = function `Error s -> failwith s | `Ok t -> t
@@ -210,19 +207,6 @@ and infer_schema env columns =
       [ col ]
   in
   flat_map resolve1 columns
-
-and test_all_const columns =
-  let rec is_const = function
-  | Fun (_,args) -> List.for_all is_const args
-  | Select _ -> false (* FIXME ? *)
-  | Column _ -> false
-  | _ -> true
-  in
-  let test = function
-  | Expr (e,_) -> is_const e
-  | _ -> false
-  in
-  List.for_all test columns
 
 and get_params env e = e |> resolve_types env |> fst |> get_params_q
 

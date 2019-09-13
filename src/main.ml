@@ -38,10 +38,9 @@ let parse_one (sql, props as x) =
      None
     end
   | exn ->
-(*     let bt = Printexc.get_raw_backtrace () in *)
+    let bt = Printexc.get_raw_backtrace () in
     Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
-    raise exn
-(*     Printexc.raise_with_backtrace exn bt *)
+    Printexc.raise_with_backtrace exn bt
 
 let parse_one (sql,props as x) =
   match Props.get props "noparse" with
