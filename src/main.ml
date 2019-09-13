@@ -7,7 +7,7 @@ open ExtLib
 module L = List
 module S = String
 
-let parse_one_exn (sql,props) =
+let parse_one' (sql,props) =
     if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
     let (sql,schema,vars,kind) = Syntax.parse sql in
     begin match kind, !Gen.params_mode with
@@ -17,9 +17,12 @@ let parse_one_exn (sql,props) =
     let props = Props.set props "sql" sql in
     { Gen.schema; vars; kind; props }
 
+(** @return parsed statement or [None] in case of parsing failure.
+    @raise exn for other errors (typing etc)
+*)
 let parse_one (sql, props as x) =
   try
-    Some (parse_one_exn x)
+    Some (parse_one' x)
   with
   | Parser_utils.Error (exn,(line,cnum,tok,tail)) ->
     begin

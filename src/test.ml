@@ -35,10 +35,9 @@ let tt sql ?kind schema params =
   sql >:: test
 
 let wrong sql =
-  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one_exn (sql,[])); false with _ -> true))
+  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
-
-let attr n d = make_attribute n d Constraints.empty
+let attr ?(extra=[]) n d = make_attribute n d (Constraints.of_list extra)
 
 let test = [
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
@@ -160,8 +159,8 @@ let test_misc () =
 
 let test_enum = [
   tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test6" [attr "x" Text; attr "y" Int] [];
-  tt "SELECT x, y+10 FROM test6" [attr "x" Text; attr "" Int] [];
+  tt "SELECT * FROM test6" [attr "x" Text ~extra:[NotNull]; attr "y" Int] [];
+  tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull]; attr "" Int] [];
 ]
 
 let run () =
