@@ -17,6 +17,15 @@ let parse_one' (sql,props) =
     let props = Props.set props "sql" sql in
     { Gen.schema; vars; kind; props }
 
+(* Printexc.raise_with_backtrace is only available since 4.05.0 *)
+exception With_backtrace of exn * Printexc.raw_backtrace
+
+let () = Printexc.(register_printer begin function
+  | With_backtrace (exn,bt) when raw_backtrace_length bt = 0 -> Some (to_string exn)
+  | With_backtrace (exn,bt) -> Some (Printf.sprintf "%s\nBacktrace:\n%s" (to_string exn) (raw_backtrace_to_string bt))
+  | _ -> None
+end)
+
 (** @return parsed statement or [None] in case of parsing failure.
     @raise exn for other errors (typing etc)
 *)
@@ -40,7 +49,8 @@ let parse_one (sql, props as x) =
   | exn ->
     let bt = Printexc.get_raw_backtrace () in
     Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
-    Printexc.raise_with_backtrace exn bt
+(*     Printexc.raise_with_backtrace exn bt *)
+    raise @@ With_backtrace (exn,bt)
 
 let parse_one (sql,props as x) =
   match Props.get props "noparse" with
