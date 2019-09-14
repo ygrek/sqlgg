@@ -33,7 +33,7 @@ let main () =
 
   (* list donors *)
   print_endline "Donors:";
-  G.list_donors db "petrov" 100L (fun ~surname:s -> print_endline s);
+  G.list_donors db "petrov" 100L (fun ~surname -> print_endline (match surname with Some s -> s | None -> "<unknown>"));
 
   (* properly close database *)
   db_close db;

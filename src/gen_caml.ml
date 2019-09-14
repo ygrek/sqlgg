@@ -127,8 +127,9 @@ module L = struct
 end
 
 let get_column index attr =
-  sprintf "(T.get_column_%s stmt %u)"
+  sprintf "(T.get_column_%s%s stmt %u)"
     (L.as_lang_type attr.domain)
+    (if Constraints.mem Null attr.extra then "_nullable" else "")
     index
 
 module T = Translate(L)
