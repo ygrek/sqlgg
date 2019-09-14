@@ -230,3 +230,8 @@ end
 
 module Default(IO : Sqlgg_io.M)(M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
   Make(IO)(M)(Default_types(M))
+
+let () =
+  (* checking signature match *)
+  let module Default_blocking : Sqlgg_traits.M = Default(Sqlgg_io.Blocking)(struct include Mariadb.Blocking type 'a future = 'a end) in
+  ()

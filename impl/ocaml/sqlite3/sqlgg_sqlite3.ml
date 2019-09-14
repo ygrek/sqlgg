@@ -15,6 +15,10 @@
 
 open Printf
 
+module M = struct
+
+module S = Sqlite3
+
 module Types = struct
   module Bool = struct type t = bool end
   module Int = Int64
@@ -23,8 +27,6 @@ module Types = struct
   module Datetime = Float (* ? *)
   module Any = Text
 end
-
-module S = Sqlite3
 
 type statement = S.stmt * string
 type connection = S.db
@@ -120,3 +122,11 @@ let select1 db sql set_params callback =
       Some (callback stmt)
     else
       None)
+
+end
+
+let () =
+  (* checking signature match *)
+  let module S = (M:Sqlgg_traits.M) in ()
+
+include M
