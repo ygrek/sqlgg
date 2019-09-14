@@ -49,6 +49,13 @@ module type M = sig
   val get_column_Float : row -> int -> Float.t
   val get_column_Datetime : row -> int -> Datetime.t
 
+  val get_column_Bool_nullable : row -> int -> Bool.t option
+  val get_column_Int_nullable : row -> int -> Int.t option
+  val get_column_Text_nullable : row -> int -> Text.t option
+  val get_column_Any_nullable : row -> int -> Any.t option
+  val get_column_Float_nullable : row -> int -> Float.t option
+  val get_column_Datetime_nullable : row -> int -> Datetime.t option
+
   val start_params : statement -> int -> params
   val finish_params : params -> result
 

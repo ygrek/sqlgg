@@ -151,18 +151,27 @@ let oops fmt = ksprintf (fun s -> raise (Oops s)) fmt
 
 let check = function Error (code, msg) -> oops "(%d) %s" code msg | Ok r -> IO.return r
 
-let get_column_ty name conv row index =
-  try
-    conv (row.(index))
-  with
-    e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
+let get_column_ty name conv =
+  begin fun row index ->
+    try
+      conv (row.(index))
+    with
+      e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
+  end,
+  begin fun row index ->
+    try
+      let x = row.(index) in
+      if M.Field.null_value x then None else Some (conv x)
+    with
+      e -> oops "get_column_%s_nullable %i (%s)" name index (Printexc.to_string e)
+  end
 
-let get_column_Bool = get_column_ty "Bool" Bool.of_field
-let get_column_Int = get_column_ty "Int" Int.of_field
-let get_column_Text = get_column_ty "Text" Text.of_field
-let get_column_Float = get_column_ty "Float" Float.of_field
-let get_column_Datetime = get_column_ty "Datetime" Datetime.of_field
-let get_column_Any = get_column_ty "Any" Any.of_field
+let get_column_Bool, get_column_Bool_nullable = get_column_ty "Bool" Bool.of_field
+let get_column_Int, get_column_Int_nullable = get_column_ty "Int" Int.of_field
+let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_field
+let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_field
+let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_field
+let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_field
 
 let bind_param data (_, params, index) = assert (!index < Array.length params); params.(!index) <- data; incr index
 

@@ -78,18 +78,26 @@ type datetime = Datetime.t
 exception Oops of string
 let oops fmt = ksprintf (fun s -> raise (Oops s)) fmt
 
-let get_column_ty name conv row index =
-  try
-    conv (match row.(index) with None -> failwith "no value" | Some (x:string) -> x)
-  with
-    e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
+let get_column_ty name conv =
+  begin fun row index ->
+    try
+      conv (match row.(index) with None -> failwith "no value" | Some (x:string) -> x)
+    with
+      e -> oops "get_column_%s %i (%s)" name index (Printexc.to_string e)
+  end,
+  begin fun row index ->
+    try
+      match row.(index) with None -> None | Some s -> Some (conv s)
+    with
+      e -> oops "get_column_%s_nullable %i (%s)" name index (Printexc.to_string e)
+  end
 
-let get_column_Bool = get_column_ty "Bool" Bool.of_string
-let get_column_Int = get_column_ty "Int" Int.of_string
-let get_column_Text = get_column_ty "Text" Text.of_string
-let get_column_Float = get_column_ty "Float" Float.of_string
-let get_column_Datetime = get_column_ty "Datetime" Datetime.of_string
-let get_column_Any = get_column_ty "Any" Any.of_string
+let get_column_Bool, get_column_Bool_nullable = get_column_ty "Bool" Bool.of_string
+let get_column_Int, get_column_Int_nullable = get_column_ty "Int" Int.of_string
+let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_string
+let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_string
+let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_string
+let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_string
 
 let bind_param data (_,params,index) =
   match data with

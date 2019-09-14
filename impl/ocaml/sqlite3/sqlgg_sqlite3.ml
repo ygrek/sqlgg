@@ -41,28 +41,32 @@ type datetime = float
 
 exception Oops of string
 
-let get_column_Bool (stmt,sql) index =
-  match S.column stmt index with
-  | S.Data.INT i -> i <> 0L
-  | _ -> raise (Oops (sprintf "get_column_Bool %u for %s" index sql))
+module Conv = struct
+  open S.Data
+  exception Type_mismatch of t
+  let () = Printexc.register_printer (function Type_mismatch x -> Some (sprintf "Conv.Type_mismatch %s" (to_string_debug x)) | _ -> None)
+  let bool = "Bool", function INT i -> i <> 0L | x -> raise (Type_mismatch x)
+  let int = "Int", function INT i -> i | x -> raise (Type_mismatch x)
+  let text = "Text", to_string
+  let float = "Float", function FLOAT x -> x | x -> raise (Type_mismatch x)
+end
 
-let get_column_Int (stmt,sql) index =
-  match S.column stmt index with
-  | S.Data.INT i -> i
-  | _ -> raise (Oops (sprintf "get_column_Int %u for %s" index sql))
+let get_column_ty (name,conv) =
+  begin fun (stmt,sql) index ->
+    try conv (S.column stmt index)
+    with exn -> raise (Oops (sprintf "get_column_%s %u for %s : %s" name index sql (Printexc.to_string exn)))
+  end,
+  begin fun (stmt,sql) index ->
+    try match S.column stmt index with S.Data.NULL -> None | x -> Some (conv x)
+    with exn -> raise (Oops (sprintf "get_column_%s_nullable %u for %s : %s" name index sql (Printexc.to_string exn)))
+  end
 
-let get_column_Text (stmt,_) index =
-  let x = S.column stmt index in
-  S.Data.to_string x
-
-let get_column_Any = get_column_Text
-
-let get_column_Float (stmt,sql) index =
-  match S.column stmt index with
-  | S.Data.FLOAT i -> i
-  | _ -> raise (Oops (sprintf "get_column_Float %u for %s" index sql))
-
-let get_column_Datetime = get_column_Float
+let get_column_Bool, get_column_Bool_nullable = get_column_ty Conv.bool
+let get_column_Int, get_column_Int_nullable = get_column_ty Conv.int
+let get_column_Text, get_column_Text_nullable = get_column_ty Conv.text
+let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
+let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
+let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.float
 
 let test_ok sql rc =
   if rc <> S.Rc.OK then
