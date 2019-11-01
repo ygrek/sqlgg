@@ -46,13 +46,13 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value n t = Node ("value",["name",n; "type",t;],[])
+let value v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if v.nullable then ["nullable","true"] else []),[])
 
 (* open Gen_caml.L *)
 open Gen_caml.T
 
-let params_to_values = List.map (fun (n,t) -> value n t) $ all_params_to_values
-let schema_to_values = List.map (fun (n,t) -> value n t) $ schema_to_values
+let params_to_values = List.map value $ all_params_to_values
+let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
 

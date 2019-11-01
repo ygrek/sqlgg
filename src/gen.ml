@@ -147,14 +147,24 @@ val as_lang_type : Sql.Type.t -> string
 
 end
 
+let is_param_nullable param =
+  let open Sql in
+  match param.attr with None -> false | Some attr -> Constraints.mem Null attr.extra || Constraints.mem Autoincrement attr.extra
+
+let is_attr_nullable attr =
+  let open Sql in
+  Constraints.mem Null attr.extra
+
+type value = { vname : string; vtyp : string; nullable : bool; }
+
 module Translate(T : LangTypes) = struct
 
 let show_param_type p = T.as_api_type p.Sql.typ
-let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.Sql.domain)
+let schema_to_values = List.mapi (fun i attr -> { vname = name_of attr i; vtyp = T.as_lang_type attr.Sql.domain; nullable = is_attr_nullable attr })
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values l =
-  l |> List.mapi (fun i p -> show_param_name p i, T.as_lang_type p.typ)
-  |> List.unique ~cmp:(fun (n1,_) (n2,_) -> String.equal n1 n2)
+  l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p; })
+  |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
 let names_of_vars l =

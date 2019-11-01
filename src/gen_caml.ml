@@ -129,7 +129,7 @@ end
 let get_column index attr =
   sprintf "(T.get_column_%s%s stmt %u)"
     (L.as_lang_type attr.domain)
-    (if Constraints.mem Null attr.extra then "_nullable" else "")
+    (if is_attr_nullable attr then "_nullable" else "")
     index
 
 module T = Translate(L)
@@ -186,7 +186,7 @@ let match_variant_wildcard i name args =
   sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
 
 let set_param index param =
-  let nullable = match param.attr with None -> false | Some attr -> Constraints.mem Null attr.extra || Constraints.mem Autoincrement attr.extra in
+  let nullable = is_param_nullable param in
   let pname = show_param_name param index in
   let ptype = show_param_type param in
   if nullable then

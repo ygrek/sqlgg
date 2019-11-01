@@ -55,7 +55,7 @@ let get_column attr index =
     (attr.domain |> as_api_type)
     index
 
-let schema_to_string = G.Values.to_string $ schema_to_values
+let schema_to_string = G.Values.to_string $ G.Values.inject $ schema_to_values
 
 let output_schema_binder _ schema =
   let name = "callback" in
@@ -86,7 +86,7 @@ let start () = ()
 
 let func_execute index stmt =
     let params = params_only stmt.vars in
-    let values = values_of_params params in
+    let values = G.Values.inject @@ values_of_params params in
     let schema_binder_name = output_schema_binder index stmt.schema in
     let is_select = Option.is_some schema_binder_name in
     let doc = if is_select then ["result", schema_to_string stmt.schema] else [] in

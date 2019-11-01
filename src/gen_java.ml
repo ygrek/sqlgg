@@ -58,7 +58,7 @@ let get_column attr index =
 let output_schema_binder name _ schema =
   let name = sprintf "%s_callback" name in
   start_intf name;
-  output "public void callback(%s);" (G.Values.to_string (schema_to_values schema));
+  output "public void callback(%s);" (G.Values.to_string @@ G.Values.inject @@ schema_to_values schema);
   end_intf name;
   name
 
@@ -73,7 +73,7 @@ let output_value_defs vals =
 let output_schema_data index schema =
   let name = default_name "data" index in
   start_class name;
-  schema |> schema_to_values |> output_value_defs;
+  schema |> schema_to_values |> G.Values.inject |> output_value_defs;
   end_class name
 
 let set_param name index param =
@@ -91,7 +91,7 @@ let start () = ()
 
 let generate_code index stmt =
    let params = params_only stmt.vars in
-   let values = values_of_params params in
+   let values = G.Values.inject @@ values_of_params params in
    let name = choose_name stmt.props stmt.kind index in
    let sql = quote (get_sql_string_only stmt) in
    output "PreparedStatement pstmt_%s;" name;

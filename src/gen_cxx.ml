@@ -13,6 +13,7 @@ let names = List.map fst
 let join = String.concat ", "
 let inline = join $ names
 let to_string = join $ (List.map (fun (n,t) -> t ^ " " ^ n))
+let inject = List.map (fun v -> v.vname, v.vtyp)
 
 end
 
@@ -80,7 +81,7 @@ let output_schema_binder _ schema =
   output "template <class T>";
   start_struct name;
 
-  let vals = schema_to_values schema in
+  let vals = Values.inject @@ schema_to_values schema in
   output_value_defs vals;
   empty_line ();
 
@@ -139,7 +140,7 @@ let struct_ctor name values k =
 let output_params_binder _ params =
   out_private ();
   let name = "params" in
-  let values = values_of_params params in
+  let values = Values.inject @@ values_of_params params in
   struct_ctor name (make_const_values values) (fun () ->
     comment () "binding slots in a query (one param may be bound several times)";
     output "enum { count = %u };" (List.length params);
@@ -171,7 +172,7 @@ let make_stmt index stmt =
 (*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
    out_public ();
    if (Option.is_some schema_binder_name) then output "template<class T>";
-   let values = values_of_params params in
+   let values = Values.inject @@ values_of_params params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T"] in
    let all_params = (make_const_values values) @ result in
    let inline_params = Values.inline (make_const_values values) in
