@@ -36,9 +36,7 @@ let make_param_name index (p:Sql.param_id) =
   | None -> sprintf "_%u" index
   | Some s -> s
 
-let show_param_name (p:Sql.param) index = make_param_name index (fst p)
-
-let param_type = snd
+let show_param_name (p:Sql.param) index = make_param_name index p.id
 
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
@@ -74,7 +72,7 @@ let substitute_vars s vars subst_param =
     match vars with
     | [] -> acc, i
     | Sql.Single param :: tl ->
-      let (i1,i2) = (fst param).pos in
+      let (i1,i2) = param.id.pos in
       let acc, parami =
         match subst_param with
         | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
@@ -151,16 +149,16 @@ end
 
 module Translate(T : LangTypes) = struct
 
-let show_param_type (_,t) = T.as_api_type t
+let show_param_type p = T.as_api_type p.Sql.typ
 let schema_to_values = List.mapi (fun i attr -> name_of attr i, T.as_lang_type attr.Sql.domain)
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values l =
-  l |> List.mapi (fun i p -> show_param_name p i, T.as_lang_type @@ param_type p)
+  l |> List.mapi (fun i p -> show_param_name p i, T.as_lang_type p.typ)
   |> List.unique ~cmp:(fun (n1,_) (n2,_) -> String.equal n1 n2)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
 let names_of_vars l =
-  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single (id,_) -> id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
+  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single p -> p.id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
 
 let params_only = List.map (function Sql.Single p -> p | Choice _ -> fail "dynamic choices not supported for this host language")
 

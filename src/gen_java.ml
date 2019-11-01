@@ -77,12 +77,11 @@ let output_schema_data index schema =
   end_class name
 
 let set_param name index param =
-  let (id,t) = param in
   output "pstmt_%s.set%s(%u, %s);"
     name
-    (t |> Sql.Type.show |> String.capitalize)
+    (param.typ |> Sql.Type.show |> String.capitalize)
     (index+1)
-    (make_param_name index id)
+    (make_param_name index param.id)
 
 let output_params_binder name _ params = List.iteri (set_param name) params
 

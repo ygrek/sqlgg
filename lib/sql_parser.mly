@@ -13,8 +13,8 @@
   let make_limit l =
     let param = function
       | _, `Const _ -> None
-      | x, `Param { label=None; pos } -> Some ({ label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos },Int)
-      | _, `Param p -> Some (p,Int)
+      | x, `Param { label=None; pos } -> Some (new_param { label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } Int)
+      | _, `Param id -> Some (new_param id Int)
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
@@ -349,7 +349,7 @@ expr:
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
-    | PARAM { Param ($1,Any) }
+    | PARAM { Param (new_param $1 Any) }
     | p=PARAM LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }

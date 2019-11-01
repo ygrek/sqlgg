@@ -65,11 +65,10 @@ let func head name args ?tail k =
   close_curly ""
 
 let set_param arg index param =
-  let (id,_) = param in
   output "Traits::set_param(%s, %s, %u);"
 (*     (param_type_to_string t) *)
     arg
-    (make_param_name index id)
+    (make_param_name index param.id)
     index
 
 let output_value_defs vals =

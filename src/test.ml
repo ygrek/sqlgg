@@ -4,14 +4,13 @@ open Sql
 open Sql.Type
 open Stmt
 
-let named s = { label = Some s; pos = (0,0) }
-let param = { label = None; pos = (0,0) }
-let p name t = (named name, t)
+let named s t = new_param { label = Some s; pos = (0,0) } t
+let param t = new_param { label = None; pos = (0,0) } t
 
 let cmp_params p1 p2 =
   try
-    List.for_all2 (fun (n1,t1) (n2,t2) ->
-      n1.label = n2.label && t1 = t2 && n1.pos = (0,0) && snd n2.pos > fst n2.pos)
+    List.for_all2 (fun p1 p2 ->
+      p1.id.label = p2.id.label && p1.typ = p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos)
     p1 p2
   with
     _ -> false
@@ -43,36 +42,36 @@ let test = [
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]
-     [param, Int];
+     [param  Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr "x" Text; attr "z" Int]
-     [param,Int; named "id", Int; named "lim",Int; ];
+     [param Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [attr "name" Text; attr "other_name" Text]
-     [named "delta", Int];
+     [named "delta" Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr "name" Text;]
-     [named "x", Int; param, Int; named "x", Int; param, Int;];
+     [named "x" Int; param Int; named "x" Int; param Int;];
   tt "insert into test values"
      []
-     [p "id" Int; p "str" Text; p "name" Text];
+     [named "id" Int; named "str" Text; named "name" Text];
   tt "insert into test (str,name) values"
      []
-     [p "str" Text; p "name" Text];
+     [named "str" Text; named "name" Text];
   tt "insert into test values (2,'hello' || ' world',@name)"
      []
-     [p "name" Text];
-  tt "insert or replace into test values (2,?,?)" [] [param,Text; param,Text;];
-  tt "replace into test values (2,?,?)" [] [param,Text; param,Text;];
+     [named "name" Text];
+  tt "insert or replace into test values (2,?,?)" [] [param Text; param Text;];
+  tt "replace into test values (2,?,?)" [] [param Text; param Text;];
   tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
     [attr "str" Text; attr "q" Text]
-    [p "id" Int; p "id" Int; p "def" Text];
+    [named "id" Int; named "id" Int; named "def" Text];
   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)
   tt "select str from test where id>=@id and id-@x<@id"
     [attr "str" Text;]
-    [p "id" Int; p "x" Int; p "id" Int];
+    [named "id" Int; named "x" Int; named "id" Int];
 ]
 
 let test2 = [
@@ -113,8 +112,8 @@ let test4 =
     [attr "" Int; attr "" Text] [] ~kind:(Select `Nat);
   tt "select greatest(10,x) from test4" a [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y" a [] ~kind:(Select `Nat);
-  tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select `One);
-  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named "n", Int] ~kind:(Select `One);
+  tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n" Int] ~kind:(Select `One);
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named "n" Int] ~kind:(Select `One);
 ]
 
 let test_parsing = [
@@ -138,12 +137,12 @@ let test_join_result_cols () =
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x"
     (ints ["j";"i";"k"])
-    [named "x",Int];
+    [named "x" Int];
 (*   NATURAL JOIN with common column qualified in WHERE *)
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
     (ints ["j";"i";"k"])
-    [named "x",Int];
+    [named "x" Int];
   ()
 
 let test_misc () =

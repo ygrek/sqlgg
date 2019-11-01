@@ -215,7 +215,8 @@ let print_table out (name,schema) =
 
 (** optional name and start/end position in string *)
 type param_id = { label : string option; pos : int * int; } [@@deriving show]
-type param = param_id * Type.t [@@deriving show]
+type param = { id : param_id; typ : Type.t; } [@@deriving show]
+let new_param id typ = { id; typ }
 type params = param list [@@deriving show]
 type ctor =
 | Simple of param_id * var list option
