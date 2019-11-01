@@ -175,12 +175,12 @@ let list_separate f l =
   List.iter (fun x -> match f x with `Left x -> tuck a x | `Right x -> tuck b x) l;
   List.rev !a, List.rev !b
 
-let make_variant_name i (name,_) =
+let make_variant_name i name =
   "`" ^ match name with
   | None -> sprintf "V_%d" i
   | Some n -> String.capitalize_ascii n
 
-let vname n = make_variant_name 0 (Some n,())
+let vname n = make_variant_name 0 (Some n)
 
 let match_variant_wildcard i name args =
   sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
@@ -197,9 +197,9 @@ let rec set_var index var =
     output "begin match %s with " (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
       match ctor with
-      | Simple (name,args) ->
+      | Simple (param,args) ->
         output "| %s%s -> %s"
-          (make_variant_name i name)
+          (make_variant_name i param.label)
           (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
           (match args with Some [] | None -> "()" | Some _ -> "");
         inc_indent ();
@@ -218,7 +218,9 @@ let rec eval_count_params vars =
   choices |> List.mapi begin fun i (name,ctors) ->
     sprintf " + (match %s with " (make_param_name i name) ^
     (ctors |> List.mapi (fun i ctor ->
-      match ctor with Verbatim (n,_) -> sprintf "%s -> 0" (vname n) | Simple (name,args) -> sprintf "%s -> %s" (match_variant_wildcard i name args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+      match ctor with
+      | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
+      | Simple (param,args) -> sprintf "%s -> %s" (match_variant_wildcard i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
     ^ ")"
   end |> String.concat ""
 
@@ -251,7 +253,7 @@ let make_sql l =
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_wildcard i name args); loop false l);
+      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_wildcard i name.label args); loop false l);
       bprintf b ")";
       loop true tl
   in

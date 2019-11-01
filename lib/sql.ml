@@ -214,7 +214,7 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = string option * (int * int) [@@deriving show]
+type param_id = { label : string option; pos : int * int; } [@@deriving show]
 type param = param_id * Type.t [@@deriving show]
 type params = param list [@@deriving show]
 type ctor =

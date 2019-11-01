@@ -272,8 +272,8 @@ ruleMain = parse
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
 
-  | "?" { PARAM (None,pos lexbuf) }
-  | [':' '@'] (ident as str) { PARAM (Some str,pos lexbuf) }
+  | "?" { PARAM { label=None; pos = pos lexbuf } }
+  | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
 
   | '"' { ident (ruleInQuotes "" lexbuf) }
   | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }

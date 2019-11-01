@@ -31,8 +31,8 @@ let name_of attr index =
   | "" -> sprintf "_%u" index
   | s -> s
 
-let make_param_name index ((name,_):Sql.param_id) =
-  match name with
+let make_param_name index (p:Sql.param_id) =
+  match p.label with
   | None -> sprintf "_%u" index
   | Some s -> s
 
@@ -73,7 +73,8 @@ let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
     match vars with
     | [] -> acc, i
-    | Sql.Single ((_,(i1,i2)),_ as param) :: tl ->
+    | Sql.Single param :: tl ->
+      let (i1,i2) = (fst param).pos in
       let acc, parami =
         match subst_param with
         | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
@@ -84,15 +85,23 @@ let substitute_vars s vars subst_param =
           parami + 1
       in
       loop acc i2 parami tl
-    | Choice ((_,(i1,i2) as name),ctors) :: tl ->
-      let acc = Static (String.slice ~first:i ~last:i1 s) :: acc in
-      let acc = Dynamic (name, ctors |> List.map (function
-      | Sql.Simple ((_,(c1,c2) as ctor),args) -> ctor, args, (match args with None -> [Static ""] | Some l ->
-          let (acc,last) = loop [] c1 0 l in
-          List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc))
-      | Verbatim (n,v) -> (Some n,(0,0)),Some [],[Static v])
-      ) :: acc
+    | Choice (name,ctors) :: tl ->
+      let dyn = ctors |> List.map begin function
+        | Sql.Simple (ctor,args) ->
+          let (c1,c2) = ctor.pos in
+          let pieces =
+            match args with
+            | None -> [Static ""]
+            | Some l ->
+              let (acc,last) = loop [] c1 0 l in
+              List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
+          in
+          ctor, args, pieces
+        | Verbatim (n,v) -> { label = Some n; pos = (0,0) }, Some [], [Static v]
+        end
       in
+      let (i1,i2) = name.pos in
+      let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in

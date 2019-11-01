@@ -450,13 +450,12 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single ((name,_loc),t) -> remember name t
-  | Choice (n,l) -> check_choice_name (fst n); List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | Single (p,t) -> remember p.label t
+  | Choice (p,l) -> check_choice_name p.label; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
-  | Single ((None,_),_ as x) -> Single x
-  | Single ((Some name,_ as id),_) -> Single (id, (try Hashtbl.find h name with _ -> assert false))
-  | Choice (id, l) -> Choice (id, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
+  | Single (p,t) -> Single (p, match p.label with None -> t | Some name -> try Hashtbl.find h name with _ -> assert false)
+  | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   in
   List.iter traverse l;
   List.map map l
@@ -503,7 +502,7 @@ let complete_sql kind sql =
       let attr_ref = "@" ^ attr_name in
       let pos_start = B.length b + String.length attr_ref_prefix in
       let pos_end = pos_start + String.length attr_ref in
-      let param = Single ((Some attr_name,(pos_start,pos_end)),attr.Sql.domain) in
+      let param = Single ({label=Some attr_name; pos=(pos_start,pos_end)},attr.Sql.domain) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

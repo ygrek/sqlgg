@@ -13,7 +13,7 @@
   let make_limit l =
     let param = function
       | _, `Const _ -> None
-      | x, `Param (None,pos) -> Some ((Some (match x with `Limit -> "limit" | `Offset -> "offset"),pos),Int)
+      | x, `Param { label=None; pos } -> Some ({ label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos },Int)
       | _, `Param p -> Some (p,Int)
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
@@ -350,7 +350,7 @@ expr:
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | PARAM { Param ($1,Any) }
-    | p=PARAM LCURLY l=choices c2=RCURLY { let (name,(p1,_p2)) = p in Choices ((name,(p1,c2+1)),l) }
+    | p=PARAM LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
@@ -377,7 +377,7 @@ case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: name=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ((name, (c1+1,c2)),e) }
+choice: label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(NUM_BIT_OR,choice) { $1 }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value Datetime }

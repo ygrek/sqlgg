@@ -4,14 +4,14 @@ open Sql
 open Sql.Type
 open Stmt
 
-let named s = (Some s,(0,0))
-let param = (None,(0,0))
+let named s = { label = Some s; pos = (0,0) }
+let param = { label = None; pos = (0,0) }
 let p name t = (named name, t)
 
 let cmp_params p1 p2 =
   try
-    List.for_all2 (fun ((name1,pos1),t1) ((name2,pos2),t2) ->
-      name1 = name2 && t1 = t2 && pos1 = (0,0) && snd pos2 > fst pos2)
+    List.for_all2 (fun (n1,t1) (n2,t2) ->
+      n1.label = n2.label && t1 = t2 && n1.pos = (0,0) && snd n2.pos > fst n2.pos)
     p1 p2
   with
     _ -> false
