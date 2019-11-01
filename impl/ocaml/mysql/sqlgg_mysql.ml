@@ -29,6 +29,7 @@ module type Types = sig
   module Float : Value
   module Text : Value
   module Datetime : Value
+  module Decimal : Value
   module Any : Value
 end
 
@@ -37,6 +38,8 @@ module Default_types = struct
   module Int = Int64
   module Text = struct type t = string let of_string s = s let to_string s = s end
   module Float = struct type t = float let of_string = float_of_string let to_string = string_of_float end
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Decimal = Float
   module Datetime = Text
   module Any = Text
 end
@@ -96,6 +99,7 @@ let get_column_Bool, get_column_Bool_nullable = get_column_ty "Bool" Bool.of_str
 let get_column_Int, get_column_Int_nullable = get_column_ty "Int" Int.of_string
 let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_string
 let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_string
+let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_string
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_string
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_string
 
@@ -115,6 +119,7 @@ let set_param_Any = set_param_ty Any.to_string
 let set_param_Bool = set_param_ty Bool.to_string
 let set_param_Int = set_param_ty Int.to_string
 let set_param_Float = set_param_ty Float.to_string
+let set_param_Decimal = set_param_ty Decimal.to_string
 let set_param_Datetime = set_param_ty Datetime.to_string
 
 let no_params stmt = P.execute stmt [||]

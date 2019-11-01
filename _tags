@@ -52,7 +52,7 @@ true: annot, bin_annot
 <impl/ocaml/sqlite3/*.ml{,i,y}>: package(sqlite3)
 <impl/ocaml/sqlite3/*.ml{,i,y}>: use_sqlgg_traits
 # OASIS_STOP
-true: warn(+A-e-40-41-42-44-45)
+true: warn(+A@8-e-40-41-42-44-45)
 true: -annot
 true: use_menhir
 "example" or "demo" or "impl": -traverse

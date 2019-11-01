@@ -45,7 +45,7 @@
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
        YEAR_MONTH FALSE TRUE DUPLICATE
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
-%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID
+%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL
 
 (*
 %left COMMA_JOIN
@@ -419,6 +419,7 @@ interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUART
              | YEAR_MONTH { }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
+               | T_DECIMAL { Decimal }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }
                | ENUM sequence(TEXT) charset? collate? { Text }

@@ -32,6 +32,7 @@ module type Types = sig
   module Float : Value
   module Text : Value
   module Datetime : Value
+  module Decimal : Value
   module Any : Value
 end
 
@@ -42,6 +43,7 @@ module Default_types(M : Mariadb.Nonblocking.S) : Types with
   type Int.t = int64 and
   type Text.t = string and
   type Float.t = float and
+  type Decimal.t = float and
   type Datetime.t = M.Time.t and
   type Any.t = M.Field.value =
 struct
@@ -66,6 +68,7 @@ struct
       | `Float x -> sprintf "float %f" x
       | `String x -> sprintf "string %S" x
       | `Bytes x -> sprintf "bytes %S" (Bytes.to_string x)
+      | `Decimal x -> sprintf "decimal %S" x
       | `Time x ->
       let open M.Time in
       sprintf "time %04d-%02d-%02d %02d:%02d:%02d.%03d" (year x) (month x) (day x) (hour x) (minute x) (second x) (microsecond x)
@@ -98,6 +101,9 @@ struct
       | value -> convfail "float" field value
     let to_value x = `Float x
   end)
+
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Decimal = Float
 
   module Text = Make(struct
     type t = string
@@ -170,6 +176,7 @@ let get_column_Bool, get_column_Bool_nullable = get_column_ty "Bool" Bool.of_fie
 let get_column_Int, get_column_Int_nullable = get_column_ty "Int" Int.of_field
 let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_field
 let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_field
+let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_field
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_field
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_field
 
@@ -190,6 +197,7 @@ let set_param_Any = set_param_ty Any.to_value
 let set_param_Bool = set_param_ty Bool.to_value
 let set_param_Int = set_param_ty Int.to_value
 let set_param_Float = set_param_ty Float.to_value
+let set_param_Decimal = set_param_ty Decimal.to_value
 let set_param_Datetime = set_param_ty Datetime.to_value
 
 let no_params stmt =

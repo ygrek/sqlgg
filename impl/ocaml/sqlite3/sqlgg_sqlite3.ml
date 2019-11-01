@@ -24,6 +24,8 @@ module Types = struct
   module Int = Int64
   module Text = struct type t = string end
   module Float = struct type t = float end
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Decimal = Float
   module Datetime = Float (* ? *)
   module Any = Text
 end
@@ -49,6 +51,7 @@ module Conv = struct
   let int = "Int", function INT i -> i | x -> raise (Type_mismatch x)
   let text = "Text", to_string
   let float = "Float", function FLOAT x -> x | x -> raise (Type_mismatch x)
+  let decimal = "Decimal", function INT i -> Int64.to_float i | FLOAT x -> x | x -> raise (Type_mismatch x)
 end
 
 let get_column_ty (name,conv) =
@@ -66,6 +69,7 @@ let get_column_Int, get_column_Int_nullable = get_column_ty Conv.int
 let get_column_Text, get_column_Text_nullable = get_column_ty Conv.text
 let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
 let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
+let get_column_Decimal, get_column_Decimal_nullable = get_column_ty Conv.decimal
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.float
 
 let test_ok sql rc =
@@ -87,6 +91,7 @@ let set_param_Any = set_param_Text
 let set_param_Bool stmt v = bind_param (S.Data.INT (if v then 1L else 0L)) stmt
 let set_param_Int stmt v = bind_param (S.Data.INT v) stmt
 let set_param_Float stmt v = bind_param (S.Data.FLOAT v) stmt
+let set_param_Decimal = set_param_Float
 let set_param_Datetime = set_param_Float
 
 let no_params _ = ()

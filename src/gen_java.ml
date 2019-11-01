@@ -1,4 +1,4 @@
-(* Java code generation *)
+(** Java code generation *)
 
 open ExtLib
 open Prelude
@@ -33,12 +33,13 @@ module L = struct
 
 let as_lang_type = function
   | Type.Int -> "int"
-  | Type.Text -> "String"
-  | Type.Any -> "String"
-  | Type.Float -> "float"
-  | Type.Blob -> "Blob"
-  | Type.Bool -> "boolean"
-  | Type.Datetime -> "Timestamp"
+  | Text -> "String"
+  | Any -> "String"
+  | Float -> "float"
+  | Blob -> "Blob"
+  | Bool -> "boolean"
+  | Decimal -> "float" (* BigDecimal? *)
+  | Datetime -> "Timestamp"
 
 let as_api_type = String.capitalize $ as_lang_type
 

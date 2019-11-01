@@ -175,7 +175,7 @@ let keywords =
       DATE, TIME, TIMESTAMP, INTERVAL
     *)
   all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
-  all T_INTEGER ["numeric";"decimal";"dec";"fixed"];
+  all T_DECIMAL ["numeric";"decimal";"dec";"fixed"];
   all T_INTEGER ["number"]; (* oracle *)
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];

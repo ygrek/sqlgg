@@ -33,12 +33,13 @@ module L = struct
 
 let as_api_type = function
   | Type.Int -> "Int64"
-  | Type.Text -> "String"
-  | Type.Float -> "Float"
-  | Type.Blob -> "String"
-  | Type.Bool -> "Boolean"
-  | Type.Datetime -> "Datetime"
-  | Type.Any -> "String"
+  | Text -> "String"
+  | Float -> "Float"
+  | Blob -> "String"
+  | Bool -> "Boolean"
+  | Decimal -> "Decimal"
+  | Datetime -> "Datetime"
+  | Any -> "String"
 
 let as_lang_type = as_api_type
 

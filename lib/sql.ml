@@ -6,7 +6,7 @@ open Prelude
 
 module Type =
 struct
-  type t = | Int | Text | Blob | Float | Bool | Datetime | Any
+  type t = | Int | Text | Blob | Float | Bool | Datetime | Decimal | Any
     [@@deriving show {with_path=false}]
 
   let to_string = show
