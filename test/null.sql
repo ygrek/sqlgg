@@ -4,13 +4,22 @@ CREATE TABLE IF NOT EXISTS `test` (
 );
 
 -- issue #45
--- @create
+-- @insert1
 INSERT INTO `test` SET
   `nullable` = CASE @nullable WHEN 0 THEN NULL ELSE @nullable END
 ;
 
--- @create2
-INSERT INTO `test` SET `nullable` = IFNULL(@nullable, 0);
+-- @insert2
+INSERT INTO `test` SET `nullable` = NULLIF(@nullable, 0);
 
 -- @list
-SELECT `id`, NULLIF(`nullable`, 0) `nullable` FROM `test`;
+SELECT `id`, IFNULL(`nullable`, 0) `nullable` FROM `test`;
+
+-- @insert_nullable
+INSERT INTO `test` SET `nullable` = @nullable;
+
+-- @insert_all
+INSERT INTO test VALUES;
+
+-- @list_nullable
+SELECT `id`, `nullable` FROM test;
