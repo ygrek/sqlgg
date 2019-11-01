@@ -186,9 +186,13 @@ let match_variant_wildcard i name args =
   sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
 
 let set_param index param =
-  output "T.set_param_%s p %s;"
-    (show_param_type param)
-    (show_param_name param index)
+  let nullable = match param.attr with None -> false | Some attr -> Constraints.mem Null attr.extra || Constraints.mem Autoincrement attr.extra in
+  let pname = show_param_name param index in
+  let ptype = show_param_type param in
+  if nullable then
+    output "begin match %s with None -> T.set_param_null p | Some v -> T.set_param_%s p v end;" pname ptype
+  else
+    output "T.set_param_%s p %s;" ptype pname
 
 let rec set_var index var =
   match var with

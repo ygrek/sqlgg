@@ -64,8 +64,11 @@ let resolve_column tables joined_schema {cname;tname} =
 let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
   l |> List.map begin fun (col,expr) ->
-    (* hint expression to unify with the column type *)
-    let typ = (resolve_column tables all col).domain in
+    let attr = resolve_column tables all col in
+    (* associate parameter with column *)
+    let expr = match expr with Param p -> Param { p with attr = Some attr } | e -> e in
+    (* HACK hint expression to unify with the column type *)
+    let typ = attr.domain in
     Fun (Type.(Ret Any), [Value typ;expr])
   end
 
@@ -173,7 +176,7 @@ and assign_types expr =
         in
         let assign inferred x =
           match x with
-          | `Param { id; typ = Any } -> `Param (new_param id inferred)
+          | `Param { id; typ = Any; attr } -> `Param (new_param ?attr id inferred)
           | x -> x
         in
         `Func (func,(List.map2 assign inferred_params params)), `Ok ret
@@ -450,11 +453,11 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ } -> remember id.label typ
+  | Single { id; typ; attr=_ } -> remember id.label typ
   | Choice (p,l) -> check_choice_name p.label; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
-  | Single { id; typ } -> Single (new_param id (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
+  | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   in
   List.iter traverse l;
@@ -502,7 +505,7 @@ let complete_sql kind sql =
       let attr_ref = "@" ^ attr_name in
       let pos_start = B.length b + String.length attr_ref_prefix in
       let pos_end = pos_start + String.length attr_ref in
-      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} attr.domain) in
+      let param = Single (new_param ~attr {label=Some attr_name; pos=(pos_start,pos_end)} attr.domain) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;
