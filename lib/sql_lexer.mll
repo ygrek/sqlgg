@@ -283,7 +283,7 @@ ruleMain = parse
   | "[" { ident (ruleInBrackets "" lexbuf) }
   | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
 
-  | ident as str { get_ident str }
+  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
@@ -346,13 +346,13 @@ ruleCommentMulti acc = parse
 {
 
   let parse_rule lexbuf =
-    let module P = Parser_state in
     let token = ruleMain lexbuf in
-    match !P.mode with
-    | P.Normal -> token
-    | P.Ignore ->
+    match !Parser_state.mode with
+    | Normal -> token
+    | Ignore ->
 (*         eprintf "ignored: %s\n" (lexeme lexbuf); *)
-      if (token = EOF) then token else IGNORED
+      if token = EOF then token else IGNORED
+    | Ident -> token
 
 }
 

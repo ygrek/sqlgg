@@ -178,8 +178,11 @@ table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (fun
 
 (* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
-table_def_done: table_def_done1 RPAREN IGNORED* { Parser_state.mode_normal () }
-table_def_done1: { Parser_state.mode_ignore () }
+table_def_done: parser_state_ignore RPAREN IGNORED* parser_state_normal { }
+
+parser_state_ignore: { Parser_state.mode_ignore () }
+parser_state_normal: { Parser_state.mode_normal () }
+parser_state_ident: { Parser_state.mode_ident () }
 
 select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
               {
@@ -350,7 +353,7 @@ expr:
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | PARAM { Param (new_param $1 Any) }
-    | p=PARAM LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
+    | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
@@ -377,8 +380,8 @@ case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
-choices: separated_nonempty_list(NUM_BIT_OR,choice) { $1 }
+choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
+choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value Datetime }
 
