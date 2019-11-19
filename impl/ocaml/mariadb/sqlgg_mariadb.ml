@@ -233,15 +233,23 @@ let execute db sql set_params =
   set_params stmt >>=
   fun res -> return (Int64.of_int (M.Res.affected_rows res))
 
-let select1 db sql set_params callback =
+let select_one_maybe db sql set_params convert =
   with_stmt db sql @@ fun stmt ->
   let open IO in
   set_params stmt >>=
   M.Res.fetch row_array >>=
-  check >>=
-  function
-  | Some row -> return (Some (callback row))
+  check >>= function
+  | Some row -> return (Some (convert row))
   | None -> return None
+
+let select_one db sql set_params convert =
+  with_stmt db sql @@ fun stmt ->
+  let open IO in
+  set_params stmt >>=
+  M.Res.fetch row_array >>=
+  check >>= function
+  | Some row -> IO.return (convert row)
+  | None -> oops "no row but one expected : %s" sql
 
 end
 

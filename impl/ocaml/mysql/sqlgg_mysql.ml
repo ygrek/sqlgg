@@ -150,11 +150,17 @@ let execute db sql set_params =
     if 0 <> P.real_status stmt then oops "execute : %s" sql;
     P.affected stmt)
 
-let select1 db sql set_params callback =
+let select_one_maybe db sql set_params convert =
   with_stmt db sql (fun stmt ->
     match P.fetch (set_params stmt) with
-    | Some row -> Some (callback row)
+    | Some row -> Some (convert row)
     | None -> None)
+
+let select_one db sql set_params convert =
+  with_stmt db sql (fun stmt ->
+    match P.fetch (set_params stmt) with
+    | Some row -> convert row
+    | None -> oops "no row but one expected : %s" sql)
 
 end
 

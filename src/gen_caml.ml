@@ -160,7 +160,8 @@ let output_schema_binder index schema kind =
   match schema with
   | [] -> "execute",""
   | _ -> match kind with
-         | Stmt.Select (`Zero_one | `One) -> "select1", output_select1_cb index schema
+         | Stmt.Select `Zero_one -> "select_one_maybe", output_select1_cb index schema
+         | Select `One -> "select_one", output_select1_cb index schema
          | _ -> "select",output_schema_binder index schema
 
 let is_callback stmt =

@@ -76,16 +76,22 @@ module type M = sig
   val no_params : statement -> result
 
   (**
-    Perform query and return results via callback for each row
+    Perform query (cardinality "any") and return results via callback for each row
     @raise Oops on error
   *)
   val select : connection -> string -> (statement -> result) -> (row -> unit) -> unit
 
   (**
-    Perform query and return first row if available
+    Perform query (cardinality "zero or one") and return first row if available
     @raise Oops on error
   *)
-  val select1 : connection -> string -> (statement -> result) -> (row -> 'b) -> 'b option
+  val select_one_maybe : connection -> string -> (statement -> result) -> (row -> 'r) -> 'r option
+
+  (**
+    Perform query (cardinality "one") and return first row
+    @raise Oops on error
+  *)
+  val select_one : connection -> string -> (statement -> result) -> (row -> 'r) -> 'r
 
   (** Execute non-query.
     @raise Oops on error
@@ -107,7 +113,9 @@ module type M_io = sig
 
   val select : connection -> string -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
 
-  val select1 : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
+  val select_one_maybe : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
+
+  val select_one : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b IO.future
 
   val execute : connection -> string -> (statement -> result IO.future) -> int64 IO.future
 

@@ -124,13 +124,21 @@ let execute db sql set_params =
     Int64.of_int (S.changes db)
   )
 
-let select1 db sql set_params callback =
+let select_one_maybe db sql set_params convert =
   with_sql db sql (fun stmt ->
     set_params stmt;
     if S.Rc.ROW = S.step (fst stmt) then
-      Some (callback stmt)
+      Some (convert stmt)
     else
       None)
+
+let select_one db sql set_params convert =
+  with_sql db sql (fun stmt ->
+    set_params stmt;
+    if S.Rc.ROW = S.step (fst stmt) then
+      convert stmt
+    else
+      raise (Oops (sprintf "no row but one expected : %s" sql)))
 
 end
 
