@@ -61,15 +61,20 @@ let all_tbl_columns = all_columns $ List.map snd
 let resolve_column tables joined_schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) joined_schema tname) cname
 
+(* HACK hint expression to unify with the column type *)
+let rec hint attr expr =
+  (* associate parameter with column *)
+  let expr = match expr with Param p -> Param { p with attr = Some attr } | e -> e in
+  (* go one level deep into choices *)
+  match expr with
+  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint attr) e) l)
+  | _ -> Fun (Type.(Ret Any), [Value attr.domain;expr])
+
 let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
   l |> List.map begin fun (col,expr) ->
     let attr = resolve_column tables all col in
-    (* associate parameter with column *)
-    let expr = match expr with Param p -> Param { p with attr = Some attr } | e -> e in
-    (* HACK hint expression to unify with the column type *)
-    let typ = attr.domain in
-    Fun (Type.(Ret Any), [Value typ;expr])
+    hint attr expr
   end
 
 let get_columns_schema tables l =
