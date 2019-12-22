@@ -85,3 +85,6 @@ select * from issue63 where x like 'hello%' or y like 'world%';
 INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)
 ON DUPLICATE KEY UPDATE
   `work_id` = LAST_INSERT_ID(`work_id`);
+
+-- @select_date
+SELECT `DATE`(CURRENT_TIMESTAMP);
