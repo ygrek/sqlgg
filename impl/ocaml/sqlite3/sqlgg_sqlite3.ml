@@ -49,7 +49,7 @@ module Conv = struct
   let () = Printexc.register_printer (function Type_mismatch x -> Some (sprintf "Conv.Type_mismatch %s" (to_string_debug x)) | _ -> None)
   let bool = "Bool", function INT i -> i <> 0L | x -> raise (Type_mismatch x)
   let int = "Int", function INT i -> i | x -> raise (Type_mismatch x)
-  let text = "Text", to_string
+  let text = "Text", function TEXT s | BLOB s -> s | x -> raise (Type_mismatch x)
   let float = "Float", function FLOAT x -> x | x -> raise (Type_mismatch x)
   let decimal = "Decimal", function INT i -> Int64.to_float i | FLOAT x -> x | x -> raise (Type_mismatch x)
 end
