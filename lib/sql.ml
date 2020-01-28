@@ -25,6 +25,7 @@ struct
       | Int, Float | Float, Int -> `Order (Int,Float)
       | Text, Blob | Blob, Text -> `Order (Text,Blob)
       | Int, Datetime | Datetime, Int -> `Order (Int,Datetime)
+      | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
       | _ -> `No
 
   let common_type f x y =
