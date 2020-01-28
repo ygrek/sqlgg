@@ -330,37 +330,37 @@ distinct_from: DISTINCT FROM { }
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun ((fixed Bool [Text; Text]), [e1;e2]) }
 
 expr:
-      expr numeric_bin_op expr %prec PLUS { Fun ((Ret Any),[$1;$3]) } (* TODO default Int *)
-    | expr DIV expr %prec PLUS { Fun ((Ret Int),[$1;$3]) }
-    | expr boolean_bin_op expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[$1;$3]) }
+      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
+    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
+    | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
-    | expr CONCAT_OP expr { Fun ((fixed Text [Text;Text]),[$1;$3]) }
+    | e1=expr CONCAT_OP e2=expr { Fun ((fixed Text [Text;Text]),[e1;e2]) }
     | e=like_expr esc=escape?
       {
         match esc with
         | None -> e
         | Some esc -> Fun ((fixed Bool [Bool; Text]), [e;esc])
       }
-    | unary_op expr { $2 }
-    | MINUS expr %prec UNARY_MINUS { $2 }
-    | INTERVAL expr interval_unit { Fun (fixed Datetime [Int], [$2]) }
-    | LPAREN expr RPAREN { $2 }
-    | attr_name collate? { Column $1 }
+    | unary_op e=expr { e }
+    | MINUS e=expr %prec UNARY_MINUS { e }
+    | INTERVAL e=expr interval_unit { Fun (fixed Datetime [Int], [e]) }
+    | LPAREN e=expr RPAREN { e }
+    | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=IDENT { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
-    | PARAM { Param (new_param $1 Any) }
+    | p=PARAM { Param (new_param p Any) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
-    | expr IS NOT? NULL { Fun (Ret Bool, [$1]) }
+    | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
-    | expr mnot(BETWEEN) expr AND expr { poly Bool [$1;$3;$5] }
+    | e=expr mnot(BETWEEN) a=expr AND b=expr { poly Bool [e;a;b] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[Select (select,`Exists)]) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
