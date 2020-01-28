@@ -40,6 +40,7 @@ let as_api_type = function
   | Decimal -> "Decimal"
   | Datetime -> "Datetime"
   | Any -> "String"
+  | Unit _ -> assert false
 
 let as_lang_type = as_api_type
 

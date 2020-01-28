@@ -99,9 +99,17 @@ let get_statements ch =
       begin match parse_one sql with
       | None -> next ()
       | Some stmt ->
+          let open Sql in
           if not (Sql.Schema.is_unique stmt.schema) then
             Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" (fst sql);
-          stmt
+          match List.exists (fun a -> Type.is_unit a.domain) stmt.schema with
+          | true -> Error.log "Output schema contains column of type Unit, which is not allowed"; next ()
+          | false ->
+          (* FIXME iterate choice *)
+          match List.filter_map (function (i,Single p) when Type.is_unit p.typ -> Some (Gen.show_param_name p i) | _ -> None) @@ List.mapi (fun i p -> i,p)  stmt.vars with
+          | _::_ as l -> Error.log "Input parameter(s) of type Unit not allowed : %s" (String.concat " " l); next ()
+          | [] ->
+            stmt
       end
   in
   Enum.from next |> List.of_enum

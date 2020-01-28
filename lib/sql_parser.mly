@@ -348,6 +348,7 @@ expr:
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
+    | v=interval_unit { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=IDENT { Tables.check table; e1 }
@@ -419,7 +420,7 @@ interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUART
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
-             | YEAR_MONTH { }
+             | YEAR_MONTH { Value (Unit `Interval) }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }

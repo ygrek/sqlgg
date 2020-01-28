@@ -40,6 +40,7 @@ let as_lang_type = function
   | Bool -> "boolean"
   | Decimal -> "float" (* BigDecimal? *)
   | Datetime -> "Timestamp"
+  | Unit _ -> assert false
 
 let as_api_type = String.capitalize $ as_lang_type
 

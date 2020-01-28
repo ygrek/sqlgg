@@ -6,7 +6,16 @@ open Prelude
 
 module Type =
 struct
-  type t = | Int | Text | Blob | Float | Bool | Datetime | Decimal | Any
+  type t =
+    | Unit of [`Interval]
+    | Int
+    | Text
+    | Blob
+    | Float
+    | Bool
+    | Datetime
+    | Decimal
+    | Any
     [@@deriving show {with_path=false}]
 
   let to_string = show
@@ -15,6 +24,8 @@ struct
     match x,y with
     | Any, _ | _, Any -> true
     | _ -> x = y
+
+  let is_unit = function Unit _ -> true | _ -> false
 
   let order x y =
     if x = y then
@@ -393,6 +404,7 @@ let () =
   "from_unixtime" |> monomorphic Text [Int;Text];
   "unix_timestamp" |> monomorphic Int [];
   "unix_timestamp" |> monomorphic Int [Datetime];
+  ["timestampdiff";"timestampadd"] ||> monomorphic Int [Unit `Interval;Datetime;Datetime];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
   "substring" |> monomorphic Text [Text; Int];
   "substring" |> monomorphic Text [Text; Int; Int];
