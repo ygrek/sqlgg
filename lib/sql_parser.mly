@@ -358,6 +358,8 @@ expr:
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
+    | DATE LPAREN e=expr RPAREN { Fun (Function.lookup "date" 1, [e]) }
+    | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
