@@ -365,16 +365,22 @@ let exclude narg name = add_ (Some narg) None name
 let add_multi typ name = add_ None (Some typ) name
 let add narg typ name = add_ (Some narg) (Some typ) name
 
+let sponge = Type.(Multi (Typ Any, Typ Any))
+
 let lookup name narg =
   let name = String.lowercase name in
   match Hashtbl.find h (name,Some narg) with
-  | None -> fail "Wrong number of arguments for function %S" name
+  | None ->
+    eprintfn "W: wrong number of arguments for known function %S, treating as untyped" name;
+    sponge
   | Some t -> t
   | exception _ ->
   match Hashtbl.find h (name,None) with
   | None -> assert false
   | Some t -> t
-  | exception _ -> fail "Unknown function %S of %d arguments" name narg
+  | exception _ ->
+    eprintfn "W: unknown function %S of %d arguments, treating as untyped" name narg;
+    sponge
 
 let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
 let multi_polymorphic name = add_multi Type.(Multi (Var 0, Var 0)) name
