@@ -1,18 +1,18 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_transactions" sql="create table transactions (amount float not null, `date` datetime)" kind="create" target="transactions" cardinality="0">
+ <stmt name="create_transactions" sql="create table transactions (amount float not null, `date` datetime)" category="DDL" kind="create" target="transactions" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert" sql="insert into transactions values (@amount,@date)" kind="insert" target="transactions" cardinality="0">
+ <stmt name="insert" sql="insert into transactions values (@amount,@date)" category="DML" kind="insert" target="transactions" cardinality="0">
   <in>
    <value name="amount" type="Float"/>
    <value name="date" type="Datetime"/>
   </in>
   <out/>
  </stmt>
- <stmt name="select" sql="select amount + 2.5 from transactions where `date` &gt; @date and amount &gt; @limit" kind="select" cardinality="n">
+ <stmt name="select" sql="select amount + 2.5 from transactions where `date` &gt; @date and amount &gt; @limit" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="date" type="Datetime"/>
    <value name="limit" type="Float"/>

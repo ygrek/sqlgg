@@ -1,22 +1,22 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_person" sql="CREATE TABLE IF NOT EXISTS person (id INTEGER PRIMARY KEY AUTO_INCREMENT,name TEXT,surname TEXT)" kind="create" target="person" cardinality="0">
+ <stmt name="create_person" sql="CREATE TABLE IF NOT EXISTS person (id INTEGER PRIMARY KEY AUTO_INCREMENT,name TEXT,surname TEXT)" category="DDL" kind="create" target="person" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="add_person" sql="INSERT INTO person (name,surname) VALUES (@name,@surname)" kind="insert" target="person" cardinality="0">
+ <stmt name="add_person" sql="INSERT INTO person (name,surname) VALUES (@name,@surname)" category="DML" kind="insert" target="person" cardinality="0">
   <in>
    <value name="name" type="Text"/>
    <value name="surname" type="Text"/>
   </in>
   <out/>
  </stmt>
- <stmt name="create_money" sql="CREATE TABLE IF NOT EXISTS money (src INTEGER, dst INTEGER, amount INTEGER)" kind="create" target="money" cardinality="0">
+ <stmt name="create_money" sql="CREATE TABLE IF NOT EXISTS money (src INTEGER, dst INTEGER, amount INTEGER)" category="DDL" kind="create" target="money" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="add_money" sql="INSERT INTO money VALUES (@src,@dst,@amount)" kind="insert" target="money" cardinality="0">
+ <stmt name="add_money" sql="INSERT INTO money VALUES (@src,@dst,@amount)" category="DML" kind="insert" target="money" cardinality="0">
   <in>
    <value name="src" type="Int"/>
    <value name="dst" type="Int"/>
@@ -24,14 +24,14 @@
   </in>
   <out/>
  </stmt>
- <stmt name="calc_total" sql="SELECT CONCAT(name,' ',surname) AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id" kind="select" cardinality="n">
+ <stmt name="calc_total" sql="SELECT CONCAT(name,' ',surname) AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="fullname" type="Text"/>
    <value name="total" type="Int"/>
   </out>
  </stmt>
- <stmt name="list_donors" sql="SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @_0) LIMIT @limit" kind="select" cardinality="n">
+ <stmt name="list_donors" sql="SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @_0) LIMIT @limit" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="_0" type="Text"/>
    <value name="limit" type="Int"/>
@@ -40,11 +40,11 @@
    <value name="surname" type="Text"/>
   </out>
  </stmt>
- <stmt name="drop_person" sql="DROP TABLE IF EXISTS person" kind="drop" target="person" cardinality="0">
+ <stmt name="drop_person" sql="DROP TABLE IF EXISTS person" category="DDL" kind="drop" target="person" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="drop_money" sql="DROP TABLE IF EXISTS money" kind="drop" target="money" cardinality="0">
+ <stmt name="drop_money" sql="DROP TABLE IF EXISTS money" category="DDL" kind="drop" target="money" cardinality="0">
   <in/>
   <out/>
  </stmt>

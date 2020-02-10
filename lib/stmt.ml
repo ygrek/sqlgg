@@ -17,5 +17,20 @@ type kind = | Select of cardinality (** possible number of rows *)
             | Delete of string
             | Alter of string
             | Drop of string
+            | CreateRoutine of string
             | Other
             [@@deriving show {with_path=false}]
+
+type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}]
+
+let category_of_stmt_kind = function
+| Select _ -> DQL
+| Insert _
+| Update _
+| Delete _ -> DML
+| Create _
+| CreateIndex _
+| CreateRoutine _
+| Alter _
+| Drop _ -> DDL
+| Other -> OTHER

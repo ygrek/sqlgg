@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_foo" sql="CREATE TABLE `foo` (&#x0A;  `col1` INTEGER NOT NULL,&#x0A;  `col2` INTEGER NOT NULL,&#x0A;  `col3` INTEGER NOT NULL&#x0A;)" kind="create" target="foo" cardinality="0">
+ <stmt name="create_foo" sql="CREATE TABLE `foo` (&#x0A;  `col1` INTEGER NOT NULL,&#x0A;  `col2` INTEGER NOT NULL,&#x0A;  `col3` INTEGER NOT NULL&#x0A;)" category="DDL" kind="create" target="foo" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="create_index_foo_unique" sql="CREATE INDEX `foo_unique` ON `foo` (`col1`, `col2`, `col3`)" kind="create_index" target="foo_unique" cardinality="0">
+ <stmt name="create_index_foo_unique" sql="CREATE INDEX `foo_unique` ON `foo` (`col1`, `col2`, `col3`)" category="DDL" kind="create_index" target="foo_unique" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="alter_foo_2" sql="ALTER TABLE `foo`&#x0A;DROP INDEX `foo_unique`,&#x0A;ADD UNIQUE `foo_unique` (`col1`, `col3`)" kind="alter" target="foo" cardinality="0">
+ <stmt name="alter_foo_2" sql="ALTER TABLE `foo`&#x0A;DROP INDEX `foo_unique`,&#x0A;ADD UNIQUE `foo_unique` (`col1`, `col3`)" category="DDL" kind="alter" target="foo" cardinality="0">
   <in/>
   <out/>
  </stmt>

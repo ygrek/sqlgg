@@ -76,8 +76,9 @@ let generate_code (x,_) index stmt =
     | Delete t         -> ["kind", "delete"; "target", t; "cardinality", "0"]
     | Alter t          -> ["kind", "alter"; "target", t; "cardinality", "0"]
     | Drop t           -> ["kind", "drop"; "target", t; "cardinality", "0"]
-    | Other            -> [] in
-  x := Node ("stmt", ("name",name)::("sql",sql)::attrs, [input; output]) :: !x
+    | CreateRoutine s  -> ["kind", "create_routine"; "target", s]
+    | Other            -> ["kind", "other"] in
+  x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, [input; output]) :: !x
 
 let start_output (x,pre) = pre := !x; x := []
 

@@ -1,40 +1,40 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="select_0" sql="SELECT strftime('%s','now')" kind="select" cardinality="1">
+ <stmt name="select_0" sql="SELECT strftime('%s','now')" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="create_test" sql="CREATE TABLE test (x INT, `key` VARBINARY(200))" kind="create" target="test" cardinality="0">
+ <stmt name="create_test" sql="CREATE TABLE test (x INT, `key` VARBINARY(200))" category="DDL" kind="create" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_2" sql="SELECT * FROM test WHERE x IS NOT NULL" kind="select" cardinality="n">
+ <stmt name="select_2" sql="SELECT * FROM test WHERE x IS NOT NULL" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="x" type="Int"/>
    <value name="key" type="Text"/>
   </out>
  </stmt>
- <stmt name="create_index_key" sql="CREATE INDEX `key` ON test(`key`(20))" kind="create_index" target="key" cardinality="0">
+ <stmt name="create_index_key" sql="CREATE INDEX `key` ON test(`key`(20))" category="DDL" kind="create_index" target="key" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_4" sql="SELECT avg(x) FROM test" kind="select" cardinality="1">
+ <stmt name="select_4" sql="SELECT avg(x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Float"/>
   </out>
  </stmt>
- <stmt name="select_5" sql="SELECT count(*) FROM test" kind="select" cardinality="1">
+ <stmt name="select_5" sql="SELECT count(*) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>
   </out>
  </stmt>
- <stmt name="select_6" sql="SELECT x FROM test WHERE @_0 &gt;= `key` ORDER BY `key` DESC LIMIT 1" kind="select" cardinality="0,1">
+ <stmt name="select_6" sql="SELECT x FROM test WHERE @_0 &gt;= `key` ORDER BY `key` DESC LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
    <value name="_0" type="Text"/>
   </in>
@@ -42,7 +42,7 @@
    <value name="x" type="Int"/>
   </out>
  </stmt>
- <stmt name="select_7" sql="SELECT x FROM test WHERE `key` &lt; @_0" kind="select" cardinality="n">
+ <stmt name="select_7" sql="SELECT x FROM test WHERE `key` &lt; @_0" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="_0" type="Text"/>
   </in>
@@ -50,123 +50,123 @@
    <value name="x" type="Int"/>
   </out>
  </stmt>
- <stmt name="create_appointments" sql="CREATE TABLE appointments (alert_at DATETIME)" kind="create" target="appointments" cardinality="0">
+ <stmt name="create_appointments" sql="CREATE TABLE appointments (alert_at DATETIME)" category="DDL" kind="create" target="appointments" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert_appointments_9" sql="INSERT INTO `appointments` (&#x0A;  `alert_at`&#x0A;) VALUES (&#x0A;  NOW() + INTERVAL @delay SECOND&#x0A;)" kind="insert" target="appointments" cardinality="0">
+ <stmt name="insert_appointments_9" sql="INSERT INTO `appointments` (&#x0A;  `alert_at`&#x0A;) VALUES (&#x0A;  NOW() + INTERVAL @delay SECOND&#x0A;)" category="DML" kind="insert" target="appointments" cardinality="0">
   <in>
    <value name="delay" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="select_10" sql="SELECT SUM(CASE WHEN x &gt; 10 THEN 1 ELSE 0 END) FROM test" kind="select" cardinality="1">
+ <stmt name="select_10" sql="SELECT SUM(CASE WHEN x &gt; 10 THEN 1 ELSE 0 END) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>
   </out>
  </stmt>
- <stmt name="create_issue14" sql="CREATE TABLE issue14 (x integer)" kind="create" target="issue14" cardinality="0">
+ <stmt name="create_issue14" sql="CREATE TABLE issue14 (x integer)" category="DDL" kind="create" target="issue14" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert_issue14_12" sql="INSERT INTO issue14 (x) VALUES (@x)" kind="insert" target="issue14" cardinality="0">
+ <stmt name="insert_issue14_12" sql="INSERT INTO issue14 (x) VALUES (@x)" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
    <value name="x" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_issue14_13" sql="INSERT INTO issue14 SET x = @x" kind="insert" target="issue14" cardinality="0">
+ <stmt name="insert_issue14_13" sql="INSERT INTO issue14 SET x = @x" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
    <value name="x" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_issue14_14" sql="INSERT INTO issue14 (x) SELECT @x" kind="insert" target="issue14" cardinality="0">
+ <stmt name="insert_issue14_14" sql="INSERT INTO issue14 (x) SELECT @x" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
    <value name="x" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_test_15" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + @_0" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_15" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + @_0" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="_0" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_test_16" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + @_0" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_16" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + @_0" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="_0" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_test_17" sql="INSERT INTO test VALUES (20, $$twenty$$)" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_17" sql="INSERT INTO test VALUES (20, $$twenty$$)" category="DML" kind="insert" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert_test_18" sql="INSERT INTO test VALUES (200,&#x0A;$$twenty&#x0A;times&#x0A;ten$$)" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_18" sql="INSERT INTO test VALUES (200,&#x0A;$$twenty&#x0A;times&#x0A;ten$$)" category="DML" kind="insert" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_19" sql="SELECT $function$&#x0A;BEGIN&#x0A;    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);&#x0A;END;&#x0A;$function$" kind="select" cardinality="1">
+ <stmt name="select_19" sql="SELECT $function$&#x0A;BEGIN&#x0A;    RETURN ($1 ~ $q$[\t\r\n\v\\]$q$);&#x0A;END;&#x0A;$function$" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="insert_test_20" sql="INSERT INTO `test` (`x`, `key`) VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_20" sql="INSERT INTO `test` (`x`, `key`) VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" category="DML" kind="insert" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert_test_21" sql="INSERT INTO test VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_test_21" sql="INSERT INTO test VALUES&#x0A;(1, 'one'),&#x0A;(2, 'two'),&#x0A;(3, 'three')" category="DML" kind="insert" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="issue47" sql="SELECT count(*) &gt; 0 FROM test" kind="select" cardinality="1">
+ <stmt name="issue47" sql="SELECT count(*) &gt; 0 FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Bool"/>
   </out>
  </stmt>
- <stmt name="select_23" sql="SELECT count(*) * avg(x) FROM test" kind="select" cardinality="1">
+ <stmt name="select_23" sql="SELECT count(*) * avg(x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Float"/>
   </out>
  </stmt>
- <stmt name="issue45" sql="INSERT INTO test VALUES&#x0A;(1, @one),&#x0A;(2, @two),&#x0A;(3, @one)" kind="insert" target="test" cardinality="0">
+ <stmt name="issue45" sql="INSERT INTO test VALUES&#x0A;(1, @one),&#x0A;(2, @two),&#x0A;(3, @one)" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="two" type="Text"/>
    <value name="one" type="Text"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_appointments_25" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (@alert)" kind="insert" target="appointments" cardinality="0">
+ <stmt name="insert_appointments_25" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (@alert)" category="DML" kind="insert" target="appointments" cardinality="0">
   <in>
    <value name="alert" type="Datetime"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_appointments_26" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (FROM_UNIXTIME(@alert))" kind="insert" target="appointments" cardinality="0">
+ <stmt name="insert_appointments_26" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (FROM_UNIXTIME(@alert))" category="DML" kind="insert" target="appointments" cardinality="0">
   <in>
    <value name="alert" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="count_x" sql="SELECT COUNT(x) FROM test" kind="select" cardinality="1">
+ <stmt name="count_x" sql="SELECT COUNT(x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>
   </out>
  </stmt>
- <stmt name="count_distinct" sql="SELECT COUNT(DISTINCT x), SUM(DISTINCT x) FROM test" kind="select" cardinality="1">
+ <stmt name="count_distinct" sql="SELECT COUNT(DISTINCT x), SUM(DISTINCT x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>
    <value name="_1" type="Int"/>
   </out>
  </stmt>
- <stmt name="issue54_mysql" sql="SELECT 0 &lt;=&gt; 0, 0 &lt;=&gt; null, null &lt;=&gt; 0, null &lt;=&gt; null" kind="select" cardinality="1">
+ <stmt name="issue54_mysql" sql="SELECT 0 &lt;=&gt; 0, 0 &lt;=&gt; null, null &lt;=&gt; 0, null &lt;=&gt; null" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Bool"/>
@@ -175,7 +175,7 @@
    <value name="_3" type="Bool"/>
   </out>
  </stmt>
- <stmt name="issue54_sqlite" sql="SELECT 0 is 0, 0 is null, null is 0, null is null" kind="select" cardinality="1">
+ <stmt name="issue54_sqlite" sql="SELECT 0 is 0, 0 is null, null is 0, null is null" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Bool"/>
@@ -184,49 +184,49 @@
    <value name="_3" type="Bool"/>
   </out>
  </stmt>
- <stmt name="issue54_sql" sql="SELECT 42 is not distinct from null, 42 is distinct from null" kind="select" cardinality="1">
+ <stmt name="issue54_sql" sql="SELECT 42 is not distinct from null, 42 is distinct from null" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Bool"/>
    <value name="_1" type="Bool"/>
   </out>
  </stmt>
- <stmt name="create_workareas" sql="CREATE TABLE workareas (work_id int autoincrement, about text, k int) unique key (k)" kind="create" target="workareas" cardinality="0">
+ <stmt name="create_workareas" sql="CREATE TABLE workareas (work_id int autoincrement, about text, k int) unique key (k)" category="DDL" kind="create" target="workareas" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="delete_test_33" sql="delete from test&#x0A;where x in (@x1, @x2)&#x0A;  and not exists (select 1 from workareas where work_id = test.x)" kind="delete" target="test" cardinality="0">
+ <stmt name="delete_test_33" sql="delete from test&#x0A;where x in (@x1, @x2)&#x0A;  and not exists (select 1 from workareas where work_id = test.x)" category="DML" kind="delete" target="test" cardinality="0">
   <in>
    <value name="x1" type="Int"/>
    <value name="x2" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="create_issue63" sql="create table issue63 ( x text, y text )" kind="create" target="issue63" cardinality="0">
+ <stmt name="create_issue63" sql="create table issue63 ( x text, y text )" category="DDL" kind="create" target="issue63" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="issue63" sql="select * from issue63 where x like 'hello%' or y like 'world%'" kind="select" cardinality="n">
+ <stmt name="issue63" sql="select * from issue63 where x like 'hello%' or y like 'world%'" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="x" type="Text"/>
    <value name="y" type="Text"/>
   </out>
  </stmt>
- <stmt name="last_insert_id" sql="INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)&#x0A;ON DUPLICATE KEY UPDATE&#x0A;  `work_id` = LAST_INSERT_ID(`work_id`)" kind="insert" target="workareas" cardinality="0">
+ <stmt name="last_insert_id" sql="INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)&#x0A;ON DUPLICATE KEY UPDATE&#x0A;  `work_id` = LAST_INSERT_ID(`work_id`)" category="DML" kind="insert" target="workareas" cardinality="0">
   <in>
    <value name="about" type="Text"/>
    <value name="k" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="select_date" sql="SELECT `DATE`(CURRENT_TIMESTAMP)" kind="select" cardinality="1">
+ <stmt name="select_date" sql="SELECT `DATE`(CURRENT_TIMESTAMP)" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="select_38" sql="SELECT DATE(CURRENT_TIMESTAMP)" kind="select" cardinality="1">
+ <stmt name="select_38" sql="SELECT DATE(CURRENT_TIMESTAMP)" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>

@@ -1,22 +1,22 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_master" sql="CREATE TABLE IF NOT EXISTS `master` (&#x0A;  `id` INTEGER PRIMARY KEY&#x0A;)" kind="create" target="master" cardinality="0">
+ <stmt name="create_master" sql="CREATE TABLE IF NOT EXISTS `master` (&#x0A;  `id` INTEGER PRIMARY KEY&#x0A;)" category="DDL" kind="create" target="master" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="create_detail" sql="CREATE TABLE IF NOT EXISTS `detail` (&#x0A;  `id` INTEGER PRIMARY KEY,&#x0A;  `master_id` INTEGER,&#x0A;  FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)&#x0A;)" kind="create" target="detail" cardinality="0">
+ <stmt name="create_detail" sql="CREATE TABLE IF NOT EXISTS `detail` (&#x0A;  `id` INTEGER PRIMARY KEY,&#x0A;  `master_id` INTEGER,&#x0A;  FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)&#x0A;)" category="DDL" kind="create" target="detail" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_2" sql="SELECT m.`id` m_id, d.`id` d_id&#x0A;FROM `master` m&#x0A;LEFT JOIN `detail` d ON d.`id` = (&#x0A;  SELECT dd.`id`&#x0A;  FROM `detail` dd&#x0A;  WHERE dd.`master_id` = m.`id`&#x0A;  ORDER BY dd.`id` DESC&#x0A;  LIMIT 1&#x0A;)" kind="select" cardinality="n">
+ <stmt name="select_2" sql="SELECT m.`id` m_id, d.`id` d_id&#x0A;FROM `master` m&#x0A;LEFT JOIN `detail` d ON d.`id` = (&#x0A;  SELECT dd.`id`&#x0A;  FROM `detail` dd&#x0A;  WHERE dd.`master_id` = m.`id`&#x0A;  ORDER BY dd.`id` DESC&#x0A;  LIMIT 1&#x0A;)" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="m_id" type="Int"/>
    <value name="d_id" type="Int"/>
   </out>
  </stmt>
- <stmt name="select_3" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 'foo', NULL&#x0A;) x" kind="select" cardinality="n">
+ <stmt name="select_3" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 'foo', NULL&#x0A;) x" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="_0" type="Int"/>
@@ -24,14 +24,14 @@
    <value name="_2" type="Any"/>
   </out>
  </stmt>
- <stmt name="select_4" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 2 UNION&#x0A;  SELECT 3, 4&#x0A;) x" kind="select" cardinality="n">
+ <stmt name="select_4" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 2 UNION&#x0A;  SELECT 3, 4&#x0A;) x" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="_0" type="Int"/>
    <value name="_1" type="Int"/>
   </out>
  </stmt>
- <stmt name="select_5" sql="SELECT x.* FROM (&#x0A;  SELECT 'foo' UNION ALL&#x0A;  SELECT 'foo'&#x0A;) x" kind="select" cardinality="n">
+ <stmt name="select_5" sql="SELECT x.* FROM (&#x0A;  SELECT 'foo' UNION ALL&#x0A;  SELECT 'foo'&#x0A;) x" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="_0" type="Text"/>

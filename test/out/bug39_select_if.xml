@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_profiles" sql="create table profiles (id int, host text, today_count int)" kind="create" target="profiles" cardinality="0">
+ <stmt name="create_profiles" sql="create table profiles (id int, host text, today_count int)" category="DDL" kind="create" target="profiles" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_1" sql="select id, host, if(@x &lt; now() - interval 1 day, 0, today_count) from profiles" kind="select" cardinality="n">
+ <stmt name="select_1" sql="select id, host, if(@x &lt; now() - interval 1 day, 0, today_count) from profiles" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="x" type="Datetime"/>
   </in>
