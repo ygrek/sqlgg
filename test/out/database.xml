@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_database1_test" sql="CREATE TABLE database1.test (id INT PRIMARY KEY, txt TEXT)" category="DDL" kind="create" target="database1.test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_database2_test" sql="CREATE TABLE database2.test (id INT PRIMARY KEY, amount INT)" category="DDL" kind="create" target="database2.test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT COUNT(*)&#x0A;FROM database1.test t1&#x0A;FULL OUTER JOIN database2.test t2 ON t1.id = t2.id&#x0A;WHERE t1.id IS NULL OR t2.id IS NULL" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Int"/>
+  </out>
+ </stmt>
+</sqlgg>

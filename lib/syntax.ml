@@ -372,10 +372,10 @@ let eval (stmt:Sql.stmt) =
       | `RenameTable new_name -> Tables.rename name new_name
       | `RenameIndex _ -> () (* indices are not tracked yet *)
       | `None -> ()) actions;
-      ([],[],Alter name)
+      ([],[],Alter [name])
   | Rename l ->
     List.iter (fun (o,n) -> Tables.rename o n) l;
-    ([], [], Alter (String.concat "," @@ List.map fst l)) (* to have sensible target for gen_xml *)
+    ([], [], Alter (List.map fst l)) (* to have sensible target for gen_xml *)
   | Drop name ->
       Tables.drop name;
       ([],[],Drop name)

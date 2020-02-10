@@ -216,11 +216,14 @@ struct
 
 end
 
-type table = string * Schema.t [@@deriving show]
-type schema = Schema.t
+type table_name = { db : string option; tn : string } [@@deriving show]
+let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn | None -> tn
+let make_table_name ?db tn = { db; tn }
+type schema = Schema.t [@@deriving show]
+type table = table_name * schema [@@deriving show]
 
 let print_table out (name,schema) =
-  IO.write_line out name;
+  IO.write_line out (show_table_name name);
   schema |> List.iter begin fun {name;domain;extra} ->
     IO.printf out "%10s %s %s\n" (Type.to_string domain) name (Constraints.show extra)
   end;
@@ -243,7 +246,7 @@ type vars = var list [@@deriving show]
 type alter_pos = [ `After of string | `Default | `First ]
 type alter_action = [
   | `Add of attr * alter_pos
-  | `RenameTable of string
+  | `RenameTable of table_name
   | `RenameColumn of string * string
   | `RenameIndex of string * string
   | `Drop of string
@@ -258,12 +261,11 @@ type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
 type col_name = {
   cname : string; (** column name *)
-  tname : string option; (** table name *)
+  tname : table_name option;
 }
 and limit = param list * bool
 and nested = source * (source * join_cond) list
-and source1 = [ `Select of select_full | `Table of string | `Nested of nested ]
-and source = source1 * string option
+and source = [ `Select of select_full | `Table of table_name | `Nested of nested ] * table_name option (* alias *)
 and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
 and select = {
   columns : column list;
@@ -289,7 +291,7 @@ and expr =
   | Inserted of string (** inserted value *)
 and column =
   | All
-  | AllOf of string
+  | AllOf of table_name
   | Expr of expr * string option (** name *)
   [@@deriving show {with_path=false}]
 
@@ -308,7 +310,7 @@ type assignments = (col_name * expr) list
 
 type insert_action =
 {
-  target : string;
+  target : table_name;
   action : [ `Set of assignments option
            | `Values of (string list option * expr list list option) (* column names * list of value tuples *)
            | `Select of (string list option * select_full) ];
@@ -316,15 +318,15 @@ type insert_action =
 }
 
 type stmt =
-| Create of string * [ `Schema of schema | `Select of select_full ]
-| Drop of string
-| Alter of string * alter_action list
-| Rename of (string * string) list
-| CreateIndex of string * string * string list (* index name, table name, columns *)
+| Create of table_name * [ `Schema of schema | `Select of select_full ]
+| Drop of table_name
+| Alter of table_name * alter_action list
+| Rename of (table_name * table_name) list
+| CreateIndex of string * table_name * string list (* index name, table name, columns *)
 | Insert of insert_action
-| Delete of string * expr option
+| Delete of table_name * expr option
 | Set of string * expr
-| Update of string * assignments * expr option * order * param list (* where, order, limit *)
+| Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
 | CreateRoutine of string * Type.t option * (string * Type.t * expr option) list

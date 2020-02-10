@@ -103,7 +103,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Drop name
               }
-         | CREATE UNIQUE? INDEX if_not_exists? name=table_name ON table=table_name cols=sequence(index_column)
+         | CREATE UNIQUE? INDEX if_not_exists? name=IDENT ON table=table_name cols=sequence(index_column)
               {
                 CreateIndex (name, table, cols)
               }
@@ -169,7 +169,8 @@ compound_stmt: BEGIN statement+ END { } (* mysql *)
 routine_extra: LANGUAGE IDENT { }
              | COMMENT TEXT { }
 
-%inline table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
+%inline table_name: name=IDENT { Sql.make_table_name name }
+                  | db=IDENT DOT name=IDENT { Sql.make_table_name ~db name }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
@@ -210,7 +211,7 @@ source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
        | LPAREN s=table_list RPAREN { `Nested s }
 
-source: src=source1 alias=maybe_as { src, alias }
+source: src=source1 alias=maybe_as { src, Option.map Sql.make_table_name alias }
 
 insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
@@ -263,7 +264,7 @@ maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD index_type IDENT? sequence(IDENT) { `None }
-            | RENAME either(TO,AS)? new_name=IDENT { `RenameTable new_name }
+            | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
             | RENAME COLUMN old_name=IDENT TO new_name=IDENT { `RenameColumn (old_name, new_name) }
             | RENAME either(INDEX,KEY) old_name=IDENT TO new_name=IDENT { `RenameIndex (old_name, new_name) }
             | DROP INDEX IDENT { `None }

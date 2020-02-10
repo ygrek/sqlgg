@@ -42,26 +42,27 @@ let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
 
 let choose_name props kind index =
-  let fix = String.map begin function
+  let safename = String.map begin function
   | ('a'..'z' | 'A'..'Z' | '0'..'9' | '_' as c) -> c
   | _ -> '_'
   end in
-  let fix s =
+  let fix' s =
     match Props.get props "subst" with
-    | Some x -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in fix s
-    | None -> fix s
+    | Some x -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in safename s
+    | None -> safename s
   in
+  let fix t = fix' @@ Sql.show_table_name t in
   let name = match kind with
   | Create t -> sprintf "create_%s" (fix t)
-  | CreateIndex t -> sprintf "create_index_%s" (fix t)
+  | CreateIndex t -> sprintf "create_index_%s" (fix' t)
   | Update (Some t) -> sprintf "update_%s_%u" (fix t) index
   | Update None -> sprintf "update_%u" index
   | Insert (_,t) -> sprintf "insert_%s_%u" (fix t) index
   | Delete t -> sprintf "delete_%s_%u" (fix t) index
-  | Alter t -> sprintf "alter_%s_%u" (fix t) index
+  | Alter t -> sprintf "alter_%s_%u" (String.concat "_" @@ List.map fix t) index
   | Drop t -> sprintf "drop_%s" (fix t)
   | Select _  -> sprintf "select_%u" index
-  | CreateRoutine s -> sprintf "create_routine_%s" (fix s)
+  | CreateRoutine s -> sprintf "create_routine_%s" (fix' s)
   | Other -> sprintf "statement_%u" index
   in
   make_name props name
