@@ -86,11 +86,11 @@ if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 
-statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT schema=table_definition
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
                 Create (name,`Schema schema)
               }
-         | CREATE either(TABLE,VIEW) name=IDENT AS select=maybe_parenth(select_stmt)
+         | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(select_stmt)
               {
                 Create (name,`Select select)
               }
@@ -98,8 +98,8 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               {
                 Alter (name,actions)
               }
-         | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(IDENT,TO,IDENT)) { Rename l }
-         | DROP either(TABLE,VIEW) if_exists? name=IDENT
+         | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(table_name,TO,table_name)) { Rename l }
+         | DROP either(TABLE,VIEW) if_exists? name=table_name
               {
                 Drop name
               }
@@ -108,19 +108,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=IDENT names=sequence(IDENT)? VALUES values=commas(sequence(expr))? ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(expr))? ss=on_duplicate?
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
-         | insert_cmd target=IDENT names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
               {
                 Insert { target; action=`Select (names, select); on_duplicate=ss; }
               }
-         | insert_cmd target=IDENT SET set=commas(set_column)? ss=on_duplicate?
+         | insert_cmd target=table_name SET set=commas(set_column)? ss=on_duplicate?
               {
                 Insert { target; action=`Set set; on_duplicate=ss; }
               }
-         | update_cmd table=IDENT SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
+         | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 Update (table,ss,w,o,lim)
               }
@@ -129,7 +129,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=IDENT sch
               {
                 UpdateMulti (tables,ss,w)
               }
-         | DELETE FROM table=IDENT w=where?
+         | DELETE FROM table=table_name w=where?
               {
                 Delete (table,w)
               }
@@ -169,12 +169,12 @@ compound_stmt: BEGIN statement+ END { } (* mysql *)
 routine_extra: LANGUAGE IDENT { }
              | COMMENT TEXT { }
 
-table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
+%inline table_name: name=IDENT | IDENT DOT name=IDENT { name } (* FIXME db name *)
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
 table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
-                | LIKE name=maybe_parenth(IDENT) { Tables.get name |> snd } (* mysql *)
+                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
 
 (* ugly, can you fixme? *)
 (* ignoring everything after RPAREN (NB one look-ahead token) *)
@@ -206,7 +206,7 @@ join_cond: ON e=expr { `Search e }
          | USING l=sequence(IDENT) { `Using l }
          | (* *) { `Default }
 
-source1: IDENT { `Table $1 }
+source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
        | LPAREN s=table_list RPAREN { `Nested s }
 
@@ -252,7 +252,7 @@ group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
 
 column1:
-       | IDENT DOT ASTERISK { Sql.AllOf $1 }
+       | table_name DOT ASTERISK { Sql.AllOf $1 }
        | ASTERISK { Sql.All }
        | e=expr m=maybe_as { Sql.Expr (e,m) }
 
@@ -322,8 +322,7 @@ anyall: ANY | ALL | SOME { }
 mnot(X): NOT x = X | x = X { x }
 
 attr_name: cname=IDENT { { cname; tname=None} }
-         | table=IDENT DOT cname=IDENT
-         | IDENT DOT table=IDENT DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
+         | table=table_name DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
 
 distinct_from: DISTINCT FROM { }
 
@@ -351,7 +350,7 @@ expr:
     | v=interval_unit { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
-    | e1=expr IN table=IDENT { Tables.check table; e1 }
+    | e1=expr IN table=table_name { Tables.check table; e1 }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
