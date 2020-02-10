@@ -2,22 +2,19 @@
 
 set -e -u
 
-mode=${1:-run}
+OUTDIR=test/out
+echo Running regression tests
 
-if [ "$mode" = "init" ] ; then
-  OUTDIR=test/out
-  echo Initializing test outputs in $OUTDIR
-else
-  OUTDIR=test/tmp
-  echo Running regression tests
-fi
-
-mkdir -p test/out test/tmp
+mkdir -p test/out
 for file in test/*.sql; do
   basename=${file#test/}
-  _build/src/cli.native -no-header -params named -gen xml $file > $OUTDIR/${basename%.sql}.xml || { echo FAILED $file; exit 2; }
+  _build/src/cli.native -no-header -params named -gen xml "$file" > "$OUTDIR/${basename%.sql}.xml" || { echo "FAILED $file"; exit 2; }
 done
 
-[ "$mode" = "init" ] || diff --strip-trailing-cr -u test/out test/tmp
-
-echo OK
+if git diff --no-ext-diff --quiet --exit-code "$OUTDIR" ; then
+  echo OK
+else
+  echo FAILED
+  git status -uno -s "$OUTDIR"
+  exit 2
+fi
