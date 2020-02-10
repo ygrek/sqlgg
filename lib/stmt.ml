@@ -21,7 +21,9 @@ type kind = | Select of cardinality (** possible number of rows *)
             | Other
             [@@deriving show {with_path=false}]
 
-type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}]
+type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
+
+let all_categories = List.init (max_category - min_category) (fun i -> Option.get @@ category_of_enum @@ min_category + i)
 
 let category_of_stmt_kind = function
 | Select _ -> DQL

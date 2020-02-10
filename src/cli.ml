@@ -39,12 +39,33 @@ let set_params_mode s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown params mode: %s" s)
 
+let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
+let category_of_string s =
+  match List.find (fun cat -> String.equal (String.lowercase @@ Stmt.show_category cat) s) Stmt.all_categories with
+  | exception _ -> failwith @@ sprintf "bad category %S" s
+  | x -> x
+let set_category s =
+  let s = String.lowercase s in
+  Sqlgg_config.include_category :=
+    match s with
+    | "all" -> `All
+    | "none" -> `None
+    | "" -> failwith "bad category \"\""
+    | _ when s.[0] = '-' -> `Except (List.map category_of_string @@ String.nsplit (String.slice ~first:1 s) ",")
+    | _ -> `Only (List.map category_of_string @@ String.nsplit s ",")
+let filter_category cat =
+  match !Sqlgg_config.include_category with
+  | `All -> true
+  | `None -> false
+  | `Only l -> List.mem cat l
+  | `Except l -> not (List.mem cat l)
+
 let each_input =
   let run input =
     let l = match input with Some ch -> Main.get_statements ch | None -> [] in
     match !generate with
     | None -> []
-    | Some _ -> l
+    | Some _ -> List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind)) l
   in
   function
   | "-" -> run (Some stdin)
@@ -69,6 +90,7 @@ let main () =
   let args = Arg.align
   [
     "-version", Arg.Unit show_version, " Show version";
+    "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
     "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
