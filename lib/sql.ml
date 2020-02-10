@@ -122,6 +122,7 @@ struct
   let project names t = List.map (find t) names
 
   let change_inplace t before after =
+    ignore (find t before);
     List.map (fun attr ->
       match by_name before attr with
       | true -> after
