@@ -48,9 +48,9 @@ let rec is_grouping = function
 | Column _
 | Select _
 | Inserted _ -> false
-| Choices (_,l) ->
+| Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
-  | None -> fail "inconsistent grouping in choice branches"
+  | None -> failed ~at:p.pos "inconsistent grouping in choice branches"
   | Some v -> v
   end
 | Fun (func,args) ->
@@ -111,7 +111,7 @@ let rec resolve_columns env expr =
     | Fun (r,l) ->
       `Func (r,List.map each l)
     | Select (select, usage) ->
-      let as_params p = List.map (function Single p -> `Param p | Choice _ -> fail "FIXME as_params") p in
+      let as_params p = List.map (function Single p -> `Param p | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice") p in
       let (schema,p,_) = eval_select_full env select in
       match schema, usage with
       | [ {domain;_} ], `AsValue -> `Func (Type.Ret domain, as_params p)
@@ -281,7 +281,7 @@ and params_of_order order final_schema tables =
 and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
-  | Choices _ -> fail "ensure_simple_expr Choices TBD"
+  | Choices (p,_) -> failed ~at:p.pos "ensure_simple_expr Choices TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
@@ -450,10 +450,11 @@ let eval (stmt:Sql.stmt) =
 let unify_params l =
   let h = Hashtbl.create 10 in
   let h_choices = Hashtbl.create 10 in
-  let check_choice_name = function
-  | None -> () (* unique *)
-  | Some n when Hashtbl.mem h_choices n -> fail "sharing choices not implemented"
-  | Some n -> Hashtbl.add h_choices n ()
+  let check_choice_name p =
+    match p.label with
+    | None -> () (* unique *)
+    | Some n when Hashtbl.mem h_choices n -> failed ~at:p.pos "sharing choices not implemented"
+    | Some n -> Hashtbl.add h_choices n ()
   in
   let remember name t =
     match name with
@@ -468,7 +469,7 @@ let unify_params l =
   in
   let rec traverse = function
   | Single { id; typ; attr=_ } -> remember id.label typ
-  | Choice (p,l) -> check_choice_name p.label; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
   | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))

@@ -49,6 +49,11 @@ let parse_one (sql, props as x) =
   | exn ->
     let bt = Printexc.get_raw_backtrace () in
     Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
+    let exn =
+      match exn with
+      | Prelude.At ((p1,p2),exn) -> Error.log "At : %s" (String.slice ~first:p1 ~last:p2 sql); exn
+      | _ -> exn
+    in
 (*     Printexc.raise_with_backtrace exn bt *)
     raise @@ With_backtrace (exn,bt)
 
