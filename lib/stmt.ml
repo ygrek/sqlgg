@@ -1,5 +1,7 @@
 (** Statement *)
 
+open ExtLib
+
 type insert_kind = Values | Assign [@@deriving show {with_path=false}]
 
 (** inferred inserted values to complete sql statement *)
