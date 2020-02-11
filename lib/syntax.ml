@@ -37,13 +37,22 @@ let rec get_params_q (e:expr_q) =
   in
   loop [] e |> List.rev
 
+let list_same l =
+  match l with
+  | [] -> None
+  | x::xs -> if List.for_all (fun y -> x = y) xs then Some x else None
+
 let rec is_grouping = function
 | Value _
 | Param _
 | Column _
 | Select _
 | Inserted _ -> false
-| Choices _ -> fail "is_grouping Choice TBD"
+| Choices (_,l) ->
+  begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
+  | None -> fail "inconsistent grouping in choice branches"
+  | Some v -> v
+  end
 | Fun (func,args) ->
   (* grouping function of zero or single parameter or function on grouping result *)
   (Type.is_grouping func && List.length args <= 1) || List.exists is_grouping args
