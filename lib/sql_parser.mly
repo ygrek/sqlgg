@@ -108,7 +108,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(expr))? ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(insert_expr))? ss=on_duplicate?
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
@@ -329,6 +329,9 @@ distinct_from: DISTINCT FROM { }
 
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun ((fixed Bool [Text; Text]), [e1;e2]) }
 
+insert_expr: e=expr { `Expr e }
+           | DEFAULT { `Default }
+
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
@@ -360,6 +363,7 @@ expr:
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
     | DATE LPAREN e=expr RPAREN { Fun (Function.lookup "date" 1, [e]) }
     | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
+    | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }

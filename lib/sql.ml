@@ -62,6 +62,8 @@ struct
   let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
   let fixed = monomorphic
 
+  let identity = F (Var 0, [Var 0])
+
   let pp_func pp =
     let open Format in
   function
@@ -312,7 +314,7 @@ type insert_action =
 {
   target : table_name;
   action : [ `Set of assignments option
-           | `Values of (string list option * expr list list option) (* column names * list of value tuples *)
+           | `Values of (string list option * [ `Expr of expr | `Default ] list list option) (* column names * list of value tuples *)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
 }

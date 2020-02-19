@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test" sql="create table test ( foo integer not null default 12345 )" category="DDL" kind="create" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_test_1" sql="insert into test ( foo ) values ( default )" category="DML" kind="insert" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="select * from test where foo != default(foo)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="foo" type="Int"/>
+  </out>
+ </stmt>
+</sqlgg>

@@ -401,7 +401,14 @@ let eval (stmt:Sql.stmt) =
       let cl = List.length expect in
       if List.exists (fun n -> n <> cl) vl then
         fail "Expecting %u expressions in every VALUES tuple" cl;
-      let assigns = List.map (fun tuple -> List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple) values in
+      let assigns = values |>
+        List.map begin fun tuple ->
+          (* pair up columns with inserted values *)
+          List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple
+          (* resolve DEFAULTs *)
+          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun (Type.identity, [Column col]))
+        end
+      in
       params_of_assigns env (List.concat assigns), None
     in
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
