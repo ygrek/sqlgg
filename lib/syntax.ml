@@ -77,7 +77,7 @@ let rec hint attr expr =
   (* go one level deep into choices *)
   match expr with
   | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint attr) e) l)
-  | _ -> Fun (Type.(Ret Any), [Value attr.domain;expr])
+  | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
 
 let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
@@ -155,7 +155,7 @@ and assign_types expr =
         | Agg, [typ]
         | Group typ, _ -> typ, types
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | F (_, args), _ when List.length args <> List.length types -> fail "types do not match : %s" (show ())
+        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show ())
         | F (ret, args), _ ->
           let typevar = Hashtbl.create 10 in
           let l = List.map2 begin fun arg typ ->
