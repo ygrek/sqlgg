@@ -413,6 +413,7 @@ let () =
   "julianday" |> multi ~ret:(Typ Float) (Typ Text);
   "from_unixtime" |> monomorphic Datetime [Int];
   "from_unixtime" |> monomorphic Text [Int;Text];
+  ["pow"; "power"] ||> monomorphic Float [Float;Int];
   "unix_timestamp" |> monomorphic Int [];
   "unix_timestamp" |> monomorphic Int [Datetime];
   ["timestampdiff";"timestampadd"] ||> monomorphic Int [Unit `Interval;Datetime;Datetime];
