@@ -72,6 +72,9 @@ let test = [
   tt "select str from test where id>=@id and id-@x<@id"
     [attr "str" Text;]
     [named "id" Int; named "x" Int; named "id" Int];
+  tt "select 3/5"
+    [attr "" Float;]
+    [];
 ]
 
 let test2 = [

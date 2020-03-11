@@ -334,6 +334,7 @@ insert_expr: e=expr { `Expr e }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
+    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
@@ -414,7 +415,7 @@ func_params: DISTINCT? l=expr_list { l }
            | ASTERISK { [] }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
-numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_DIV_OP | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
+numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
 comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP | NOT_DISTINCT_OP { }
 boolean_bin_op: AND | OR | XOR { }
 
