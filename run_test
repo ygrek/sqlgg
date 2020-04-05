@@ -8,7 +8,7 @@ echo Running regression tests
 mkdir -p test/out
 for file in test/*.sql; do
   basename=${file#test/}
-  _build/src/cli.native -no-header -params named -gen xml "$file" > "$OUTDIR/${basename%.sql}.xml" || { echo "FAILED $file"; exit 2; }
+  ./_build/default/src/cli.exe -no-header -params named -gen xml "$file" > "$OUTDIR/${basename%.sql}.xml" || { echo "FAILED $file"; exit 2; }
 done
 
 if ! git rev-parse --git-dir > /dev/null ; then

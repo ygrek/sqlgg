@@ -1,0 +1,5 @@
+(library
+  (name sqlgg_mariadb)
+  (public_name sqlgg.mariadb)
+  (optional)
+  (libraries mariadb sqlgg.traits))

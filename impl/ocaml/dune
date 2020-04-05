@@ -1,0 +1,4 @@
+(library
+  (wrapped false)
+  (name sqlgg_traits)
+  (public_name sqlgg.traits))

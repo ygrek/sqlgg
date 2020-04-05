@@ -1,0 +1,5 @@
+(library
+  (name sqlgg_mysql)
+  (public_name sqlgg.mysql)
+  (optional)
+  (libraries mysql sqlgg.traits))

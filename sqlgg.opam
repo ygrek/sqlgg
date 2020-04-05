@@ -1,38 +1,24 @@
 opam-version: "2.0"
 maintainer: "ygrek@autistici.org"
 authors: ["ygrek"]
-homepage: "http://ygrek.org.ua/p/sqlgg/"
+homepage: "https://ygrek.org/p/sqlgg/"
 dev-repo: "git+https://github.com/ygrek/sqlgg.git"
 bug-reports: "https://github.com/ygrek/sqlgg/issues"
+license: "GPL-2"
+tags: [ "org:ygrek" ]
 build: [
-  [ "ocaml"
-    "setup.ml"
-    "-configure"
-    "--enable-tests"
-    "--%{mariadb:enable}%-mariadb"
-    "--%{mysql:enable}%-mysql"
-    "--%{sqlite3:enable}%-sqlite3"
-    "--prefix" prefix
-  ]
-  ["ocaml" "setup.ml" "-build"]
-  ["ocaml" "setup.ml" "-test"] {with-test}
-]
-install: [
-  ["ocaml" "setup.ml" "-install"]
-]
-remove: [
-  ["ocamlfind" "remove" "sqlgg"]
-  ["rm" "-f" "%{bin}%/sqlgg" "%{bin}%/sqlgg.exe"]
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs "@install" "@doc" {with-doc}]
 ]
 depends: [
   "ocaml" {>= "4.02.0"}
-  "ocamlfind" {build}
-  "ocamlbuild" {build}
-  "mybuild" {build}
+  "dune"
   "menhir"
+  "mybuild"
   "ppx_deriving"
   ("extlib" | "extlib-compat")
   "base-unix"
+  "odoc" {with-doc}
   "ounit"
 ]
 depopts: [
@@ -47,4 +33,3 @@ It starts off with SQL schema and queries, and generates code (or XML, allowing
 further code generation for various purposes). Generated code only defines a mapping
 of output columns and query parameters to the host language, trying to be as unobtrusive
 as possible and leaving the choice of SQL database (and API to access it) to the developer."""
-flags: light-uninstall

@@ -1,0 +1,9 @@
+(menhir (modules sql_parser))
+(ocamllex sql_lexer)
+
+(library
+  (name sqlgg)
+  (public_name sqlgg.lib)
+  (libraries extlib)
+  (preprocess (pps ppx_deriving.std))
+)

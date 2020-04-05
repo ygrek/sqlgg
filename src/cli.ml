@@ -2,6 +2,7 @@
 
 open Printf
 open ExtLib
+open Sqlgg
 
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml.Generator)

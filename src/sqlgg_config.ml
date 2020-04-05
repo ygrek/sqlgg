@@ -1,4 +1,5 @@
 (**  *)
+open Sqlgg
 
 (** Sqlgg version *)
 let version = Version.id

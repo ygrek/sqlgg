@@ -3,6 +3,7 @@
 *)
 
 open ExtLib
+open Sqlgg
 
 module L = List
 module S = String

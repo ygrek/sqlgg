@@ -1,5 +1,6 @@
 open Printf
 open OUnit
+open Sqlgg
 open Sql
 open Sql.Type
 open Stmt
