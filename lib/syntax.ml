@@ -9,11 +9,11 @@ let debug = ref false
 
 type env = {
   tables : Tables.table list;
-  joined_schema : Schema.t;
+  schema : Schema.t;
   insert_schema : Schema.t;
 }
 
-let empty_env = { tables = []; joined_schema = []; insert_schema = []; }
+let empty_env = { tables = []; schema = []; insert_schema = []; }
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -67,8 +67,8 @@ let cross = List.fold_left Schema.cross []
 let all_columns = Schema.make_unique $ cross
 let all_tbl_columns = all_columns $ List.map snd
 
-let resolve_column tables joined_schema {cname;tname} =
-  Schema.find (Option.map_default (schema_of tables) joined_schema tname) cname
+let resolve_column tables schema {cname;tname} =
+  Schema.find (Option.map_default (schema_of tables) schema tname) cname
 
 (* HACK hint expression to unify with the column type *)
 let rec hint attr expr =
@@ -96,13 +96,13 @@ let rec resolve_columns env expr =
   if !debug then
   begin
     eprintf "\nRESOLVE COLUMNS %s\n%!" (expr_to_string expr);
-    eprintf "schema: "; Sql.Schema.print env.joined_schema;
+    eprintf "schema: "; Sql.Schema.print env.schema;
     Tables.print stderr env.tables;
   end;
   let rec each e =
     match e with
     | Value x -> `Value x
-    | Column col -> `Value (resolve_column env.tables env.joined_schema col).domain
+    | Column col -> `Value (resolve_column env.tables env.schema col).domain
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       `Value attr.domain
@@ -212,12 +212,12 @@ and resolve_types env expr =
 and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let resolve1 = function
-    | All -> env.joined_schema
+    | All -> env.schema
     | AllOf t -> schema_of env.tables t
     | Expr (e,name) ->
       let col =
         match e with
-        | Column col -> resolve_column env.tables env.joined_schema col
+        | Column col -> resolve_column env.tables env.schema col
         | _ -> make_attribute "" (resolve_types env e |> snd |> get_or_failwith) Constraints.empty
       in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
@@ -247,24 +247,24 @@ and get_params_opt env = function
 and get_params_l env l = flat_map (get_params env) l
 
 and do_join (env,params) ((schema1,params1,_tables),kind) =
-  let joined_schema = match kind with
+  let schema = match kind with
   | `Cross
   | `Search _
-  | `Default -> Schema.cross env.joined_schema schema1
-  | `Natural -> Schema.natural env.joined_schema schema1
-  | `Using l -> Schema.join_using l env.joined_schema schema1
+  | `Default -> Schema.cross env.schema schema1
+  | `Natural -> Schema.natural env.schema schema1
+  | `Using l -> Schema.join_using l env.schema schema1
   in
-  let env = { env with joined_schema } in
+  let env = { env with schema } in
   let p = match kind with
   | `Cross | `Default | `Natural | `Using _ -> []
   | `Search e -> get_params env e (* TODO should use final schema (same as tables)? *)
   in
   env, params @ params1 @ p
 
-and join env ((joined_schema,p0,ts0),joins) =
-  assert (env.joined_schema = []);
+and join env ((schema,p0,ts0),joins) =
+  assert (env.schema = []);
   let all_tables = List.flatten (ts0 :: List.map (fun ((_,_,ts),_) -> ts) joins) in
-  let env = { env with tables = env.tables @ all_tables; joined_schema; } in
+  let env = { env with tables = env.tables @ all_tables; schema; } in
   List.fold_left do_join (env, p0) joins
 
 and params_of_assigns env ss =
@@ -274,7 +274,7 @@ and params_of_assigns env ss =
 and params_of_order order final_schema tables =
   let (orders,directions) = List.split order in
   let directions = List.filter_map (function None | Some `Fixed -> None | Some (`Param p) -> Some (Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")]))) directions in
-  get_params_l { tables; joined_schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } orders
+  get_params_l { tables; schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } orders
   @
   directions
 
@@ -290,7 +290,7 @@ and ensure_simple_expr = function
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
     but can refer to attributes of tables through `tables` *)
-  let env = { env with joined_schema = [] } in
+  let env = { env with schema = [] } in
   match nested with
   | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
   | None -> env, []
@@ -343,10 +343,10 @@ and eval_select_full env { select=(select,other); order; limit; } =
 
 
 let update_tables sources ss w =
-  let joined_schema = cross @@ (List.map (fun (s,_,_) -> s) sources) in
+  let schema = cross @@ (List.map (fun (s,_,_) -> s) sources) in
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
-  let env = { tables; joined_schema; insert_schema=get_columns_schema tables (List.map fst ss); } in
+  let env = { tables; schema; insert_schema=get_columns_schema tables (List.map fst ss); } in
   let p1 = params_of_assigns env ss in
   let p2 = get_params_opt env w in
   p0 @ p1 @ p2
@@ -393,7 +393,7 @@ let eval (stmt:Sql.stmt) =
       [],[],CreateIndex name
   | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
@@ -415,7 +415,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
     let select = annotate_select select (List.map (fun a -> a.domain) expect) in
     let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
@@ -423,7 +423,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
-    let env = { tables = [Tables.get table]; joined_schema = Tables.get_schema table; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns env ss, None
@@ -432,7 +432,7 @@ let eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt { tables=[t]; joined_schema=snd t; insert_schema=[]; } where in
+    let p = get_params_opt { tables=[t]; schema=snd t; insert_schema=[]; } where in
     [], p, Delete table
   | Set (_name, e) ->
     let p = match e with
