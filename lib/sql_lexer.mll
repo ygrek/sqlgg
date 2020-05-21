@@ -132,6 +132,7 @@ let keywords =
    "set",SET;
    "share", SHARE;
    "some",SOME;
+   "spatial", SPATIAL;
    "substr", SUBSTRING;
    "substring", SUBSTRING;
    "table",TABLE;
@@ -147,7 +148,6 @@ let keywords =
    "unsigned",UNSIGNED;
    "update",UPDATE;
    "using",USING;
-   "value",VALUE;
    "values",VALUES;
    "varying",VARYING;
    "view",VIEW;

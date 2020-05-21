@@ -89,3 +89,10 @@ ON DUPLICATE KEY UPDATE
 -- @select_date
 SELECT `DATE`(CURRENT_TIMESTAMP);
 SELECT DATE(CURRENT_TIMESTAMP);
+
+CREATE TABLE `adr` (
+  `word` text COLLATE utf8_bin NOT NULL,
+  `amount` int(10) unsigned DEFAULT '0',
+  KEY `amount` (`amount`),
+  KEY `word` (`word`(10))
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin;

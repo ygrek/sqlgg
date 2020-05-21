@@ -35,7 +35,7 @@
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
-       GLOBAL LOCAL VALUE REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT FIRST
+       GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
@@ -283,8 +283,29 @@ drop_behavior: CASCADE | RESTRICT { }
 column_def: name=IDENT t=sql_type? extra=column_def_extra* { make_attribute name (Option.default Int t) (Constraints.of_list @@ List.filter_map identity extra) }
 
 column_def1: c=column_def { `Attr c }
-           | pair(CONSTRAINT,IDENT)? c=table_constraint_1 { `Constraint c }
-           | INDEX cols=sequence(index_column) { `Index cols }
+           | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
+           | either(INDEX,KEY) l=table_index { `Index l }
+           | either(FULLTEXT,SPATIAL) either(INDEX,KEY)? l=table_index { `Index l }
+
+key_part: n=IDENT delimited(LPAREN,INTEGER,RPAREN)? either(ASC,DESC)? { n }
+index_options: list(IDENT)? { }
+
+table_index: IDENT? l=sequence(key_part) index_options { l }
+
+(* FIXME check columns *)
+table_constraint_1:
+      | PRIMARY KEY l=sequence(key_part) { l }
+      | UNIQUE either(INDEX,KEY)? IDENT? l=sequence(key_part) { l }
+      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
+        reference_action_clause*
+          { [] }
+      | CHECK LPAREN expr RPAREN { [] }
+
+reference_action_clause:
+  ON either(DELETE, UPDATE) reference_action { }
+
+reference_action:
+  RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
 
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY KEY { Some PrimaryKey }
@@ -298,23 +319,6 @@ column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | COLLATE IDENT { None }
 
 default_value: single_literal_value | datetime_value { } (* sub expr ? *)
-
-(* FIXME check columns *)
-table_constraint_1:
-      | some_key IDENT? key_arg { [] }
-      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
-        reference_action_clause*
-          { [] }
-      | CHECK LPAREN expr RPAREN { [] }
-
-reference_action_clause:
-  ON either(DELETE, UPDATE) reference_action { }
-
-reference_action:
-  RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-
-some_key: UNIQUE KEY? | PRIMARY? KEY | FULLTEXT KEY { }
-key_arg: LPAREN VALUE RPAREN | sequence(IDENT) { }
 
 set_column: name=attr_name EQUAL e=expr { name,e }
 
