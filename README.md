@@ -4,7 +4,7 @@ sqlgg: SQL Guided (code) Generator
 [![Build Status](https://travis-ci.org/ygrek/sqlgg.svg?branch=master)](https://travis-ci.org/ygrek/sqlgg)
 [![Build status](https://ci.appveyor.com/api/projects/status/1bfx41oulkbu4aj2?svg=true)](https://ci.appveyor.com/project/ygrek/sqlgg/branch/master)
 
-Homepage at http://ygrek.org.ua/p/sqlgg/
+Homepage at https://ygrek.org/p/sqlgg/
 
 Install with `opam install sqlgg`
 

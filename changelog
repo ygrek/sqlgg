@@ -1,6 +1,22 @@
 sqlgg changelog
 ---------------
 
+20200521
+	* switch versioning scheme
+	* switch build system to dune
+	* sql: EXISTS, nested JOINs, SUBSTRING, DROP VIEW, ALTER RENAME,
+		RENAME TABLE, DIV, MOD, LAST_INSERT_ID, UNIX_TIMESTAMP(DATE),
+		TIMESTAMPDIFF, TIMESTAMPADD, DATE, TIME, POW, INSERT DEFAULT
+	* sql: INSERT scope fixes
+	* ocaml: monadic IO with `-gen caml_io`
+	* ocaml: mariadb traits
+	* ocaml: parameters in callbacks are now named
+	* sql: variant parameters (ocaml only)
+	* traits: + Decimal
+	* typing: rudimentary NULL support
+	* sql: do not fail on unknown functions (treat as untyped and emit warning)
+	* gen: allow filtering by DDL, DML, DQL, etc
+
 0.4.5
 2018-10-16
 	* improve type resolution for functions

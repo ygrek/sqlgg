@@ -16,11 +16,11 @@ test:
 top:
 	dune utop
 
-VERSION=$(shell oasis query version)
+VERSION:=$(shell date +%Y%m%d)
 NAME=sqlgg-$(VERSION)
 
 .PHONY: release
 release:
 	git tag -a -m $(VERSION) $(VERSION)
 	git archive --prefix=$(NAME)/ $(VERSION) | gzip > $(NAME).tar.gz
-	gpg -a -b $(NAME).tar.gz
+	gpg -a -b $(NAME).tar.gz -o $(NAME).tar.gz.asc
