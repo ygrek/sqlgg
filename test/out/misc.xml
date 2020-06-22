@@ -236,4 +236,11 @@
   <in/>
   <out/>
  </stmt>
+ <stmt name="group_by_having" sql="select x, count(*) nr from test group by x having nr &gt; 1" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="x" type="Int"/>
+   <value name="nr" type="Int"/>
+  </out>
+ </stmt>
 </sqlgg>

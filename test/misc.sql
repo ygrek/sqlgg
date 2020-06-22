@@ -96,3 +96,6 @@ CREATE TABLE `adr` (
   KEY `amount` (`amount`),
   KEY `word` (`word`(10))
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+
+-- @group_by_having
+select x, count(*) nr from test group by x having nr > 1;
