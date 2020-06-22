@@ -19,4 +19,10 @@
   </in>
   <out/>
  </stmt>
+ <table name="test1">
+  <schema>
+   <value name="x1" type="Int"/>
+   <value name="x2" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

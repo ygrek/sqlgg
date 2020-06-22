@@ -81,6 +81,9 @@ let generate_code (x,_) index stmt =
     | Other            -> ["kind", "other"] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, [input; output]) :: !x
 
+let generate_table (x,_) (name,schema) =
+  x := Node ("table", ["name",Sql.show_table_name name], [Node ("schema",[],schema_to_values schema)]) :: !x
+
 let start_output (x,pre) = pre := !x; x := []
 
 let finish_output (x,pre) =
@@ -93,4 +96,5 @@ let finish_output (x,pre) =
 let generate out _ stmts =
   start_output out;
   List.iteri (generate_code out) stmts;
+  List.iter (generate_table out) (Tables.all ());
   finish_output out

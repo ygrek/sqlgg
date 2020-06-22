@@ -13,4 +13,11 @@
   <in/>
   <out/>
  </stmt>
+ <table name="foo">
+  <schema>
+   <value name="col1" type="Int"/>
+   <value name="col2" type="Int"/>
+   <value name="col3" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

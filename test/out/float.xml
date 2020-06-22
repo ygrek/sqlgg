@@ -21,4 +21,10 @@
    <value name="_0" type="Float"/>
   </out>
  </stmt>
+ <table name="transactions">
+  <schema>
+   <value name="amount" type="Float"/>
+   <value name="date" type="Datetime"/>
+  </schema>
+ </table>
 </sqlgg>

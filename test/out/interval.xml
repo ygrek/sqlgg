@@ -165,4 +165,11 @@
    <value name="interval" type="Int"/>
   </out>
  </stmt>
+ <table name="events">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="stamp" type="Datetime"/>
+   <value name="interval" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

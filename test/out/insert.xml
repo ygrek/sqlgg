@@ -15,4 +15,9 @@
    <value name="foo" type="Int"/>
   </out>
  </stmt>
+ <table name="test">
+  <schema>
+   <value name="foo" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

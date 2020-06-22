@@ -44,4 +44,10 @@
    <value name="nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
+ <table name="test">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="nullable" type="Datetime" nullable="true"/>
+  </schema>
+ </table>
 </sqlgg>

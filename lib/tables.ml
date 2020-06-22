@@ -55,3 +55,4 @@ let print1 name = print stdout [get @@ Sql.make_table_name name] (* TODO allow d
 
 let reset () = all := []
 
+let all () = !all

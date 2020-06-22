@@ -52,4 +52,20 @@
    <value name="b" type="Int"/>
   </out>
  </stmt>
+ <table name="t3">
+  <schema>
+   <value name="b" type="Int"/>
+  </schema>
+ </table>
+ <table name="t2">
+  <schema>
+   <value name="a2" type="Int"/>
+   <value name="b2" type="Int"/>
+  </schema>
+ </table>
+ <table name="t1">
+  <schema>
+   <value name="a" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

@@ -15,4 +15,16 @@
    <value name="_0" type="Int"/>
   </out>
  </stmt>
+ <table name="database2.test">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="amount" type="Int"/>
+  </schema>
+ </table>
+ <table name="database1.test">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="txt" type="Text"/>
+  </schema>
+ </table>
 </sqlgg>

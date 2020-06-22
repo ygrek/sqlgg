@@ -37,4 +37,15 @@
    <value name="_0" type="Text"/>
   </out>
  </stmt>
+ <table name="detail">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="master_id" type="Int"/>
+  </schema>
+ </table>
+ <table name="master">
+  <schema>
+   <value name="id" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

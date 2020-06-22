@@ -15,4 +15,11 @@
    <value name="_2" type="Int"/>
   </out>
  </stmt>
+ <table name="profiles">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="host" type="Text"/>
+   <value name="today_count" type="Int"/>
+  </schema>
+ </table>
 </sqlgg>

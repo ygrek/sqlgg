@@ -243,4 +243,39 @@
    <value name="nr" type="Int"/>
   </out>
  </stmt>
+ <table name="adr">
+  <schema>
+   <value name="word" type="Text"/>
+   <value name="amount" type="Int"/>
+  </schema>
+ </table>
+ <table name="issue63">
+  <schema>
+   <value name="x" type="Text"/>
+   <value name="y" type="Text"/>
+  </schema>
+ </table>
+ <table name="workareas">
+  <schema>
+   <value name="work_id" type="Int"/>
+   <value name="about" type="Text"/>
+   <value name="k" type="Int"/>
+  </schema>
+ </table>
+ <table name="issue14">
+  <schema>
+   <value name="x" type="Int"/>
+  </schema>
+ </table>
+ <table name="appointments">
+  <schema>
+   <value name="alert_at" type="Datetime"/>
+  </schema>
+ </table>
+ <table name="test">
+  <schema>
+   <value name="x" type="Int"/>
+   <value name="key" type="Text"/>
+  </schema>
+ </table>
 </sqlgg>

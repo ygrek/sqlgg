@@ -11,4 +11,9 @@
    <value name="id" type="Text"/>
   </out>
  </stmt>
+ <table name="xxx">
+  <schema>
+   <value name="id" type="Text"/>
+  </schema>
+ </table>
 </sqlgg>

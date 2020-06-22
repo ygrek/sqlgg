@@ -37,4 +37,14 @@
    <value name="_0" type="Decimal"/>
   </out>
  </stmt>
+ <table name="foo">
+  <schema>
+   <value name="x" type="Decimal"/>
+  </schema>
+ </table>
+ <table name="%%tablename%%">
+  <schema>
+   <value name="first_key" type="Text"/>
+  </schema>
+ </table>
 </sqlgg>
