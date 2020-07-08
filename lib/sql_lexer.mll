@@ -47,6 +47,7 @@ let keywords =
    "comment", COMMENT;
    "conflict",CONFLICT;
    "constraint",CONSTRAINT;
+   "convert", CONVERT;
    "create",CREATE;
    "cross",CROSS;
    "date",DATE;
