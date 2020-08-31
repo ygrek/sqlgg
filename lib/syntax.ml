@@ -303,8 +303,9 @@ and eval_select env { columns; from; where; group; having; } =
     else `Nat
   in
   let final_schema = infer_schema env columns in
-  let env = Schema.{ env with schema = cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
+  (* use schema without aliases here *)
   let p1 = params_of_columns env columns in
+  let env = Schema.{ env with schema = cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
   let p3 = get_params_opt env where in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in

@@ -99,3 +99,9 @@ CREATE TABLE `adr` (
 
 -- @group_by_having
 select x, count(*) nr from test group by x having nr > 1;
+
+-- @select_alias
+select x <> 0 AS y from test;
+
+-- @select_alias_change_type
+select x <> 0 AS x from test;

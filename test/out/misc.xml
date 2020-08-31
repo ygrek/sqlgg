@@ -243,6 +243,18 @@
    <value name="nr" type="Int"/>
   </out>
  </stmt>
+ <stmt name="select_alias" sql="select x &lt;&gt; 0 AS y from test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="y" type="Bool"/>
+  </out>
+ </stmt>
+ <stmt name="select_alias_change_type" sql="select x &lt;&gt; 0 AS x from test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="x" type="Bool"/>
+  </out>
+ </stmt>
  <table name="adr">
   <schema>
    <value name="word" type="Text"/>
