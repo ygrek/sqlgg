@@ -264,9 +264,10 @@ maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD index_type IDENT? sequence(IDENT) { `None }
+            | ADD pair(CONSTRAINT,IDENT?)? table_constraint_1 index_options { `None }
             | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
             | RENAME COLUMN old_name=IDENT TO new_name=IDENT { `RenameColumn (old_name, new_name) }
-            | RENAME either(INDEX,KEY) old_name=IDENT TO new_name=IDENT { `RenameIndex (old_name, new_name) }
+            | RENAME index_or_key old_name=IDENT TO new_name=IDENT { `RenameIndex (old_name, new_name) }
             | DROP INDEX IDENT { `None }
             | DROP PRIMARY KEY { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
@@ -274,7 +275,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
 index_or_key: INDEX | KEY { }
-index_type: index_or_key | UNIQUE index_or_key? | FULLTEXT index_or_key? | PRIMARY KEY { }
+index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }
          | { `Default }
@@ -284,8 +285,8 @@ column_def: name=IDENT t=sql_type? extra=column_def_extra* { make_attribute name
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
-           | either(INDEX,KEY) l=table_index { `Index l }
-           | either(FULLTEXT,SPATIAL) either(INDEX,KEY)? l=table_index { `Index l }
+           | index_or_key l=table_index { `Index l }
+           | either(FULLTEXT,SPATIAL) index_or_key? l=table_index { `Index l }
 
 key_part: n=IDENT delimited(LPAREN,INTEGER,RPAREN)? either(ASC,DESC)? { n }
 index_options: list(IDENT)? { }
@@ -295,7 +296,7 @@ table_index: IDENT? l=sequence(key_part) index_options { l }
 (* FIXME check columns *)
 table_constraint_1:
       | PRIMARY KEY l=sequence(key_part) { l }
-      | UNIQUE either(INDEX,KEY)? IDENT? l=sequence(key_part) { l }
+      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { l }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
         reference_action_clause*
           { [] }
