@@ -271,6 +271,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP INDEX IDENT { `None }
             | DROP PRIMARY KEY { `None }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
+            | DROP FOREIGN KEY IDENT { `None }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
