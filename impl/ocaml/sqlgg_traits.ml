@@ -18,7 +18,7 @@ module type Value = sig type t end
 module type M = sig
 
   type statement
-  type 'a connection
+  type -'a connection
   type params
   type row
   type result
