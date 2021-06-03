@@ -64,7 +64,7 @@ end
 module Make_(T : Types) = struct
 
 type statement = P.stmt
-type connection = Mysql.dbd
+type 'a connection = Mysql.dbd
 type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
