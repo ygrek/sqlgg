@@ -272,11 +272,18 @@ and params_of_assigns env ss =
   get_params_l env exprs
 
 and params_of_order order final_schema tables =
-  let (orders,directions) = List.split order in
-  let directions = List.filter_map (function None | Some `Fixed -> None | Some (`Param p) -> Some (Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")]))) directions in
-  get_params_l { tables; schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } orders
-  @
-  directions
+  List.concat @@
+  List.map
+    (fun (order, direction) ->
+       let env = { tables; schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } in
+       let p1 = get_params_l env [ order ] in
+       let p2 =
+         match direction with
+         | None | Some `Fixed -> []
+         | Some (`Param p) -> [Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")])]
+       in
+       p1 @ p2)
+    order
 
 and ensure_simple_expr = function
   | Value x -> `Value x
