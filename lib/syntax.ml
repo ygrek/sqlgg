@@ -31,6 +31,7 @@ let rec get_params_q (e:expr_q) =
   let rec loop acc e =
     match e with
     | `Param p -> Single p::acc
+    | `Inparam p -> SingleIn p::acc
     | `Func (_,l) -> List.fold_left loop acc l
     | `Value _ -> acc
     | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_q e)) l) :: acc
@@ -47,6 +48,7 @@ let rec is_grouping = function
 | Param _
 | Column _
 | Select _
+| Inparam _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -107,11 +109,18 @@ let rec resolve_columns env expr =
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       `Value attr.domain
     | Param x -> `Param x
+    | Inparam x -> `Inparam x
     | Choices (n,l) -> `Choice (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun (r,l) ->
       `Func (r,List.map each l)
     | Select (select, usage) ->
-      let as_params p = List.map (function Single p -> `Param p | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice") p in
+      let as_params p =
+        List.map
+          (function
+            | Single p -> `Param p
+            | SingleIn p -> failed ~at:p.id.pos "FIXME as_params in SingleIn"
+            | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice")
+          p in
       let (schema,p,_) = eval_select_full env select in
       match schema, usage with
       | [ {domain;_} ], `AsValue -> `Func (Type.Ret domain, as_params p)
@@ -127,6 +136,7 @@ and assign_types expr =
     match e with
     | `Value t -> e, `Ok t
     | `Param p -> e, `Ok p.typ
+    | `Inparam p -> e, `Ok (Tuple p.typ)
     | `Choice (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
@@ -177,6 +187,32 @@ and assign_types expr =
             convert ret, List.map convert args
           else
             fail "types do not match : %s" (show ())
+        | InF (lhs, rhs), _ ->
+          let typevar = Hashtbl.create 10 in
+          let l = List.map2 begin fun arg typ ->
+            match arg with
+            | Typ arg -> common_type arg typ
+            | Var i ->
+              let arg =
+                match Hashtbl.find typevar i with
+                | exception Not_found -> Hashtbl.replace typevar i typ; typ
+                | t -> t
+              in
+              (* prefer more precise type *)
+              begin match arg with
+                | Type.Any -> Hashtbl.replace typevar i typ
+                | _ -> ()
+              end;
+              common_type arg typ ||
+              match typ with Tuple _ -> true | _ -> false
+            end [lhs; rhs] types
+          in
+          let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
+          if List.fold_left (&&) true l then begin
+            let concrete_typ = convert lhs in
+            Bool, [ concrete_typ; Tuple concrete_typ ]
+          end else
+            fail "types do not match : %s" (show ())
         | Ret Any, _ -> (* lame *)
           begin match List.filter ((<>) Any) types with
           | [] -> Any, types
@@ -191,6 +227,7 @@ and assign_types expr =
         let assign inferred x =
           match x with
           | `Param { id; typ = Any; attr } -> `Param (new_param ?attr id inferred)
+          | `Inparam { id; typ = Any; attr } -> `Inparam (new_param ?attr id inferred)
           | x -> x
         in
         `Func (func,(List.map2 assign inferred_params params)), `Ok ret
@@ -281,6 +318,7 @@ and params_of_order order final_schema tables =
 and ensure_simple_expr = function
   | Value x -> `Value x
   | Param x -> `Param x
+  | Inparam x -> `Inparam x
   | Choices (p,_) -> failed ~at:p.pos "ensure_simple_expr Choices TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
@@ -479,10 +517,12 @@ let unify_params l =
   in
   let rec traverse = function
   | Single { id; typ; attr=_ } -> remember id.label typ
+  | SingleIn { id; typ; _ } -> remember id.label typ
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
   | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
+  | SingleIn { id; typ; attr } -> SingleIn (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   in
   List.iter traverse l;

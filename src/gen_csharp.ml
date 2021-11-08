@@ -42,6 +42,7 @@ let as_api_type = function
   | Datetime -> "Datetime"
   | Any -> "String"
   | Unit _ -> assert false
+  | Tuple _ -> assert false
 
 let as_lang_type = as_api_type
 

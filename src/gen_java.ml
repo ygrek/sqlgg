@@ -42,6 +42,7 @@ let as_lang_type = function
   | Decimal -> "float" (* BigDecimal? *)
   | Datetime -> "Timestamp"
   | Unit _ -> assert false
+  | Tuple _ -> assert false
 
 let as_api_type = String.capitalize $ as_lang_type
 

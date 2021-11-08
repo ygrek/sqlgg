@@ -199,6 +199,7 @@ let set_param index param =
 let rec set_var index var =
   match var with
   | Single p -> set_param index p
+  | SingleIn _ -> ()
   | Choice (name,ctors) ->
     output "begin match %s with " (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -216,8 +217,8 @@ let rec set_var index var =
     output "end;"
 
 let rec eval_count_params vars =
-  let (static,choices) = list_separate (function Single _ -> `Left () | Choice (name,c) -> `Right (name, c)) vars in
-  string_of_int (List.length static) ^
+  let (static,choices) = list_separate (function Single _ -> `Left true | SingleIn _ -> `Left false | Choice (name,c) -> `Right (name, c)) vars in
+  string_of_int (List.length @@ List.filter (fun x -> x) static) ^
   match choices with
   | [] -> ""
   | _ ->
@@ -234,7 +235,14 @@ let output_params_binder _ vars =
   output "let set_params stmt =";
   inc_indent ();
   output "let p = T.start_params stmt (%s) in" (eval_count_params vars);
-  List.iteri set_var vars;
+  let (_ : int) =
+    List.fold_left
+      (fun index v ->
+         match v with
+         | Single _ | Choice _ -> set_var index v; index + 1
+         | SingleIn _ -> index)
+    0 vars
+  in
   output "T.finish_params p";
   dec_indent ();
   output "in";
@@ -268,10 +276,32 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
+let in_var_module label = function
+  | Sql.Type.Tuple _ | Any | Unit _ as typ -> failwith @@ sprintf "invalid IN var type %s in @%s" (Sql.Type.show typ) label
+  | typ -> Sql.Type.to_string typ
+
+let gen_in_substitution var =
+  if Option.is_none var.id.label then failwith "empty label in IN param";
+  match var.typ with
+  | Sql.Type.Unit _ | Int | Text | Blob | Float | Bool | Datetime | Decimal | Any | Tuple (Any | Tuple _) as typ ->
+    failwith @@ sprintf "invalid inferred IN var type %s (%s)" (Sql.Type.show typ) (Option.get var.id.label)
+  | Tuple typ ->
+    sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
+      (in_var_module (Option.get var.id.label) typ)
+      (Option.get var.id.label)
+
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
+  let insubst =
+    List.filter_map
+      (function
+        | Single _ | Choice _ -> None
+        | SingleIn p -> Some (`InVar p))
+      stmt.vars
+  in
+  let subst = List.map (fun x -> `Var x) subst @ insubst in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
   | _ ->
@@ -290,8 +320,13 @@ let generate_stmt style index stmt =
     output "    in loop str";
     output "  in";
     output "  let sql = %s in" sql;
-    List.iter begin fun var ->
-      output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
+    List.iter begin function
+      | `Var var ->
+        output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
+      | `InVar var ->
+        output "  let sql = replace_all ~str:sql ~sub:(\"@@_sqlgg_sql_%s\") ~by:(%s) in"
+          (match var.id.label with None -> failwith "IN var with no label" | Some label -> label)
+          (gen_in_substitution var);
     end vars;
     output "  sql";
     output "in";

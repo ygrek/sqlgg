@@ -16,6 +16,7 @@ struct
     | Datetime
     | Decimal
     | Any
+    | Tuple of t
     [@@deriving show {with_path=false}]
 
   let to_string = show
@@ -58,6 +59,7 @@ struct
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
+  | InF of tyvar * tyvar
 
   let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
   let fixed = monomorphic
@@ -71,13 +73,14 @@ struct
   | Group ret -> fprintf pp "|_| -> %s" (to_string ret)
   | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
+  | InF (arg1, arg2) -> fprintf pp "%s -> %s -> %s" (string_of_tyvar arg1) (string_of_tyvar arg2) (string_of_tyvar @@ Typ Bool)
   | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | F _ | Multi _ -> false
+  | Ret _ | F _ | InF _ | Multi _ -> false
 end
 
 module Constraint =
@@ -241,6 +244,7 @@ type ctor =
 | Verbatim of string * string
 and var =
 | Single of param
+| SingleIn of param
 | Choice of param_id * ctor list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -286,6 +290,7 @@ and 'expr choices = (param_id * 'expr option) list
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
+  | Inparam of param
   | Choices of param_id * expr choices
   | Fun of Type.func * expr list (** parameters *)
   | Select of select_full * [ `AsValue | `Exists ]
@@ -301,6 +306,7 @@ type columns = column list [@@deriving show]
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
+            | `Inparam of param
             | `Choice of param_id * expr_q choices
             | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]
