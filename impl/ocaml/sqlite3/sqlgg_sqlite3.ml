@@ -144,6 +144,6 @@ end
 
 let () =
   (* checking signature match *)
-  let module S = (M:Sqlgg_traits.M) in ()
+  let module S = (M:Sqlgg_traits.M) in ignore (S.Oops "ok")
 
 include M

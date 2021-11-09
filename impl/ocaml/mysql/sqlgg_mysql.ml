@@ -168,7 +168,8 @@ module Default = Make_(Default_types)
 
 let () =
   (* checking signature match *)
-  let module M = (Default : Sqlgg_traits.M) in ()
+  let module M = (Default : Sqlgg_traits.M) in
+  ignore (M.Oops "OK")
 
 (* compatibility *)
 module Make(Number : Value) = struct
