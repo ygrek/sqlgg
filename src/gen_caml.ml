@@ -324,7 +324,7 @@ let generate_stmt style index stmt =
       | `Var var ->
         output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
       | `InVar var ->
-        output "  let sql = replace_all ~str:sql ~sub:(\"@@_sqlgg_sql_%s\") ~by:(%s) in"
+        output "  let sql = replace_all ~str:sql ~sub:(\"@@_sqlgg_%s@@\") ~by:(%s) in"
           (match var.id.label with None -> failwith "IN var with no label" | Some label -> label)
           (gen_in_substitution var);
     end vars;

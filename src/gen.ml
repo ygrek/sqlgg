@@ -92,7 +92,7 @@ let substitute_vars s vars subst_param =
         match param.id.label with
         | None -> failwith "empty label in IN param"
         | Some label ->
-          Static (sprintf "@@_sqlgg_%s" label) ::
+          Static (sprintf "@@_sqlgg_%s@@" label) ::
           Static (String.slice ~first:i ~last:i1 s) ::
           acc,
           parami
