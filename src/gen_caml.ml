@@ -235,23 +235,23 @@ let output_params_binder _ vars =
   output "let set_params stmt =";
   inc_indent ();
   output "let p = T.start_params stmt (%s) in" (eval_count_params vars);
-  let (_ : int) =
-    List.fold_left
-      (fun index v ->
-         match v with
-         | Single _ | Choice _ -> set_var index v; index + 1
-         | SingleIn _ -> index)
-    0 vars
-  in
+  List.iteri (fun index v -> set_var index v) vars;
   output "T.finish_params p";
   dec_indent ();
   output "in";
   "set_params"
 
+let exclude_in_vars l =
+  List.filter
+    (function
+      | Single _ | Choice _ -> true
+      | SingleIn _ -> false)
+    l
+
 let output_params_binder index vars =
-  match vars with
+  match exclude_in_vars vars with
   | [] -> "T.no_params"
-  | _ -> output_params_binder index vars
+  | vars -> output_params_binder index vars
 
 let prepend prefix = function s -> prefix ^ s
 
