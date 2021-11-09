@@ -13,7 +13,7 @@
   For more information, please refer to <http://unlicense.org/>
 *)
 
-module type Value = sig type t end
+module type Value = sig type t val to_literal : t -> string end
 
 module type M = sig
 

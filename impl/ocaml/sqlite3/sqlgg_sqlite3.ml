@@ -20,10 +20,23 @@ module M = struct
 module S = Sqlite3
 
 module Types = struct
-  module Bool = struct type t = bool end
-  module Int = Int64
-  module Text = struct type t = string end
-  module Float = struct type t = float end
+  module Bool = struct type t = bool let to_literal = string_of_bool end
+  module Int = struct include Int64 let to_literal = to_string end
+  module Text = struct
+    type t = string
+
+    let replace_all ~str ~sub ~by =
+      let rec loop str = match ExtString.String.replace ~str ~sub ~by with
+        | true, str -> loop str
+        | false, s -> s
+      in loop str
+
+    let to_literal s =
+      let str = replace_all ~str:s ~sub:"\\" ~by:"\\\\" in
+      let str = replace_all ~str:str ~sub:"\000" ~by:"\\0" in
+      replace_all ~str:str ~sub:"'" ~by:"\\'"
+  end
+  module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
   module Datetime = Float (* ? *)
