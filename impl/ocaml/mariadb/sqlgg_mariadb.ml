@@ -128,7 +128,7 @@ struct
     let to_literal s =
       let str = replace_all ~str:s ~sub:"\\" ~by:"\\\\" in
       let str = replace_all ~str:str ~sub:"\000" ~by:"\\0" in
-      replace_all ~str:str ~sub:"'" ~by:"\\'"
+      "'" ^ replace_all ~str:str ~sub:"'" ~by:"\\'" ^ "'"
   end)
 
   module Datetime = Make(struct

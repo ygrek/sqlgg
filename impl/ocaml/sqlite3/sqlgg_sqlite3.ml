@@ -31,10 +31,14 @@ module Types = struct
         | false, s -> s
       in loop str
 
-    let to_literal s =
-      let str = replace_all ~str:s ~sub:"\\" ~by:"\\\\" in
-      let str = replace_all ~str:str ~sub:"\000" ~by:"\\0" in
-      replace_all ~str:str ~sub:"'" ~by:"\\'"
+    (* cf. https://sqlite.org/lang_expr.html "Literal Values"
+        "A string constant is formed by enclosing the string in single quotes
+        ('). A single quote within the string can be encoded by putting two
+        single quotes in a row - as in Pascal. C-style escapes using the
+        backslash character are not supported because they are not standard
+        SQL."
+    *)
+    let to_literal s = "'" ^ replace_all ~str:s ~sub:"'" ~by:"''" ^ "'"
   end
   module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
