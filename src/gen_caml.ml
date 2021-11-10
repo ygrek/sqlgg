@@ -296,17 +296,29 @@ let gen_in_substitution var =
       (in_var_module (Option.get var.id.label) typ)
       (Option.get var.id.label)
 
+let extract_in_subst vars =
+  let rec extract acc = function
+    | [] -> List.rev acc
+    | Single _ :: tl -> extract acc tl
+    | SingleText p :: tl -> extract (`InVar p :: acc) tl
+    | Choice (_, ctors) :: tl ->
+      let acc =
+        List.fold_left
+          (fun acc ctor ->
+             match ctor with
+             | Verbatim _ | Simple (_, None) -> acc
+             | Simple (_, Some vars) -> List.fold_left extract acc [vars])
+          acc ctors
+      in
+      extract acc tl
+  in
+  extract [] vars
+
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
-  let insubst =
-    List.filter_map
-      (function
-        | Single _ | Choice _ -> None
-        | SingleText p -> Some (`InVar p))
-      stmt.vars
-  in
+  let insubst = extract_in_subst stmt.vars in
   let subst = List.map (fun x -> `Var x) subst @ insubst in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
