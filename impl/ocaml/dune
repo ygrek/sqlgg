@@ -1,5 +1,4 @@
 (library
   (wrapped false)
   (name sqlgg_traits)
-  (libraries extlib)
   (public_name sqlgg.traits))

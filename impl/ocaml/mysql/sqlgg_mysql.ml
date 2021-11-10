@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module P = Mysql.Prepared
 
@@ -47,16 +48,10 @@ module Default_types = struct
     let of_string s = s
     let to_string s = s
 
-    let replace_all ~str ~sub ~by =
-      let rec loop str = match ExtString.String.replace ~str ~sub ~by with
-        | true, str -> loop str
-        | false, s -> s
-      in loop str
-
     let to_literal s =
-      let str = replace_all ~str:s ~sub:"\\" ~by:"\\\\" in
-      let str = replace_all ~str:str ~sub:"\000" ~by:"\\0" in
-      "'" ^ replace_all ~str:str ~sub:"'" ~by:"\\'" ^ "'"
+      let str = replace_all_chars ~str:s ~sub:'\\' ~by:"\\\\" in
+      let str = replace_all_chars ~str:str ~sub:'\000' ~by:"\\0" in
+      "'" ^ replace_all_chars ~str:str ~sub:'\'' ~by:"\\'" ^ "'"
   end
   module Float = struct
     type t = float

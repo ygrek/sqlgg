@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module type Value = sig
   type t
@@ -119,16 +120,10 @@ struct
       | value -> convfail "string" field value
     let to_value x = `String x
 
-    let replace_all ~str ~sub ~by =
-      let rec loop str = match ExtString.String.replace ~str ~sub ~by with
-        | true, str -> loop str
-        | false, s -> s
-      in loop str
-
     let to_literal s =
-      let str = replace_all ~str:s ~sub:"\\" ~by:"\\\\" in
-      let str = replace_all ~str:str ~sub:"\000" ~by:"\\0" in
-      "'" ^ replace_all ~str:str ~sub:"'" ~by:"\\'" ^ "'"
+      let str = replace_all_chars ~str:s ~sub:'\\' ~by:"\\\\" in
+      let str = replace_all_chars ~str:str ~sub:'\000' ~by:"\\0" in
+      "'" ^ replace_all_chars ~str:str ~sub:''' ~by:"\\'" ^ "'"
   end)
 
   module Datetime = Make(struct

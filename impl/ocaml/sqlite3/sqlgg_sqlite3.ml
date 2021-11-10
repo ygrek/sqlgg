@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module M = struct
 
@@ -25,12 +26,6 @@ module Types = struct
   module Text = struct
     type t = string
 
-    let replace_all ~str ~sub ~by =
-      let rec loop str = match ExtString.String.replace ~str ~sub ~by with
-        | true, str -> loop str
-        | false, s -> s
-      in loop str
-
     (* cf. https://sqlite.org/lang_expr.html "Literal Values"
         "A string constant is formed by enclosing the string in single quotes
         ('). A single quote within the string can be encoded by putting two
@@ -38,7 +33,7 @@ module Types = struct
         backslash character are not supported because they are not standard
         SQL."
     *)
-    let to_literal s = "'" ^ replace_all ~str:s ~sub:"'" ~by:"''" ^ "'"
+    let to_literal s = "'" ^ replace_all_chars ~str:s ~sub:'\'' ~by:"''" ^ "'"
   end
   module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
