@@ -235,7 +235,7 @@ let output_params_binder _ vars =
   output "let set_params stmt =";
   inc_indent ();
   output "let p = T.start_params stmt (%s) in" (eval_count_params vars);
-  List.iteri (fun index v -> set_var index v) vars;
+  List.iteri set_var vars;
   output "T.finish_params p";
   dec_indent ();
   output "in";
