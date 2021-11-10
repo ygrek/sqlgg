@@ -37,7 +37,7 @@
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
- <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@ AND foo NOT IN @@_sqlgg_foos@@" category="DQL" kind="select" cardinality="n">
+ <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@ AND foo NOT IN @@_sqlgg_foos@@&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
    <value name="ids" type="(Tuple Int)"/>
    <value name="foos" type="(Tuple Text)"/>

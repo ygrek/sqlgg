@@ -25,7 +25,8 @@ WHERE id IN @ids AND foo NOT IN @foos;
 
 -- @get2
 SELECT * FROM foo
-WHERE id IN @ids AND foo NOT IN @foos;
+WHERE id IN @ids AND foo NOT IN @foos
+LIMIT 1;
 
 -- @join
 SELECT *
