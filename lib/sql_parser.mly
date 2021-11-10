@@ -340,6 +340,7 @@ insert_expr: e=expr { `Expr e }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
+    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret Any),[e1;e2]) } (* mysql special *)
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
