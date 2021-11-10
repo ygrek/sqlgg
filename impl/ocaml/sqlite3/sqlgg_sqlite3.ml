@@ -31,7 +31,7 @@ module Types = struct
 end
 
 type statement = S.stmt * string
-type connection = S.db
+type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit

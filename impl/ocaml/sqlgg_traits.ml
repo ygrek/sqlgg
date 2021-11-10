@@ -18,7 +18,7 @@ module type Value = sig type t end
 module type M = sig
 
   type statement
-  type connection
+  type -'a connection
   type params
   type row
   type result
@@ -79,25 +79,25 @@ module type M = sig
     Perform query (cardinality "any") and return results via callback for each row
     @raise Oops on error
   *)
-  val select : connection -> string -> (statement -> result) -> (row -> unit) -> unit
+  val select : [>`RO] connection -> string -> (statement -> result) -> (row -> unit) -> unit
 
   (**
     Perform query (cardinality "zero or one") and return first row if available
     @raise Oops on error
   *)
-  val select_one_maybe : connection -> string -> (statement -> result) -> (row -> 'r) -> 'r option
+  val select_one_maybe : [>`RO] connection -> string -> (statement -> result) -> (row -> 'r) -> 'r option
 
   (**
     Perform query (cardinality "one") and return first row
     @raise Oops on error
   *)
-  val select_one : connection -> string -> (statement -> result) -> (row -> 'r) -> 'r
+  val select_one : [>`RO] connection -> string -> (statement -> result) -> (row -> 'r) -> 'r
 
   (** Execute non-query.
     @raise Oops on error
     @return number of affected rows
   *)
-  val execute : connection -> string -> (statement -> result) -> int64
+  val execute : [>`WR] connection -> string -> (statement -> result) -> int64
 
 end
 
@@ -111,12 +111,12 @@ module type M_io = sig
 
   val no_params : statement -> result IO.future
 
-  val select : connection -> string -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
+  val select : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
 
-  val select_one_maybe : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
+  val select_one_maybe : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
 
-  val select_one : connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b IO.future
+  val select_one : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b IO.future
 
-  val execute : connection -> string -> (statement -> result IO.future) -> int64 IO.future
+  val execute : [>`WR] connection -> string -> (statement -> result IO.future) -> int64 IO.future
 
 end
