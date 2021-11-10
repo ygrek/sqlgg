@@ -25,7 +25,7 @@ let parse sql =
 let do_test sql ?kind schema params =
   let stmt = parse sql in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
-  assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params (List.map (function Single p -> p | SingleIn _ | Choice _ -> assert false) stmt.vars);
+  assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params (List.map (function Single p -> p | SingleText _ | Choice _ -> assert false) stmt.vars);
   match kind with
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
   | None -> ()

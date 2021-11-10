@@ -86,7 +86,7 @@ let substitute_vars s vars subst_param =
           parami + 1
       in
       loop acc i2 parami tl
-    | SingleIn param :: tl ->
+    | SingleText param :: tl ->
       let (i1,i2) = param.id.pos in
       let acc, parami =
         match param.id.label with
@@ -183,9 +183,9 @@ let all_params_to_values l =
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
 let names_of_vars l =
-  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single p | SingleIn p -> p.id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
+  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single p | SingleText p -> p.id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
 
-let params_only = List.map (function Sql.Single p | SingleIn p -> p | Choice _ -> fail "dynamic choices not supported for this host language")
+let params_only = List.map (function Sql.Single p | SingleText p -> p | Choice _ -> fail "dynamic choices not supported for this host language")
 
 end
 
