@@ -362,7 +362,7 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | e1=expr mnot(IN) p=PARAM { Fun (InF (Var 0, Var 1), [ e1; Inparam (new_param p Any) ]) }
+    | e1=expr mnot(IN) p=PARAM { poly Bool [ e1; Inparam (new_param p Any) ] }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }

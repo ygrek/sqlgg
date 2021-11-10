@@ -10,49 +10,54 @@
   <out/>
  </stmt>
  <stmt name="find" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@" category="DQL" kind="select" cardinality="n">
-  <in>
-   <value name="ids" type="(Tuple Int)"/>
-  </in>
+  <in/>
+  <in-set>
+   <value name="ids" type="Int"/>
+  </in-set>
   <out>
    <value name="id" type="Int"/>
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="get" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
-  <in>
-   <value name="ids" type="(Tuple Int)"/>
-  </in>
+  <in/>
+  <in-set>
+   <value name="ids" type="Int"/>
+  </in-set>
   <out>
    <value name="id" type="Int"/>
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="find2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@ AND foo NOT IN @@_sqlgg_foos@@" category="DQL" kind="select" cardinality="n">
-  <in>
-   <value name="ids" type="(Tuple Int)"/>
-   <value name="foos" type="(Tuple Text)"/>
-  </in>
+  <in/>
+  <in-set>
+   <value name="ids" type="Int"/>
+   <value name="foos" type="Text"/>
+  </in-set>
   <out>
    <value name="id" type="Int"/>
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@_sqlgg_ids@@ AND foo NOT IN @@_sqlgg_foos@@&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
-  <in>
-   <value name="ids" type="(Tuple Int)"/>
-   <value name="foos" type="(Tuple Text)"/>
-  </in>
+  <in/>
+  <in-set>
+   <value name="ids" type="Int"/>
+   <value name="foos" type="Text"/>
+  </in-set>
   <out>
    <value name="id" type="Int"/>
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="join" sql="SELECT *&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz IN @@_sqlgg_bazz@@ AND b.baz NOT IN @@_sqlgg_notbazz@@ AND LENGTH(f.foo) IN @@_sqlgg_lengths@@" category="DQL" kind="select" cardinality="n">
-  <in>
-   <value name="bazz" type="(Tuple Text)"/>
-   <value name="notbazz" type="(Tuple Text)"/>
-   <value name="lengths" type="(Tuple Int)"/>
-  </in>
+  <in/>
+  <in-set>
+   <value name="bazz" type="Text"/>
+   <value name="notbazz" type="Text"/>
+   <value name="lengths" type="Int"/>
+  </in-set>
   <out>
    <value name="id" type="Int"/>
    <value name="foo" type="Text" nullable="true"/>

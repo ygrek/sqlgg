@@ -282,19 +282,13 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
-let in_var_module label = function
-  | Sql.Type.Tuple _ | Any | Unit _ as typ -> failwith @@ sprintf "invalid IN var type %s in @%s" (Sql.Type.show typ) label
-  | typ -> Sql.Type.to_string typ
+let in_var_module _label typ = Sql.Type.to_string typ
 
 let gen_in_substitution var =
   if Option.is_none var.id.label then failwith "empty label in IN param";
-  match var.typ with
-  | Sql.Type.Unit _ | Int | Text | Blob | Float | Bool | Datetime | Decimal | Any | Tuple (Any | Tuple _) as typ ->
-    failwith @@ sprintf "invalid inferred IN var type %s (%s)" (Sql.Type.show typ) (Option.get var.id.label)
-  | Tuple typ ->
-    sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
-      (in_var_module (Option.get var.id.label) typ)
-      (Option.get var.id.label)
+  sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
+    (in_var_module (Option.get var.id.label) var.typ)
+    (Option.get var.id.label)
 
 let extract_in_subst vars =
   let rec extract acc = function

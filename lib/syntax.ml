@@ -136,7 +136,7 @@ and assign_types expr =
     match e with
     | `Value t -> e, `Ok t
     | `Param p -> e, `Ok p.typ
-    | `Inparam p -> e, `Ok (Tuple p.typ)
+    | `Inparam p -> e, `Ok p.typ
     | `Choice (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
@@ -187,32 +187,6 @@ and assign_types expr =
             convert ret, List.map convert args
           else
             fail "types do not match : %s" (show ())
-        | InF (lhs, rhs), _ ->
-          let typevar = Hashtbl.create 10 in
-          let l = List.map2 begin fun arg typ ->
-            match arg with
-            | Typ arg -> common_type arg typ
-            | Var i ->
-              let arg =
-                match Hashtbl.find typevar i with
-                | exception Not_found -> Hashtbl.replace typevar i typ; typ
-                | t -> t
-              in
-              (* prefer more precise type *)
-              begin match arg with
-                | Type.Any -> Hashtbl.replace typevar i typ
-                | _ -> ()
-              end;
-              common_type arg typ ||
-              match typ with Tuple _ -> true | _ -> false
-            end [lhs; rhs] types
-          in
-          let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
-          if List.fold_left (&&) true l then begin
-            let concrete_typ = convert lhs in
-            Bool, [ concrete_typ; Tuple concrete_typ ]
-          end else
-            fail "types do not match : %s" (show ())
         | Ret Any, _ -> (* lame *)
           begin match List.filter ((<>) Any) types with
           | [] -> Any, types
@@ -226,8 +200,8 @@ and assign_types expr =
         in
         let assign inferred x =
           match x with
-          | `Param { id; typ = Any; attr } -> `Param (new_param ?attr id inferred)
-          | `Inparam { id; typ = Any; attr } -> `Inparam (new_param ?attr id inferred)
+          | `Param { id; typ = Any; attr; } -> `Param (new_param ?attr id inferred)
+          | `Inparam { id; typ = Any; attr; } -> `Inparam (new_param ?attr id inferred)
           | x -> x
         in
         `Func (func,(List.map2 assign inferred_params params)), `Ok ret
