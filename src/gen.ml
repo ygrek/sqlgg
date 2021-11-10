@@ -76,6 +76,8 @@ let substitute_vars s vars subst_param =
     | [] -> acc, i
     | Sql.Single param :: tl ->
       let (i1,i2) = param.id.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
       let acc, parami =
         match subst_param with
         | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
@@ -90,6 +92,8 @@ let substitute_vars s vars subst_param =
       let dyn = ctors |> List.map begin function
         | Sql.Simple (ctor,args) ->
           let (c1,c2) = ctor.pos in
+          assert ((c2 = 0 && c1 = 1) || c2 > c1);
+          assert (c1 > i);
           let pieces =
             match args with
             | None -> [Static ""]
@@ -102,6 +106,8 @@ let substitute_vars s vars subst_param =
         end
       in
       let (i1,i2) = name.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
   in
