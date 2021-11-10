@@ -241,12 +241,18 @@ let output_params_binder _ vars =
   output "in";
   "set_params"
 
-let exclude_in_vars l =
-  List.filter
+let rec exclude_in_vars l =
+  List.filter_map
     (function
-      | Single _ | Choice _ -> true
-      | SingleIn _ -> false)
+      | SingleIn _ -> None
+      | Single _ as v -> Some v
+      | Choice (param_id, ctors) ->
+        Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
     l
+
+and exclude_in_vars_in_constructors = function
+  | Verbatim _ as ctor -> ctor
+  | Simple (param_id, vars) -> Simple (param_id, Option.map exclude_in_vars vars)
 
 let output_params_binder index vars =
   match exclude_in_vars vars with
