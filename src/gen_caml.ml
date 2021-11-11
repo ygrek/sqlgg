@@ -199,7 +199,7 @@ let set_param index param =
 let rec set_var index var =
   match var with
   | Single p -> set_param index p
-  | SingleText _ -> ()
+  | SingleIn _ -> ()
   | Choice (name,ctors) ->
     output "begin match %s with " (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -217,7 +217,7 @@ let rec set_var index var =
     output "end;"
 
 let rec eval_count_params vars =
-  let (static,choices) = list_separate (function Single _ -> `Left true | SingleText _ -> `Left false | Choice (name,c) -> `Right (name, c)) vars in
+  let (static,choices) = list_separate (function Single _ -> `Left true | SingleIn _ -> `Left false | Choice (name,c) -> `Right (name, c)) vars in
   string_of_int (List.length @@ List.filter (fun x -> x) static) ^
   match choices with
   | [] -> ""
@@ -244,7 +244,7 @@ let output_params_binder _ vars =
 let rec exclude_in_vars l =
   List.filter_map
     (function
-      | SingleText _ -> None
+      | SingleIn _ -> None
       | Single _ as v -> Some v
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
@@ -294,7 +294,7 @@ let extract_in_subst vars =
   let rec extract acc = function
     | [] -> List.rev acc
     | Single _ :: tl -> extract acc tl
-    | SingleText p :: tl -> extract (`InVar p :: acc) tl
+    | SingleIn p :: tl -> extract (`InVar p :: acc) tl
     | Choice (_, ctors) :: tl ->
       let acc =
         List.fold_left

@@ -241,7 +241,7 @@ type ctor =
 | Verbatim of string * string
 and var =
 | Single of param
-| SingleText of param
+| SingleIn of param
 | Choice of param_id * ctor list
 [@@deriving show]
 type vars = var list [@@deriving show]

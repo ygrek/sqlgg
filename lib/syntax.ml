@@ -31,7 +31,7 @@ let rec get_params_q (e:expr_q) =
   let rec loop acc e =
     match e with
     | `Param p -> Single p::acc
-    | `Inparam p -> SingleText p::acc
+    | `Inparam p -> SingleIn p::acc
     | `Func (_,l) -> List.fold_left loop acc l
     | `Value _ -> acc
     | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_q e)) l) :: acc
@@ -118,7 +118,7 @@ let rec resolve_columns env expr =
         List.map
           (function
             | Single p -> `Param p
-            | SingleText p -> failed ~at:p.id.pos "FIXME as_params in SingleText"
+            | SingleIn p -> failed ~at:p.id.pos "FIXME as_params in SingleIn"
             | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice")
           p in
       let (schema,p,_) = eval_select_full env select in
@@ -491,12 +491,12 @@ let unify_params l =
   in
   let rec traverse = function
   | Single { id; typ; attr=_ } -> remember id.label typ
-  | SingleText { id; typ; _ } -> remember id.label typ
+  | SingleIn { id; typ; _ } -> remember id.label typ
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
   | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
-  | SingleText { id; typ; attr } -> SingleText (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
+  | SingleIn { id; typ; attr } -> SingleIn (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   in
   List.iter traverse l;
