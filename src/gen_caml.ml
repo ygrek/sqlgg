@@ -261,6 +261,14 @@ let output_params_binder index vars =
 
 let prepend prefix = function s -> prefix ^ s
 
+let in_var_module _label typ = Sql.Type.to_string typ
+
+let gen_in_substitution var =
+  if Option.is_none var.id.label then failwith "empty label in IN param";
+  sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
+    (in_var_module (Option.get var.id.label) var.typ)
+    (Option.get var.id.label)
+
 let make_sql l =
   let b = Buffer.create 100 in
   let rec loop app = function
@@ -269,6 +277,10 @@ let make_sql l =
     | Static s :: tl ->
       if app then bprintf b " ^ ";
       Buffer.add_string b (quote s);
+      loop true tl
+    | SubstIn param :: tl ->
+      if app then bprintf b " ^ ";
+      Buffer.add_string b (gen_in_substitution param);
       loop true tl
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
@@ -282,38 +294,10 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
-let in_var_module _label typ = Sql.Type.to_string typ
-
-let gen_in_substitution var =
-  if Option.is_none var.id.label then failwith "empty label in IN param";
-  sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
-    (in_var_module (Option.get var.id.label) var.typ)
-    (Option.get var.id.label)
-
-let extract_in_subst vars =
-  let rec extract acc = function
-    | [] -> List.rev acc
-    | Single _ :: tl -> extract acc tl
-    | SingleIn p :: tl -> extract (`InVar p :: acc) tl
-    | Choice (_, ctors) :: tl ->
-      let acc =
-        List.fold_left
-          (fun acc ctor ->
-             match ctor with
-             | Verbatim _ | Simple (_, None) -> acc
-             | Simple (_, Some vars) -> List.fold_left extract acc [vars])
-          acc ctors
-      in
-      extract acc tl
-  in
-  extract [] vars
-
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
-  let insubst = extract_in_subst stmt.vars in
-  let subst = List.map (fun x -> `Var x) subst @ insubst in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
   | _ ->
@@ -332,14 +316,7 @@ let generate_stmt style index stmt =
     output "    in loop str";
     output "  in";
     output "  let sql = %s in" sql;
-    List.iter begin function
-      | `Var var ->
-        output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
-      | `InVar var ->
-        output "  let sql = replace_all ~str:sql ~sub:(\"@@_sqlgg_%s@@\") ~by:(%s) in"
-          (match var.id.label with None -> failwith "IN var with no label" | Some label -> label)
-          (gen_in_substitution var);
-    end vars;
+    List.iter (fun var -> output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var) vars;
     output "  sql";
     output "in";
     "__sqlgg_sql"

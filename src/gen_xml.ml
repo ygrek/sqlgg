@@ -59,6 +59,14 @@ type t = xml list ref * xml list ref
 
 let start () = ref [], ref []
 
+let get_sql_string stmt =
+  let map i = function
+  | Static s -> s
+  | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
+  | Dynamic _ -> fail "dynamic choice not supported for xml output"
+  in
+  String.concat "" @@ List.mapi map @@ get_sql stmt
+
 let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
   let input = Node ("in",[],params_to_values @@ params_only stmt.vars) in
@@ -68,7 +76,7 @@ let generate_code (x,_) index stmt =
     | _ -> Some (Node ("in-set",[],params_to_values @@ inparams_only stmt.vars))
   in
   let output = Node ("out",[],schema_to_values stmt.schema) in
-  let sql = get_sql_string_only stmt in
+  let sql = get_sql_string stmt in
   let attrs =
     match stmt.kind with
     | Select `Nat      -> ["kind", "select"; "cardinality", "n"]

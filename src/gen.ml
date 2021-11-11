@@ -68,7 +68,7 @@ let choose_name props kind index =
   in
   make_name props name
 
-type sql = Static of string | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
+type sql = Static of string | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list) | SubstIn of Sql.param
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -88,15 +88,7 @@ let substitute_vars s vars subst_param =
       loop acc i2 parami tl
     | SingleIn param :: tl ->
       let (i1,i2) = param.id.pos in
-      let acc, parami =
-        match param.id.label with
-        | None -> failwith "empty label in IN param"
-        | Some label ->
-          Static (sprintf "@@_sqlgg_%s@@" label) ::
-          Static (String.slice ~first:i ~last:i1 s) ::
-          acc,
-          parami
-      in
+      let acc = SubstIn param :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
     | Choice (name,ctors) :: tl ->
       let dyn = ctors |> List.map begin function
