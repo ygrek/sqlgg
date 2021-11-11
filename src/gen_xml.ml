@@ -47,23 +47,32 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if v.nullable then ["nullable","true"] else []),[])
+let value ?(inparam=false) v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if inparam then ["set","true"] else [] @ if v.nullable then ["nullable","true"] else []),[])
 
 (* open Gen_caml.L *)
 open Gen_caml.T
 
 let params_to_values = List.map value $ all_params_to_values
+let inparams_to_values = List.map (value ~inparam:true) $ all_params_to_values
 let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
 
 let start () = ref [], ref []
 
+let get_sql_string stmt =
+  let map i = function
+  | Static s -> s
+  | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
+  | Dynamic _ -> fail "dynamic choice not supported for xml output"
+  in
+  String.concat "" @@ List.mapi map @@ get_sql stmt
+
 let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
-  let input = Node ("in",[],params_to_values @@ params_only stmt.vars) in
+  let input = Node ("in",[], (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
-  let sql = get_sql_string_only stmt in
+  let sql = get_sql_string stmt in
   let attrs =
     match stmt.kind with
     | Select `Nat      -> ["kind", "select"; "cardinality", "n"]
@@ -78,8 +87,10 @@ let generate_code (x,_) index stmt =
     | Alter t          -> ["kind", "alter"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateRoutine s  -> ["kind", "create_routine"; "target", s]
-    | Other            -> ["kind", "other"] in
-  x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, [input; output]) :: !x
+    | Other            -> ["kind", "other"]
+  in
+  let nodes = [ input; output] in
+  x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x
 
 let generate_table (x,_) (name,schema) =
   x := Node ("table", ["name",Sql.show_table_name name], [Node ("schema",[],schema_to_values schema)]) :: !x

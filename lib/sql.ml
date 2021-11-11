@@ -241,6 +241,7 @@ type ctor =
 | Verbatim of string * string
 and var =
 | Single of param
+| SingleIn of param
 | Choice of param_id * ctor list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -286,6 +287,7 @@ and 'expr choices = (param_id * 'expr option) list
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
+  | Inparam of param
   | Choices of param_id * expr choices
   | Fun of Type.func * expr list (** parameters *)
   | Select of select_full * [ `AsValue | `Exists ]
@@ -301,6 +303,7 @@ type columns = column list [@@deriving show]
 
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
+            | `Inparam of param
             | `Choice of param_id * expr_q choices
             | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]

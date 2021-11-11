@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module type Value = sig
   type t
@@ -21,6 +22,7 @@ module type Value = sig
   type value
   val of_field : field -> t
   val to_value : t -> value
+  val to_literal : t -> string
 end
 
 module type Types = sig
@@ -50,7 +52,7 @@ struct
   type field = M.Field.t
   type value = M.Field.value
   module type Value = Value with type field = field and type value = value
-  module Make(T : sig type t val of_field : field -> t val to_value : t -> value end) : Value with
+  module Make(T : sig type t val of_field : field -> t val to_value : t -> value val to_literal : t -> string end) : Value with
     type t = T.t =
   struct
     type t = T.t
@@ -58,6 +60,7 @@ struct
     type nonrec value = value
     let of_field = T.of_field
     let to_value = T.to_value
+    let to_literal = T.to_literal
   end
 
   let convfail expected field value =
@@ -83,12 +86,14 @@ struct
       | `String x -> Int64.of_string x
       | value -> convfail "int" field value
     let to_value x = `Int (Int64.to_int x)
+    let to_literal = Int64.to_string
   end)
 
   module Bool = Make(struct
     type t = bool
     let of_field field = Int.of_field field <> 0L
     let to_value = function true -> `Int 1 | false -> `Int 0
+    let to_literal = string_of_bool
   end)
 
   module Float = Make(struct
@@ -100,6 +105,7 @@ struct
       | `String x -> float_of_string x
       | value -> convfail "float" field value
     let to_value x = `Float x
+    let to_literal = string_of_float
   end)
 
   (* you probably want better type, e.g. (int*int) or Z.t *)
@@ -113,18 +119,34 @@ struct
       | `Bytes x -> Bytes.to_string x
       | value -> convfail "string" field value
     let to_value x = `String x
+
+    let to_literal s =
+      let str = replace_all_chars ~str:s ~sub:'\\' ~by:"\\\\" in
+      let str = replace_all_chars ~str:str ~sub:'\000' ~by:"\\0" in
+      "'" ^ replace_all_chars ~str:str ~sub:''' ~by:"\\'" ^ "'"
   end)
 
   module Datetime = Make(struct
     type t = M.Time.t
     let of_field = M.Field.time
     let to_value x = `Time x
+    let to_literal t =
+      sprintf
+        "'%04d-%02d-%02d %02d:%02d:%02d.%06d'"
+        (M.Time.year t)
+        (M.Time.month t)
+        (M.Time.day t)
+        (M.Time.hour t)
+        (M.Time.minute t)
+        (M.Time.second t)
+        (M.Time.microsecond t)
   end)
 
   module Any = Make(struct
     type t = M.Field.value
     let of_field = M.Field.value
     let to_value x = x
+    let to_literal _ = failwith "to_literal Any"
   end)
 end
 
@@ -259,4 +281,4 @@ module Default(IO : Sqlgg_io.M)(M : Mariadb.Nonblocking.S with type 'a future = 
 let () =
   (* checking signature match *)
   let module Default_blocking : Sqlgg_traits.M = Default(Sqlgg_io.Blocking)(struct include Mariadb.Blocking type 'a future = 'a end) in
-  ()
+  ignore (Default_blocking.Oops "ok")

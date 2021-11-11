@@ -1,0 +1,75 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_table_foo" sql="CREATE TABLE foo(&#x0A;    id INTEGER PRIMARY KEY,&#x0A;    foo TEXT NULL&#x0A;)" category="DDL" kind="create" target="foo" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_table_bar" sql="CREATE TABLE bar(&#x0A;    foo_id INTEGER NOT NULL,&#x0A;    baz TEXT NOT NULL&#x0A;)" category="DDL" kind="create" target="bar" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="find" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="ids" type="Int" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="get" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
+  <in>
+   <value name="ids" type="Int" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="find2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids AND foo NOT IN @@foos" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="ids" type="Int" set="true"/>
+   <value name="foos" type="Text" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids AND foo NOT IN @@foos&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
+  <in>
+   <value name="ids" type="Int" set="true"/>
+   <value name="foos" type="Text" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="join" sql="SELECT *&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz IN @@bazz AND b.baz NOT IN @@notbazz AND LENGTH(f.foo) IN @@lengths" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="bazz" type="Text" set="true"/>
+   <value name="notbazz" type="Text" set="true"/>
+   <value name="lengths" type="Int" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+   <value name="foo_id" type="Int"/>
+   <value name="baz" type="Text"/>
+  </out>
+ </stmt>
+ <table name="bar">
+  <schema>
+   <value name="foo_id" type="Int"/>
+   <value name="baz" type="Text"/>
+  </schema>
+ </table>
+ <table name="foo">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>

@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module P = Mysql.Prepared
 
@@ -21,6 +22,7 @@ module type Value = sig
   type t
   val of_string : string -> t
   val to_string : t -> string
+  val to_literal : t -> string
 end
 
 module type Types = sig
@@ -34,10 +36,29 @@ module type Types = sig
 end
 
 module Default_types = struct
-  module Bool = struct type t = bool let of_string s = s <> "0" let to_string x = if x then "1" else "0" end
-  module Int = Int64
-  module Text = struct type t = string let of_string s = s let to_string s = s end
-  module Float = struct type t = float let of_string = float_of_string let to_string = string_of_float end
+  module Bool = struct
+    type t = bool
+    let of_string s = s <> "0"
+    let to_string x = if x then "1" else "0"
+    let to_literal = string_of_bool
+  end
+  module Int = struct include Int64 let to_literal = to_string end
+  module Text = struct
+    type t = string
+    let of_string s = s
+    let to_string s = s
+
+    let to_literal s =
+      let str = replace_all_chars ~str:s ~sub:'\\' ~by:"\\\\" in
+      let str = replace_all_chars ~str:str ~sub:'\000' ~by:"\\0" in
+      "'" ^ replace_all_chars ~str:str ~sub:'\'' ~by:"\\'" ^ "'"
+  end
+  module Float = struct
+    type t = float
+    let of_string = float_of_string
+    let to_string = string_of_float
+    let to_literal = string_of_float
+  end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
   module Datetime = Text
@@ -168,7 +189,8 @@ module Default = Make_(Default_types)
 
 let () =
   (* checking signature match *)
-  let module M = (Default : Sqlgg_traits.M) in ()
+  let module M = (Default : Sqlgg_traits.M) in
+  ignore (M.Oops "OK")
 
 (* compatibility *)
 module Make(Number : Value) = struct

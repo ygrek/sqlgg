@@ -14,16 +14,28 @@
 *)
 
 open Printf
+open Sqlgg_runtime
 
 module M = struct
 
 module S = Sqlite3
 
 module Types = struct
-  module Bool = struct type t = bool end
-  module Int = Int64
-  module Text = struct type t = string end
-  module Float = struct type t = float end
+  module Bool = struct type t = bool let to_literal = string_of_bool end
+  module Int = struct include Int64 let to_literal = to_string end
+  module Text = struct
+    type t = string
+
+    (* cf. https://sqlite.org/lang_expr.html "Literal Values"
+        "A string constant is formed by enclosing the string in single quotes
+        ('). A single quote within the string can be encoded by putting two
+        single quotes in a row - as in Pascal. C-style escapes using the
+        backslash character are not supported because they are not standard
+        SQL."
+    *)
+    let to_literal s = "'" ^ replace_all_chars ~str:s ~sub:'\'' ~by:"''" ^ "'"
+  end
+  module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
   module Datetime = Float (* ? *)
@@ -144,6 +156,6 @@ end
 
 let () =
   (* checking signature match *)
-  let module S = (M:Sqlgg_traits.M) in ()
+  let module S = (M:Sqlgg_traits.M) in ignore (S.Oops "ok")
 
 include M

@@ -199,6 +199,7 @@ let set_param index param =
 let rec set_var index var =
   match var with
   | Single p -> set_param index p
+  | SingleIn _ -> ()
   | Choice (name,ctors) ->
     output "begin match %s with " (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -216,8 +217,8 @@ let rec set_var index var =
     output "end;"
 
 let rec eval_count_params vars =
-  let (static,choices) = list_separate (function Single _ -> `Left () | Choice (name,c) -> `Right (name, c)) vars in
-  string_of_int (List.length static) ^
+  let (static,choices) = list_separate (function Single _ -> `Left true | SingleIn _ -> `Left false | Choice (name,c) -> `Right (name, c)) vars in
+  string_of_int (List.length @@ List.filter (fun x -> x) static) ^
   match choices with
   | [] -> ""
   | _ ->
@@ -240,12 +241,33 @@ let output_params_binder _ vars =
   output "in";
   "set_params"
 
+let rec exclude_in_vars l =
+  List.filter_map
+    (function
+      | SingleIn _ -> None
+      | Single _ as v -> Some v
+      | Choice (param_id, ctors) ->
+        Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
+    l
+
+and exclude_in_vars_in_constructors = function
+  | Verbatim _ as ctor -> ctor
+  | Simple (param_id, vars) -> Simple (param_id, Option.map exclude_in_vars vars)
+
 let output_params_binder index vars =
-  match vars with
+  match exclude_in_vars vars with
   | [] -> "T.no_params"
-  | _ -> output_params_binder index vars
+  | vars -> output_params_binder index vars
 
 let prepend prefix = function s -> prefix ^ s
+
+let in_var_module _label typ = Sql.Type.to_string typ
+
+let gen_in_substitution var =
+  if Option.is_none var.id.label then failwith "empty label in IN param";
+  sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
+    (in_var_module (Option.get var.id.label) var.typ)
+    (Option.get var.id.label)
 
 let make_sql l =
   let b = Buffer.create 100 in
@@ -255,6 +277,10 @@ let make_sql l =
     | Static s :: tl ->
       if app then bprintf b " ^ ";
       Buffer.add_string b (quote s);
+      loop true tl
+    | SubstIn param :: tl ->
+      if app then bprintf b " ^ ";
+      Buffer.add_string b (gen_in_substitution param);
       loop true tl
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
@@ -290,9 +316,7 @@ let generate_stmt style index stmt =
     output "    in loop str";
     output "  in";
     output "  let sql = %s in" sql;
-    List.iter begin fun var ->
-      output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var;
-    end vars;
+    List.iter (fun var -> output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var) vars;
     output "  sql";
     output "in";
     "__sqlgg_sql"

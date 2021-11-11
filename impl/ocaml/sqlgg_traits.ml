@@ -13,7 +13,12 @@
   For more information, please refer to <http://unlicense.org/>
 *)
 
-module type Value = sig type t end
+module type Value = sig
+  type t
+
+  (** Return the literal representation of the value in the SQL dialect. *)
+  val to_literal : t -> string
+end
 
 module type M = sig
 
