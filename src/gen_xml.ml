@@ -47,12 +47,13 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if v.nullable then ["nullable","true"] else []),[])
+let value ?(inparam=false) v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if inparam then ["set","true"] else [] @ if v.nullable then ["nullable","true"] else []),[])
 
 (* open Gen_caml.L *)
 open Gen_caml.T
 
 let params_to_values = List.map value $ all_params_to_values
+let inparams_to_values = List.map (value ~inparam:true) $ all_params_to_values
 let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
@@ -69,12 +70,7 @@ let get_sql_string stmt =
 
 let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
-  let input = Node ("in",[],params_to_values @@ params_only stmt.vars) in
-  let input_sets =
-    match inparams_only stmt.vars with
-    | [] -> None
-    | _ -> Some (Node ("in-set",[],params_to_values @@ inparams_only stmt.vars))
-  in
+  let input = Node ("in",[], (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
   let sql = get_sql_string stmt in
   let attrs =
@@ -93,7 +89,7 @@ let generate_code (x,_) index stmt =
     | CreateRoutine s  -> ["kind", "create_routine"; "target", s]
     | Other            -> ["kind", "other"]
   in
-  let nodes = List.filter_map (fun x -> x) [Some input; input_sets; Some output] in
+  let nodes = [ input; output] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x
 
 let generate_table (x,_) (name,schema) =
