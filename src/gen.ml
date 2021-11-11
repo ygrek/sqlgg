@@ -90,6 +90,8 @@ let substitute_vars s vars subst_param =
       loop acc i2 parami tl
     | SingleIn param :: tl ->
       let (i1,i2) = param.id.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
       let acc = SubstIn param :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
     | Choice (name,ctors) :: tl ->
