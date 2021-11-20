@@ -11,4 +11,9 @@
 
   For more information, please refer to <http://unlicense.org/>
 *)
-val replace_all_chars : str:string -> sub:char -> by:string -> string
+
+(* Returns a MySQL string literal for the supplied string. *)
+val mysql_string_to_literal : string -> string
+
+(* Returns a Sqlite3 string literal for the supplied string. *)
+val sqlite3_string_to_literal : string -> string

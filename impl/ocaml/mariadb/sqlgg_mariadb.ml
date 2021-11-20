@@ -120,10 +120,7 @@ struct
       | value -> convfail "string" field value
     let to_value x = `String x
 
-    let to_literal s =
-      let str = replace_all_chars ~str:s ~sub:'\\' ~by:"\\\\" in
-      let str = replace_all_chars ~str:str ~sub:'\000' ~by:"\\0" in
-      "'" ^ replace_all_chars ~str:str ~sub:'\'' ~by:"\\'" ^ "'"
+    let to_literal = Sqlgg_runtime.mysql_string_to_literal
   end)
 
   module Datetime = Make(struct
