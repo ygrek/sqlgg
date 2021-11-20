@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_t1" sql="CREATE TABLE t1 (pk int primary key, a int, b int, c char(10), d real, e real)" category="DDL" kind="create" target="t1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_t1_1" sql="INSERT INTO t1 VALUES&#x0A; ( 1, 0, 1,    'one',    0.1,  0.001),&#x0A; ( 2, 0, 2,    'two',    0.2,  0.002),&#x0A; ( 3, 0, 3,    'three',  0.3,  0.003),&#x0A; ( 4, 1, 2,    'three',  0.4,  0.004),&#x0A; ( 5, 1, 1,    'two',    0.5,  0.005),&#x0A; ( 6, 1, 1,    'one',    0.6,  0.006),&#x0A; ( 7, 2, NULL, 'n_one',  0.5,  0.007),&#x0A; ( 8, 2, 1,    'n_two',  NULL, 0.008),&#x0A; ( 9, 2, 2,    NULL,     0.7,  0.009),&#x0A; (10, 2, 0,    'n_four', 0.8,  0.010),&#x0A; (11, 2, 10,   NULL,     0.9,  NULL)" category="DML" kind="insert" target="t1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT pk, LAG(pk) OVER (ORDER BY pk) AS l,&#x0A;  LAG(pk,1) OVER (ORDER BY pk) AS l1,&#x0A;  LAG(pk+@inc,2) OVER (ORDER BY pk) AS l2,&#x0A;  LAG(pk,0) OVER (ORDER BY pk) AS l0,&#x0A;  LAG(pk,-1) OVER (ORDER BY pk) AS lm1,&#x0A;  LAG(pk,-2) OVER (ORDER BY pk) AS lm2 &#x0A;FROM t1" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="inc" type="Int"/>
+  </in>
+  <out>
+   <value name="pk" type="Int"/>
+   <value name="l" type="Int"/>
+   <value name="l1" type="Int"/>
+   <value name="l2" type="Int"/>
+   <value name="l0" type="Int"/>
+   <value name="lm1" type="Int"/>
+   <value name="lm2" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_3" sql="SELECT pk, LEAD(pk) OVER (ORDER BY pk) AS l,&#x0A;  LEAD(pk,1) OVER (ORDER BY pk) AS l1,&#x0A;  LEAD(pk+@inc,2) OVER (ORDER BY pk) AS l2,&#x0A;  LEAD(pk,0) OVER (ORDER BY pk) AS l0,&#x0A;  LEAD(pk,-1) OVER (ORDER BY pk) AS lm1,&#x0A;  LEAD(pk,-2) OVER (ORDER BY pk) AS lm2 &#x0A;FROM t1" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="inc" type="Int"/>
+  </in>
+  <out>
+   <value name="pk" type="Int"/>
+   <value name="l" type="Int"/>
+   <value name="l1" type="Int"/>
+   <value name="l2" type="Int"/>
+   <value name="l0" type="Int"/>
+   <value name="lm1" type="Int"/>
+   <value name="lm2" type="Int"/>
+  </out>
+ </stmt>
+ <table name="t1">
+  <schema>
+   <value name="pk" type="Int"/>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
+   <value name="c" type="Text"/>
+   <value name="d" type="Float"/>
+   <value name="e" type="Float"/>
+  </schema>
+ </table>
+</sqlgg>
