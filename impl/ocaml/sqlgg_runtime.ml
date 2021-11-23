@@ -2,7 +2,7 @@
 
 (* cf. https://dev.mysql.com/doc/refman/5.7/en/string-literals.html *)
 let mysql_string_to_literal s =
-  let b = Buffer.create (String.length s + String.length s lsl 2) in
+  let b = Buffer.create (String.length s + String.length s / 4) in
   Buffer.add_string b "'";
   for i = 0 to String.length s - 1 do
     match String.unsafe_get s i with
@@ -21,7 +21,7 @@ let mysql_string_to_literal s =
     backslash character are not supported because they are not standard
     SQL." *)
 let sqlite3_string_to_literal s =
-  let b = Buffer.create (String.length s + String.length s lsl 2) in
+  let b = Buffer.create (String.length s + String.length s / 4) in
   Buffer.add_string b "'";
   for i = 0 to String.length s - 1 do
     match String.unsafe_get s i with
