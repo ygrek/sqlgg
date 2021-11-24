@@ -330,6 +330,7 @@ type stmt =
 | CreateIndex of string * table_name * string list (* index name, table name, columns *)
 | Insert of insert_action
 | Delete of table_name * expr option
+| DeleteMulti of table_name * table_name list * nested * expr option
 | Set of string * expr
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
