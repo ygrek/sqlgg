@@ -14,7 +14,6 @@
 *)
 
 open Printf
-open Sqlgg_runtime
 
 module type Value = sig
   type t
@@ -120,7 +119,19 @@ struct
       | value -> convfail "string" field value
     let to_value x = `String x
 
-    let to_literal = Sqlgg_runtime.mysql_string_to_literal
+    (* cf. https://dev.mysql.com/doc/refman/5.7/en/string-literals.html *)
+    let to_literal s =
+      let b = Buffer.create (String.length s + String.length s / 4) in
+      Buffer.add_string b "'";
+      for i = 0 to String.length s - 1 do
+        match String.unsafe_get s i with
+        | '\\' -> Buffer.add_string b "\\\\"
+        | '\000' -> Buffer.add_string b "\\0"
+        | '\'' -> Buffer.add_string b "\\'"
+        | c -> Buffer.add_char b c
+      done;
+      Buffer.add_string b "'";
+      Buffer.contents b
   end)
 
   module Datetime = Make(struct

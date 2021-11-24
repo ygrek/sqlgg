@@ -14,7 +14,6 @@
 *)
 
 open Printf
-open Sqlgg_runtime
 
 module M = struct
 
@@ -26,7 +25,22 @@ module Types = struct
   module Text = struct
     type t = string
 
-    let to_literal = Sqlgg_runtime.sqlite3_string_to_literal
+    (* cf. https://sqlite.org/lang_expr.html "Literal Values"
+        "A string constant is formed by enclosing the string in single quotes
+        ('). A single quote within the string can be encoded by putting two
+        single quotes in a row - as in Pascal. C-style escapes using the
+        backslash character are not supported because they are not standard
+        SQL." *)
+    let to_literal s =
+      let b = Buffer.create (String.length s + String.length s / 4) in
+      Buffer.add_string b "'";
+      for i = 0 to String.length s - 1 do
+        match String.unsafe_get s i with
+        | '\'' -> Buffer.add_string b "''"
+        | c -> Buffer.add_char b c
+      done;
+      Buffer.add_string b "'";
+      Buffer.contents b
   end
   module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
