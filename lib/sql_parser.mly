@@ -133,6 +133,11 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Delete (table,w)
               }
+         /* https://dev.mysql.com/doc/refman/5.7/en/delete.html multi-table syntax */
+         | DELETE targets=commas(table_name) FROM tables=table_list w=where?
+              {
+                DeleteMulti (targets, tables, w)
+              }
          | SET name=IDENT EQUAL e=expr
               {
                 Set (name, e)

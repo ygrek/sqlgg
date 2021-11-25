@@ -1,0 +1,81 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_table_foo" sql="CREATE TABLE foo(&#x0A;    id INTEGER PRIMARY KEY,&#x0A;    foo TEXT NULL&#x0A;)" category="DDL" kind="create" target="foo" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_table_bar" sql="CREATE TABLE bar(&#x0A;    foo_id INTEGER NOT NULL,&#x0A;    baz TEXT NOT NULL&#x0A;)" category="DDL" kind="create" target="bar" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="find" sql="SELECT * FROM foo WHERE foo = @foo" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="foo" type="Text"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="delete_foo0" sql="DELETE foo FROM foo" category="DML" kind="delete" target="foo" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo1" sql="DELETE foo FROM foo WHERE foo = @foo" category="DML" kind="delete" target="foo" cardinality="0">
+  <in>
+   <value name="foo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo2" sql="DELETE FROM foo WHERE foo = @foo" category="DML" kind="delete" target="foo" cardinality="0">
+  <in>
+   <value name="foo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo3" sql="DELETE foo&#x0A;FROM foo JOIN bar ON foo.id = bar.foo_id&#x0A;WHERE bar.baz = '' OR foo.foo = @badfoo" category="DML" kind="delete" target="foo" cardinality="0">
+  <in>
+   <value name="badfoo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo_and_bar" sql="DELETE foo, bar&#x0A;FROM foo JOIN bar ON foo.id = bar.foo_id&#x0A;WHERE bar.baz = '' OR foo.foo = @badfoo" category="DML" kind="delete" target="foo,bar" cardinality="0">
+  <in>
+   <value name="badfoo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo_alias" sql="DELETE f&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz = @badbaz OR f.foo = @badfoo" category="DML" kind="delete" target="f" cardinality="0">
+  <in>
+   <value name="badbaz" type="Text"/>
+   <value name="badfoo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo_and_bar_alias" sql="DELETE f, b&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz = @badbaz OR f.foo = @badfoo" category="DML" kind="delete" target="f,b" cardinality="0">
+  <in>
+   <value name="badbaz" type="Text"/>
+   <value name="badfoo" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="delete_foo_and_bar_alias_rep" sql="DELETE f, b&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz = @bad OR f.foo = @bad" category="DML" kind="delete" target="f,b" cardinality="0">
+  <in>
+   <value name="bad" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <table name="bar">
+  <schema>
+   <value name="foo_id" type="Int"/>
+   <value name="baz" type="Text"/>
+  </schema>
+ </table>
+ <table name="foo">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
