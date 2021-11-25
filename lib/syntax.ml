@@ -455,13 +455,13 @@ let eval (stmt:Sql.stmt) =
   | Delete (table, where) ->
     let t = Tables.get table in
     let p = get_params_opt { tables=[t]; schema=snd t; insert_schema=[]; } where in
-    [], p, Delete (Some table)
-  | DeleteMulti (target, targets, tables, where) ->
+    [], p, Delete [table]
+  | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
-    let columns = List.map (fun tn -> AllOf tn) (target :: targets) in
+    let columns = List.map (fun tn -> AllOf tn) targets in
     let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
     let _attrs, params, _ = eval_select_full empty_env { select; order = []; limit = None } in
-    [], params, Delete None
+    [], params, Delete targets
   | Set (_name, e) ->
     let p = match e with
       | Column _ -> [] (* this is not column but some db-specific identifier *)

@@ -59,8 +59,7 @@ let choose_name props kind index =
   | Update (Some t) -> sprintf "update_%s_%u" (fix t) index
   | Update None -> sprintf "update_%u" index
   | Insert (_,t) -> sprintf "insert_%s_%u" (fix t) index
-  | Delete (Some t) -> sprintf "delete_%s_%u" (fix t) index
-  | Delete None -> sprintf "delete_%u" index
+  | Delete t -> sprintf "delete_%s_%u" (String.concat "_" @@ List.map fix t) index
   | Alter t -> sprintf "alter_%s_%u" (String.concat "_" @@ List.map fix t) index
   | Drop t -> sprintf "drop_%s" (fix t)
   | Select _  -> sprintf "select_%u" index

@@ -17,7 +17,7 @@ type kind = | Select of cardinality
             | Create of Sql.table_name
             | CreateIndex of string
             | Update of Sql.table_name option (** name for single-table UPDATEs *)
-            | Delete of Sql.table_name option (** name for single-table DELETEs *)
+            | Delete of Sql.table_name list
             | Alter of Sql.table_name list
             | Drop of Sql.table_name
             | CreateRoutine of string
