@@ -280,6 +280,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
+            | charset collate? { `None }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
