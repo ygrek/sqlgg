@@ -210,15 +210,18 @@ let rec params_only l =
     (function
       | Sql.Single p -> [p]
       | SingleIn _ -> []
-      | ChoiceIn (_, _, v) -> params_only v
+      | ChoiceIn (_, _, vs) -> params_only vs
       | Choice _ -> fail "dynamic choices not supported for this host language")
     l
 
-let inparams_only =
-  List.filter_map
+let rec inparams_only l =
+  List.concat @@
+  List.map
     (function
-      | Sql.SingleIn p -> Some p
-      | _ -> None)
+      | Sql.SingleIn p -> [p]
+      | ChoiceIn (_, _, vs) -> inparams_only vs
+      | _ -> [])
+    l
 
 end
 
