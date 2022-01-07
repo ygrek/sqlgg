@@ -9,7 +9,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="find" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids" category="DQL" kind="select" cardinality="n">
+ <stmt name="find" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids)" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="ids" type="Int" set="true"/>
   </in>
@@ -18,7 +18,7 @@
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
- <stmt name="get" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
+ <stmt name="get" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids)&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
    <value name="ids" type="Int" set="true"/>
   </in>
@@ -27,17 +27,7 @@
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
- <stmt name="find2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids AND foo NOT IN @@foos" category="DQL" kind="select" cardinality="n">
-  <in>
-   <value name="ids" type="Int" set="true"/>
-   <value name="foos" type="Text" set="true"/>
-  </in>
-  <out>
-   <value name="id" type="Int"/>
-   <value name="foo" type="Text" nullable="true"/>
-  </out>
- </stmt>
- <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids AND foo NOT IN @@foos&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
+ <stmt name="find2" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids) AND (foo NOT IN @@foos)" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="ids" type="Int" set="true"/>
    <value name="foos" type="Text" set="true"/>
@@ -47,7 +37,17 @@
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
- <stmt name="join" sql="SELECT *&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz IN @@bazz AND b.baz NOT IN @@notbazz AND LENGTH(f.foo) IN @@lengths" category="DQL" kind="select" cardinality="n">
+ <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids) AND (foo NOT IN @@foos)&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
+  <in>
+   <value name="ids" type="Int" set="true"/>
+   <value name="foos" type="Text" set="true"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="foo" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="join" sql="SELECT *&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE (b.baz IN @@bazz) AND (b.baz NOT IN @@notbazz) AND (LENGTH(f.foo) IN @@lengths)" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="bazz" type="Text" set="true"/>
    <value name="notbazz" type="Text" set="true"/>
