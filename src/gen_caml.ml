@@ -200,6 +200,15 @@ let rec set_var index var =
   match var with
   | Single p -> set_param index p
   | SingleIn _ -> ()
+  | ChoiceIn (name, vs) ->
+    output "begin match %s with " (make_param_name index name);
+    output "| [] -> ()";
+    output "| _ :: _ ->";
+    inc_indent ();
+    List.iter (set_var index) vs;
+    output "()";
+    dec_indent ();
+    output "end;"
   | Choice (name,ctors) ->
     output "begin match %s with " (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -217,19 +226,50 @@ let rec set_var index var =
     output "end;"
 
 let rec eval_count_params vars =
-  let (static,choices) = list_separate (function Single _ -> `Left true | SingleIn _ -> `Left false | Choice (name,c) -> `Right (name, c)) vars in
-  string_of_int (List.length @@ List.filter (fun x -> x) static) ^
-  match choices with
-  | [] -> ""
-  | _ ->
-  choices |> List.mapi begin fun i (name,ctors) ->
-    sprintf " + (match %s with " (make_param_name i name) ^
-    (ctors |> List.mapi (fun i ctor ->
-      match ctor with
-      | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
-      | Simple (param,args) -> sprintf "%s -> %s" (match_variant_wildcard i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
-    ^ ")"
-  end |> String.concat ""
+  let (static, all_choices) =
+    list_separate
+      (function
+        | Single _ -> `Left true
+        | SingleIn _ -> `Left false
+        | ChoiceIn (name, vs) -> `Right (`ChoiceIn (name, vs))
+        | Choice (name,c) -> `Right (`Choice (name, c)))
+      vars
+  in
+  let choices, choices_in =
+    list_separate
+      (function
+        | `Choice (name, c) -> `Left (name, c)
+        | `ChoiceIn (name, vs) -> `Right (name, vs))
+      all_choices
+  in
+  let static = string_of_int (List.length @@ List.filter (fun x -> x) static) in
+  let choices_in =
+    match choices_in with
+    | [] -> ""
+    | choices_in ->
+      choices_in |>
+      List.mapi
+        (fun i (name, vs) ->
+           sprintf
+             " + (match %s with [] -> 0 | _ :: _ -> %s)"
+             (make_param_name i name)
+             (eval_count_params vs)) |>
+      String.concat ""
+  in
+  let choices =
+    match choices with
+    | [] -> ""
+    | _ ->
+    choices |> List.mapi begin fun i (name,ctors) ->
+      sprintf " + (match %s with " (make_param_name i name) ^
+      (ctors |> List.mapi (fun i ctor ->
+        match ctor with
+        | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
+        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_wildcard i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+      ^ ")"
+    end |> String.concat ""
+  in
+  static ^ choices_in ^ choices
 
 let output_params_binder _ vars =
   output "let set_params stmt =";
@@ -246,6 +286,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
+      | ChoiceIn (param_id, vs) -> Some (ChoiceIn (param_id, exclude_in_vars vs)) (* XXX *)
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
     l
@@ -281,6 +322,13 @@ let make_sql l =
     | SubstIn param :: tl ->
       if app then bprintf b " ^ ";
       Buffer.add_string b (gen_in_substitution param);
+      loop true tl
+    | DynamicIn (name, sqls) :: tl ->
+      if app then bprintf b " ^ ";
+      bprintf b "(match %s with" (make_param_name 0 name);
+      bprintf b " [] -> \"FALSE\" | _ :: _ -> ";
+      loop false sqls;
+      bprintf b {| ^ ")")|};
       loop true tl
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";

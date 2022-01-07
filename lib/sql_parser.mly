@@ -25,8 +25,8 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
-%token <int> LCURLY RCURLY
-%token LPAREN RPAREN COMMA EOF DOT NULL
+%token <int> LCURLY RCURLY LPAREN RPAREN
+%token COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
@@ -369,7 +369,11 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | e1=expr mnot(IN) p=PARAM { poly Bool [ e1; Inparam (new_param p Any) ] }
+    | lp=LPAREN e1=expr IN p=PARAM rp=RPAREN
+      {
+        let e = poly Bool [ e1; Inparam (new_param p Any) ] in
+        InChoice ({ label = p.label; pos = (lp, rp + 1) }, e )
+      }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
