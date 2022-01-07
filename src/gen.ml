@@ -72,7 +72,7 @@ type sql =
     Static of string
   | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
   | SubstIn of Sql.param
-  | DynamicIn of Sql.param_id * sql list
+  | DynamicIn of Sql.param_id * bool * sql list
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -98,12 +98,12 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstIn param :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
-    | ChoiceIn (name, vs) :: tl ->
+    | ChoiceIn (name, b, vs) :: tl ->
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
       let acc =
-        DynamicIn (name, List.rev @@ fst @@ loop [] i1 0 vs) ::
+        DynamicIn (name, b, List.rev @@ fst @@ loop [] i1 0 vs) ::
         Static (String.slice ~first:i ~last:i1 s) ::
         acc
       in
@@ -201,7 +201,7 @@ let names_of_vars l =
   List.mapi
     (fun i v ->
        make_param_name i
-         (match v with Sql.Single p | SingleIn p -> p.id | Choice (id,_) | ChoiceIn (id, _) -> id))
+         (match v with Sql.Single p | SingleIn p -> p.id | Choice (id,_) | ChoiceIn (id, _, _) -> id))
   |> List.unique ~cmp:String.equal
 
 let rec params_only l =
@@ -210,7 +210,7 @@ let rec params_only l =
     (function
       | Sql.Single p -> [p]
       | SingleIn _ -> []
-      | ChoiceIn (_, v) -> params_only v
+      | ChoiceIn (_, _, v) -> params_only v
       | Choice _ -> fail "dynamic choices not supported for this host language")
     l
 

@@ -200,7 +200,7 @@ let rec set_var index var =
   match var with
   | Single p -> set_param index p
   | SingleIn _ -> ()
-  | ChoiceIn (name, vs) ->
+  | ChoiceIn (name, _, vs) ->
     output "begin match %s with " (make_param_name index name);
     output "| [] -> ()";
     output "| _ :: _ ->";
@@ -231,7 +231,7 @@ let rec eval_count_params vars =
       (function
         | Single _ -> `Left true
         | SingleIn _ -> `Left false
-        | ChoiceIn (name, vs) -> `Right (`ChoiceIn (name, vs))
+        | ChoiceIn (name, b, vs) -> `Right (`ChoiceIn (name, b, vs))
         | Choice (name,c) -> `Right (`Choice (name, c)))
       vars
   in
@@ -239,7 +239,7 @@ let rec eval_count_params vars =
     list_separate
       (function
         | `Choice (name, c) -> `Left (name, c)
-        | `ChoiceIn (name, vs) -> `Right (name, vs))
+        | `ChoiceIn (name, b, vs) -> `Right (name, b, vs))
       all_choices
   in
   let static = string_of_int (List.length @@ List.filter (fun x -> x) static) in
@@ -249,7 +249,7 @@ let rec eval_count_params vars =
     | choices_in ->
       choices_in |>
       List.mapi
-        (fun i (name, vs) ->
+        (fun i (name, _, vs) ->
            sprintf
              " + (match %s with [] -> 0 | _ :: _ -> %s)"
              (make_param_name i name)
@@ -286,7 +286,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
-      | ChoiceIn (param_id, vs) -> Some (ChoiceIn (param_id, exclude_in_vars vs)) (* XXX *)
+      | ChoiceIn (param_id, b, vs) -> Some (ChoiceIn (param_id, b, exclude_in_vars vs))
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
     l
@@ -323,10 +323,10 @@ let make_sql l =
       if app then bprintf b " ^ ";
       Buffer.add_string b (gen_in_substitution param);
       loop true tl
-    | DynamicIn (name, sqls) :: tl ->
+    | DynamicIn (name, in_or_not_in, sqls) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      bprintf b " [] -> \"FALSE\" | _ :: _ -> ";
+      bprintf b " [] -> \"%s\" | _ :: _ -> " (String.uppercase_ascii @@ string_of_bool @@ not in_or_not_in);
       loop false sqls;
       bprintf b {| ^ ")")|};
       loop true tl

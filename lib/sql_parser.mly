@@ -369,10 +369,10 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | lp=LPAREN e1=expr IN p=PARAM rp=RPAREN
+    | lp=LPAREN e1=expr b=in_or_not_in p=PARAM rp=RPAREN
       {
         let e = poly Bool [ e1; Inparam (new_param p Any) ] in
-        InChoice ({ label = p.label; pos = (lp, rp + 1) }, e )
+        InChoice ({ label = p.label; pos = (lp, rp + 1) }, b, e )
       }
     | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
@@ -406,6 +406,7 @@ expr:
       OVER LPAREN (* [ PARTITION BY partition_expression ] *) order RPAREN (* TODO order parameters? *)
       { e }
 
+in_or_not_in: IN { true } | NOT IN { false }
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 

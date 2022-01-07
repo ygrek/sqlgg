@@ -242,7 +242,7 @@ type ctor =
 and var =
 | Single of param
 | SingleIn of param
-| ChoiceIn of param_id * var list
+| ChoiceIn of param_id * bool * var list
 | Choice of param_id * ctor list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -290,7 +290,7 @@ and expr =
   | Param of param
   | Inparam of param
   | Choices of param_id * expr choices
-  | InChoice of param_id * expr
+  | InChoice of param_id * bool * expr
   | Fun of Type.func * expr list (** parameters *)
   | Select of select_full * [ `AsValue | `Exists ]
   | Column of col_name
@@ -306,7 +306,7 @@ type columns = column list [@@deriving show]
 type expr_q = [ `Value of Type.t (** literal value *)
             | `Param of param
             | `Inparam of param
-            | `InChoice of param_id * expr_q
+            | `InChoice of param_id * bool * expr_q
             | `Choice of param_id * expr_q choices
             | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
             ]
