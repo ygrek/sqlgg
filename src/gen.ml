@@ -196,13 +196,20 @@ let all_params_to_values l =
   |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
+
+let rec find_param_ids l =
+  List.concat @@
+  List.map
+    (function
+      | Sql.Single p | SingleIn p -> [ p.id ]
+      | Choice (id,_) -> [ id ]
+      | ChoiceIn (id, _, vs) -> id :: find_param_ids vs)
+    l
+
 let names_of_vars l =
-  l |>
-  List.mapi
-    (fun i v ->
-       make_param_name i
-         (match v with Sql.Single p | SingleIn p -> p.id | Choice (id,_) | ChoiceIn (id, _, _) -> id))
-  |> List.unique ~cmp:String.equal
+  find_param_ids l |>
+  List.mapi make_param_name |>
+  List.unique ~cmp:String.equal
 
 let rec params_only l =
   List.concat @@
