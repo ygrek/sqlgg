@@ -47,7 +47,7 @@ let rec is_grouping = function
 | Value _
 | Param _
 | Column _
-| Select _
+| SelectExpr _
 | Inparam _
 | Inserted _ -> false
 | Choices (p,l) ->
@@ -113,7 +113,7 @@ let rec resolve_columns env expr =
     | Choices (n,l) -> `Choice (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun (r,l) ->
       `Func (r,List.map each l)
-    | Select (select, usage) ->
+    | SelectExpr (select, usage) ->
       let as_params p =
         List.map
           (function
@@ -304,7 +304,7 @@ and ensure_simple_expr = function
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
-  | Select _ -> failwith "not implemented : ensure_simple_expr for SELECT"
+  | SelectExpr _ -> failwith "not implemented : ensure_simple_expr for SELECT"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
