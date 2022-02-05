@@ -280,7 +280,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
-            | charset collate? { `None }
+            | either(DEFAULT,pair(CONVERT,TO))? charset collate? { `None }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
@@ -367,14 +367,14 @@ expr:
     | v=literal_value | v=datetime_value { v }
     | v=interval_unit { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; Select (select, `AsValue)] }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | lp=LPAREN e1=expr b=in_or_not_in p=PARAM rp=RPAREN
       {
         let e = poly Bool [ e1; Inparam (new_param p Any) ] in
         InChoice ({ label = p.label; pos = (lp, rp + 1) }, b, e )
       }
-    | LPAREN select=select_stmt RPAREN { Select (select, `AsValue) }
+    | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -388,7 +388,7 @@ expr:
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly Bool [e;a;b] }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[Select (select,`Exists)]) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[SelectExpr (select,`Exists)]) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
         let maybe f = function None -> [] | Some x -> [f x] in

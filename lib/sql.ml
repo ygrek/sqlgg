@@ -292,7 +292,7 @@ and expr =
   | Choices of param_id * expr choices
   | InChoice of param_id * bool * expr
   | Fun of Type.func * expr list (** parameters *)
-  | Select of select_full * [ `AsValue | `Exists ]
+  | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
 and column =
