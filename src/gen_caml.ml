@@ -187,6 +187,18 @@ let vname n = make_variant_name 0 (Some n)
 let match_variant_wildcard i name args =
   sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
 
+let match_arg_pattern = function
+  | Sql.Single _ | SingleIn _ | Choice _
+  | ChoiceIn ({ label = None; _ }, _, _) -> "_"
+  | ChoiceIn ({ label = Some s; _ }, _, _) -> s
+
+let match_variant_pattern i name args =
+  sprintf "%s%s"
+    (make_variant_name i name)
+    (match args with
+     | Some [] | None -> ""
+     | Some l -> sprintf " (%s)" (String.concat ", " (List.map match_arg_pattern l)))
+
 let set_param index param =
   let nullable = is_param_nullable param in
   let pname = show_param_name param index in
@@ -333,7 +345,7 @@ let make_sql l =
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_wildcard i name.label args); loop false l);
+      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
       bprintf b ")";
       loop true tl
   in

@@ -511,7 +511,7 @@ let unify_params l =
   let rec traverse = function
   | Single { id; typ; attr=_ } -> remember id.label typ
   | SingleIn { id; typ; _ } -> remember id.label typ
-  | ChoiceIn (p,_,l) -> check_choice_name p; List.iter traverse l
+  | ChoiceIn (_,_,l) -> List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   in
   let rec map = function
