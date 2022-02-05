@@ -203,7 +203,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
-      | ChoiceIn (id, _, vs) -> id :: find_param_ids vs)
+      | ChoiceIn (id, _, vs) -> find_param_ids vs @ [id])
     l
 
 let names_of_vars l =
