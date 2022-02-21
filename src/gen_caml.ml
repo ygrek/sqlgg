@@ -197,7 +197,10 @@ let match_variant_pattern i name args =
     (make_variant_name i name)
     (match args with
      | Some [] | None -> ""
-     | Some l -> sprintf " (%s)" (String.concat ", " (List.map match_arg_pattern l)))
+     | Some l ->
+     match List.map match_arg_pattern l with
+     | l when List.for_all ((=) "_") l -> " _"
+     | l -> sprintf " (%s)" (String.concat ", " l))
 
 let set_param index param =
   let nullable = is_param_nullable param in
