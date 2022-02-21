@@ -369,10 +369,10 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | lp=LPAREN e1=expr b=in_or_not_in p=PARAM rp=RPAREN
+    | e1=expr b=in_or_not_in p=PARAM
       {
         let e = poly Bool [ e1; Inparam (new_param p Any) ] in
-        InChoice ({ label = p.label; pos = (lp, rp + 1) }, b, e )
+        InChoice ({ label = p.label; pos = ($startpos.Lexing.pos_cnum, $endpos.Lexing.pos_cnum + 1) }, b, e )
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }
