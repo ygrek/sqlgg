@@ -19,6 +19,12 @@ let advance_line_pos pos =
 let advance_line lexbuf =
   lexbuf.lex_curr_p <- advance_line_pos lexbuf.lex_curr_p
 
+let keep_lexeme_start lexbuf f =
+  let start_p = lexeme_start_p lexbuf in
+  let x = f () in
+  lexbuf.lex_start_p <- start_p;
+  x
+
 let keywords =
   let k = ref [
    "action", ACTION;
@@ -233,7 +239,9 @@ rule ruleStatement = parse
   | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Prop ("name",name) }
   | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
   | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
-  | "$" (ident? as tag) "$" { let s = ruleInDollarQuotes tag "" lexbuf in `Token (sprintf "$%s$%s$%s$" tag s tag) }
+  | "$" (ident? as tag) "$" {
+    keep_lexeme_start lexbuf (fun () -> let s = ruleInDollarQuotes tag "" lexbuf in `Token (sprintf "$%s$%s$%s$" tag s tag))
+  }
   | cmnt as s { `Comment (s ^ ruleComment "" lexbuf) }
   | "/*" { `Comment ("/*" ^ ruleCommentMulti "" lexbuf ^ "*/") }
   | ';' { `Semicolon }
@@ -279,13 +287,13 @@ ruleMain = parse
   | "?" { PARAM { label=None; pos = pos lexbuf } }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
 
-  | '"' { ident (ruleInQuotes "" lexbuf) }
-  | "'" { TEXT (ruleInSingleQuotes "" lexbuf) }
+  | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
+  | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }
   (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)
-  | "$" (ident? as tag) "$" { TEXT (ruleInDollarQuotes tag "" lexbuf) }
-  | "`" { ident (ruleInBackQuotes "" lexbuf) }
-  | "[" { ident (ruleInBrackets "" lexbuf) }
-  | ['x' 'X'] "'" { BLOB (ruleInSingleQuotes "" lexbuf) }
+  | "$" (ident? as tag) "$" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInDollarQuotes tag "" lexbuf)) }
+  | "`" { keep_lexeme_start lexbuf (fun () -> ident (ruleInBackQuotes "" lexbuf)) }
+  | "[" { keep_lexeme_start lexbuf (fun () -> ident (ruleInBrackets "" lexbuf)) }
+  | ['x' 'X'] "'" { keep_lexeme_start lexbuf (fun () -> BLOB (ruleInSingleQuotes "" lexbuf)) }
 
   | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
   | digit+ as str { INTEGER (int_of_string str) }
