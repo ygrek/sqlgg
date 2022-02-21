@@ -189,8 +189,8 @@ let match_variant_wildcard i name args =
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
-  | ChoiceIn ({ label = None; _ }, _, _) -> "_"
-  | ChoiceIn ({ label = Some s; _ }, _, _) -> s
+  | ChoiceIn { param = { label = None; _ }; _ } -> "_"
+  | ChoiceIn { param = { label = Some s; _ }; _ } -> s
 
 let match_variant_pattern i name args =
   sprintf "%s%s"
@@ -212,12 +212,12 @@ let rec set_var index var =
   match var with
   | Single p -> set_param index p
   | SingleIn _ -> ()
-  | ChoiceIn (name, _, vs) ->
+  | ChoiceIn { param = name; vars; _ } ->
     output "begin match %s with " (make_param_name index name);
     output "| [] -> ()";
     output "| _ :: _ ->";
     inc_indent ();
-    List.iter (set_var index) vs;
+    List.iter (set_var index) vars;
     output "()";
     dec_indent ();
     output "end;"
@@ -243,7 +243,7 @@ let rec eval_count_params vars =
       (function
         | Single _ -> `Left true
         | SingleIn _ -> `Left false
-        | ChoiceIn (name, b, vs) -> `Right (`ChoiceIn (name, b, vs))
+        | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
         | Choice (name,c) -> `Right (`Choice (name, c)))
       vars
   in
@@ -251,7 +251,7 @@ let rec eval_count_params vars =
     list_separate
       (function
         | `Choice (name, c) -> `Left (name, c)
-        | `ChoiceIn (name, b, vs) -> `Right (name, b, vs))
+        | `ChoiceIn t -> `Right t)
       all_choices
   in
   let static = string_of_int (List.length @@ List.filter (fun x -> x) static) in
@@ -261,11 +261,11 @@ let rec eval_count_params vars =
     | choices_in ->
       choices_in |>
       List.mapi
-        (fun i (name, _, vs) ->
+        (fun i (param, vars) ->
            sprintf
              " + (match %s with [] -> 0 | _ :: _ -> %s)"
-             (make_param_name i name)
-             (eval_count_params vs)) |>
+             (make_param_name i param)
+             (eval_count_params vars)) |>
       String.concat ""
   in
   let choices =
@@ -298,7 +298,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
-      | ChoiceIn (param_id, b, vs) -> Some (ChoiceIn (param_id, b, exclude_in_vars vs))
+      | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
     l
@@ -338,7 +338,8 @@ let make_sql l =
     | DynamicIn (name, in_or_not_in, sqls) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      bprintf b " [] -> \"%s\" | _ :: _ -> " (String.uppercase_ascii @@ string_of_bool @@ not in_or_not_in);
+      bprintf b " [] -> \"%s\" | _ :: _ -> "
+        (String.uppercase_ascii @@ string_of_bool @@ match in_or_not_in with `In -> false | `NotIn -> true);
       loop false sqls;
       bprintf b {| ^ ")")|};
       loop true tl
