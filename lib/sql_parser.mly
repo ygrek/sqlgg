@@ -372,7 +372,7 @@ expr:
     | e1=expr k=in_or_not_in p=PARAM
       {
         let e = poly Bool [ e1; Inparam (new_param p Any) ] in
-        InChoice ({ label = p.label; pos = ($startofs, $endofs + 1) }, k, e )
+        InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p Any) }

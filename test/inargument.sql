@@ -12,7 +12,7 @@ CREATE TABLE bar(
 
 -- @find
 SELECT * FROM foo
-WHERE (id IN @ids);
+WHERE id IN @ids;
 
 -- @get
 SELECT * FROM foo
@@ -21,18 +21,18 @@ LIMIT 1;
 
 -- @find2
 SELECT * FROM foo
-WHERE (id IN @ids) AND (foo NOT IN @foos);
+WHERE (id IN @ids) AND foo NOT IN @foos;
 
 -- @find_with_bar
 SELECT * FROM foo
-WHERE (CONCAT(foo, @suffix) IN @foos_with_suffix);
+WHERE CONCAT(foo, @suffix) IN @foos_with_suffix;
 
 -- @get2
 SELECT * FROM foo
-WHERE (id IN @ids) AND (foo NOT IN @foos)
+WHERE id IN @ids AND (foo NOT IN @foos)
 LIMIT 1;
 
 -- @join
 SELECT *
 FROM foo f JOIN bar b ON f.id = b.foo_id
-WHERE (b.baz IN @bazz) AND (b.baz NOT IN @notbazz) AND (LENGTH(f.foo) IN @lengths);
+WHERE b.baz IN @bazz AND b.baz NOT IN @notbazz AND LENGTH(f.foo) IN @lengths;

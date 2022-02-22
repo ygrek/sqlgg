@@ -344,7 +344,7 @@ let make_sql l =
       bprintf b " [] -> \"%s\" | _ :: _ -> "
         (String.uppercase_ascii @@ string_of_bool @@ match in_or_not_in with `In -> false | `NotIn -> true);
       loop false sqls;
-      bprintf b {| ^ ")")|};
+      bprintf b ")";
       loop true tl
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
