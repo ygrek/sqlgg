@@ -258,8 +258,8 @@ ruleMain = parse
   (* update line number *)
   | '\n'  { advance_line lexbuf; ruleMain lexbuf}
 
-  | '('   { LPAREN (lexeme_start lexbuf) }
-  | ')'   { RPAREN (lexeme_start lexbuf) }
+  | '('                { LPAREN }
+  | ')'                { RPAREN }
   | ','   { COMMA }
   | '.'   { DOT }
   | '{'   { LCURLY (lexeme_start lexbuf) }
