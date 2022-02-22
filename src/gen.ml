@@ -68,7 +68,11 @@ let choose_name props kind index =
   in
   make_name props name
 
-type sql = Static of string | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list) | SubstIn of Sql.param
+type sql =
+    Static of string
+  | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
+  | SubstIn of Sql.param
+  | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -93,6 +97,16 @@ let substitute_vars s vars subst_param =
       assert (i2 > i1);
       assert (i1 > i);
       let acc = SubstIn param :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      loop acc i2 parami tl
+    | ChoiceIn { param = name; kind; vars } :: tl ->
+      let (i1,i2) = name.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
+      let acc =
+        DynamicIn (name, kind, List.rev @@ fst @@ loop [] i1 0 vars) ::
+        Static (String.slice ~first:i ~last:i1 s) ::
+        acc
+      in
       loop acc i2 parami tl
     | Choice (name,ctors) :: tl ->
       let dyn = ctors |> List.map begin function
@@ -182,21 +196,39 @@ let all_params_to_values l =
   |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
+
+let rec find_param_ids l =
+  List.concat @@
+  List.map
+    (function
+      | Sql.Single p | SingleIn p -> [ p.id ]
+      | Choice (id,_) -> [ id ]
+      | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param])
+    l
+
 let names_of_vars l =
-  l |> List.mapi (fun i v -> make_param_name i (match v with Sql.Single p | SingleIn p -> p.id | Choice (id,_) -> id)) |> List.unique ~cmp:String.equal
+  find_param_ids l |>
+  List.mapi make_param_name |>
+  List.unique ~cmp:String.equal
 
-let params_only =
-  List.filter_map
+let rec params_only l =
+  List.concat @@
+  List.map
     (function
-      | Sql.Single p -> Some p
-      | SingleIn _ -> None
+      | Sql.Single p -> [p]
+      | SingleIn _ -> []
+      | ChoiceIn { vars; _ } -> params_only vars
       | Choice _ -> fail "dynamic choices not supported for this host language")
+    l
 
-let inparams_only =
-  List.filter_map
+let rec inparams_only l =
+  List.concat @@
+  List.map
     (function
-      | Sql.SingleIn p -> Some p
-      | _ -> None)
+      | Sql.SingleIn p -> [p]
+      | ChoiceIn { vars; _ } -> inparams_only vars
+      | _ -> [])
+    l
 
 end
 

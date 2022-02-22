@@ -16,16 +16,20 @@ WHERE id IN @ids;
 
 -- @get
 SELECT * FROM foo
-WHERE id IN @ids
+WHERE (id IN @ids)
 LIMIT 1;
 
 -- @find2
 SELECT * FROM foo
-WHERE id IN @ids AND foo NOT IN @foos;
+WHERE (id IN @ids) AND foo NOT IN @foos;
+
+-- @find_with_bar
+SELECT * FROM foo
+WHERE CONCAT(foo, @suffix) IN @foos_with_suffix;
 
 -- @get2
 SELECT * FROM foo
-WHERE id IN @ids AND foo NOT IN @foos
+WHERE id IN @ids AND (foo NOT IN @foos)
 LIMIT 1;
 
 -- @join
