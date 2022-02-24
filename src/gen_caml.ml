@@ -280,7 +280,7 @@ let rec eval_count_params vars =
       (ctors |> List.mapi (fun i ctor ->
         match ctor with
         | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
-        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_wildcard i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_pattern i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
   in
