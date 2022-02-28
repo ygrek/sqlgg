@@ -362,6 +362,7 @@ val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
+val sponge : Type.func
 
 end = struct
 

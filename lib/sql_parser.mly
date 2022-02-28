@@ -384,6 +384,7 @@ expr:
     | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
+    | CONVERT LPAREN e=expr COMMA convert_type RPAREN { Fun (Function.sponge, [e]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
@@ -464,6 +465,8 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
+
+convert_type : T_TEXT | T_DECIMAL | DATE | TIME | T_DATETIME { }
 
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
