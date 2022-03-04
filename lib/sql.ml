@@ -98,7 +98,9 @@ end
 type attr = {name : string; domain : Type.t; extra : Constraints.t; }
   [@@deriving show {with_path=false}]
 
-let make_attribute name domain extra = {name;domain;extra}
+let make_attribute name domain extra =
+  if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
+  {name;domain;extra}
 
 module Schema =
 struct

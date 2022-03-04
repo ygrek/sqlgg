@@ -34,7 +34,7 @@
   <in>
    <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Datetime" nullable="true"/>
-   <value name="nullable_too" type="Datetime"/>
+   <value name="nullable_too" type="Datetime" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -57,7 +57,7 @@
   <schema>
    <value name="id" type="Int"/>
    <value name="nullable" type="Datetime" nullable="true"/>
-   <value name="nullable_too" type="Datetime"/>
+   <value name="nullable_too" type="Datetime" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

@@ -323,10 +323,10 @@ column_def_extra: PRIMARY KEY { Some PrimaryKey }
                 | AUTOINCREMENT { Some Autoincrement }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
-                | DEFAULT default_value { None } (* FIXME check type with column *)
+                | DEFAULT e=default_value { if e = Value Any then Some Null else None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
 
-default_value: single_literal_value | datetime_value { } (* sub expr ? *)
+default_value: e=single_literal_value | e=datetime_value { e } (* sub expr ? *)
 
 set_column: name=attr_name EQUAL e=expr { name,e }
 
