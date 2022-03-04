@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS `test` (
   `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,
-  `nullable` TIMESTAMP NULL
+  `nullable` TIMESTAMP NULL,
+  `nullable_too` TIMESTAMP DEFAULT NULL
 );
 
 -- issue #45
@@ -23,3 +24,6 @@ INSERT INTO test VALUES;
 
 -- @list_nullable
 SELECT `id`, `nullable` FROM test;
+
+-- @case_todo
+SELECT CASE @x WHEN 0 THEN NULL ELSE @x END

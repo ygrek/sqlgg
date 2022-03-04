@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_test" sql="CREATE TABLE IF NOT EXISTS `test` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `nullable` TIMESTAMP NULL&#x0A;)" category="DDL" kind="create" target="test" cardinality="0">
+ <stmt name="create_test" sql="CREATE TABLE IF NOT EXISTS `test` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `nullable` TIMESTAMP NULL,&#x0A;  `nullable_too` TIMESTAMP DEFAULT NULL&#x0A;)" category="DDL" kind="create" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
@@ -30,10 +30,11 @@
   </in>
   <out/>
  </stmt>
- <stmt name="insert_all" sql="INSERT INTO test VALUES (@id,@nullable)" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_all" sql="INSERT INTO test VALUES (@id,@nullable,@nullable_too)" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Datetime" nullable="true"/>
+   <value name="nullable_too" type="Datetime"/>
   </in>
   <out/>
  </stmt>
@@ -44,10 +45,19 @@
    <value name="nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
+ <stmt name="case_todo" sql="SELECT CASE @x WHEN 0 THEN NULL ELSE @x END&#x0A;" category="DQL" kind="select" cardinality="1">
+  <in>
+   <value name="x" type="Int"/>
+  </in>
+  <out>
+   <value name="_0" type="Any"/>
+  </out>
+ </stmt>
  <table name="test">
   <schema>
    <value name="id" type="Int"/>
    <value name="nullable" type="Datetime" nullable="true"/>
+   <value name="nullable_too" type="Datetime"/>
   </schema>
  </table>
 </sqlgg>
