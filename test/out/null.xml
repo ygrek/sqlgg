@@ -1,19 +1,19 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_test" sql="CREATE TABLE IF NOT EXISTS `test` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `nullable` TIMESTAMP NULL,&#x0A;  `nullable_too` TIMESTAMP DEFAULT NULL&#x0A;)" category="DDL" kind="create" target="test" cardinality="0">
+ <stmt name="create_test" sql="CREATE TABLE IF NOT EXISTS `test` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `nullable` TIMESTAMP NULL,&#x0A;  `nullable_too` TIMESTAMP DEFAULT NULL,&#x0A;  `nullable_int` INTEGER NULL&#x0A;)" category="DDL" kind="create" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
- <stmt name="insert1" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @nullable WHEN 0 THEN NULL ELSE @nullable END&#x0A;" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert1" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @maybe WHEN 0 THEN NULL ELSE @maybe END&#x0A;" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="nullable" type="Int"/>
+   <value name="maybe" type="Int"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert2" sql="INSERT INTO `test` SET `nullable` = NULLIF(@nullable, 0)" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert2" sql="INSERT INTO `test` SET `nullable` = NULLIF(@maybe, 0)" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="nullable" type="Int"/>
+   <value name="maybe" type="Int"/>
   </in>
   <out/>
  </stmt>
@@ -24,17 +24,18 @@
    <value name="nullable" type="Datetime"/>
   </out>
  </stmt>
- <stmt name="insert_nullable" sql="INSERT INTO `test` SET `nullable` = @nullable" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_nullable" sql="INSERT INTO `test` SET `nullable` = @maybe" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="nullable" type="Datetime" nullable="true"/>
+   <value name="maybe" type="Datetime" nullable="true"/>
   </in>
   <out/>
  </stmt>
- <stmt name="insert_all" sql="INSERT INTO test VALUES (@id,@nullable,@nullable_too)" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert_all" sql="INSERT INTO test VALUES (@id,@nullable,@nullable_too,@nullable_int)" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Datetime" nullable="true"/>
    <value name="nullable_too" type="Datetime" nullable="true"/>
+   <value name="nullable_int" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -45,7 +46,7 @@
    <value name="nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
- <stmt name="case_todo" sql="SELECT CASE @x WHEN 0 THEN NULL ELSE @x END&#x0A;" category="DQL" kind="select" cardinality="1">
+ <stmt name="case_todo" sql="SELECT CASE @x WHEN 0 THEN NULL ELSE @x END" category="DQL" kind="select" cardinality="1">
   <in>
    <value name="x" type="Int"/>
   </in>
@@ -53,11 +54,41 @@
    <value name="_0" type="Any"/>
   </out>
  </stmt>
+ <stmt name="select_nullif" sql="SELECT NULLIF(@maybe, 0)" category="DQL" kind="select" cardinality="1">
+  <in>
+   <value name="maybe" type="Int"/>
+  </in>
+  <out>
+   <value name="_0" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_ifnull" sql="SELECT IFNULL(@maybe, 0)" category="DQL" kind="select" cardinality="1">
+  <in>
+   <value name="maybe" type="Int"/>
+  </in>
+  <out>
+   <value name="_0" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_plus" sql="SELECT id + IFNULL(nullable_int, 0) FROM test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_func" sql="SELECT nullable, floor(unix_timestamp(nullable)/3600) FROM test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="nullable" type="Datetime" nullable="true"/>
+   <value name="_1" type="Any"/>
+  </out>
+ </stmt>
  <table name="test">
   <schema>
    <value name="id" type="Int"/>
    <value name="nullable" type="Datetime" nullable="true"/>
    <value name="nullable_too" type="Datetime" nullable="true"/>
+   <value name="nullable_int" type="Int" nullable="true"/>
   </schema>
  </table>
 </sqlgg>
