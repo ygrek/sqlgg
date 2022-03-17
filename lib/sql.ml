@@ -414,6 +414,7 @@ let () =
   ["lower";"upper"] ||> monomorphic Text [Text];
   "length" |> monomorphic Int [Text];
   ["random"] ||> monomorphic Int [];
+  "floor" |> monomorphic Int [Float];
   ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
