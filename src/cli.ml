@@ -100,6 +100,7 @@ let main () =
       "do not put version header in generated output";
     "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
       "do not put timestamp in version header in generated output";
+    "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), "only output short static header without version/timestamp";
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
