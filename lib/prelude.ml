@@ -7,6 +7,7 @@ external identity : 'a -> 'a = "%identity"
 let flip f x y = f y x
 
 let tuck l x = l := x :: !l
+let option_list = function Some x -> [x] | None -> []
 
 let fail fmt = Printf.ksprintf failwith fmt
 let failed ~at fmt = Printf.ksprintf (fun s -> raise (At (at, Failure s))) fmt

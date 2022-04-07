@@ -46,3 +46,8 @@ WHERE b.baz = @badbaz OR f.foo = @badfoo;
 DELETE f, b
 FROM foo f JOIN bar b ON f.id = b.foo_id
 WHERE b.baz = @bad OR f.foo = @bad;
+
+-- @delete_foo_not_alias
+DELETE foo
+FROM foo as f LEFT JOIN bar as b ON f.id = b.foo_id
+WHERE bar.baz = @bad OR b.baz = @bad2;

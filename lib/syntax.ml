@@ -95,6 +95,11 @@ let get_columns_schema tables l =
   (* FIXME col_name *)
   l |> List.map (fun col -> { (resolve_column tables all col) with name = col.cname })
 
+let _print_env env =
+  eprintfn "env: ";
+  Sql.Schema.print env.schema;
+  Tables.print stderr env.tables
+
 (** replace each name reference (Column, Inserted, etc) with Value of corresponding type *)
 let rec resolve_columns env expr =
   if !debug then
@@ -349,7 +354,7 @@ and resolve_source env (x,alias) =
     s, p, env.tables
   | `Table s ->
     let (name,s) = Tables.get s in
-    s, [], [Option.default name alias, s]
+    s, [], List.map (fun name -> name, s) (name :: option_list alias)
 
 and eval_select_full env { select=(select,other); order; limit; } =
   let (s1,p1,tbls,cardinality) = eval_select env select in
