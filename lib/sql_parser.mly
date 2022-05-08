@@ -112,6 +112,10 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=PARAM ss=on_duplicate?
+              {
+                Insert { target; action=`Param (names, p); on_duplicate=ss; }
+              }
          | insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
               {
                 Insert { target; action=`Select (names, select); on_duplicate=ss; }

@@ -189,7 +189,8 @@ let match_variant_wildcard i name args =
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
-  | ChoiceIn { param = { label = None; _ }; _ } -> "_"
+  | ChoiceIn { param = { label = None; _ }; _ }
+  | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
 
 let match_variant_pattern i name args =
@@ -215,6 +216,7 @@ let rec set_var index var =
   match var with
   | Single p -> set_param index p
   | SingleIn _ -> ()
+  | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
     output "begin match %s with " (make_param_name index name);
     output "| [] -> ()";
@@ -246,6 +248,7 @@ let rec eval_count_params vars =
       (function
         | Single _ -> `Left true
         | SingleIn _ -> `Left false
+        | TupleList _ -> `Left true
         | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
         | Choice (name,c) -> `Right (`Choice (name, c)))
       vars
@@ -301,6 +304,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
+      | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
@@ -324,6 +328,29 @@ let gen_in_substitution var =
   sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
     (in_var_module (Option.get var.id.label) var.typ)
     (Option.get var.id.label)
+
+let gen_tuple_printer _label schema =
+  let params = List.map (fun { name; _ } -> name) schema in
+  sprintf
+    {|(fun _sqlgg_idx (%s) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); %s Buffer.add_char _sqlgg_b ')')|}
+    (String.concat ", " params)
+    (String.concat " " @@
+     List.mapi
+       (fun idx { name; domain; _ } ->
+          (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
+          sprintf
+            {|Buffer.add_string _sqlgg_b T.Types.%s.to_literal %s;|}
+            (in_var_module name domain) name)
+       schema)
+
+let gen_tuple_substitution id schema =
+  match id.label with
+  | None -> failwith "empty label in tuple param"
+  | Some label ->
+    sprintf
+      {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
+      (gen_tuple_printer label schema)
+      label
 
 let make_sql l =
   let b = Buffer.create 100 in
@@ -351,6 +378,10 @@ let make_sql l =
       bprintf b "(match %s with" (make_param_name 0 name);
       ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
       bprintf b ")";
+      loop true tl
+    | SubstTuple (id, schema) :: tl ->
+      if app then bprintf b " ^ ";
+      Buffer.add_string b (gen_tuple_substitution id schema);
       loop true tl
   in
   Buffer.add_string b "(";

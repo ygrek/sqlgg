@@ -128,7 +128,8 @@ let rec resolve_columns env expr =
             | Single p -> `Param p
             | SingleIn p -> failed ~at:p.id.pos "FIXME as_params in SingleIn"
             | ChoiceIn { param = p; _ } -> failed ~at:p.pos "FIXME as_params in ChoiceIn"
-            | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice")
+            | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice"
+            | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in Choice")
           p in
       let (schema,p,_) = eval_select_full env select in
       match schema, usage with
@@ -446,6 +447,12 @@ let eval (stmt:Sql.stmt) =
     in
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
+  | Insert { target=table; action=`Param (names, param_id); on_duplicate; } ->
+    let expect = values_or_all table names in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
+    let params = [ TupleList (param_id, expect) ] in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    [], params @ params2, Insert (None, table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
     let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
@@ -518,12 +525,14 @@ let unify_params l =
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | TupleList _ -> ()
   in
   let rec map = function
   | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
   | SingleIn { id; typ; attr } -> SingleIn (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
+  | TupleList _ as x -> x
   in
   List.iter traverse l;
   List.map map l

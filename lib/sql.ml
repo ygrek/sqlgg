@@ -246,6 +246,7 @@ and var =
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
+| TupleList of param_id * schema
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -323,6 +324,7 @@ type insert_action =
   target : table_name;
   action : [ `Set of assignments option
            | `Values of (string list option * [ `Expr of expr | `Default ] list list option) (* column names * list of value tuples *)
+           | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
 }
