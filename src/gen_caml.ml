@@ -339,7 +339,7 @@ let gen_tuple_printer _label schema =
        (fun idx { name; domain; _ } ->
           (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
           sprintf
-            {|Buffer.add_string _sqlgg_b T.Types.%s.to_literal %s;|}
+            {|Buffer.add_string _sqlgg_b (T.Types.%s.to_literal %s);|}
             (in_var_module name domain) name)
        schema)
 
