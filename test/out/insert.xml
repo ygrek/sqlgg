@@ -15,6 +15,41 @@
    <value name="foo" type="Int"/>
   </out>
  </stmt>
+ <stmt name="insert_test_3" sql="insert into test VALUES @@@x" category="DML" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="x" type="Any" tuplelist="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="insert_test_4" sql="insert into test(foo) VALUES @@@x" category="DML" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="x" type="Any" tuplelist="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="create_test2" sql="create table test2 ( foo integer not null default 12345, bar text not null default '')" category="DDL" kind="create" target="test2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_test2_6" sql="insert into test2 VALUES @@@x" category="DML" kind="insert" target="test2" cardinality="0">
+  <in>
+   <value name="x" type="Any" tuplelist="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="insert_test2_7" sql="insert into test2(foo, bar) VALUES @@@x ON DUPLICATE KEY UPDATE bar = @on_collision" category="DML" kind="insert" target="test2" cardinality="0">
+  <in>
+   <value name="x" type="Any" tuplelist="true"/>
+   <value name="on_collision" type="Text"/>
+  </in>
+  <out/>
+ </stmt>
+ <table name="test2">
+  <schema>
+   <value name="foo" type="Int"/>
+   <value name="bar" type="Text"/>
+  </schema>
+ </table>
  <table name="test">
   <schema>
    <value name="foo" type="Int"/>

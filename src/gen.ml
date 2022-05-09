@@ -239,6 +239,14 @@ let rec inparams_only l =
       | _ -> [])
     l
 
+let tuplelist_params_only l =
+  List.concat @@
+  List.map
+    (function
+      | Sql.TupleList (p, _) -> [Sql.new_param p Any]
+      | _ -> [])
+    l
+
 end
 
 module type Generator = sig

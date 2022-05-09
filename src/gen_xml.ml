@@ -47,13 +47,24 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value ?(inparam=false) v = Node ("value",(["name",v.vname; "type",v.vtyp] @ if inparam then ["set","true"] else [] @ if v.nullable then ["nullable","true"] else []),[])
+let value ?(inparam=false) ?(tuplelist=false) v =
+  let attrs =
+    List.concat
+      [
+        ["name",v.vname; "type",v.vtyp];
+        if inparam then ["set","true"] else [];
+        if tuplelist then ["tuplelist","true"] else [];
+        if v.nullable then ["nullable","true"] else [];
+      ]
+  in
+  Node ("value", attrs, [])
 
 (* open Gen_caml.L *)
 open Gen_caml.T
 
 let params_to_values = List.map value $ all_params_to_values
 let inparams_to_values = List.map (value ~inparam:true) $ all_params_to_values
+let tuplelist_params_to_values = List.map (value ~tuplelist:true) $ all_params_to_values
 let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
@@ -64,7 +75,7 @@ let get_sql_string stmt =
   let rec map i = function
   | Static s -> s
   | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
-  | SubstTuple (id, _) -> "@@" ^ make_param_name i id
+  | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> fail "dynamic choice not supported for xml output"
   in
@@ -72,7 +83,10 @@ let get_sql_string stmt =
 
 let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
-  let input = Node ("in",[], (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
+  let input =
+    Node ("in",[],
+          (tuplelist_params_to_values @@ tuplelist_params_only stmt.vars) @
+          (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
   let sql = get_sql_string stmt in
   let attrs =
