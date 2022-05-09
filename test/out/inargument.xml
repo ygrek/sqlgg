@@ -11,7 +11,7 @@
  </stmt>
  <stmt name="find" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="ids" type="Int" set="true"/>
+   <value name="ids" type="set(Int)"/>
   </in>
   <out>
    <value name="id" type="Int"/>
@@ -20,7 +20,7 @@
  </stmt>
  <stmt name="get" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids)&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
-   <value name="ids" type="Int" set="true"/>
+   <value name="ids" type="set(Int)"/>
   </in>
   <out>
    <value name="id" type="Int"/>
@@ -29,8 +29,8 @@
  </stmt>
  <stmt name="find2" sql="SELECT * FROM foo&#x0A;WHERE (id IN @@ids) AND foo NOT IN @@foos" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="ids" type="Int" set="true"/>
-   <value name="foos" type="Text" set="true"/>
+   <value name="ids" type="set(Int)"/>
+   <value name="foos" type="set(Text)"/>
   </in>
   <out>
    <value name="id" type="Int"/>
@@ -40,7 +40,7 @@
  <stmt name="find_with_bar" sql="SELECT * FROM foo&#x0A;WHERE CONCAT(foo, @suffix) IN @@foos_with_suffix" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="suffix" type="Text"/>
-   <value name="foos_with_suffix" type="Text" set="true"/>
+   <value name="foos_with_suffix" type="set(Text)"/>
   </in>
   <out>
    <value name="id" type="Int"/>
@@ -49,8 +49,8 @@
  </stmt>
  <stmt name="get2" sql="SELECT * FROM foo&#x0A;WHERE id IN @@ids AND (foo NOT IN @@foos)&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
-   <value name="ids" type="Int" set="true"/>
-   <value name="foos" type="Text" set="true"/>
+   <value name="ids" type="set(Int)"/>
+   <value name="foos" type="set(Text)"/>
   </in>
   <out>
    <value name="id" type="Int"/>
@@ -59,9 +59,9 @@
  </stmt>
  <stmt name="join" sql="SELECT *&#x0A;FROM foo f JOIN bar b ON f.id = b.foo_id&#x0A;WHERE b.baz IN @@bazz AND b.baz NOT IN @@notbazz AND LENGTH(f.foo) IN @@lengths" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="bazz" type="Text" set="true"/>
-   <value name="notbazz" type="Text" set="true"/>
-   <value name="lengths" type="Int" set="true"/>
+   <value name="bazz" type="set(Text)"/>
+   <value name="notbazz" type="set(Text)"/>
+   <value name="lengths" type="set(Int)"/>
   </in>
   <out>
    <value name="id" type="Int"/>

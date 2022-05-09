@@ -47,24 +47,30 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value ?(inparam=false) ?(tuplelist=false) v =
+let value ?(inparam=false) v =
   let attrs =
     List.concat
       [
-        ["name",v.vname; "type",v.vtyp];
-        if inparam then ["set","true"] else [];
-        if tuplelist then ["tuplelist","true"] else [];
+        ["name",v.vname; "type", if inparam then sprintf "set(%s)" v.vtyp else v.vtyp];
         if v.nullable then ["nullable","true"] else [];
       ]
   in
   Node ("value", attrs, [])
+
+let tuplelist_value_of_param = function
+  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ -> None
+  | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
+  | TupleList ({ label = Some name; _ }, schema) ->
+    let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.to_string domain) schema) ^ ")" in
+    let attrs = ["name", name; "type", typ] in
+    Some (Node ("value", attrs, []))
 
 (* open Gen_caml.L *)
 open Gen_caml.T
 
 let params_to_values = List.map value $ all_params_to_values
 let inparams_to_values = List.map (value ~inparam:true) $ all_params_to_values
-let tuplelist_params_to_values = List.map (value ~tuplelist:true) $ all_params_to_values
+let tuplelist_values_only l = List.filter_map tuplelist_value_of_param l
 let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
@@ -85,7 +91,7 @@ let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
   let input =
     Node ("in",[],
-          (tuplelist_params_to_values @@ tuplelist_params_only stmt.vars) @
+          (tuplelist_values_only stmt.vars) @
           (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
   let output = Node ("out",[],schema_to_values stmt.schema) in
   let sql = get_sql_string stmt in
