@@ -18,6 +18,9 @@
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
+  let maybe f = function None -> [] | Some x -> [f x]
+  let option_to_list = maybe Prelude.identity
+
   let poly ret args = Fun (F (Typ ret, List.map (fun _ -> Var 0) args), args)
 %}
 
@@ -38,6 +41,7 @@
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
+       FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -396,20 +400,37 @@ expr:
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[SelectExpr (select,`Exists)]) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
-        let maybe f = function None -> [] | Some x -> [f x] in
         let t_args =
           match e1 with
           | None -> (List.flatten @@ List.map (fun _ -> [Typ Bool; Var 1]) branches)
           | Some _ -> [Var 0] @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
         in
         let t_args = t_args @ maybe (fun _ -> Var 1) e2 in
-        let v_args = maybe Prelude.identity e1 @ List.flatten branches @ maybe Prelude.identity e2 in
+        let v_args = option_to_list e1 @ List.flatten branches @ option_to_list e2 in
         Fun (F (Var 1, t_args), v_args)
       }
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ Bool;Var 0;Var 0]), [e1;e2;e3]) }
-    | either(LAG,LEAD) LPAREN e=expr pair(COMMA, pair(MINUS?,INTEGER))? RPAREN
-      OVER LPAREN (* [ PARTITION BY partition_expression ] *) order RPAREN (* TODO order parameters? *)
-      { e }
+    | e=window_function OVER window_spec { e }
+
+(* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
+window_function:
+  | either(FIRST_VALUE,LAST_VALUE) LPAREN e=expr RPAREN { e }
+  | NTH_VALUE LPAREN e=expr COMMA INTEGER RPAREN { e }
+  | either(LAG,LEAD) LPAREN e=expr pair(COMMA, pair(MINUS?,INTEGER))? RPAREN { e }
+
+window_spec: LPAREN e=partition? order? frame? RPAREN (* TODO order parameters? *) { e }
+partition: PARTITION BY expr { } (* TODO check no params *)
+
+frame: either(ROWS,RANGE) either(frame_border, frame_between) { }
+
+frame_between: BETWEEN frame_border AND frame_border { }
+
+frame_border:
+  | CURRENT ROW
+  | UNBOUNDED PRECEDING
+  | UNBOUNDED FOLLOWING
+  | expr PRECEDING
+  | expr FOLLOWING { }
 
 in_or_not_in: IN { `In } | NOT IN { `NotIn }
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }

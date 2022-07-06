@@ -56,6 +56,7 @@ let keywords =
    "convert", CONVERT;
    "create",CREATE;
    "cross",CROSS;
+   "current", CURRENT;
    "date",DATE;
    "day", DAY;
    "day_hour", DAY_HOUR;
@@ -78,6 +79,8 @@ let keywords =
    "exists",EXISTS;
    "false", FALSE;
    "first",FIRST;
+   "first_value",FIRST_VALUE;
+   "following", FOLLOWING;
    "for", FOR;
    "foreign",FOREIGN;
    "from",FROM;
@@ -100,7 +103,10 @@ let keywords =
    "is", IS;
    "join",JOIN;
    "key",KEY;
+   "lag", LAG;
    "language", LANGUAGE;
+   "last_value", LAST_VALUE;
+   "lead", LEAD;
    "like", LIKE;
    "limit",LIMIT;
    "local",LOCAL;
@@ -124,15 +130,21 @@ let keywords =
    "on",ON;
    "or",OR;
    "order",ORDER;
+   "over",OVER;
+   "partition",PARTITION;
+   "preceding", PRECEDING;
    "precision",PRECISION;
    "primary",PRIMARY;
    "procedure", PROCEDURE;
    "quarter", QUARTER;
+   "range", RANGE;
    "references",REFERENCES;
    "rename",RENAME;
    "replace",REPLACE;
    "restrict",RESTRICT;
    "returns", RETURNS;
+   "row", ROW;
+   "rows", ROWS;
    "second", SECOND;
    "second_microsecond", SECOND_MICROSECOND;
    "select",SELECT;
@@ -149,6 +161,7 @@ let keywords =
    "timestamp",TIMESTAMP;
    "to",TO;
    "true", TRUE;
+   "unbounded", UNBOUNDED;
    "unicode",UNICODE;
    "union",UNION;
    "unique",UNIQUE;
@@ -164,9 +177,6 @@ let keywords =
    "with", WITH;
    "year", YEAR;
    "year_month", YEAR_MONTH;
-   "lag", LAG;
-   "lead", LEAD;
-   "over", OVER;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
