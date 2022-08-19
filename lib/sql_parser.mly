@@ -42,6 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
+       CAST
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -392,7 +393,8 @@ expr:
     | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
-    | CONVERT LPAREN e=expr COMMA convert_type RPAREN { Fun (Function.sponge, [e]) }
+    | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
+    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
@@ -490,8 +492,6 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
-
-convert_type : T_TEXT | T_DECIMAL | DATE | TIME | T_DATETIME { }
 
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }

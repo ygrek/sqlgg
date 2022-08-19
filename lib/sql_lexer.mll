@@ -44,6 +44,7 @@ let keywords =
    "bytea",BINARY;
    "cascade",CASCADE;
    "case", CASE;
+   "cast", CAST;
    "change", CHANGE;
    "character",CHARACTER;
    "charset",CHARSET;
