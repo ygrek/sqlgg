@@ -32,11 +32,13 @@ struct
       `Equal
     else
       match x,y with
-      | Any, t | t, Any -> `Order (t, Any)
+      | Any, t | t, Any -> `Order (t,Any)
       | Int, Float | Float, Int -> `Order (Int,Float)
+      (* arbitrary decision : allow int<->decimal but require explicit cast for floats *)
+      | Decimal, Int | Int, Decimal -> `Order (Int,Decimal)
       | Text, Blob | Blob, Text -> `Order (Text,Blob)
       | Int, Datetime | Datetime, Int -> `Order (Int,Datetime)
-      | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
+      | Text, Datetime | Datetime, Text -> `Order (Datetime,Text)
       | _ -> `No
 
   let common_type f x y =

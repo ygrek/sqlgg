@@ -16,3 +16,6 @@ CREATE TABLE foo ( x decimal(10,2) );
 INSERT INTO foo ( x ) VALUES;
 SELECT x FROM foo;
 SELECT SUM(x) FROM foo WHERE x < @n;
+
+-- issue #112
+insert into foo ( x ) values ( cast(1.2 as decimal) ), ( 100 );

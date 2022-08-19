@@ -37,6 +37,10 @@
    <value name="_0" type="Decimal"/>
   </out>
  </stmt>
+ <stmt name="insert_foo_6" sql="insert into foo ( x ) values ( cast(1.2 as decimal) ), ( 100 )" category="DML" kind="insert" target="foo" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
  <table name="foo">
   <schema>
    <value name="x" type="Decimal"/>
