@@ -424,7 +424,8 @@ let () =
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
   ["concat";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
-  ["date";"time"] ||> monomorphic Text [Datetime];
+  "date" |> monomorphic Datetime [Datetime];
+  "time" |> monomorphic Text [Datetime];
   "julianday" |> multi ~ret:(Typ Float) (Typ Text);
   "from_unixtime" |> monomorphic Datetime [Int];
   "from_unixtime" |> monomorphic Text [Int;Text];
