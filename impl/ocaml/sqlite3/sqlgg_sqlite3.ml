@@ -42,6 +42,24 @@ module Types = struct
       Buffer.add_string b "'";
       Buffer.contents b
   end
+  module Blob = struct
+    (* "BLOB literals are string literals containing hexadecimal data and preceded
+       by a single "x" or "X" character. Example: X'53514C697465'" *)
+    type t = string
+
+    let to_hex = [| '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' |]
+
+    let to_literal s =
+      let b = Buffer.create (3 + String.length s * 2) in
+      Buffer.add_string b "x'";
+      for i = 0 to String.length s - 1 do
+        let c = Char.code (String.unsafe_get s i) in
+        Buffer.add_char b (Array.unsafe_get to_hex (c lsr 4));
+        Buffer.add_char b (Array.unsafe_get to_hex (c land 0x0F));
+      done;
+      Buffer.add_string b "'";
+      Buffer.contents b
+  end
   module Float = struct type t = float let to_literal = string_of_float end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float

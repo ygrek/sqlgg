@@ -32,6 +32,7 @@ module type Types = sig
   module Int : Value
   module Float : Value
   module Text : Value
+  module Blob : Value
   module Datetime : Value
   module Decimal : Value
   module Any : Value
@@ -43,6 +44,7 @@ module Default_types(M : Mariadb.Nonblocking.S) : Types with
   type Bool.t = bool and
   type Int.t = int64 and
   type Text.t = string and
+  type Blob.t = string and
   type Float.t = float and
   type Decimal.t = float and
   type Datetime.t = M.Time.t and
@@ -129,6 +131,31 @@ struct
         | '\000' -> Buffer.add_string b "\\0"
         | '\'' -> Buffer.add_string b "\\'"
         | c -> Buffer.add_char b c
+      done;
+      Buffer.add_string b "'";
+      Buffer.contents b
+  end)
+
+  module Blob = Make(struct
+    (* https://dev.mysql.com/doc/refman/5.7/en/hexadecimal-literals.html
+       "Hexadecimal literal values are written using X'val' or 0xval notation,
+       where val contains hexadecimal digits (0..9, A..F)."
+      "By default, a hexadecimal literal is a binary string, where each pair of
+       hexadecimal digits represents a character" *)
+    type t = string
+
+    let of_field = Text.of_field
+    let to_value x = `Bytes (Bytes.of_string x)
+
+    let to_hex = [| '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' |]
+
+    let to_literal s =
+      let b = Buffer.create (3 + String.length s * 2) in
+      Buffer.add_string b "x'";
+      for i = 0 to String.length s - 1 do
+        let c = Char.code (String.unsafe_get s i) in
+        Buffer.add_char b (Array.unsafe_get to_hex (c lsr 4));
+        Buffer.add_char b (Array.unsafe_get to_hex (c land 0x0F));
       done;
       Buffer.add_string b "'";
       Buffer.contents b

@@ -34,6 +34,7 @@ module type M = sig
     module Int : Value
     module Float : Value
     module Text : Value
+    module Blob : Value
     module Decimal : Value
     module Datetime : Value
     module Any : Value
