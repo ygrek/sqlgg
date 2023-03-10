@@ -439,7 +439,7 @@ let generate_stmt style index stmt =
     | Some id ->
     match id.label with
     | None -> failwith "empty label in tuple substitution"
-    | Some label -> sprintf {|( match %s with [] -> T.execute db "-- empty insert" T.no_params | _ :: _ -> %s)|} label exec
+    | Some label -> sprintf {|( match %s with [] -> IO.return 0L | _ :: _ -> %s)|} label exec
   in
   output "%s%s" bind exec;
   if style = `Fold then output "(fun () -> IO.return !r_acc)";
