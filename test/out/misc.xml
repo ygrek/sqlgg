@@ -223,13 +223,13 @@
  <stmt name="select_date" sql="SELECT `DATE`(CURRENT_TIMESTAMP)" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
-   <value name="_0" type="Text"/>
+   <value name="_0" type="Datetime"/>
   </out>
  </stmt>
  <stmt name="select_38" sql="SELECT DATE(CURRENT_TIMESTAMP)" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
-   <value name="_0" type="Text"/>
+   <value name="_0" type="Datetime"/>
   </out>
  </stmt>
  <stmt name="create_adr" sql="CREATE TABLE `adr` (&#x0A;  `word` text COLLATE utf8_bin NOT NULL,&#x0A;  `amount` int(10) unsigned DEFAULT '0',&#x0A;  KEY `amount` (`amount`),&#x0A;  KEY `word` (`word`(10))&#x0A;) ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_bin" category="DDL" kind="create" target="adr" cardinality="0">
