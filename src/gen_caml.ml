@@ -390,7 +390,7 @@ let make_sql l =
   Buffer.contents b
 
 let generate_stmt style index stmt =
-  let name = choose_name stmt.props stmt.kind index |> String.uncapitalize in
+  let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
   match style, is_callback stmt with
@@ -458,7 +458,7 @@ let generate ~gen_io name stmts =
     | true -> "Sqlgg_traits.M_io", "T.IO"
     | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
   in
-  output "module %s (T : %s) = struct" (String.capitalize name) traits;
+  output "module %s (T : %s) = struct" (String.capitalize_ascii name) traits;
   empty_line ();
   inc_indent ();
   output "module IO = %s" io;
@@ -476,7 +476,7 @@ let generate ~gen_io name stmts =
   dec_indent ();
   output "end (* module List *)";
   dec_indent ();
-  output "end (* module %s *)" (String.capitalize name)
+  output "end (* module %s *)" (String.capitalize_ascii name)
 
 module Generator_base = struct
 

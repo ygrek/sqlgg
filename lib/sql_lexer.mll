@@ -216,7 +216,7 @@ module Keywords = Map.Make(String)
 
 let keywords =
   let add map (k,v) =
-    let k = String.lowercase k in
+    let k = String.lowercase_ascii k in
     if Keywords.mem k map then
       failwith (sprintf "Lexeme %s is already associated with keyword." k)
     else
@@ -227,10 +227,10 @@ let keywords =
 (* FIXME case sensitivity??! *)
 
 let get_ident str =
-  let str = String.lowercase str in
+  let str = String.lowercase_ascii str in
   try Keywords.find str keywords with Not_found -> IDENT str
 
-let ident str = IDENT (String.lowercase str)
+let ident str = IDENT (String.lowercase_ascii str)
 
 let as_literal ch s =
   let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in

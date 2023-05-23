@@ -20,7 +20,7 @@ let name = ref "sqlgg"
 
 let set_out s =
   generate :=
-  match (String.lowercase s) with
+  match (String.lowercase_ascii s) with
   | "cxx" | "c++" | "cpp" -> Some Cxx.process
   | "caml" | "ocaml" | "ml" -> Some Caml.process
   | "caml_io" -> Some Caml_io.process
@@ -32,7 +32,7 @@ let set_out s =
 
 let set_params_mode s =
   Gen.params_mode :=
-  match String.lowercase s with
+  match String.lowercase_ascii s with
   | "named" -> Some Gen.Named
   | "unnamed" -> Some Gen.Unnamed
   | "oracle" -> Some Gen.Oracle
@@ -42,11 +42,11 @@ let set_params_mode s =
 
 let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
 let category_of_string s =
-  match List.find (fun cat -> String.equal (String.lowercase @@ Stmt.show_category cat) s) Stmt.all_categories with
+  match List.find (fun cat -> String.equal (String.lowercase_ascii @@ Stmt.show_category cat) s) Stmt.all_categories with
   | exception _ -> failwith @@ sprintf "bad category %S" s
   | x -> x
 let set_category s =
-  let s = String.lowercase s in
+  let s = String.lowercase_ascii s in
   Sqlgg_config.include_category :=
     match s with
     | "all" -> `All

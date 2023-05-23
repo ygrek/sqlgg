@@ -373,7 +373,7 @@ end = struct
 let h = Hashtbl.create 10
 
 let add_ narg typ name =
-  let name = String.lowercase name in
+  let name = String.lowercase_ascii name in
   if Hashtbl.mem h (name,narg) then
     let func = match narg with None -> sprintf "%S" name | Some n -> sprintf "%S of %d arguments" name n in
     fail "Function %s already registered" func
@@ -387,7 +387,7 @@ let add narg typ name = add_ (Some narg) (Some typ) name
 let sponge = Type.(Multi (Typ Any, Typ Any))
 
 let lookup name narg =
-  let name = String.lowercase name in
+  let name = String.lowercase_ascii name in
   match Hashtbl.find h (name,Some narg) with
   | None ->
     eprintfn "W: wrong number of arguments for known function %S, treating as untyped" name;
