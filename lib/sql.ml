@@ -308,15 +308,6 @@ and column =
 
 type columns = column list [@@deriving show]
 
-type expr_q = [ `Value of Type.t (** literal value *)
-            | `Param of param
-            | `Inparam of param
-            | `InChoice of param_id * [`In | `NotIn] * expr_q
-            | `Choice of param_id * expr_q choices
-            | `Func of Type.func * expr_q list (** return type, grouping, parameters *)
-            ]
-            [@@deriving show]
-
 let expr_to_string = show_expr
 
 type assignments = (col_name * expr) list

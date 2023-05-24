@@ -13,6 +13,16 @@ type env = {
   insert_schema : Schema.t;
 }
 
+(* expr with all name references resolved to values or "functions" *)
+type res_expr =
+  | ResValue of Type.t (** literal value *)
+  | ResParam of param
+  | ResInparam of param
+  | ResChoices of param_id * res_expr choices
+  | ResInChoice of param_id * [`In | `NotIn] * res_expr
+  | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
+  [@@deriving show]
+
 let empty_env = { tables = []; schema = []; insert_schema = []; }
 
 let flat_map f l = List.flatten (List.map f l)
@@ -27,15 +37,15 @@ let values_or_all table names =
   | Some names -> Schema.project names schema
   | None -> schema
 
-let rec get_params_q (e:expr_q) =
+let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
-    | `Param p -> Single p::acc
-    | `Inparam p -> SingleIn p::acc
-    | `Func (_,l) -> List.fold_left loop acc l
-    | `Value _ -> acc
-    | `InChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_q e } :: acc
-    | `Choice (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_q e)) l) :: acc
+    | ResParam p -> Single p::acc
+    | ResInparam p -> SingleIn p::acc
+    | ResFun (_,l) -> List.fold_left loop acc l
+    | ResValue _ -> acc
+    | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
+    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
   in
   loop [] e |> List.rev
 
@@ -100,7 +110,7 @@ let _print_env env =
   Sql.Schema.print env.schema;
   Tables.print stderr env.tables
 
-(** replace each name reference (Column, Inserted, etc) with Value of corresponding type *)
+(** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
   if !debug then
   begin
@@ -110,45 +120,47 @@ let rec resolve_columns env expr =
   end;
   let rec each e =
     match e with
-    | Value x -> `Value x
-    | Column col -> `Value (resolve_column env.tables env.schema col).domain
+    | Value x -> ResValue x
+    | Column col -> ResValue (resolve_column env.tables env.schema col).domain
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
-      `Value attr.domain
-    | Param x -> `Param x
-    | Inparam x -> `Inparam x
-    | InChoice (n, k, x) -> `InChoice (n, k, each x)
-    | Choices (n,l) -> `Choice (n, List.map (fun (n,e) -> n, Option.map each e) l)
+      ResValue attr.domain
+    | Param x -> ResParam x
+    | Inparam x -> ResInparam x
+    | InChoice (n, k, x) -> ResInChoice (n, k, each x)
+    | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun (r,l) ->
-      `Func (r,List.map each l)
+      ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
       let as_params p =
         List.map
           (function
-            | Single p -> `Param p
+            | Single p -> ResParam p
             | SingleIn p -> failed ~at:p.id.pos "FIXME as_params in SingleIn"
             | ChoiceIn { param = p; _ } -> failed ~at:p.pos "FIXME as_params in ChoiceIn"
             | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice"
             | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in Choice")
           p in
       let (schema,p,_) = eval_select_full env select in
+      (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> `Func (Type.Ret domain, as_params p)
+      | [ {domain;_} ], `AsValue ->
+        ResFun (Type.Ret domain, as_params p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> `Func (Type.Ret Any, as_params p)
+      | _, `Exists -> ResFun (Type.Ret Any, as_params p)
   in
   each expr
 
 (** assign types to parameters where possible *)
 and assign_types expr =
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
-  let rec typeof (e:expr_q) = (* FIXME simplify *)
+  let rec typeof (e:res_expr) = (* FIXME simplify *)
     match e with
-    | `Value t -> e, `Ok t
-    | `Param p -> e, `Ok p.typ
-    | `Inparam p -> e, `Ok p.typ
-    | `InChoice (n, k, e) -> let e, t = typeof e in `InChoice (n, k, e), t
-    | `Choice (n,l) ->
+    | ResValue t -> e, `Ok t
+    | ResParam p -> e, `Ok p.typ
+    | ResInparam p -> e, `Ok p.typ
+    | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
+    | ResChoices (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
         match List.map get_or_failwith @@ List.filter_map identity t with
@@ -156,8 +168,8 @@ and assign_types expr =
         | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> Type.common_subtype prev t) (Some t) ts
       in
       let t = match t with None -> `Error "no common subtype for all choice branches" | Some t -> `Ok t in
-      `Choice (n, List.map2 (fun (n,_) e -> n,e) l e), t
-    | `Func (func,params) ->
+      ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
+    | ResFun (func,params) ->
         let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
         let types = List.map get_or_failwith types in
@@ -211,11 +223,11 @@ and assign_types expr =
         in
         let assign inferred x =
           match x with
-          | `Param { id; typ = Any; attr; } -> `Param (new_param ?attr id inferred)
-          | `Inparam { id; typ = Any; attr; } -> `Inparam (new_param ?attr id inferred)
+          | ResParam { id; typ = Any; attr; } -> ResParam (new_param ?attr id inferred)
+          | ResInparam { id; typ = Any; attr; } -> ResInparam (new_param ?attr id inferred)
           | x -> x
         in
-        `Func (func,(List.map2 assign inferred_params params)), `Ok ret
+        ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
   in
   typeof expr
 
@@ -223,12 +235,12 @@ and resolve_types env expr =
   let expr = resolve_columns env expr in
   try
     let (expr',t as r) = assign_types expr in
-    if !debug then eprintf "resolved types %s : %s\n%!" (show_expr_q expr') (Type.to_string @@ get_or_failwith t);
+    if !debug then eprintf "resolved types %s : %s\n%!" (show_res_expr expr') (Type.to_string @@ get_or_failwith t);
     r
   with
     exn ->
       eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
-      eprintfn "%s" (show_expr_q expr);
+      eprintfn "%s" (show_res_expr expr);
       raise exn
 
 and infer_schema env columns =
@@ -247,7 +259,7 @@ and infer_schema env columns =
   in
   flat_map resolve1 columns
 
-and get_params env e = e |> resolve_types env |> fst |> get_params_q
+and get_params env e = e |> resolve_types env |> fst |> get_params_of_res_expr
 
 (*
 let _ =
@@ -255,7 +267,7 @@ let _ =
   e |> get_params |> to_string |> print_endline
 *)
 
-and params_of_columns env =
+and get_params_of_columns env =
   let get = function
   | All | AllOf _ -> []
   | Expr (e,_) -> get_params env e
@@ -307,16 +319,16 @@ and params_of_order order final_schema tables =
        p1 @ p2)
     order
 
-and ensure_simple_expr = function
-  | Value x -> `Value x
-  | Param x -> `Param x
-  | Inparam x -> `Inparam x
-  | Choices (p,_) -> failed ~at:p.pos "ensure_simple_expr Choices TBD"
-  | InChoice (p,_,_) -> failed ~at:p.pos "ensure_simple_expr InChoice TBD"
+and ensure_res_expr = function
+  | Value x -> ResValue x
+  | Param x -> ResParam x
+  | Inparam x -> ResInparam x
+  | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
+  | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
-  | Fun (x,l) -> `Func (x,List.map ensure_simple_expr l) (* FIXME *)
-  | SelectExpr _ -> failwith "not implemented : ensure_simple_expr for SELECT"
+  | Fun (x,l) -> ResFun (x,List.map ensure_res_expr l) (* FIXME *)
+  | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
@@ -335,7 +347,7 @@ and eval_select env { columns; from; where; group; having; } =
   in
   let final_schema = infer_schema env columns in
   (* use schema without aliases here *)
-  let p1 = params_of_columns env columns in
+  let p1 = get_params_of_columns env columns in
   let env = Schema.{ env with schema = cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
   let p3 = get_params_opt env where in
   let p4 = get_params_l env group in
@@ -483,7 +495,7 @@ let eval (stmt:Sql.stmt) =
   | Set (_name, e) ->
     let p = match e with
       | Column _ -> [] (* this is not column but some db-specific identifier *)
-      | _ -> get_params_q (ensure_simple_expr e)
+      | _ -> get_params_of_res_expr (ensure_res_expr e)
     in
     [], p, Other
   | Update (table,ss,w,o,lim) ->
