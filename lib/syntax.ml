@@ -132,15 +132,13 @@ let rec resolve_columns env expr =
     | Fun (r,l) ->
       ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
-      let as_params p =
-        List.map
-          (function
-            | Single p -> ResParam p
-            | SingleIn p -> failed ~at:p.id.pos "FIXME as_params in SingleIn"
-            | ChoiceIn { param = p; _ } -> failed ~at:p.pos "FIXME as_params in ChoiceIn"
-            | Choice (p,_) -> failed ~at:p.pos "FIXME as_params in Choice"
-            | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in Choice")
-          p in
+      let rec params_of_var = function
+        | Single p -> [ResParam p]
+        | SingleIn p -> [ResParam p]
+        | ChoiceIn { vars; _ } -> as_params vars
+        | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
+        | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
+      and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
