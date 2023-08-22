@@ -97,19 +97,19 @@ let generate_code (x,_) index stmt =
   let sql = get_sql_string stmt in
   let attrs =
     match stmt.kind with
-    | Select `Nat      -> ["kind", "select"; "cardinality", "n"]
-    | Select `Zero_one -> ["kind", "select"; "cardinality", "0,1"]
-    | Select `One      -> ["kind", "select"; "cardinality", "1"]
-    | Insert (_, t)    -> ["kind", "insert"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | Create t         -> ["kind", "create"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | CreateIndex t    -> ["kind", "create_index"; "target",t;"cardinality","0"]
-    | Update None      -> ["kind", "update"; "cardinality", "0"]
-    | Update (Some t)  -> ["kind", "update"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | Delete t         -> ["kind", "delete"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
-    | Alter t          -> ["kind", "alter"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
-    | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | CreateRoutine s  -> ["kind", "create_routine"; "target", s]
-    | Other            -> ["kind", "other"]
+    | Select `Nat         -> ["kind", "select"; "cardinality", "n"]
+    | Select `Zero_one    -> ["kind", "select"; "cardinality", "0,1"]
+    | Select `One         -> ["kind", "select"; "cardinality", "1"]
+    | Insert (_, t)       -> ["kind", "insert"; "target", Sql.show_table_name t; "cardinality", "0"]
+    | Create t            -> ["kind", "create"; "target", Sql.show_table_name t; "cardinality", "0"]
+    | CreateIndex t       -> ["kind", "create_index"; "target",t;"cardinality","0"]
+    | Update None         -> ["kind", "update"; "cardinality", "0"]
+    | Update (Some t)     -> ["kind", "update"; "target", Sql.show_table_name t; "cardinality", "0"]
+    | Delete t            -> ["kind", "delete"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
+    | Alter t             -> ["kind", "alter"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
+    | Drop t              -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
+    | CreateRoutine (s,_) -> ["kind", "create_routine"; "target", s]
+    | Other               -> ["kind", "other"]
   in
   let nodes = [ input; output] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x
