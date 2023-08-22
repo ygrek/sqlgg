@@ -24,6 +24,19 @@ type kind = | Select of cardinality
             | Other
             [@@deriving show {with_path=false}]
 
+let kind_to_operation_name = function
+| Select _ -> Some "SELECT"
+| Insert _ -> Some "INSERT"
+| Create _ -> Some "CREATE TABLE"
+| CreateIndex _ -> Some "CREATE INDEX"
+| Update _ -> Some "UPDATE"
+| Delete _ -> Some "DELETE"
+| Alter _ -> Some "ALTER TABLE"
+| Drop _ -> Some "DROP TABLE"
+| CreateRoutine (_, Some _) -> Some "CREATE FUNCTION"
+| CreateRoutine (_, None) -> Some "CREATE PROCEDURE"
+| Other -> None
+
 type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
 
 let all_categories = List.init (max_category - min_category) (fun i -> Option.get @@ category_of_enum @@ min_category + i)
