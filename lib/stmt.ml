@@ -37,6 +37,19 @@ let kind_to_operation_name = function
 | CreateRoutine (_, None) -> Some "CREATE PROCEDURE"
 | Other -> None
 
+let kind_to_table_names = function
+| Create t -> [t]
+| CreateIndex _ -> [] (* FIXME *)
+| Update (Some t) -> [t]
+| Update None -> []
+| Insert (_,t) -> [t]
+| Delete ts -> ts
+| Alter ts -> ts
+| Drop t -> [t]
+| Select _  ->  [] (* FIXME *)
+| CreateRoutine (_s, _ret) -> []
+| Other -> []
+
 type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
 
 let all_categories = List.init (max_category - min_category) (fun i -> Option.get @@ category_of_enum @@ min_category + i)

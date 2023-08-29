@@ -105,6 +105,10 @@ let inline_values = String.concat " "
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
 
+let quote_list ss =
+  let body = List.map quote ss |> String.concat "; " in
+  "[" ^ body ^ "]"
+
 let rec replace_all ~str ~sub ~by =
   match String.replace ~str ~sub ~by with
   | (true,s) -> replace_all ~str:s ~sub ~by
@@ -389,6 +393,17 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
+let output_tracing ~op ~tables ~sql_var name =
+  match op, tables with
+  | Some op, [] ->
+    output "T.tracing_span ~operation:%s ~statement:%s %s @@ fun () ->" (quote op) sql_var (quote name)
+  | None, [] ->
+    output "T.tracing_span ~statement:%s %s @@ fun () ->" sql_var (quote name)
+  | Some op, _::_ ->
+    output "T.tracing_span ~operation:%s ~tables:%s ~statement:%s %s @@ fun () ->" (quote op) (quote_list tables) sql_var (quote name)
+  | None, _::_ ->
+    failwith "UNREACHABLE"
+
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
@@ -400,8 +415,10 @@ let generate_stmt style index stmt =
   output "let %s db %s =" name all_inputs;
   inc_indent ();
   let sql = make_sql @@ get_sql stmt in
-  let sql = match subst with
-  | [] -> sql
+  begin match subst with
+  | [] ->
+    output "let __sqlgg_sql = %s" sql;
+    output "in"
   | vars ->
     output "let __sqlgg_sql =";
     output "  let replace_all ~str ~sub ~by =";
@@ -413,9 +430,8 @@ let generate_stmt style index stmt =
     output "  let sql = %s in" sql;
     List.iter (fun var -> output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var) vars;
     output "  sql";
-    output "in";
-    "__sqlgg_sql"
-  in
+    output "in"
+  end;
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.vars in
   if style = `Fold then output "let r_acc = ref acc in";
@@ -426,7 +442,12 @@ let generate_stmt style index stmt =
     | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
     | `Direct -> "", callback (* or empty string *)
   in
-  let exec = sprintf "T.%s db %s %s %s" func sql params_binder_name callback in
+  if !Sqlgg_config.tracing then begin
+    let op = Stmt.kind_to_operation_name stmt.kind in
+    let tables = List.map Sql.show_table_name (Stmt.kind_to_table_names stmt.kind) in
+    output_tracing ~op ~tables ~sql_var:"__sqlgg_sql" name
+  end;
+  let exec = sprintf "T.%s db __sqlgg_sql %s %s" func params_binder_name callback in
   let exec =
     match
       List.find_map
@@ -454,9 +475,11 @@ let generate ~gen_io name stmts =
   in
 *)
   let (traits, io) =
-    match gen_io with
-    | true -> "Sqlgg_traits.M_io", "T.IO"
-    | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
+    match gen_io, !Sqlgg_config.tracing with
+    | true, false -> "Sqlgg_traits.M_io", "T.IO"
+    | false, false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
+    | true, true -> "Sqlgg_traits.M_tracing_io", "T.IO"
+    | false, true -> "Sqlgg_traits.M_tracing", "Sqlgg_io.Blocking"
   in
   output "module %s (T : %s) = struct" (String.capitalize_ascii name) traits;
   empty_line ();
