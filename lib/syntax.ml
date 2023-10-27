@@ -85,19 +85,31 @@ let resolve_column tables schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) schema tname) cname
 
 (* HACK hint expression to unify with the column type *)
-let rec hint attr expr =
+let rec hint inferred_types attr expr =
   (* associate parameter with column *)
-  let expr = match expr with Param p -> Param { p with attr = Some attr } | e -> e in
+  let rec get_expr attr expr = 
+    match expr with 
+    | Param p -> 
+      let existed = Hashtbl.find_opt inferred_types p.id.label in
+      begin match existed with
+      | Some attr -> Param { p with attr = attr }
+      | None -> Hashtbl.add inferred_types p.id.label (Some attr);
+        Param { p with attr = Some attr }
+      end
+    | Fun (func, exprs) -> Fun (func, List.map (get_expr attr) exprs)
+    | e -> e in
+  let expr = get_expr attr expr in    
   (* go one level deep into choices *)
   match expr with
-  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint attr) e) l)
+  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint inferred_types attr) e) l)
   | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
 
 let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
+  let inferred_types = Hashtbl.create (List.length l) in
   l |> List.map begin fun (col,expr) ->
     let attr = resolve_column tables all col in
-    hint attr expr
+    hint inferred_types attr expr
   end
 
 let get_columns_schema tables l =
