@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_some_table" sql="CREATE TABLE IF NOT EXISTS `some_table` (&#x0A; `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A; `some_field` TEXT NULL,&#x0A; `some_field_2` TEXT NULL DEFAULT NULL&#x0A;)" category="DDL" kind="create" target="some_table" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create" sql="INSERT INTO some_table (&#x0A;  some_field,&#x0A;  some_field_2&#x0A;) VALUES (&#x0A;  @some_field,&#x0A;  case when @some_field = 'TEST' then 'A' else NULL end&#x0A;)" category="DML" kind="insert" target="some_table" cardinality="0">
+  <in>
+   <value name="some_field" type="Text" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <table name="some_table">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="some_field" type="Text" nullable="true"/>
+   <value name="some_field_2" type="Text" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>

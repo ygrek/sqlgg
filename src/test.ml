@@ -167,6 +167,20 @@ let test_enum = [
   tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull]; attr "" Int] [];
 ]
 
+let inferred_type () = 
+  let named = named "some_field" Text in
+  let param = Some (attr "some_field" Text ~extra:[Null]) in
+  let insert = "INSERT INTO some_table ( some_field, some_field_2 ) VALUES ( @some_field, case when @some_field = 'TEST' then 'A' else NULL end )" in
+  do_test "CREATE TABLE some_table ( id INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT, some_field TEXT NULL, some_field_2 TEXT NULL DEFAULT NULL )" [] [];
+  do_test insert [] [named; named];
+  let stmt = parse insert in
+  let attrs = List.map (function 
+    | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false
+    | Single params -> params.attr
+  ) stmt.vars in
+  List.iter2 (assert_equal ~msg:"params" ~cmp:(=) ~printer:[%derive.show: Sql.attr option]) attrs 
+  [param; param]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -179,6 +193,7 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
     "enum" >::: test_enum;
+    "inferred_type" >:: inferred_type;
   ]
   in
   let test_suite = "main" >::: tests in
