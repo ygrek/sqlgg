@@ -11,6 +11,7 @@ type env = {
   tables : Tables.table list;
   schema : Schema.t;
   insert_schema : Schema.t;
+  param_types: (string option, attr option) Hashtbl.t
 }
 
 (* expr with all name references resolved to values or "functions" *)
@@ -23,7 +24,7 @@ type res_expr =
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   [@@deriving show]
 
-let empty_env = { tables = []; schema = []; insert_schema = []; }
+let empty_env = { tables = []; schema = []; insert_schema = []; param_types = Hashtbl.create 0 }
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -85,18 +86,21 @@ let resolve_column tables schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) schema tname) cname
 
 (* HACK hint expression to unify with the column type *)
-let rec hint inferred_types attr expr =
-  (* associate parameter with column *)
+let rec hint param_types attr expr =
+  (** [get_expr ~readonly attr expr] returns already known param types.
+    Pay attention [~readonly] flag
+    It means which constructors can only consume type and which can consume and set.
+  *)
   let rec get_expr ~readonly attr expr =
     match expr with 
     | Param p -> 
-      let inferred_attr_opt = Hashtbl.find_opt inferred_types p.id.label in
+      let inferred_attr_opt = Hashtbl.find_opt param_types p.id.label in
       begin match inferred_attr_opt with
       | Some inferred_attr -> Param { p with attr = inferred_attr }
       | None -> 
         if readonly then expr
         else begin
-          Hashtbl.add inferred_types p.id.label (Some attr);
+          Hashtbl.add param_types p.id.label (Some attr);
           Param { p with attr = Some attr }
         end
       end  
@@ -106,14 +110,14 @@ let rec hint inferred_types attr expr =
   let expr = get_expr ~readonly:false attr expr in
   (* go one level deep into choices *)
   match expr with
-  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint inferred_types attr) e) l)
+  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint param_types attr) e) l)
   | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
 
-let resolve_column_assignments inferred_types tables l =
-  let all = all_tbl_columns tables in
+let resolve_column_assignments env l =
+  let all = all_tbl_columns env.tables in
   l |> List.map begin fun (col,expr) ->
-    let attr = resolve_column tables all col in
-    hint inferred_types attr expr
+    let attr = resolve_column env.tables all col in
+    hint env.param_types attr expr
   end
 
 let get_columns_schema tables l =
@@ -317,15 +321,16 @@ and join env ((schema,p0,ts0),joins) =
   let env = { env with tables = env.tables @ all_tables; schema; } in
   List.fold_left do_join (env, p0) joins
 
-and params_of_assigns inferred_types env ss =
-  let exprs = resolve_column_assignments inferred_types env.tables ss in
+and params_of_assigns env ss =
+  let exprs = resolve_column_assignments env ss in
   get_params_l env exprs
 
 and params_of_order order final_schema tables =
   List.concat @@
   List.map
     (fun (order, direction) ->
-       let env = { tables; schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; } in
+       let param_types = Hashtbl.create 0 in
+       let env = { tables; schema=(final_schema :: (List.map snd tables) |> all_columns); insert_schema = []; param_types; } in
        let p1 = get_params_l env [ order ] in
        let p2 =
          match direction with
@@ -408,9 +413,9 @@ let update_tables sources ss w =
   let schema = cross @@ (List.map (fun (s,_,_) -> s) sources) in
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
-  let env = { tables; schema; insert_schema=get_columns_schema tables (List.map fst ss); } in
-  let inferred_types = Hashtbl.create (List.length ss) in
-  let p1 = params_of_assigns inferred_types env ss in
+  let param_types = Hashtbl.create (List.length ss) in
+  let env = { tables; schema; insert_schema=get_columns_schema tables (List.map fst ss); param_types  } in
+  let p1 = params_of_assigns env ss in
   let p2 = get_params_opt env w in
   p0 @ p1 @ p2
 
@@ -456,9 +461,9 @@ let eval (stmt:Sql.stmt) =
       [],[],CreateIndex name
   | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
-    let inferred_types = Hashtbl.create @@ 
-    List.length(Option.default [] on_duplicate) + List.length(Option.default [] names) in
+    let param_types = Hashtbl.create @@ 
+      List.length(Option.default [] on_duplicate) + List.length(Option.default [] names) in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; param_types } in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
@@ -474,42 +479,42 @@ let eval (stmt:Sql.stmt) =
           |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun (Type.identity, [Column col]))
         end
       in
-      params_of_assigns inferred_types env (List.concat assigns), None
+      params_of_assigns env (List.concat assigns), None
     in
-    let params2 = params_of_assigns inferred_types env (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Insert { target=table; action=`Param (names, param_id); on_duplicate; } ->
-    let inferred_types = Hashtbl.create @@ 
+    let param_types = Hashtbl.create @@ 
     List.length(Option.default [] on_duplicate) + List.length(Option.default [] names) in
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; param_types } in
     let params = [ TupleList (param_id, expect) ] in
-    let params2 = params_of_assigns inferred_types env (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None, table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
-    let inferred_types = Hashtbl.create @@ 
-    List.length(Option.default [] on_duplicate) + List.length(Option.default [] names) in
+    let param_types = Hashtbl.create @@ 
+      List.length(Option.default [] on_duplicate) + List.length(Option.default [] names) in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; param_types } in
     let select = annotate_select select (List.map (fun a -> a.domain) expect) in
     let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound expect schema); (* test equal types once more (not really needed) *)
-    let params2 = params_of_assigns inferred_types env (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
-    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; } in
-    let inferred_types = Hashtbl.create @@ 
-    List.length(Option.default [] on_duplicate) + List.length(Option.default [] ss) in
+    let param_types = Hashtbl.create @@ 
+      List.length(Option.default [] on_duplicate) + List.length(Option.default [] ss) in
+    let env = { tables = [Tables.get table]; schema = Tables.get_schema table; insert_schema = expect; param_types } in  
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
-    | Some ss -> params_of_assigns inferred_types env ss, None
+    | Some ss -> params_of_assigns env ss, None
     in
-    let params2 = params_of_assigns inferred_types env (Option.default [] on_duplicate) in
+    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt { tables=[t]; schema=snd t; insert_schema=[]; } where in
+    let p = get_params_opt { tables=[t]; schema=snd t; insert_schema=[]; param_types=Hashtbl.create 0 } where in
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
