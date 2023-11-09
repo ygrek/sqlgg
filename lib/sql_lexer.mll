@@ -178,6 +178,10 @@ let keywords =
    "with", WITH;
    "year", YEAR;
    "year_month", YEAR_MONTH;
+   "generated", GENERATED;
+   "always", ALWAYS;
+   "virtual", VIRTUAL;
+   "stored", STORED;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];

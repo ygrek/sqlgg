@@ -255,6 +255,16 @@
    <value name="x" type="Bool"/>
   </out>
  </stmt>
+ <stmt name="create_oauth_tokens" sql="CREATE TABLE IF NOT EXISTS `oauth_tokens` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `unique_value_google_drive` BINARY(16) AS (&#x0A;  CASE WHEN `client_name` = &quot;google-drive&quot; THEN&#x0A;    UNHEX(MD5(CONCAT_WS(&quot;|&quot;, `creator_user_id`, `email`)))&#x0A;  ELSE&#x0A;    NULL&#x0A;  END) UNIQUE&#x0A;)" category="DDL" kind="create" target="oauth_tokens" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <table name="oauth_tokens">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="unique_value_google_drive" type="Text"/>
+  </schema>
+ </table>
  <table name="adr">
   <schema>
    <value name="word" type="Text"/>
