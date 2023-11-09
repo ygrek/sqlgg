@@ -407,14 +407,15 @@ let () =
   "avg" |> add 1 (Group Float);
   ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
-  ["lower";"upper"] ||> monomorphic Text [Text];
+  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic Text [Text];
+  "hex" |> monomorphic Text [Int];
   "length" |> monomorphic Int [Text];
   ["random"] ||> monomorphic Int [];
   "floor" |> monomorphic Int [Float];
   ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
-  ["concat";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
+  ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
   "date" |> monomorphic Datetime [Datetime];
   "time" |> monomorphic Text [Datetime];
   "julianday" |> multi ~ret:(Typ Float) (Typ Text);
