@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST
+       CAST GENERATED ALWAYS VIRTUAL STORED
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -325,15 +325,16 @@ reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
 
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
-column_def_extra: PRIMARY KEY { Some PrimaryKey }
+column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
                 | NULL { Some Null }
-                | UNIQUE { Some Unique }
+                | UNIQUE KEY? { Some Unique }
                 | AUTOINCREMENT { Some Autoincrement }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
                 | DEFAULT e=default_value { if e = Value Any then Some Null else None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
+                | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
 default_value: e=single_literal_value | e=datetime_value { e } (* sub expr ? *)
 
