@@ -181,6 +181,21 @@ let inferred_type () =
   List.iter2 (assert_equal ~msg:"params" ~cmp:(=) ~printer:[%derive.show: Sql.attr option]) attrs 
   [param; param]
 
+
+let inferred_type_from_fun_constr () = 
+  let named = named "var" Int in
+  let param = Some (attr "field_1" Text ~extra:[Null]) in
+  let insert = "INSERT INTO `no_matter` ( field_1, field_2 ) VALUES ( CASE WHEN COALESCE(@var, 69) > 1 THEN 'five' ELSE 'six' END, @var )" in
+  do_test "CREATE TABLE IF NOT EXISTS `no_matter` ( `field_1` TEXT NULL, `field_2` INT NOT NULL )" [] [];
+  do_test insert [] [named; named];
+  let stmt = parse insert in
+  let attrs = List.map (function 
+    | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false
+    | Single params -> params.attr
+  ) stmt.vars in
+  List.iter2 (assert_equal ~msg:"params" ~cmp:(=) ~printer:[%derive.show: Sql.attr option]) attrs 
+  [param; param]  
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -194,6 +209,7 @@ let run () =
     "misc" >:: test_misc;
     "enum" >::: test_enum;
     "inferred_type" >:: inferred_type;
+    "inferred_type_from_fun_constr" >:: inferred_type_from_fun_constr;
   ]
   in
   let test_suite = "main" >::: tests in

@@ -86,38 +86,41 @@ let resolve_column tables schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) schema tname) cname
 
 (* HACK hint expression to unify with the column type *)
-let rec hint param_types attr expr =
-  (** [get_expr ~readonly attr expr] returns already known param types.
-    Pay attention [~readonly] flag
-    It means which constructors can only consume type and which can consume and set.
-  *)
-  let rec get_expr ~readonly attr expr =
+let rec hint attr expr =
+  (* go one level deep into choices *)
+  match expr with
+  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint attr) e) l)
+  | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
+
+let get_expr param_types attr expr =
+  let set_extra constr = { attr with extra=(Constraints.singleton constr) } in
+  let rec match_nullable tyvar expr = match tyvar with
+  | Type.Nulable _ -> set_attr (Some (set_extra Null)) expr
+  | _ -> set_attr (Some (set_extra NotNull)) expr 
+  and set_attr attr expr = 
     match expr with 
     | Param p -> 
       let inferred_attr_opt = Hashtbl.find_opt param_types p.id.label in
-      begin match inferred_attr_opt with
-      | Some inferred_attr -> Param { p with attr = inferred_attr }
-      | None -> 
-        if readonly then expr
-        else begin
-          Hashtbl.add param_types p.id.label (Some attr);
-          Param { p with attr = Some attr }
-        end
-      end  
-    | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (get_expr ~readonly:false attr) e) l)
-    | Fun (func, exprs) -> Fun (func, List.map (get_expr ~readonly:true attr) exprs)
-    | e -> e in
-  let expr = get_expr ~readonly:false attr expr in
-  (* go one level deep into choices *)
-  match expr with
-  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint param_types attr) e) l)
-  | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
+      let attr = match attr, inferred_attr_opt with
+      | _, Some inferred_attr -> inferred_attr
+      | Some attr, None -> 
+        Hashtbl.add param_types p.id.label (Some attr);
+        Some attr
+      | _ -> None  in
+      Param { p with attr }
+    | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (set_attr attr) e) l)
+    | Fun (F(tyvar, tyvars), exprs) -> Fun(F(tyvar, tyvars), List.map2 match_nullable tyvars exprs)
+    | Fun (Multi(i, o), exprs) -> Fun(Multi(i, o), List.map (match_nullable i) exprs)
+    | Fun (func, exprs) -> Fun (func, List.map (set_attr None) exprs)
+    | e -> e  in
+    set_attr (Some attr) expr
 
 let resolve_column_assignments env l =
   let all = all_tbl_columns env.tables in
   l |> List.map begin fun (col,expr) ->
     let attr = resolve_column env.tables all col in
-    hint env.param_types attr expr
+    let expr = get_expr env.param_types attr expr in
+    hint attr expr
   end
 
 let get_columns_schema tables l =
@@ -212,7 +215,8 @@ and assign_types expr =
         | F (ret, args), _ ->
           let typevar = Hashtbl.create 10 in
           let l = List.map2 begin fun arg typ ->
-            match arg with
+            let rec resolve arg = match arg with
+            | Nulable i -> resolve i
             | Typ arg -> common_type arg typ
             | Var i ->
               let arg =
@@ -222,10 +226,11 @@ and assign_types expr =
               in
               (* prefer more precise type *)
               if arg = Type.Any then Hashtbl.replace typevar i typ;
-              common_type arg typ
+              common_type arg typ in 
+              resolve arg
           end args types
           in
-          let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
+          let rec convert = function Typ t -> t | Var i -> Hashtbl.find typevar i | Nulable i -> convert i in
           if List.fold_left (&&) true l then
             convert ret, List.map convert args
           else

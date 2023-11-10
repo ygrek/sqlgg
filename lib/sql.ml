@@ -51,8 +51,12 @@ struct
   let common_subtype = common_type fst
   let common_type x y = Option.is_some @@ common_subtype x y
 
-  type tyvar = Typ of t | Var of int
-  let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+  type tyvar = Typ of t | Var of int | Nulable of tyvar
+  
+  let rec string_of_tyvar = function 
+    | Typ t -> to_string t
+    | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+    | Nulable v -> string_of_tyvar v
 
   type func =
   | Group of t (* _ -> t *)
@@ -357,6 +361,8 @@ val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
+
+val multi_polymorphic_nullable : string -> unit
 val sponge : Type.func
 
 end = struct
@@ -394,6 +400,9 @@ let lookup name narg =
 
 let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
 let multi_polymorphic name = add_multi Type.(Multi (Var 0, Var 0)) name
+
+let multi_polymorphic_nullable name = add_multi Type.(Multi (Nulable(Var 0), Var 0)) name
+
 let multi ~ret args name = add_multi Type.(Multi (ret, args)) name
 
 end
@@ -411,8 +420,10 @@ let () =
   "length" |> monomorphic Int [Text];
   ["random"] ||> monomorphic Int [];
   "floor" |> monomorphic Int [Float];
-  ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
-  ["least";"greatest";"coalesce"] ||> multi_polymorphic;
+  "nullif" |> add 2 (F (Var 0, [Var 0; Var 0]));
+  "ifnull" |> add 2 (F (Var 0, [Nulable (Var 0); Var 0]));
+  ["least";"greatest";] ||> multi_polymorphic;
+  "coalesce" |> multi_polymorphic_nullable;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
   ["concat";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
   "date" |> monomorphic Datetime [Datetime];
