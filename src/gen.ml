@@ -185,7 +185,9 @@ end
 
 let is_param_nullable param =
   let open Sql in
-  match param.attr with None -> false | Some attr -> Constraints.mem Null attr.extra || Constraints.mem Autoincrement attr.extra
+  param.typ.nullability = Nullable
+  (* TODO attributes should be transferred into type and removed *)
+  || match param.attr with None -> false | Some attr -> Constraints.mem Null attr.extra || Constraints.mem Autoincrement attr.extra
 
 let is_attr_nullable attr =
   let open Sql in
