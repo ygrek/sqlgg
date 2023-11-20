@@ -63,3 +63,12 @@ FROM
 WHERE
   id = @id
 LIMIT 1;
+
+-- @params_unification
+INSERT INTO test (
+  nullable,
+  nullable_too
+) VALUES (
+  @p,
+  case when @p = 42 then 100 else NULL end
+);

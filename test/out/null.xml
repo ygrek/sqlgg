@@ -110,6 +110,12 @@
    <value name="_1" type="Datetime" nullable="true"/>
   </out>
  </stmt>
+ <stmt name="params_unification" sql="INSERT INTO test (&#x0A;  nullable,&#x0A;  nullable_too&#x0A;) VALUES (&#x0A;  @p,&#x0A;  case when @p = 42 then 100 else NULL end&#x0A;)" category="DML" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="p" type="Int" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
  <table name="test">
   <schema>
    <value name="id" type="Int"/>
