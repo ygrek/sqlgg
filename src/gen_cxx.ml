@@ -18,11 +18,6 @@ let inject = List.map (fun v -> v.vname, v.vtyp)
 
 end
 
-let rec freshname name scope =
-  match List.find_all ((=) name) scope with
-  | [] -> name
-  | _ -> freshname (name ^ "_") scope
-
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
 
