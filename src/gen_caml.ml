@@ -120,9 +120,11 @@ let comment () fmt = Printf.kprintf (indent_endline $ make_comment) fmt
 let empty_line () = print_newline ()
 
 module L = struct
+  open Type
+
   let as_lang_type = function
-  | Type.Blob -> Type.to_string Type.Text
-  | t -> Type.to_string t
+  | { t = Blob; nullability } -> type_name { t = Text; nullability }
+  | t -> type_name t
 
   let as_api_type = as_lang_type
 end
@@ -319,9 +321,7 @@ let output_params_binder index vars =
   | [] -> "T.no_params"
   | vars -> output_params_binder index vars
 
-let prepend prefix = function s -> prefix ^ s
-
-let in_var_module _label typ = Sql.Type.to_string typ
+let in_var_module _label typ = Sql.Type.type_name typ
 
 let gen_in_substitution var =
   if Option.is_none var.id.label then failwith "empty label in IN param";
@@ -392,7 +392,7 @@ let make_sql l =
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
-  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
+  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (fun v -> sprintf "~%s" v) |> inline_values in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
   | _ ->

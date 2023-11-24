@@ -32,8 +32,9 @@ let quote = J.quote
 
 module L = struct
 
-let as_api_type = function
-  | Type.Int -> "Int64"
+let as_api_type t =
+  match t.Type.t with
+  | Int -> "Int64"
   | Text -> "String"
   | Float -> "Float"
   | Blob -> "String"

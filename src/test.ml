@@ -2,16 +2,13 @@ open Printf
 open OUnit
 open Sqlgg
 open Sql
-open Sql.Type
+(* open Sql.Type *)
 open Stmt
-
-let named s t = new_param { label = Some s; pos = (0,0) } t
-let param t = new_param { label = None; pos = (0,0) } t
 
 let cmp_params p1 p2 =
   try
     List.for_all2 (fun p1 p2 ->
-      p1.id.label = p2.id.label && p1.typ = p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos)
+      p1.id.label = p2.id.label && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos)
     p1 p2
   with
     _ -> false
@@ -38,9 +35,11 @@ let tt sql ?kind schema params =
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
-let attr ?(extra=[]) n d = make_attribute n d (Constraints.of_list extra)
+let attr ?(extra=[]) n d = make_attribute n (Type.strict d) (Constraints.of_list extra)
+let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
+let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
 
-let test = [
+let test = Type.[
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
      [attr "str" Text]

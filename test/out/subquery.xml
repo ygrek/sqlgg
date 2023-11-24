@@ -21,7 +21,7 @@
   <out>
    <value name="_0" type="Int"/>
    <value name="_1" type="Text"/>
-   <value name="_2" type="Any"/>
+   <value name="_2" type="Any" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_4" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 2 UNION&#x0A;  SELECT 3, 4&#x0A;) x" category="DQL" kind="select" cardinality="n">

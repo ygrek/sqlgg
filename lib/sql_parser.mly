@@ -13,8 +13,8 @@
   let make_limit l =
     let param = function
       | _, `Const _ -> None
-      | x, `Param { label=None; pos } -> Some (new_param { label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } Int)
-      | _, `Param id -> Some (new_param id Int)
+      | x, `Param { label=None; pos } -> Some (new_param { label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } (strict Int))
+      | _, `Param id -> Some (new_param id (strict Int))
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
@@ -297,7 +297,12 @@ alter_pos: AFTER col=IDENT { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT t=sql_type? extra=column_def_extra* { make_attribute name (Option.default Int t) (Constraints.of_list @@ List.filter_map identity extra) }
+column_def: name=IDENT t=sql_type? extra=column_def_extra*
+  {
+    let extra = Constraints.of_list @@ List.filter_map identity extra in
+    let t = { t = Option.default Int t; nullability = if Constraints.mem Null extra then Nullable else Strict } in
+    make_attribute name t extra
+  }
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
@@ -332,7 +337,7 @@ column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | AUTOINCREMENT { Some Autoincrement }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
-                | DEFAULT e=default_value { if e = Value Any then Some Null else None } (* FIXME check type with column *)
+                | DEFAULT e=default_value { match e with Value { t = Any; nullability = _ } -> Some Null | _ -> None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
@@ -360,7 +365,7 @@ expr:
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly Bool [e1;e2] }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun ((fixed Text [Text;Text]),[e1;e2]) }
     | e=like_expr esc=escape?
       {
@@ -376,16 +381,16 @@ expr:
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | v=interval_unit { v }
-    | e1=expr mnot(IN) l=sequence(expr) { poly Bool (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly Bool [e1; SelectExpr (select, `AsValue)] }
+    | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | e1=expr k=in_or_not_in p=PARAM
       {
-        let e = poly Bool [ e1; Inparam (new_param p Any) ] in
+        let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=PARAM { Param (new_param p Any) }
+    | p=PARAM { Param (new_param p (depends Any)) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
@@ -397,22 +402,22 @@ expr:
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
-    | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
-    | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
-    | e=expr mnot(BETWEEN) a=expr AND b=expr { poly Bool [e;a;b] }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ  Bool, [Typ Any]),[SelectExpr (select,`Exists)]) }
+    | e=expr IS NOT? NULL { poly (strict Bool) [e] }
+    | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
+    | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ (strict Bool), [Typ (depends Any)]),[SelectExpr (select,`Exists)]) }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
         let t_args =
           match e1 with
-          | None -> (List.flatten @@ List.map (fun _ -> [Typ Bool; Var 1]) branches)
+          | None -> (List.flatten @@ List.map (fun _ -> [Typ (depends Bool); Var 1]) branches)
           | Some _ -> [Var 0] @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
         in
         let t_args = t_args @ maybe (fun _ -> Var 1) e2 in
         let v_args = option_to_list e1 @ List.flatten branches @ option_to_list e2 in
         Fun (F (Var 1, t_args), v_args)
       }
-    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ Bool;Var 0;Var 0]), [e1;e2;e3]) }
+    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ (depends Bool);Var 0;Var 0]), [e1;e2;e3]) }
     | e=window_function OVER window_spec { e }
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
@@ -443,24 +448,27 @@ choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
 choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
-datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value Datetime }
+datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
 
-literal_value:
-    | TEXT collate? { Value Text }
-    | BLOB collate? { Value Blob }
-    | INTEGER { Value Int }
-    | FLOAT { Value Float }
+strict_value:
+    | TEXT collate? { Text }
+    | BLOB collate? { Blob }
+    | INTEGER { Int }
+    | FLOAT { Float }
     | TRUE
-    | FALSE { Value Bool }
+    | FALSE { Bool }
     | DATE TEXT
     | TIME TEXT
-    | TIMESTAMP TEXT { Value Datetime }
-    | NULL { Value Any } (* he he *)
+    | TIMESTAMP TEXT { Datetime }
+
+literal_value:
+    | strict_value { Value (strict $1) }
+    | NULL { Value (nullable Any) } (* he he *)
 
 single_literal_value:
     | literal_value { $1 }
-    | MINUS INTEGER { Value Int }
-    | MINUS FLOAT { Value Float }
+    | MINUS INTEGER { Value (strict Int) }
+    | MINUS FLOAT { Value (strict Float) }
 
 expr_list: l=commas(expr) { l }
 func_params: DISTINCT? l=expr_list { l }
@@ -479,7 +487,7 @@ interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUART
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
-             | YEAR_MONTH { Value (Unit `Interval) }
+             | YEAR_MONTH { Value (strict (Unit `Interval)) }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }
