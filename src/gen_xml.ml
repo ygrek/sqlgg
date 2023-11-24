@@ -61,7 +61,7 @@ let tuplelist_value_of_param = function
   | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ -> None
   | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ label = Some name; _ }, schema) ->
-    let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.to_string domain) schema) ^ ")" in
+    let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in
     Some (Node ("value", attrs, []))
 

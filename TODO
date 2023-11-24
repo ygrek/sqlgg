@@ -1,3 +1,4 @@
+* WHERE IS NOT NULL influence type
 * native-type annotations in queries
 * allow to parametrize SQL syntax itself (ORDER BY ASC|DESC) : unsafe/enumeration/option params
 * ocaml ppx syntax extension for inline sql

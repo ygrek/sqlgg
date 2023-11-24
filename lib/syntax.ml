@@ -144,8 +144,7 @@ let rec resolve_columns env expr =
       let (schema,p,_) = eval_select_full env select in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue ->
-        ResFun (Type.Ret domain, as_params p)
+      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret domain.t, as_params p) (* use nullable *)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
       | _, `Exists -> ResFun (Type.Ret Any, as_params p)
   in
@@ -154,7 +153,7 @@ let rec resolve_columns env expr =
 (** assign types to parameters where possible *)
 and assign_types expr =
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
-  let rec typeof (e:res_expr) = (* FIXME simplify *)
+  let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
@@ -165,7 +164,7 @@ and assign_types expr =
       let t =
         match List.map get_or_failwith @@ List.filter_map identity t with
         | [] -> assert false
-        | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> Type.common_subtype prev t) (Some t) ts
+        | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> Type.common_type prev t) (Some t) ts
       in
       let t = match t with None -> `Error "no common subtype for all choice branches" | Some t -> `Ok t in
       ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
@@ -173,11 +172,12 @@ and assign_types expr =
         let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
         let types = List.map get_or_failwith types in
-        let show () =
+        let show_func () =
           sprintf "%s applied to (%s)"
             (string_of_func func)
-            (String.concat ", " @@ List.map to_string types)
+            (String.concat ", " @@ List.map show types)
         in
+        if !debug then eprintfn "func %s" (show_func ());
         let func =
           match func with
           | Multi (ret,each_arg) -> F (ret, List.map (fun _ -> each_arg) types)
@@ -188,55 +188,69 @@ and assign_types expr =
         | Agg, [typ]
         | Group typ, _ -> typ, types
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show ())
+        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | F (ret, args), _ ->
           let typevar = Hashtbl.create 10 in
-          let l = List.map2 begin fun arg typ ->
+          List.iter2 begin fun arg typ ->
             match arg with
-            | Typ arg -> common_type arg typ
+            | Typ arg ->
+              begin match common_type arg typ with
+              | None -> fail "types %s and %s do not match in %s" (show arg) (show typ) (show_func ())
+              | Some _ -> ()
+              end
             | Var i ->
-              let arg =
+              let var =
                 match Hashtbl.find typevar i with
-                | exception Not_found -> Hashtbl.replace typevar i typ; typ
+                | exception Not_found -> typ
                 | t -> t
               in
-              (* prefer more precise type *)
-              if arg = Type.Any then Hashtbl.replace typevar i typ;
-              common_type arg typ
-          end args types
-          in
+              match common_type var typ with
+              | Some t ->
+                if !debug then Type.(eprintfn "common_type %s %s = %s" (show var) (show typ) (show t));
+                Hashtbl.replace typevar i t
+              | None -> fail "types %s and %s for %s do not match in %s" (show var) (show typ) (string_of_tyvar arg) (show_func ());
+          end args types;
+          if !debug then typevar |> Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ));
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
-          if List.fold_left (&&) true l then
-            convert ret, List.map convert args
-          else
-            fail "types do not match : %s" (show ())
+          let args = List.map convert args in
+          let nullable = common_nullability args in
+          let ret = convert ret in
+          undepend ret nullable, args
         | Ret Any, _ -> (* lame *)
-          begin match List.filter ((<>) Any) types with
-          | [] -> Any, types
-          (* make a best guess, return type same as for parameters when all of single type *)
-          | h::tl when List.for_all (matches h) tl -> h, List.map (fun _ -> h) types
-          (* "expand" to floats, when all parameters numeric and above rule didn't match *)
-          | l when List.for_all (function Int | Float -> true | _ -> false) l -> Float, List.map (function Any -> Float | x -> x) types
-          | _ -> Any, types
-          end
-        | Ret ret, _ -> ret, types (* ignoring arguments FIXME *)
+          let (t, types) =
+            match List.filter (not $ is_any) types with
+            | [] -> Any, types
+            (* make a best guess, return type same as for parameters when all of single type *)
+            | h::tl when List.for_all (matches h) tl -> h.t, List.map (fun _ -> h) types
+            (* "expand" to floats, when all parameters numeric and above rule didn't match *)
+            | l when List.for_all (function { t = Int | Float; nullability = _ } -> true | _ -> false) l ->
+              Float, List.map (fun x -> if is_any x then { x with t = Float } else x) types
+            | _ -> Any, types
+          and nullability = common_nullability types
+          in
+          { t; nullability }, types
+        | Ret ret, _ ->
+          let nullability = common_nullability types in
+          { t = ret; nullability; }, types (* ignoring arguments FIXME *)
         in
         let assign inferred x =
           match x with
-          | ResParam { id; typ = Any; attr; } -> ResParam (new_param ?attr id inferred)
-          | ResInparam { id; typ = Any; attr; } -> ResInparam (new_param ?attr id inferred)
+          | ResParam { id; typ; attr; } when is_any typ -> ResParam (new_param ?attr id inferred)
+          | ResInparam { id; typ; attr; } when is_any typ -> ResInparam (new_param ?attr id inferred)
           | x -> x
         in
         ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
+  and typeof expr =
+    let r = typeof_ expr in
+    if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
+    r
   in
   typeof expr
 
 and resolve_types env expr =
   let expr = resolve_columns env expr in
   try
-    let (expr',t as r) = assign_types expr in
-    if !debug then eprintf "resolved types %s : %s\n%!" (show_res_expr expr') (Type.to_string @@ get_or_failwith t);
-    r
+    assign_types expr
   with
     exn ->
       eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
@@ -528,7 +542,7 @@ let unify_params l =
     match Hashtbl.find h name with
     | exception _ -> Hashtbl.add h name t
     | t' ->
-    match Sql.Type.common_subtype t t' with
+    match Type.common_type t t' with
     | Some x -> Hashtbl.replace h name x
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
@@ -540,8 +554,12 @@ let unify_params l =
   | TupleList _ -> ()
   in
   let rec map = function
-  | Single { id; typ; attr } -> Single (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
-  | SingleIn { id; typ; attr } -> SingleIn (new_param id ?attr (match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false))
+  | Single { id; typ; attr } ->
+    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    Single (new_param id ?attr (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+  | SingleIn { id; typ; attr } ->
+    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    SingleIn (new_param id ?attr (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x

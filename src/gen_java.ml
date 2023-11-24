@@ -32,8 +32,9 @@ let (start_intf,end_intf) = start_ "public static interface"
 
 module L = struct
 
-let as_lang_type = function
-  | Type.Int -> "int"
+let as_lang_type t =
+  match t.Type.t with
+  | Int -> "int"
   | Text -> "String"
   | Any -> "String"
   | Float -> "float"

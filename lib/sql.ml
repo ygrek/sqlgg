@@ -6,7 +6,7 @@ open Prelude
 
 module Type =
 struct
-  type t =
+  type kind =
     | Unit of [`Interval]
     | Int
     | Text
@@ -16,19 +16,37 @@ struct
     | Datetime
     | Decimal
     | Any
-    [@@deriving show {with_path=false}]
+    [@@deriving eq, show{with_path=false}]
 
-  let to_string = show
+  type nullability =
+  | Nullable (** can be NULL *)
+  | Strict (** cannot be NULL *)
+  | Depends (** unknown, to be determined *)
+  [@@deriving eq, show{with_path=false}]
 
-  let matches x y =
-    match x,y with
-    | Any, _ | _, Any -> true
-    | _ -> x = y
+  type t = { t : kind; nullability : nullability; }[@@deriving eq, show{with_path=false}]
 
-  let is_unit = function Unit _ -> true | _ -> false
+  let nullability nullability = fun t -> { t; nullability }
+  let strict = nullability Strict
+  let depends = nullability Depends
+  let nullable = nullability Nullable
 
-  let order x y =
-    if x = y then
+  let (=) : t -> t -> bool = equal
+
+  let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
+  let _ = pp
+  let pp pf t = Format.pp_print_string pf (show t)
+
+  let type_name t = show_kind t.t
+
+  let is_any { t; nullability = _ } = equal_kind t Any
+
+  let matches x y = is_any x || is_any y || x = y
+
+  let is_unit = function { t = Unit _; _ } -> true | _ -> false
+
+  let order_kind x y =
+    if equal_kind x y then
       `Equal
     else
       match x,y with
@@ -41,28 +59,50 @@ struct
       | Text, Datetime | Datetime, Text -> `Order (Datetime,Text)
       | _ -> `No
 
-  let common_type f x y =
-    match order x y with
-    | `Equal -> Some x
-    | `Order p -> Some (f p)
-    | `No -> None
+  let order_nullability x y =
+    match x,y with
+    | Depends, Depends -> `Equal Depends
+    | Nullable, Nullable -> `Equal Nullable
+    | Strict, Strict -> `Equal Strict
+    | Depends, n
+    | n, Depends -> `Equal n (* Order ? *)
+    | Strict, Nullable -> `Strict_Nullable
+    | Nullable, Strict -> `Nullable_Strict
 
-  let common_supertype = common_type snd
-  let common_subtype = common_type fst
-  let common_type x y = Option.is_some @@ common_subtype x y
+  let common_nullability = List.fold_left (fun acc t ->
+    match acc, t.nullability with
+    | _, Nullable
+    | Nullable, _ -> Nullable
+    | _, Strict
+    | Strict, _ -> Strict
+    | Depends, Depends -> Depends
+    ) Depends
+
+  let common_nullability l = match common_nullability l with Depends -> Strict | n -> n
+  let undepend t nullability = if equal_nullability t.nullability Depends then { t with nullability } else t
+
+  let common_type x y =
+    match order_nullability x.nullability y.nullability, order_kind x.t y.t with
+    | _, `No -> None
+    | `Equal nullability, `Order (t,_) -> Some {t; nullability}
+    | `Equal _nullability, `Equal -> Some x
+    | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t)
+    | (`Nullable_Strict|`Strict_Nullable), `Order (sub,_) -> Some (nullable sub)
+
+  let has_common_type x y = Option.is_some @@ common_type x y
 
   type tyvar = Typ of t | Var of int
-  let string_of_tyvar = function Typ t -> to_string t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+  let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 
   type func =
   | Group of t (* _ -> t *)
   | Agg (* 'a -> 'a *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
-  | Ret of t (* _ -> t *) (* TODO eliminate *)
+  | Ret of kind (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
   let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
-  let fixed = monomorphic
+  let fixed ret args = monomorphic (depends ret) (List.map depends args)
 
   let identity = F (Var 0, [Var 0])
 
@@ -70,8 +110,8 @@ struct
     let open Format in
   function
   | Agg -> fprintf pp "|'a| -> 'a"
-  | Group ret -> fprintf pp "|_| -> %s" (to_string ret)
-  | Ret ret -> fprintf pp "_ -> %s" (to_string ret)
+  | Group ret -> fprintf pp "|_| -> %s" (show ret)
+  | Ret ret -> fprintf pp "_ -> %s" (show_kind ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
 
@@ -155,7 +195,7 @@ struct
 
   let sub l a = List.filter (fun x -> not (List.mem x a)) l
 
-  let to_string v = v |> List.map (fun attr -> sprintf "%s %s" (Type.to_string attr.domain) attr.name) |>
+  let to_string v = v |> List.map (fun attr -> sprintf "%s %s" (Type.show attr.domain) attr.name) |>
     String.concat ", " |> sprintf "[%s]"
   let names t = t |> List.map (fun attr -> attr.name) |> String.concat "," |> sprintf "[%s]"
 
@@ -176,14 +216,13 @@ struct
     common @ sub t1 common @ sub t2 common
 
   let check_types t1 t2 =
-    List.iter2 (fun a1 a2 ->
-      match a1.domain, a2.domain with
-      | Type.Any, _
-      | _, Type.Any -> ()
-      | x, y when x = y -> ()
-      | _ -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s"
-        a1.name (Type.to_string a1.domain)
-        a2.name (Type.to_string a2.domain)))) t1 t2
+    List.iter2 begin fun a1 a2 ->
+      match Type.matches a1.domain a2.domain with
+      | true -> ()
+      | false -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s"
+        a1.name (Type.show a1.domain)
+        a2.name (Type.show a2.domain)))
+    end t1 t2
 
   let check_types t1 t2 =
     try check_types t1 t2 with
@@ -231,7 +270,7 @@ type table = table_name * schema [@@deriving show]
 let print_table out (name,schema) =
   IO.write_line out (show_table_name name);
   schema |> List.iter begin fun {name;domain;extra} ->
-    IO.printf out "%10s %s %s\n" (Type.to_string domain) name (Constraints.show extra)
+    IO.printf out "%10s %s %s\n" (Type.show domain) name (Constraints.show extra)
   end;
   IO.write_line out ""
 
@@ -335,7 +374,7 @@ type stmt =
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
-| CreateRoutine of string * Type.t option * (string * Type.t * expr option) list
+| CreateRoutine of string * Type.kind option * (string * Type.kind * expr option) list
 
 (*
 open Schema
@@ -375,7 +414,7 @@ let exclude narg name = add_ (Some narg) None name
 let add_multi typ name = add_ None (Some typ) name
 let add narg typ name = add_ (Some narg) (Some typ) name
 
-let sponge = Type.(Multi (Typ Any, Typ Any))
+let sponge = let open Type in let any = depends Any in Multi (Typ any, Typ any)
 
 let lookup name narg =
   let name = String.lowercase_ascii name in
@@ -402,33 +441,38 @@ let () =
   let open Type in
   let open Function in
   let (||>) x f = List.iter f x in
-  "count" |> add 0 (Group Int); (* count( * ) - asterisk is treated as no parameters in parser *)
-  "count" |> add 1 (Group Int);
-  "avg" |> add 1 (Group Float);
+  let int = strict Int in
+  let float = strict Float in
+  let text = strict Text in
+  let datetime = strict Datetime in
+  "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
+  "count" |> add 1 (Group int);
+  "avg" |> add 1 (Group float);
   ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
-  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic Text [Text];
-  "hex" |> monomorphic Text [Int];
-  "length" |> monomorphic Int [Text];
-  ["random"] ||> monomorphic Int [];
-  "floor" |> monomorphic Int [Float];
-  ["nullif";"ifnull"] ||> add 2 (F (Var 0, [Var 0; Var 0]));
+  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic text [text];
+  "hex" |> monomorphic text [int];
+  "length" |> monomorphic int [text];
+  ["random"] ||> monomorphic int [];
+  "floor" |> monomorphic int [float];
+  "nullif" |> add 2 (F (Var 0 (* TODO nullable *), [Var 0; Var 0]));
+  "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
   ["least";"greatest";"coalesce"] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
-  ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ Text) (Typ Text);
-  "date" |> monomorphic Datetime [Datetime];
-  "time" |> monomorphic Text [Datetime];
-  "julianday" |> multi ~ret:(Typ Float) (Typ Text);
-  "from_unixtime" |> monomorphic Datetime [Int];
-  "from_unixtime" |> monomorphic Text [Int;Text];
-  ["pow"; "power"] ||> monomorphic Float [Float;Int];
-  "unix_timestamp" |> monomorphic Int [];
-  "unix_timestamp" |> monomorphic Int [Datetime];
-  ["timestampdiff";"timestampadd"] ||> monomorphic Int [Unit `Interval;Datetime;Datetime];
+  ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ text) (Typ text);
+  "date" |> monomorphic datetime [datetime];
+  "time" |> monomorphic text [datetime];
+  "julianday" |> multi ~ret:(Typ float) (Typ text);
+  "from_unixtime" |> monomorphic datetime [int];
+  "from_unixtime" |> monomorphic text [int;text];
+  ["pow"; "power"] ||> monomorphic float [float;int];
+  "unix_timestamp" |> monomorphic int [];
+  "unix_timestamp" |> monomorphic int [datetime];
+  ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
-  "substring" |> monomorphic Text [Text; Int];
-  "substring" |> monomorphic Text [Text; Int; Int];
-  "substring_index" |> monomorphic Text [Text; Text; Int];
-  "last_insert_id" |> monomorphic Int [];
-  "last_insert_id" |> monomorphic Int [Int];
+  "substring" |> monomorphic text [text; int];
+  "substring" |> monomorphic text [text; int; int];
+  "substring_index" |> monomorphic text [text; text; int];
+  "last_insert_id" |> monomorphic int [];
+  "last_insert_id" |> monomorphic int [int];
   ()

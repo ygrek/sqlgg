@@ -196,10 +196,10 @@ type value = { vname : string; vtyp : string; nullable : bool; }
 module Translate(T : LangTypes) = struct
 
 let show_param_type p = T.as_api_type p.Sql.typ
-let schema_to_values = List.mapi (fun i attr -> { vname = name_of attr i; vtyp = T.as_lang_type attr.Sql.domain; nullable = is_attr_nullable attr })
+let schema_to_values = List.mapi (fun i attr -> { vname = name_of attr i; vtyp = T.as_lang_type attr.Sql.domain; nullable = is_attr_nullable attr || attr.domain.nullability = Nullable })
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values l =
-  l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p; })
+  l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p || p.typ.nullability = Nullable; })
   |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values

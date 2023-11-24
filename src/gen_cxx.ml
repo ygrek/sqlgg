@@ -41,7 +41,7 @@ let out_public () = dec_indent(); output "public:"; inc_indent()
 let out_private () = dec_indent(); output "private:"; inc_indent()
 
 module L = struct
-  let as_api_type = Type.to_string
+  let as_api_type = Type.type_name
   let as_lang_type t = "typename Traits::" ^ (as_api_type t)
 end
 

@@ -7,7 +7,7 @@
  </stmt>
  <stmt name="insert1" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @maybe WHEN 0 THEN NULL ELSE @maybe END&#x0A;" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="maybe" type="Int"/>
+   <value name="maybe" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -21,7 +21,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="nullable" type="Datetime"/>
+   <value name="nullable" type="Int"/>
   </out>
  </stmt>
  <stmt name="insert_nullable" sql="INSERT INTO `test` SET `nullable` = @maybe" category="DML" kind="insert" target="test" cardinality="0">
@@ -46,15 +46,15 @@
    <value name="nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
- <stmt name="case_todo" sql="SELECT CASE @x WHEN 0 THEN NULL ELSE @x END" category="DQL" kind="select" cardinality="1">
+ <stmt name="case_BUG" sql="SELECT CASE @x WHEN 0 THEN NULL ELSE @x END" category="DQL" kind="select" cardinality="1">
   <in>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </in>
   <out>
-   <value name="_0" type="Any"/>
+   <value name="_0" type="Any" nullable="true"/>
   </out>
  </stmt>
- <stmt name="select_nullif" sql="SELECT NULLIF(@maybe, 0)" category="DQL" kind="select" cardinality="1">
+ <stmt name="select_nullif_BUG" sql="SELECT NULLIF(@maybe, 0)" category="DQL" kind="select" cardinality="1">
   <in>
    <value name="maybe" type="Int"/>
   </in>
@@ -64,8 +64,14 @@
  </stmt>
  <stmt name="select_ifnull" sql="SELECT IFNULL(@maybe, 0)" category="DQL" kind="select" cardinality="1">
   <in>
-   <value name="maybe" type="Int"/>
+   <value name="maybe" type="Any"/>
   </in>
+  <out>
+   <value name="_0" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="select_ifnull_int" sql="SELECT IFNULL(nullable_int, 0) FROM test" category="DQL" kind="select" cardinality="n">
+  <in/>
   <out>
    <value name="_0" type="Int"/>
   </out>
@@ -76,11 +82,32 @@
    <value name="_0" type="Int"/>
   </out>
  </stmt>
+ <stmt name="select_plus_null" sql="SELECT id + NULL FROM test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="select_plus_nullable_BUG" sql="SELECT id + nullable_int FROM test" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="_0" type="Float" nullable="true"/>
+  </out>
+ </stmt>
  <stmt name="select_func" sql="SELECT nullable, floor(unix_timestamp(nullable)/3600) FROM test" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="nullable" type="Datetime" nullable="true"/>
    <value name="_1" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="get_max" sql="SELECT&#x0A;  max(nullable),&#x0A;  IF(max(nullable) IS NULL, NULL, max(nullable))&#x0A;FROM&#x0A;  test&#x0A;WHERE&#x0A;  id = @id&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="1">
+  <in>
+   <value name="id" type="Int"/>
+  </in>
+  <out>
+   <value name="_0" type="Datetime" nullable="true"/>
+   <value name="_1" type="Datetime" nullable="true"/>
   </out>
  </stmt>
  <table name="test">
