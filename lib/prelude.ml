@@ -13,3 +13,12 @@ let fail fmt = Printf.ksprintf failwith fmt
 let failed ~at fmt = Printf.ksprintf (fun s -> raise (At (at, Failure s))) fmt
 let printfn fmt = Printf.ksprintf print_endline fmt
 let eprintfn fmt = Printf.ksprintf prerr_endline fmt
+
+module Option = struct
+  include Option
+
+  let bind f o =
+    match o with
+    | None -> None
+    | Some x -> f x
+end
