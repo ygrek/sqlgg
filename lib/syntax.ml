@@ -155,10 +155,7 @@ and assign_types inferred_param_types expr =
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
-    | ResParam p -> 
-      (* print_endline "typeof_"; *)
-      (* e |> Format.asprintf "%a" pp_res_expr |> print_endline; *)
-      e, `Ok p.typ
+    | ResParam p
     | ResInparam p -> e, `Ok p.typ
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
     | ResChoices (n,l) ->
@@ -643,7 +640,6 @@ let complete_sql kind sql =
   | _ -> (sql,[])
 
 let parse sql =
-  let stmt =  Parser.parse_stmt sql in 
-  let (schema,p1,kind) = eval @@ stmt in
+  let (schema,p1,kind) = eval @@ Parser.parse_stmt sql in
   let (sql,p2) = complete_sql kind sql in
   (sql, schema, unify_params (p1 @ p2), kind)
