@@ -1,6 +1,21 @@
 sqlgg changelog
 ---------------
 
+20231201
+	+ ocaml: support IN @x via text substitution
+	+ sql: support batch insert with syntax INSERT INTO x(...) VALUES @xs
+	+ sql: rudimentary NULL handling (direct column assignments)
+	+ sql: multi-table DELETE
+	+ ocaml: update traits to track read/write nature of ops
+	* ocaml: cleanup whitespace
+	* sql: implicitly convert int<->decimal, require explicit cast for float<->decimal
+	+ sql: more string and window functions
+	+ sql: CAST, FLOOR, MOD, CONVERT, AS (expr), DROP FOREIGN KEY, ALTER TABLE .. [CONVERT TO] CHARACTER SET .., ALTER TABLE ... ADD CONSTRAINT
+	* sql: fix table alias handling
+	+ cli: -static-header
+	* sql: fix DATE type
+	* sql: fix ORDER BY with multiple params
+
 20200521
 	* switch versioning scheme
 	* switch build system to dune
