@@ -205,7 +205,7 @@ let match_variant_pattern i name args =
 
 let set_param index param =
   let nullable = is_param_nullable param in
-  let pname = make_param_name index param.Sql.id in
+  let pname = show_param_name param index in
   let ptype = show_param_type param in
   if nullable then
     output "begin match %s with None -> T.set_param_null p | Some v -> T.set_param_%s p v end;" pname ptype
@@ -319,6 +319,8 @@ let output_params_binder index vars =
   | [] -> "T.no_params"
   | vars -> output_params_binder index vars
 
+let prepend prefix = function s -> prefix ^ s
+
 let in_var_module _label typ = Sql.Type.to_string typ
 
 let gen_in_substitution var =
@@ -390,11 +392,7 @@ let make_sql l =
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
-  let inputs = (subst @ names_of_vars stmt.vars)
-    (* drop a_ prefix for "nice" names *)
-    |> List.map (fun v -> if String.starts_with v "a_" then sprintf "~%s:%s" (String.slice ~first:2 v) v else sprintf "~%s:%s" v v)
-    |> inline_values
-  in
+  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (prepend "~") |> inline_values in
   match style, is_callback stmt with
   | (`List | `Fold), false -> ()
   | _ ->

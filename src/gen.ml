@@ -27,29 +27,17 @@ let output_l = List.iter indent_endline
 let print fmt = kprintf print_endline fmt
 let indented k = inc_indent (); k (); dec_indent ()
 
-let rec freshname name scope =
-  match List.find_all ((=) name) scope with
-  | [] -> name
-  | _ -> freshname (name ^ "_") scope
-
 let name_of attr index =
   match attr.Sql.name with
   | "" -> sprintf "_%u" index
   | s -> s
 
-(* host language level param name - hygiene *)
 let make_param_name index (p:Sql.param_id) =
-  match p.label with
-  | None -> sprintf "_%u" index
-  | Some s -> "a_" ^ s (* a_ prefix for hygiene *)
-
-(* human/sql param name - pretty *)
-let show_param_id_name (p:Sql.param_id) index =
   match p.label with
   | None -> sprintf "_%u" index
   | Some s -> s
 
-let show_param_name p i = show_param_id_name p.Sql.id i
+let show_param_name (p:Sql.param) index = make_param_name index p.id
 
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index

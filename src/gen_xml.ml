@@ -81,7 +81,7 @@ let get_sql_string stmt =
   let rec map i = function
   | Static s -> s
   | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
-  | SubstTuple (id, _) -> "@@@" ^ show_param_id_name id i
+  | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> fail "dynamic choice not supported for xml output"
   in
