@@ -24,7 +24,8 @@ type res_expr =
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   [@@deriving show]
 
-let empty_env = { tables = []; schema = []; insert_schema = []; inferred_param_types = Hashtbl.create 0 }
+let empty_env () =
+  { tables = []; schema = []; insert_schema = []; inferred_param_types = Hashtbl.create 0 }
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -442,7 +443,7 @@ let eval (stmt:Sql.stmt) =
       Tables.add (name,schema);
       ([],[],Create name)
   | Create (name,`Select select) ->
-      let (schema,params,_) = eval_select_full empty_env select in
+      let (schema,params,_) = eval_select_full (empty_env()) select in
       Tables.add (name,schema);
       ([],params,Create name)
   | Alter (name,actions) ->
@@ -525,7 +526,7 @@ let eval (stmt:Sql.stmt) =
     (* use dummy columns to verify targets match the provided tables  *)
     let columns = List.map (fun tn -> AllOf tn) targets in
     let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
-    let _attrs, params, _ = eval_select_full empty_env { select; order = []; limit = None } in
+    let _attrs, params, _ = eval_select_full (empty_env()) { select; order = []; limit = None } in
     [], params, Delete targets
   | Set (_name, e) ->
     let p = match e with
@@ -539,10 +540,10 @@ let eval (stmt:Sql.stmt) =
     let p3 = params_of_order o [] [t] in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
-    let sources = List.map (resolve_source empty_env) tables in
+    let sources = List.map (resolve_source (empty_env())) tables in
     let params = update_tables sources ss w in
     [], params, Update None
-  | Select select -> eval_select_full empty_env select
+  | Select select -> eval_select_full (empty_env()) select
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name
 
