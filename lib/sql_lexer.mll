@@ -273,6 +273,9 @@ ruleMain = parse
   (* update line number *)
   | '\n'  { advance_line lexbuf; ruleMain lexbuf}
 
+  | "Text" { TEXT_TYPE }
+  | "Null" { NULL_TYPE }
+
   | '('                { LPAREN }
   | ')'                { RPAREN }
   | ','   { COMMA }
@@ -301,6 +304,7 @@ ruleMain = parse
 
   | "?" { PARAM { label=None; pos = pos lexbuf } }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
+  | "::" { TWO_TIMES_COLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
   | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }
@@ -368,7 +372,7 @@ ruleCommentMulti acc = parse
   | "*/"	{ acc }
   | "*"
   | [^'\n' '*']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
-  | _	        { error lexbuf "ruleCommentMulti" }
+  | _	        { error lexbuf "ruleCommentMulti" }  
 
 {
 
