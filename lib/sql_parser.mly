@@ -51,7 +51,6 @@
        YEAR_MONTH FALSE TRUE DUPLICATE
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL
-%token TEXT_TYPE NULL_TYPE
 
 (*
 %left COMMA_JOIN
@@ -523,16 +522,13 @@ compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
 
 strict_type:
-    | TEXT_TYPE { Text }
-    // | BLOB collate? { Blob }
-    // | INTEGER { Int }
-    // | FLOAT { Float }
-    // | TRUE
-    // | FALSE { Bool }
-    // | DATE TEXT
-    // | TIME TEXT
-    // | TIMESTAMP TEXT { Datetime }
+    | T_TEXT     { Text }
+    | T_BLOB     { Blob }
+    | T_INTEGER  { Int }
+    | T_FLOAT    { Float }
+    | T_BOOLEAN  { Bool }
+    | T_DATETIME { Datetime }
 
 manual_type:
-    | strict_type { strict $1 }
-    | strict_type NULL_TYPE { nullable $1 } 
+    | strict_type      { strict   $1 }
+    | strict_type NULL { nullable $1 } 

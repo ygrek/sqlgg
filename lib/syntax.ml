@@ -234,14 +234,27 @@ and assign_types inferred_param_types expr =
         in
         let assign inferred x =
           match x with
-          | ResParam { id; typ; attr; } when is_any typ ->
-            let inferred = 
-              id.label 
-                |> Option.bind (Hashtbl.find_opt inferred_param_types)
-                |> Option.default inferred
-            in
-            Option.may (fun i -> Hashtbl.replace inferred_param_types i inferred) id.label;
-            ResParam (new_param ?attr id inferred)
+          | ResParam { id; typ; attr; } ->
+            let update_inferred t = 
+              let inferred = 
+                id.label 
+                  |> Option.bind (Hashtbl.find_opt inferred_param_types)
+                  |> Option.default t
+              in
+              Option.may (fun i -> Hashtbl.replace inferred_param_types i t) id.label;
+              inferred in
+            if is_any typ then
+              ResParam (new_param ?attr id (update_inferred inferred))
+            else 
+            let attr = Option.map (fun attr ->  
+                { attr with extra = Constraints.map (fun c -> 
+                  match typ.nullability, c with
+                  | Nullable, NotNull -> Null
+                  | Strict, Null -> NotNull
+                  | _ -> c
+                ) attr.extra}
+            ) attr in
+            ResParam(new_param ?attr id (update_inferred typ))  
           | ResInparam { id; typ; attr; } when is_any typ -> ResInparam (new_param ?attr id inferred)
           | x -> x
         in

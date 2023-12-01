@@ -272,10 +272,6 @@ ruleMain = parse
   | wsp   { ruleMain lexbuf }
   (* update line number *)
   | '\n'  { advance_line lexbuf; ruleMain lexbuf}
-
-  | "Text" { TEXT_TYPE }
-  | "Null" { NULL_TYPE }
-
   | '('                { LPAREN }
   | ')'                { RPAREN }
   | ','   { COMMA }
