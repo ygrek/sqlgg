@@ -85,7 +85,7 @@ struct
     match order_nullability x.nullability y.nullability, order_kind x.t y.t with
     | _, `No -> None
     | `Equal nullability, `Order (t,_) -> Some {t; nullability}
-    | `Equal _nullability, `Equal -> Some x
+    | `Equal nullability, `Equal -> Some { x with nullability }
     | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t)
     | (`Nullable_Strict|`Strict_Nullable), `Order (sub,_) -> Some (nullable sub)
 

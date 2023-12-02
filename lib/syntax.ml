@@ -525,6 +525,7 @@ let eval (stmt:Sql.stmt) =
 
 (* FIXME unify each choice separately *)
 let unify_params l =
+  if !debug then l |> List.iter (fun p -> eprintfn "var %s" (show_var p));
   let h = Hashtbl.create 10 in
   let h_choices = Hashtbl.create 10 in
   let check_choice_name p =
@@ -541,7 +542,9 @@ let unify_params l =
     | exception _ -> Hashtbl.add h name t
     | t' ->
     match Type.common_type t t' with
-    | Some x -> Hashtbl.replace h name x
+    | Some x ->
+      if !debug then eprintfn "unify var %s %s %s => %s" name (Type.show t) (Type.show t') (Type.show x);
+      Hashtbl.replace h name x
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
