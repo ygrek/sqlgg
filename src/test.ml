@@ -35,7 +35,7 @@ let tt sql ?kind schema params =
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
-let attr ?(extra=[]) n d = make_attribute n (Type.strict d) (Constraints.of_list extra)
+let attr ?(extra=[]) n d = make_attribute n (Some d) (Constraints.of_list extra)
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
 let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
 

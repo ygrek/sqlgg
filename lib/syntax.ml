@@ -84,20 +84,15 @@ let all_tbl_columns = all_columns $ List.map snd
 let resolve_column tables schema {cname;tname} =
   Schema.find (Option.map_default (schema_of tables) schema tname) cname
 
-(* HACK hint expression to unify with the column type *)
-let rec hint attr expr =
-  (* associate parameter with column *)
-  let expr = match expr with Param p -> Param { p with attr = Some attr } | e -> e in
-  (* go one level deep into choices *)
-  match expr with
-  | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (hint attr) e) l)
-  | _ -> Fun (F (Var 0, [Var 0; Var 0]), [Value attr.domain;expr])
-
 let resolve_column_assignments tables l =
   let all = all_tbl_columns tables in
   l |> List.map begin fun (col,expr) ->
     let attr = resolve_column tables all col in
-    hint attr expr
+    (* autoincrement is special - nullable on insert, strict otherwise *)
+    let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
+    if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
+    (* add equality on param and column type *)
+    Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr])
   end
 
 let get_columns_schema tables l =
@@ -233,8 +228,8 @@ and assign_types expr =
         in
         let assign inferred x =
           match x with
-          | ResParam { id; typ; attr; } when is_any typ -> ResParam (new_param ?attr id inferred)
-          | ResInparam { id; typ; attr; } when is_any typ -> ResInparam (new_param ?attr id inferred)
+          | ResParam { id; typ; } when is_any typ -> ResParam (new_param id inferred)
+          | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
           | x -> x
         in
         ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
@@ -264,7 +259,7 @@ and infer_schema env columns =
       let col =
         match e with
         | Column col -> resolve_column env.tables env.schema col
-        | _ -> make_attribute "" (resolve_types env e |> snd |> get_or_failwith) Constraints.empty
+        | _ -> unnamed_attribute (resolve_types env e |> snd |> get_or_failwith)
       in
       let col = Option.map_default (fun n -> {col with name = n}) col name in
       [ col ]
@@ -548,19 +543,19 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ; attr=_ } -> remember id.label typ
+  | Single { id; typ; } -> remember id.label typ
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
   let rec map = function
-  | Single { id; typ; attr } ->
+  | Single { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    Single (new_param id ?attr (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
-  | SingleIn { id; typ; attr } ->
+    Single (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+  | SingleIn { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    SingleIn (new_param id ?attr (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+    SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
@@ -610,7 +605,9 @@ let complete_sql kind sql =
       let attr_ref = "@" ^ attr_name in
       let pos_start = B.length b + String.length attr_ref_prefix in
       let pos_end = pos_start + String.length attr_ref in
-      let param = Single (new_param ~attr {label=Some attr_name; pos=(pos_start,pos_end)} attr.domain) in
+      (* autoincrement is special - nullable on insert, strict otherwise *)
+      let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
+      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

@@ -140,9 +140,12 @@ end
 type attr = {name : string; domain : Type.t; extra : Constraints.t; }
   [@@deriving show {with_path=false}]
 
-let make_attribute name domain extra =
+let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
+  let domain = Type.{ t = Option.default Int kind; nullability = if Constraints.mem Null extra then Nullable else Strict } in
   {name;domain;extra}
+
+let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
 
 module Schema =
 struct
@@ -276,8 +279,8 @@ let print_table out (name,schema) =
 
 (** optional name and start/end position in string *)
 type param_id = { label : string option; pos : int * int; } [@@deriving show]
-type param = { id : param_id; typ : Type.t; attr : attr option; } [@@deriving show]
-let new_param ?attr id typ = { id; typ; attr }
+type param = { id : param_id; typ : Type.t; } [@@deriving show]
+let new_param id typ = { id; typ; }
 type params = param list [@@deriving show]
 type ctor =
 | Simple of param_id * var list option

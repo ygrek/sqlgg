@@ -300,7 +300,6 @@ drop_behavior: CASCADE | RESTRICT { }
 column_def: name=IDENT t=sql_type? extra=column_def_extra*
   {
     let extra = Constraints.of_list @@ List.filter_map identity extra in
-    let t = { t = Option.default Int t; nullability = if Constraints.mem Null extra then Nullable else Strict } in
     make_attribute name t extra
   }
 
