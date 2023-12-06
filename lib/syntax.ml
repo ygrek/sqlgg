@@ -155,11 +155,10 @@ and assign_types expr =
     | ResChoices (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
-        match List.map get_or_failwith @@ List.filter_map identity t with
-        | [] -> assert false
-        | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> Type.common_type prev t) (Some t) ts
+        match Type.common_subtype @@ List.map get_or_failwith @@ List.filter_map identity t with
+        | None -> `Error "no common subtype for all choice branches"
+        | Some t -> `Ok t
       in
-      let t = match t with None -> `Error "no common subtype for all choice branches" | Some t -> `Ok t in
       ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
     | ResFun (func,params) ->
         let open Type in
@@ -210,18 +209,10 @@ and assign_types expr =
           let ret = convert ret in
           undepend ret nullable, args
         | Ret Any, _ -> (* lame *)
-          let (t, types) =
-            match List.filter (not $ is_any) types with
-            | [] -> Any, types
-            (* make a best guess, return type same as for parameters when all of single type *)
-            | h::tl when List.for_all (matches h) tl -> h.t, List.map (fun _ -> h) types
-            (* "expand" to floats, when all parameters numeric and above rule didn't match *)
-            | l when List.for_all (function { t = Int | Float; nullability = _ } -> true | _ -> false) l ->
-              Float, List.map (fun x -> if is_any x then { x with t = Float } else x) types
-            | _ -> Any, types
-          and nullability = common_nullability types
-          in
-          { t; nullability }, types
+          begin match common_supertype types with
+          | Some t -> t, List.map (fun _ -> t) types
+          | None -> { t = Any; nullability = common_nullability types }, types
+          end
         | Ret ret, _ ->
           let nullability = common_nullability types in
           { t = ret; nullability; }, types (* ignoring arguments FIXME *)

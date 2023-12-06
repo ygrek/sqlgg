@@ -15,8 +15,9 @@ struct
     | Bool
     | Datetime
     | Decimal
-    | Any
+    | Any (* FIXME - Top and Bottom ? *)
     [@@deriving eq, show{with_path=false}]
+    (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
   type nullability =
   | Nullable (** can be NULL *)
@@ -41,16 +42,15 @@ struct
 
   let is_any { t; nullability = _ } = equal_kind t Any
 
-  let matches x y = is_any x || is_any y || x = y
-
   let is_unit = function { t = Unit _; _ } -> true | _ -> false
 
+  (** @return (subtype, supertype) *)
   let order_kind x y =
     if equal_kind x y then
       `Equal
     else
       match x,y with
-      | Any, t | t, Any -> `Order (t,Any)
+      | Any, t | t, Any -> `Order (t,t)
       | Int, Float | Float, Int -> `Order (Int,Float)
       (* arbitrary decision : allow int<->decimal but require explicit cast for floats *)
       | Decimal, Int | Int, Decimal -> `Order (Int,Decimal)
@@ -81,15 +81,26 @@ struct
   let common_nullability l = match common_nullability l with Depends -> Strict | n -> n
   let undepend t nullability = if equal_nullability t.nullability Depends then { t with nullability } else t
 
-  let common_type x y =
+  let common_type_ order x y =
     match order_nullability x.nullability y.nullability, order_kind x.t y.t with
     | _, `No -> None
-    | `Equal nullability, `Order (t,_) -> Some {t; nullability}
+    | `Equal nullability, `Order pair -> Some {t = order pair; nullability}
     | `Equal nullability, `Equal -> Some { x with nullability }
-    | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t)
-    | (`Nullable_Strict|`Strict_Nullable), `Order (sub,_) -> Some (nullable sub)
+    | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t) (* FIXME need nullability order? *)
+    | (`Nullable_Strict|`Strict_Nullable), `Order pair -> Some (nullable @@ order pair)
 
-  let has_common_type x y = Option.is_some @@ common_type x y
+  let common_type_l_ order = function
+  | [] -> None
+  | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> common_type_ order prev t) (Some t) ts
+
+  let subtype = common_type_ fst
+  let supertype = common_type_ snd
+  let common_subtype = common_type_l_ fst
+  let common_supertype = common_type_l_ snd
+
+  let common_type = subtype
+
+  let has_common_type x y = Option.is_some @@ subtype x y
 
   type tyvar = Typ of t | Var of int
   let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
@@ -218,7 +229,7 @@ struct
     List.iter (check_contains t2) common;
     common @ sub t1 common @ sub t2 common
 
-  let check_types t1 t2 =
+  let compound t1 t2 =
     if List.length t1 <> List.length t2 then raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)));
     let show_name i a =
       match a.name with
@@ -226,15 +237,13 @@ struct
       | s -> s
     in
     List.combine t1 t2
-    |> List.iteri begin fun i (a1,a2) ->
-      match Type.matches a1.domain a2.domain with
-      | true -> ()
-      | false -> raise (Error (t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
+    |> List.mapi begin fun i (a1,a2) ->
+      match Type.supertype a1.domain a2.domain with
+      | Some t -> { a1 with domain=t }
+      | None -> raise (Error (t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
         (show_name i a1) (Type.show a1.domain)
         (show_name i a2) (Type.show a2.domain)))
     end
-
-  let compound t1 t2 = check_types t1 t2; t1
 
   let add t col pos =
     match find_by_name t col.name with
