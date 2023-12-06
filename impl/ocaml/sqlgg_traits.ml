@@ -126,31 +126,3 @@ module type M_io = sig
   val execute : [>`WR] connection -> string -> (statement -> result IO.future) -> int64 IO.future
 
 end
-
-module type M_tracing = sig
-
-  include M
-
-  val tracing_span :
-    ?operation:string ->
-    ?tables:string list ->
-    statement:string ->
-    string (* span-name *) ->
-    (unit -> 'r) ->
-    'r
-
-end
-
-module type M_tracing_io = sig
-
-  include M_io
-
-  val tracing_span :
-    ?operation:string ->
-    ?tables:string list ->
-    statement:string ->
-    string (* span-name *) ->
-    (unit -> 'r IO.future) ->
-    'r IO.future
-
-end

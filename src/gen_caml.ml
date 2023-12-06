@@ -475,11 +475,9 @@ let generate ~gen_io name stmts =
   in
 *)
   let (traits, io) =
-    match gen_io, !Sqlgg_config.tracing with
-    | true, false -> "Sqlgg_traits.M_io", "T.IO"
-    | false, false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
-    | true, true -> "Sqlgg_traits.M_tracing_io", "T.IO"
-    | false, true -> "Sqlgg_traits.M_tracing", "Sqlgg_io.Blocking"
+    match gen_io with
+    | true -> "Sqlgg_traits.M_io", "T.IO"
+    | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
   in
   output "module %s (T : %s) = struct" (String.capitalize_ascii name) traits;
   empty_line ();

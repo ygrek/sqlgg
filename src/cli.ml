@@ -95,7 +95,6 @@ let main () =
     "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
-    "-tracing", Arg.Unit (fun () -> Sqlgg_config.tracing := true), "invoke a tracing callback on every query (default: false)";
     "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> set debug level";
     "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
       "do not put version header in generated output";
