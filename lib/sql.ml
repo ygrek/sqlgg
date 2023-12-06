@@ -219,17 +219,20 @@ struct
     common @ sub t1 common @ sub t2 common
 
   let check_types t1 t2 =
-    List.iter2 begin fun a1 a2 ->
+    if List.length t1 <> List.length t2 then raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)));
+    let show_name i a =
+      match a.name with
+      | "" -> sprintf "column %d (of %d)" (i+1) (List.length t1)
+      | s -> s
+    in
+    List.combine t1 t2
+    |> List.iteri begin fun i (a1,a2) ->
       match Type.matches a1.domain a2.domain with
       | true -> ()
-      | false -> raise (Error (t1, sprintf "Atributes do not match : %s of type %s and %s of type %s"
-        a1.name (Type.show a1.domain)
-        a2.name (Type.show a2.domain)))
-    end t1 t2
-
-  let check_types t1 t2 =
-    try check_types t1 t2 with
-    | List.Different_list_size _ -> raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)))
+      | false -> raise (Error (t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
+        (show_name i a1) (Type.show a1.domain)
+        (show_name i a2) (Type.show a2.domain)))
+    end
 
   let compound t1 t2 = check_types t1 t2; t1
 
