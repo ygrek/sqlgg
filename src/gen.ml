@@ -189,7 +189,7 @@ let is_param_nullable param =
 
 let is_attr_nullable attr =
   let open Sql in
-  Constraints.mem Null attr.extra
+  attr.domain.nullability = Nullable || Constraints.mem Null attr.extra (* constraints should not be needed *)
 
 type value = { vname : string; vtyp : string; nullable : bool; }
 
