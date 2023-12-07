@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test" sql="CREATE TABLE test(k TEXT NULL)" category="DDL" kind="create" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="insert_test_1" sql="INSERT INTO test (k) VALUES ({TODO dynamic choice})" category="DML" kind="insert" target="test" cardinality="0">
+  <in>
+   <value name="k" type="Any"/>
+  </in>
+  <out/>
+ </stmt>
+ <table name="test">
+  <schema>
+   <value name="k" type="Text" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>

@@ -83,16 +83,32 @@ let get_sql_string stmt =
   | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
   | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
-  | Dynamic _ -> fail "dynamic choice not supported for xml output"
+  | Dynamic _ -> "{TODO dynamic choice}"
   in
   String.concat "" @@ List.mapi map @@ get_sql stmt
+
+let rec params_only l =
+  List.concat @@
+  List.map
+    (function
+      | Sql.Single p -> [p]
+      | SingleIn _ -> []
+      | ChoiceIn { vars; _ } -> params_only vars
+      | Choice (_,choices) ->
+        choices
+        |> List.map (function Sql.Verbatim _ | Simple (_,None) -> [] | Simple (_name,Some vars) -> params_only vars) (* TODO prefix names *)
+        |> List.concat
+      | TupleList _ -> [])
+    l
 
 let generate_code (x,_) index stmt =
   let name = choose_name stmt.props stmt.kind index in
   let input =
     Node ("in",[],
-          (tuplelist_values_only stmt.vars) @
-          (params_to_values @@ params_only stmt.vars) @ (inparams_to_values @@ inparams_only stmt.vars)) in
+          (tuplelist_values_only stmt.vars)
+          @ (params_to_values @@ params_only stmt.vars)
+          @ (inparams_to_values @@ inparams_only stmt.vars))
+  in
   let output = Node ("out",[],schema_to_values stmt.schema) in
   let sql = get_sql_string stmt in
   let attrs =
