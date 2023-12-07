@@ -105,6 +105,10 @@ let inline_values = String.concat " "
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
 
+let quote_list ss =
+  let body = List.map quote ss |> String.concat "; " in
+  "[" ^ body ^ "]"
+
 let rec replace_all ~str ~sub ~by =
   match String.replace ~str ~sub ~by with
   | (true,s) -> replace_all ~str:s ~sub ~by
@@ -400,8 +404,10 @@ let generate_stmt style index stmt =
   output "let %s db %s =" name all_inputs;
   inc_indent ();
   let sql = make_sql @@ get_sql stmt in
-  let sql = match subst with
-  | [] -> sql
+  begin match subst with
+  | [] ->
+    output "let __sqlgg_sql = %s" sql;
+    output "in"
   | vars ->
     output "let __sqlgg_sql =";
     output "  let replace_all ~str ~sub ~by =";
@@ -413,9 +419,8 @@ let generate_stmt style index stmt =
     output "  let sql = %s in" sql;
     List.iter (fun var -> output "  let sql = replace_all ~str:sql ~sub:(\"%%%%%s%%%%\") ~by:%s in" var var) vars;
     output "  sql";
-    output "in";
-    "__sqlgg_sql"
-  in
+    output "in"
+  end;
   let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
   let params_binder_name = output_params_binder index stmt.vars in
   if style = `Fold then output "let r_acc = ref acc in";
@@ -426,7 +431,21 @@ let generate_stmt style index stmt =
     | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
     | `Direct -> "", callback (* or empty string *)
   in
-  let exec = sprintf "T.%s db %s %s %s" func sql params_binder_name callback in
+
+  let op = Stmt.kind_to_operation_name stmt.kind in
+  let tables = List.map Sql.show_table_name (Stmt.kind_to_table_names stmt.kind) in
+  let tracing_params = match op, tables with
+  | None, [] ->
+    sprintf "~span_name:%s" (quote name)
+  | Some op, [] ->
+    sprintf "~operation:%s ~span_name:%s" (quote op) (quote name)
+  | Some op, _::_ ->
+    sprintf "~operation:%s ~tables:%s ~span_name:%s" (quote op) (quote_list tables) (quote name)
+  | None, _::_ ->
+    failwith "UNREACHABLE"
+  in
+
+  let exec = sprintf "T.%s %s db __sqlgg_sql %s %s" func tracing_params params_binder_name callback in
   let exec =
     match
       List.find_map

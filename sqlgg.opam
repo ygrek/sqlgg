@@ -25,6 +25,10 @@ depopts: [
   "mariadb"
   "mysql"
   "sqlite3"
+  "trace"
+]
+conflicts: [
+  "trace" {< "0.3.0" | >= "0.6.0"}
 ]
 synopsis: "SQL Guided (code) Generator"
 description: """

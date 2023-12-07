@@ -262,7 +262,8 @@ let no_params stmt =
   M.Stmt.execute stmt [||] >>=
   check
 
-let with_stmt db sql f =
+let with_stmt ?operation ?tables ~sql span_name db f =
+  Possibly_tracing.span ?operation ?tables ~system:`mariadb ~sql span_name @@ fun () ->
   let open IO in
   let close stmt = M.Stmt.close stmt >>= fun _ -> return () in
   M.prepare db sql >>=
@@ -271,8 +272,8 @@ let with_stmt db sql f =
 
 let row_array = (module M.Row.Array : M.Row.S with type t = M.Field.t array)
 
-let select db sql set_params callback =
-  with_stmt db sql @@ fun stmt ->
+let select ?operation ?tables ~span_name db sql set_params callback =
+  with_stmt ?operation ?tables ~sql span_name db @@ fun stmt ->
   let open IO in
   let rec loop r =
     M.Res.fetch row_array r >>=
@@ -284,14 +285,14 @@ let select db sql set_params callback =
   set_params stmt >>=
   loop
 
-let execute db sql set_params =
-  with_stmt db sql @@ fun stmt ->
+let execute ?operation ?tables ~span_name db sql set_params =
+  with_stmt ?operation ?tables ~sql span_name db @@ fun stmt ->
   let open IO in
   set_params stmt >>=
   fun res -> return (Int64.of_int (M.Res.affected_rows res))
 
-let select_one_maybe db sql set_params convert =
-  with_stmt db sql @@ fun stmt ->
+let select_one_maybe ?operation ?tables ~span_name db sql set_params convert =
+  with_stmt ?operation ?tables ~sql span_name db @@ fun stmt ->
   let open IO in
   set_params stmt >>=
   M.Res.fetch row_array >>=
@@ -299,8 +300,8 @@ let select_one_maybe db sql set_params convert =
   | Some row -> return (Some (convert row))
   | None -> return None
 
-let select_one db sql set_params convert =
-  with_stmt db sql @@ fun stmt ->
+let select_one ?operation ?tables ~span_name db sql set_params convert =
+  with_stmt ?operation ?tables ~sql span_name db @@ fun stmt ->
   let open IO in
   set_params stmt >>=
   M.Res.fetch row_array >>=

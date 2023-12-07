@@ -506,8 +506,8 @@ let eval (stmt:Sql.stmt) =
     let params = update_tables sources ss w in
     [], params, Update None
   | Select select -> eval_select_full empty_env select
-  | CreateRoutine (name,_,_) ->
-    [], [], CreateRoutine name
+  | CreateRoutine (name,ret,_) ->
+    [], [], CreateRoutine (name, ret)
 
 (* FIXME unify each choice separately *)
 let unify_params l =

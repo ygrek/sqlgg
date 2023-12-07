@@ -187,10 +187,12 @@ let try_finally final f x =
     r
 
 let bracket res dtor k = try_finally (fun () -> dtor res) k res
-let with_stmt db sql = bracket (P.create db sql) P.close
+let with_stmt ?operation ?tables ~sql span_name db =
+  Possibly_tracing.span ?operation ?tables ~system:`mysql ~sql span_name @@ fun () ->
+  bracket (P.create db sql) P.close
 
-let select db sql set_params callback =
-  with_stmt db sql (fun stmt ->
+let select ?operation ?tables ~span_name db sql set_params callback =
+  with_stmt ?operation ?tables ~sql span_name db (fun stmt ->
     let r = set_params stmt in
     let rec loop () =
       match P.fetch r with
@@ -199,20 +201,20 @@ let select db sql set_params callback =
     in
     loop ())
 
-let execute db sql set_params =
-  with_stmt db sql (fun stmt ->
+let execute ?operation ?tables ~span_name db sql set_params =
+  with_stmt ?operation ?tables ~sql span_name db (fun stmt ->
     let _ = set_params stmt in
     if 0 <> P.real_status stmt then oops "execute : %s" sql;
     P.affected stmt)
 
-let select_one_maybe db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let select_one_maybe ?operation ?tables ~span_name db sql set_params convert =
+  with_stmt ?operation ?tables ~sql span_name db (fun stmt ->
     match P.fetch (set_params stmt) with
     | Some row -> Some (convert row)
     | None -> None)
 
-let select_one db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let select_one ?operation ?tables ~span_name db sql set_params convert =
+  with_stmt ?operation ?tables ~sql span_name db (fun stmt ->
     match P.fetch (set_params stmt) with
     | Some row -> convert row
     | None -> oops "no row but one expected : %s" sql)
