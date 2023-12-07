@@ -4,14 +4,14 @@ authors: ["ygrek"]
 homepage: "https://ygrek.org/p/sqlgg/"
 dev-repo: "git+https://github.com/ygrek/sqlgg.git"
 bug-reports: "https://github.com/ygrek/sqlgg/issues"
-license: "GPL-2"
+license: "GPL-2.0-only"
 tags: [ "org:ygrek" ]
 build: [
-  ["dune" "subst"] {pinned}
+  ["dune" "subst"] {dev}
   ["dune" "build" "-p" name "-j" jobs "@install" "@doc" {with-doc}]
 ]
 depends: [
-  "ocaml" {>= "4.02.0"}
+  "ocaml" {>= "4.03.0"}
   "dune" {>= "2.0"}
   "menhir"
   "mybuild"

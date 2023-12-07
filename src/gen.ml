@@ -21,7 +21,7 @@ let (inc_indent,dec_indent,make_indent) =
 
 let print_indent () = print_string (make_indent ())
 let indent s = print_indent (); print_string s
-let indent_endline s = print_indent (); print_endline s
+let indent_endline s = print_indent (); print_endline @@ String.trim s
 let output fmt = kprintf indent_endline fmt
 let output_l = List.iter indent_endline
 let print fmt = kprintf print_endline fmt

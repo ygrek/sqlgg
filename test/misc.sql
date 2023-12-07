@@ -105,3 +105,14 @@ select x <> 0 AS y from test;
 
 -- @select_alias_change_type
 select x <> 0 AS x from test;
+
+-- @create_oauth_tokens
+CREATE TABLE IF NOT EXISTS `oauth_tokens` (
+  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  `unique_value_google_drive` BINARY(16) AS (
+  CASE WHEN `client_name` = "google-drive" THEN
+    UNHEX(MD5(CONCAT_WS("|", `creator_user_id`, `email`)))
+  ELSE
+    NULL
+  END) UNIQUE
+);

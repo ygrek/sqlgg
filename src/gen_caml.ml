@@ -222,7 +222,7 @@ let rec set_var index var =
   | SingleIn _ -> ()
   | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
-    output "begin match %s with " (make_param_name index name);
+    output "begin match %s with" (make_param_name index name);
     output "| [] -> ()";
     output "| _ :: _ ->";
     inc_indent ();
@@ -231,7 +231,7 @@ let rec set_var index var =
     dec_indent ();
     output "end;"
   | Choice (name,ctors) ->
-    output "begin match %s with " (make_param_name index name);
+    output "begin match %s with" (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
       match ctor with
       | Simple (param,args) ->
