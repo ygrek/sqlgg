@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `master` (
 CREATE TABLE IF NOT EXISTS `detail` (
   `id` INTEGER PRIMARY KEY,
   `master_id` INTEGER,
+  `at` DATETIME NULL,
   FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)
 );
 
@@ -31,3 +32,10 @@ SELECT x.* FROM (
   SELECT 'foo' UNION ALL
   SELECT 'foo'
 ) x;
+
+SELECT id, NULL FROM master
+UNION SELECT id, NOW() FROM master;
+
+INSERT INTO detail (master_id, at)
+SELECT id, NULL FROM master
+UNION SELECT id, NOW() FROM master;

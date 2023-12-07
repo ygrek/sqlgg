@@ -57,6 +57,8 @@ SELECT nullable, floor(unix_timestamp(nullable)/3600) FROM test;
 -- @get_max
 SELECT
   max(nullable),
+  max(id),
+  IF(max(nullable) IS NULL, now(), max(nullable)),
   IF(max(nullable) IS NULL, NULL, max(nullable))
 FROM
   test

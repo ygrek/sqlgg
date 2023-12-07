@@ -5,7 +5,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="create_detail" sql="CREATE TABLE IF NOT EXISTS `detail` (&#x0A;  `id` INTEGER PRIMARY KEY,&#x0A;  `master_id` INTEGER,&#x0A;  FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)&#x0A;)" category="DDL" kind="create" target="detail" cardinality="0">
+ <stmt name="create_detail" sql="CREATE TABLE IF NOT EXISTS `detail` (&#x0A;  `id` INTEGER PRIMARY KEY,&#x0A;  `master_id` INTEGER,&#x0A;  `at` DATETIME NULL,&#x0A;  FOREIGN KEY (`master_id`) REFERENCES `master` (`id`)&#x0A;)" category="DDL" kind="create" target="detail" cardinality="0">
   <in/>
   <out/>
  </stmt>
@@ -37,10 +37,22 @@
    <value name="_0" type="Text"/>
   </out>
  </stmt>
+ <stmt name="select_6" sql="SELECT id, NULL FROM master&#x0A;UNION SELECT id, NOW() FROM master" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="_1" type="Datetime" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="insert_detail_7" sql="INSERT INTO detail (master_id, at)&#x0A;SELECT id, NULL FROM master&#x0A;UNION SELECT id, NOW() FROM master" category="DML" kind="insert" target="detail" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
  <table name="detail">
   <schema>
    <value name="id" type="Int"/>
    <value name="master_id" type="Int"/>
+   <value name="at" type="Datetime" nullable="true"/>
   </schema>
  </table>
  <table name="master">

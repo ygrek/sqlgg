@@ -463,7 +463,7 @@ let () =
   "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
   "count" |> add 1 (Group int);
   "avg" |> add 1 (Group float);
-  ["max";"min";"sum"] ||> add 1 Agg;
+  ["max";"min";"sum"] ||> add 1 Agg; (* TODO nullable, think no rows *)
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
   ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic text [text];
   "hex" |> monomorphic text [int];
