@@ -92,7 +92,10 @@ let resolve_column_assignments tables l =
     let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
-    Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr])
+    let equality typ expr = Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr]) in
+    match expr with
+    | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+    | _ -> equality typ expr
   end
 
 let get_columns_schema tables l =

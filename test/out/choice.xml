@@ -7,7 +7,7 @@
  </stmt>
  <stmt name="insert_test_1" sql="INSERT INTO test (k) VALUES ({TODO dynamic choice})" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="k" type="Any"/>
+   <value name="k" type="Text" nullable="true"/>
   </in>
   <out/>
  </stmt>
