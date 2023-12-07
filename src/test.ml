@@ -37,6 +37,7 @@ let wrong sql =
 
 let attr ?(extra=[]) n d = make_attribute n (Some d) (Constraints.of_list extra)
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
+let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
 let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
 
 let test = Type.[
@@ -166,6 +167,28 @@ let test_enum = [
   tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull]; attr "" Int] [];
 ]
 
+let test_manual_param = [
+  tt "CREATE TABLE test7 (x INT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
+  tt "SELECT * FROM test7 WHERE x = @x_arg" [attr "x" Int ~extra:[Null];] [
+    named_nullable "x_arg" Int
+  ];
+  tt "SELECT * FROM test7 WHERE x = (@x_arg :: Int)" [attr "x" Int ~extra:[Null];] [
+    named "x_arg" Int
+  ];
+  tt "INSERT INTO test7 VALUES (@x_arg)" [] [
+    named_nullable "x_arg" Int
+  ];
+  tt "UPDATE test7 SET x = @x_arg WHERE x = @x_arg_2" [] [
+    named_nullable "x_arg" Int;
+    named_nullable "x_arg_2" Int
+  ];
+  tt "UPDATE test7 SET x = (@x_arg :: Int) WHERE x = (@x_arg_2 :: Int)" [] [
+    named "x_arg" Int;
+    named "x_arg_2" Int
+  ];
+]
+
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -178,6 +201,7 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "misc" >:: test_misc;
     "enum" >::: test_enum;
+    "manual_param" >::: test_manual_param;
   ]
   in
   let test_suite = "main" >::: tests in
