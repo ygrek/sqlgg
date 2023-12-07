@@ -140,37 +140,38 @@ let try_finally final f x =
     final ();
     r
 
-let with_sql db sql f =
+let with_sql ?operation ?tables ~sql span_name db f =
+  Possibly_tracing.span ?operation ?tables ~system:`sqlite ~sql span_name @@ fun () ->
   let stmt = S.prepare db sql in
   try_finally
     (fun () -> test_ok sql (S.finalize stmt))
     f (stmt,sql)
 
-let select db sql set_params callback =
-  with_sql db sql (fun stmt ->
+let select ?operation ?tables ~span_name db sql set_params callback =
+  with_sql ?operation ?tables ~sql span_name db (fun stmt ->
     set_params stmt;
     while S.Rc.ROW = S.step (fst stmt) do
       callback stmt
     done)
 
-let execute db sql set_params =
-  with_sql db sql (fun stmt ->
+let execute ?operation ?tables ~span_name db sql set_params =
+  with_sql ?operation ?tables ~sql span_name db (fun stmt ->
     set_params stmt;
     let rc = S.step (fst stmt) in
     if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
     Int64.of_int (S.changes db)
   )
 
-let select_one_maybe db sql set_params convert =
-  with_sql db sql (fun stmt ->
+let select_one_maybe ?operation ?tables ~span_name db sql set_params convert =
+  with_sql ?operation ?tables ~sql span_name db (fun stmt ->
     set_params stmt;
     if S.Rc.ROW = S.step (fst stmt) then
       Some (convert stmt)
     else
       None)
 
-let select_one db sql set_params convert =
-  with_sql db sql (fun stmt ->
+let select_one ?operation ?tables ~span_name db sql set_params convert =
+  with_sql ?operation ?tables ~sql span_name db (fun stmt ->
     set_params stmt;
     if S.Rc.ROW = S.step (fst stmt) then
       convert stmt

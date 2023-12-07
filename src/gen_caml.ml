@@ -393,17 +393,6 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
-let output_tracing ~op ~tables ~sql_var name =
-  match op, tables with
-  | Some op, [] ->
-    output "T.tracing_span ~operation:%s ~statement:%s %s @@ fun () ->" (quote op) sql_var (quote name)
-  | None, [] ->
-    output "T.tracing_span ~statement:%s %s @@ fun () ->" sql_var (quote name)
-  | Some op, _::_ ->
-    output "T.tracing_span ~operation:%s ~tables:%s ~statement:%s %s @@ fun () ->" (quote op) (quote_list tables) sql_var (quote name)
-  | None, _::_ ->
-    failwith "UNREACHABLE"
-
 let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
@@ -442,12 +431,21 @@ let generate_stmt style index stmt =
     | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
     | `Direct -> "", callback (* or empty string *)
   in
-  if !Sqlgg_config.tracing then begin
-    let op = Stmt.kind_to_operation_name stmt.kind in
-    let tables = List.map Sql.show_table_name (Stmt.kind_to_table_names stmt.kind) in
-    output_tracing ~op ~tables ~sql_var:"__sqlgg_sql" name
-  end;
-  let exec = sprintf "T.%s db __sqlgg_sql %s %s" func params_binder_name callback in
+
+  let op = Stmt.kind_to_operation_name stmt.kind in
+  let tables = List.map Sql.show_table_name (Stmt.kind_to_table_names stmt.kind) in
+  let tracing_params = match op, tables with
+  | None, [] ->
+    sprintf "~span_name:%s" (quote name)
+  | Some op, [] ->
+    sprintf "~operation:%s ~span_name:%s" (quote op) (quote name)
+  | Some op, _::_ ->
+    sprintf "~operation:%s ~tables:%s ~span_name:%s" (quote op) (quote_list tables) (quote name)
+  | None, _::_ ->
+    failwith "UNREACHABLE"
+  in
+
+  let exec = sprintf "T.%s %s db __sqlgg_sql %s %s" func tracing_params params_binder_name callback in
   let exec =
     match
       List.find_map

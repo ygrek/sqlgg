@@ -1,4 +1,12 @@
 (library
-  (wrapped false)
-  (name sqlgg_traits)
-  (public_name sqlgg.traits))
+ (wrapped false)
+ (name sqlgg_traits)
+ (public_name sqlgg.traits)
+ (libraries
+  trace.core
+  ; (select
+  ;  possibly_tracing.ml
+  ;  from
+  ;  (trace.core -> possibly_tracing.real.ml)
+  ;  (-> possibly_tracing.stub.ml))
+  ))
