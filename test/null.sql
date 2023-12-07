@@ -74,3 +74,20 @@ INSERT INTO test (
   @p,
   case when @p = 42 then 100 else NULL end
 );
+
+CREATE TABLE tests(test_id INT UNSIGNED, run_id INTEGER UNSIGNED, started_at DATETIME NOT NULL, finished_at DATETIME NOT NULL);
+
+SELECT
+  test.id,
+  started_at,
+  finished_at,
+  last_test.started_at as started_at_should_be_nullable,
+  last_test.finished_at as finished_at_should_be_nullable
+FROM test
+LEFT JOIN (
+  SELECT test_id, started_at, finished_at
+  FROM tests aux
+  WHERE run_id = (SELECT MAX(run_id) FROM tests WHERE aux.test_id = test_id)
+) last_test ON last_test.test_id = test.id
+WHERE
+  test.nullable_int = @x;
