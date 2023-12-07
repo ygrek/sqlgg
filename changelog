@@ -1,6 +1,9 @@
 sqlgg changelog
 ---------------
 
+?
+	+ sql: allow to type-annotate parameters with `:: SQLTYPE NULL?` to help type-checker
+
 20231201
 	+ ocaml: support IN @x via text substitution
 	+ sql: support batch insert with syntax INSERT INTO x(...) VALUES @xs

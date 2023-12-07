@@ -172,7 +172,7 @@ let test_manual_param = [
   tt "SELECT * FROM test7 WHERE x = @x_arg" [attr "x" Int ~extra:[Null];] [
     named_nullable "x_arg" Int
   ];
-  tt "SELECT * FROM test7 WHERE x = (@x_arg :: Int)" [attr "x" Int ~extra:[Null];] [
+  tt "SELECT * FROM test7 WHERE x = @x_arg::Int" [attr "x" Int ~extra:[Null];] [
     named "x_arg" Int
   ];
   tt "INSERT INTO test7 VALUES (@x_arg)" [] [
@@ -182,7 +182,7 @@ let test_manual_param = [
     named_nullable "x_arg" Int;
     named_nullable "x_arg_2" Int
   ];
-  tt "UPDATE test7 SET x = (@x_arg :: Int) WHERE x = (@x_arg_2 :: Int)" [] [
+  tt "UPDATE test7 SET x = @x_arg ::Int WHERE x = @x_arg_2 :: Int" [] [
     named "x_arg" Int;
     named "x_arg_2" Int
   ];

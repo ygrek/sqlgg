@@ -301,7 +301,7 @@ ruleMain = parse
 
   | "?" { PARAM { label=None; pos = pos lexbuf } }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
-  | "::" { TWO_TIMES_COLON }
+  | "::" { DOUBLECOLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
   | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }
