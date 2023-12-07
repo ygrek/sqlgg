@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED
+       CAST GENERATED ALWAYS VIRTUAL STORED TWO_TIMES_COLON
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -390,6 +390,7 @@ expr:
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p (depends Any)) }
+    | LPAREN p=PARAM TWO_TIMES_COLON mt=manual_type RPAREN { Param (new_param { p with pos=($startofs, $endofs) } mt) }
     | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
@@ -519,3 +520,14 @@ compound_op: UNION ALL? | EXCEPT | INTERSECT { }
 
 maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
 
+strict_type:
+    | T_TEXT     { Text }
+    | T_BLOB     { Blob }
+    | T_INTEGER  { Int }
+    | T_FLOAT    { Float }
+    | T_BOOLEAN  { Bool }
+    | T_DATETIME { Datetime }
+
+manual_type:
+    | strict_type      { strict   $1 }
+    | strict_type NULL { nullable $1 } 
