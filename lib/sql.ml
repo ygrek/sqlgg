@@ -498,7 +498,12 @@ let () =
   ["pow"; "power"] ||> monomorphic float [float;int];
   "unix_timestamp" |> monomorphic int [];
   "unix_timestamp" |> monomorphic int [datetime];
+  ["extract";"dayofmonth";"dayofweek";"dayofyear";"last_day"] ||> monomorphic int [datetime];
+  ["microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ] ||> monomorphic int [datetime];
   ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
+  ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Unit `Interval];
+  ["date_format";"time_format"] ||> monomorphic text [datetime; text];
+  "str_to_date" |> monomorphic datetime [text;text];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
   "substring" |> monomorphic text [text; int];
   "substring" |> monomorphic text [text; int; int];

@@ -59,7 +59,6 @@ let keywords =
    "cross",CROSS;
    "current", CURRENT;
    "date",DATE;
-   "day", DAY;
    "day_hour", DAY_HOUR;
    "day_microsecond", DAY_MICROSECOND;
    "day_minute", DAY_MINUTE;
@@ -78,6 +77,7 @@ let keywords =
    "escape",ESCAPE;
    "except",EXCEPT;
    "exists",EXISTS;
+   "extract",EXTRACT;
    "false", FALSE;
    "first",FIRST;
    "first_value",FIRST_VALUE;
@@ -90,7 +90,6 @@ let keywords =
    "global",GLOBAL;
    "group",GROUP;
    "having",HAVING;
-   "hour", HOUR;
    "hour_microsecond", HOUR_MICROSECOND;
    "hour_minute", HOUR_MINUTE;
    "hour_second", HOUR_SECOND;
@@ -112,14 +111,11 @@ let keywords =
    "limit",LIMIT;
    "local",LOCAL;
    "lock", LOCK;
-   "microsecond", MICROSECOND;
-   "minute", MINUTE;
    "minute_microsecond", MINUTE_MICROSECOND;
    "minute_second", MINUTE_SECOND;
    "mod", MOD;
    "mode", MODE;
    "modify", MODIFY;
-   "month", MONTH;
    "national",NATIONAL;
    "natural",NATURAL;
    "no", NO;
@@ -137,7 +133,6 @@ let keywords =
    "precision",PRECISION;
    "primary",PRIMARY;
    "procedure", PROCEDURE;
-   "quarter", QUARTER;
    "range", RANGE;
    "references",REFERENCES;
    "rename",RENAME;
@@ -146,7 +141,6 @@ let keywords =
    "returns", RETURNS;
    "row", ROW;
    "rows", ROWS;
-   "second", SECOND;
    "second_microsecond", SECOND_MICROSECOND;
    "select",SELECT;
    "set",SET;
@@ -172,11 +166,9 @@ let keywords =
    "values",VALUES;
    "varying",VARYING;
    "view",VIEW;
-   "week", WEEK;
    "when", WHEN;
    "where",WHERE;
    "with", WITH;
-   "year", YEAR;
    "year_month", YEAR_MONTH;
    "generated", GENERATED;
    "always", ALWAYS;
@@ -188,6 +180,7 @@ let keywords =
    "inner", INNER;
    "outer", OUTER;
   ] in (* more *)
+  k := !k @ List.map (fun s -> s, INTERVAL_UNIT s) [ "microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ];
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
   all DATETIME_FUNC ["getdate"]; (* mssql? *)
