@@ -182,13 +182,16 @@ let keywords =
    "always", ALWAYS;
    "virtual", VIRTUAL;
    "stored", STORED;
+   "left", LEFT;
+   "right", RIGHT;
+   "full", FULL;
+   "inner", INNER;
+   "outer", OUTER;
   ] in (* more *)
   let all token l = k := !k @ List.map (fun x -> x,token) l in
   all DATETIME_FUNC ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now";];
   all DATETIME_FUNC ["getdate"]; (* mssql? *)
   all CONFLICT_ALGO ["ignore"; "abort"; "fail"; "rollback"];
-  all JOIN_TYPE1 ["left";"right";"full"];
-  all JOIN_TYPE2 ["inner";"outer"];
   all LIKE_OP ["glob";"regexp";"match"];
   all AUTOINCREMENT ["autoincrement";"auto_increment"];
 (* standard built-in types

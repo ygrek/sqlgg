@@ -1,4 +1,5 @@
 open Printf
+open ExtLib
 open OUnit
 open Sqlgg
 open Sql
@@ -132,10 +133,18 @@ let test_parsing = [
 *)
 let test_join_result_cols () =
   Tables.reset ();
-  let ints = List.map (fun name -> attr name Int) in
+  let ints = List.map (fun name ->
+    if String.ends_with name "?" then
+      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; }
+    else
+      attr name Int)
+  in
   do_test "CREATE TABLE t1 (i INT, j INT)" [] [];
   do_test "CREATE TABLE t2 (k INT, j INT)" [] [];
-  do_test "SELECT * FROM t1 JOIN t2 ON i=t1.j" (ints ["i";"j";"k";"j"]) [];
+  do_test "SELECT * FROM t1 JOIN t2 ON t1.j=t2.j" (ints ["i";"j";"k";"j"]) [];
+  do_test "SELECT * FROM t1 LEFT JOIN t2 ON t1.j=t2.j" (ints ["i";"j";"k?";"j?"]) [];
+  do_test "SELECT * FROM t1 RIGHT JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k";"j"]) [];
+  do_test "SELECT * FROM t1 FULL JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k?";"j?"]) [];
   do_test "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
   do_test "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
 (*   NATURAL JOIN with common column in WHERE *)
@@ -148,17 +157,6 @@ let test_join_result_cols () =
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
     (ints ["j";"i";"k"])
     [named "x" Int];
-  ()
-
-let test_misc () =
-  let test =
-    let printer = [%derive.show: int list] in
-    fun x y z -> assert_equal ~printer (Schema.natural_ x y) z
-  in
-  test [1;2;3;4] [1;2;5;6] [1;2;3;4;5;6];
-  test [1;2;3;4] [4;3;2;1] [1;2;3;4];
-  test [1;2;3;4] [5;4;3;7;5;7] [3;4;1;2;5;7;5;7];
-  test [1;2;3;4] [5;2;2] [2;1;3;4;5]; (* ?! *)
   ()
 
 let test_enum = [
@@ -199,7 +197,6 @@ let run () =
     "single-row SELECT" >::: test4;
     "parsing" >::: test_parsing;
     "JOIN result columns" >:: test_join_result_cols;
-    "misc" >:: test_misc;
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
   ]

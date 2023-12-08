@@ -74,11 +74,9 @@ let rec is_grouping = function
 let exists_grouping columns =
   List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
 
-let cross = List.fold_left Schema.cross []
-
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
-let all_columns = Schema.make_unique $ cross
+let all_columns = Schema.(make_unique $ cross_all)
 let all_tbl_columns = all_columns $ List.map snd
 
 let resolve_column tables schema {cname;tname} =
@@ -281,24 +279,18 @@ and get_params_opt env = function
 
 and get_params_l env l = flat_map (get_params env) l
 
-and do_join (env,params) ((schema1,params1,_tables),kind) =
-  let schema = match kind with
-  | `Cross
-  | `Search _
-  | `Default -> Schema.cross env.schema schema1
-  | `Natural -> Schema.natural env.schema schema1
-  | `Using l -> Schema.join_using l env.schema schema1
-  in
+and do_join (env,params) ((schema1,params1,_tables),join_type,join_cond) =
+  let schema = Schema.Join.join join_type join_cond env.schema schema1 in
   let env = { env with schema } in
-  let p = match kind with
-  | `Cross | `Default | `Natural | `Using _ -> []
-  | `Search e -> get_params env e (* TODO should use final schema (same as tables)? *)
+  let p = match join_cond with
+  | Default | Natural | Using _ -> []
+  | On e -> get_params env e (* TODO should use final schema (same as tables)? *)
   in
   env, params @ params1 @ p
 
 and join env ((schema,p0,ts0),joins) =
   assert (env.schema = []);
-  let all_tables = List.flatten (ts0 :: List.map (fun ((_,_,ts),_) -> ts) joins) in
+  let all_tables = List.flatten (ts0 :: List.map (fun ((_,_,ts),_,_) -> ts) joins) in
   let env = { env with tables = env.tables @ all_tables; schema; } in
   List.fold_left do_join (env, p0) joins
 
@@ -335,8 +327,9 @@ and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
     but can refer to attributes of tables through `tables` *)
   let env = { env with schema = [] } in
+  (* FIXME resolved table schema depends on join (nullability with left), this is resolving too early *)
   match nested with
-  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,k) -> resolve_source env x, k) l)
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
   | None -> env, []
 
 and eval_select env { columns; from; where; group; having; } =
@@ -349,7 +342,7 @@ and eval_select env { columns; from; where; group; having; } =
   let final_schema = infer_schema env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
-  let env = Schema.{ env with schema = cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
+  let env = Schema.{ env with schema = Join.cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
   let p3 = get_params_opt env where in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
@@ -390,7 +383,7 @@ and eval_select_full env { select=(select,other); order; limit; } =
 
 
 let update_tables sources ss w =
-  let schema = cross @@ (List.map (fun (s,_,_) -> s) sources) in
+  let schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources in
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
   let env = { tables; schema; insert_schema=get_columns_schema tables (List.map fst ss); } in

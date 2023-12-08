@@ -31,6 +31,7 @@ struct
   let strict = nullability Strict
   let depends = nullability Depends
   let nullable = nullability Nullable
+  let make_nullable { t; nullability=_ } = nullable t
 
   let (=) : t -> t -> bool = equal
 
@@ -165,6 +166,8 @@ struct
 
   exception Error of t * string
 
+  let raise_error t fmt = Printf.ksprintf (fun s -> raise (Error (t,s))) fmt
+
   (** FIXME attribute case sensitivity? *)
   let by_name name = function attr -> attr.name = name
   let find_by_name t name = List.find_all (by_name name) t
@@ -174,6 +177,14 @@ struct
     | [x] -> x
     | [] -> raise (Error (t,"missing attribute : " ^ name))
     | _ -> raise (Error (t,"duplicate attribute : " ^ name))
+
+  let mem_by_name t a =
+    match find_by_name t a.name with
+    | [_] -> true
+    | [] -> false
+    | _ -> raise (Error (t,"duplicate attribute : " ^ a.name))
+
+  let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
 
   let make_unique = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name && a1.name <> "")
   let is_unique t = List.length (make_unique t) = List.length t
@@ -198,36 +209,40 @@ struct
     if exists t newname then raise @@ Error (t, "column already exists : " ^ newname);
     List.map (fun attr -> if attr.name = oldname then { attr with name = newname } else attr) t
 
-  let cross t1 t2 = t1 @ t2
-
-  (** [contains t attr] tests whether schema [t] contains attribute [attr] *)
-  let contains t attr = find t attr.name = attr
-
-  let check_contains t attr =
-    if not (contains t attr) then
-      raise (Error (t,"type mismatch for attribute " ^ attr.name))
-
-  let sub l a = List.filter (fun x -> not (List.mem x a)) l
-
   let to_string v = v |> List.map (fun attr -> sprintf "%s %s" (Type.show attr.domain) attr.name) |>
     String.concat ", " |> sprintf "[%s]"
   let names t = t |> List.map (fun attr -> attr.name) |> String.concat "," |> sprintf "[%s]"
 
-  let natural_ t1 t2 =
-    let (common,t1only) = List.partition (fun x -> List.mem x t2) t1 in
-    if 0 = List.length common then failwith "natural'";
-    let t2only = sub t2 common in
-    common @ t1only @ t2only
+  module Join = struct
 
-  let natural t1 t2 =
-    try natural_ t1 t2 with
-    | _ -> raise (Error (t1,"no common attributes for natural join of " ^
-                             (names t1) ^ " and " ^ (names t2)))
+    type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
+    type typ = Left | Right | Full | Inner [@@deriving show]
 
-  let join_using l t1 t2 =
-    let common = List.map (find t1) l in
-    List.iter (check_contains t2) common;
-    common @ sub t1 common @ sub t2 common
+    let cross t1 t2 = t1 @ t2
+
+    (* TODO check that attribute types match (ignoring nullability)? *)
+    let natural t1 t2 =
+      let (common,t1only) = List.partition (fun a -> mem_by_name t2 a) t1 in
+      if 0 = List.length common then raise (Error (t1,"no common attributes for natural join of " ^ (names t1) ^ " and " ^ (names t2)));
+      common @ t1only @ sub_by_name t2 common
+
+    let using l t1 t2 =
+      let common = List.map (find t1) l in
+      List.iter (fun a -> let (_:attr) = find t2 a.name in ()) common;
+      common @ sub_by_name t1 common @ sub_by_name t2 common
+
+    let join typ cond a b =
+      let nullable = List.map (fun a -> { a with domain = Type.make_nullable a.domain }) in
+      let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
+      match typ with
+      | Inner -> action a b
+      | Left -> action a (nullable b)
+      | Right -> action (nullable a) b
+      | Full -> action (nullable a) (nullable b)
+
+  end
+
+  let cross_all l = List.fold_left Join.cross [] l
 
   let compound t1 t2 =
     if List.length t1 <> List.length t2 then raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)));
@@ -327,9 +342,9 @@ type col_name = {
   tname : table_name option;
 }
 and limit = param list * bool
-and nested = source * (source * join_cond) list
+and nested = source * (source * Schema.Join.typ * join_condition) list
 and source = [ `Select of select_full | `Table of table_name | `Nested of nested ] * table_name option (* alias *)
-and join_cond = [ `Cross | `Search of expr | `Default | `Natural | `Using of string list ]
+and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
   from : nested option;

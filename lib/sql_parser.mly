@@ -34,7 +34,7 @@
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
-       CONCAT_OP JOIN_TYPE1 JOIN_TYPE2 NATURAL CROSS REPLACE IN GROUP HAVING
+       CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
@@ -211,15 +211,27 @@ select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(
 
 table_list: src=source joins=join_source* { (src,joins) }
 
-join_source: NATURAL maybe_join_type JOIN src=source { src,`Natural }
-           | CROSS JOIN src=source { src,`Cross }
-           | qualified_join src=source cond=join_cond { src,cond }
+anyorder(X,Y): x=X y=Y | y=Y x=X { x,y }
+inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
+left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
+right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
+full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
+natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
+cond(join): j=join JOIN src=source c=join_cond { src, j, c }
 
-qualified_join: COMMA | maybe_join_type JOIN { }
+join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
+           | j=natural(left_join)
+           | j=natural(right_join)
+           | j=natural(full_join)
+           | j=natural(inner_join)
+           | j=cond(left_join)
+           | j=cond(right_join)
+           | j=cond(full_join)
+           | j=cond(inner_join) { j }
 
-join_cond: ON e=expr { `Search e }
-         | USING l=sequence(IDENT) { `Using l }
-         | (* *) { `Default }
+join_cond: ON e=expr { On e }
+         | USING l=sequence(IDENT) { Using l }
+         | (* *) { Default }
 
 source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
@@ -517,8 +529,6 @@ sql_type: t=sql_type_flavor
         { t }
 
 compound_op: UNION ALL? | EXCEPT | INTERSECT { }
-
-maybe_join_type: JOIN_TYPE1? JOIN_TYPE2? { }
 
 strict_type:
     | T_TEXT     { Text }

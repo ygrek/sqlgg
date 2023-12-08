@@ -29,27 +29,27 @@
   <in/>
   <out>
    <value name="a" type="Int"/>
-   <value name="a2" type="Int"/>
-   <value name="b2" type="Int"/>
-   <value name="b" type="Int"/>
+   <value name="a2" type="Int" nullable="true"/>
+   <value name="b2" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_7" sql="SELECT * FROM t1 LEFT JOIN (t2 LEFT JOIN t3 ON t2.b2 = t3.b OR t2.b2 IS NULL) ON t1.a = t2.a2" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="a" type="Int"/>
-   <value name="a2" type="Int"/>
-   <value name="b2" type="Int"/>
-   <value name="b" type="Int"/>
+   <value name="a2" type="Int" nullable="true"/>
+   <value name="b2" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_8" sql="SELECT * FROM (t1 LEFT JOIN t2 ON t1.a = t2.a2) LEFT JOIN t3 ON t2.b2 = t3.b OR t2.b2 IS NULL" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
    <value name="a" type="Int"/>
-   <value name="a2" type="Int"/>
-   <value name="b2" type="Int"/>
-   <value name="b" type="Int"/>
+   <value name="a2" type="Int" nullable="true"/>
+   <value name="b2" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
   </out>
  </stmt>
  <table name="t3">
