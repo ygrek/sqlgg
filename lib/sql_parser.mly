@@ -29,6 +29,7 @@
 %token <Sql.param_id> PARAM
 %token <Sql.shared_query_ref_id> SHARED_QUERY_REF
 %token <int> LCURLY RCURLY
+%token <string> INTERVAL_UNIT (* interval unit keyword or function *)
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -49,9 +50,9 @@
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
-       YEAR_MONTH FALSE TRUE DUPLICATE
-%token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
-%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL
+       YEAR_MONTH FALSE TRUE DUPLICATE EXTRACT
+       NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
+       T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL
 
 (*
 %left COMMA_JOIN
@@ -454,7 +455,7 @@ expr:
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
-    | v=interval_unit { v }
+    | INTERVAL_UNIT { Value (strict (Unit `Interval)) }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
@@ -476,6 +477,8 @@ expr:
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
     | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
+    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun (Function.lookup f 1, [e]) }
+    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun (Function.lookup "extract" 1, [e]) }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
@@ -571,7 +574,7 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
-interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR
+interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
@@ -584,7 +587,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
-               | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }
+               | T_DATETIME (* | YEAR *) | DATE | TIME | TIMESTAMP { Datetime }
                | T_UUID { Blob }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
