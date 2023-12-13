@@ -186,6 +186,38 @@ let test_manual_param = [
   ];
 ]
 
+let test_left_join_without_foreign_key_and_is_not_null = [
+  tt "CREATE TABLE account_types ( type_id INT PRIMARY KEY, type_name VARCHAR(255) )" [] [];
+  tt "CREATE TABLE users ( user_id INT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT )" [] [];
+   "LEFT JOIN" >::
+     (fun _ -> todo "There are no constraints it should return null on the joined fields.")
+
+     (* Uncomment the test above when it will work *)
+    
+    (* tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
+    [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
+    {name="type_name"; domain=Type.nullable Text; extra=Constraints.empty;}] []; *)
+]
+
+let test_left_join_with_foreign_key_without_is_not_null = [
+  tt "CREATE TABLE customers ( customer_id INT PRIMARY KEY, customer_name VARCHAR(255) )" [] [];
+  tt "CREATE TABLE orders ( order_id INT PRIMARY KEY, date_field DATE, customer_id INT NOT NULL, FOREIGN KEY (customer_id) REFERENCES customers(customer_id) )" [][];
+  tt "SELECT orders.order_id, orders.date_field, customers.customer_name FROM orders LEFT JOIN customers ON orders.customer_id = customers.customer_id" [attr "order_id" Int ~extra:[PrimaryKey]; attr "date_field" Datetime ~extra:[]; 
+  attr "customer_name" Text ~extra:[]] [];
+]
+
+let test_left_join_with_foreign_key_null_without_is_not_null = [
+  tt "CREATE TABLE customers2 ( customer_id INT PRIMARY KEY, customer_name VARCHAR(255) )" [] [];
+  tt "CREATE TABLE orders2 ( order_id INT PRIMARY KEY, date_field DATE, customer_id INT NULL, FOREIGN KEY (customer_id) REFERENCES customers(customer_id) )" [][];
+
+  "LEFT JOIN, FOREIGN KEY field is NULLable" >::
+     (fun _ -> todo "There is a foreign key constraint, but the field with it is nullable, it should return null on the joined fields.")
+
+  (* Uncomment the test above when it will work *)
+  (* 
+   tt "SELECT orders2.order_id, orders2.date_field, customers2.customer_name FROM orders2 LEFT JOIN customers2 ON orders2.customer_id = customers2.customer_id" [attr "order_id" Int ~extra:[PrimaryKey]; attr "date_field" Datetime ~extra:[]; 
+   {name="customer_name"; domain=Type.nullable Text; extra=Constraints.empty;}] []; *)
+]
 
 let run () =
   Gen.params_mode := Some Named;
@@ -199,6 +231,10 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
+
+    "LEFT JOIN, without FOREIGN KEY, without IS NOT NULL" >::: test_left_join_without_foreign_key_and_is_not_null;
+    "LEFT JOIN, with FOREIGN KEY, without IS NOT NULL" >::: test_left_join_with_foreign_key_without_is_not_null;
+    "LEFT JOIN, with FOREIGN KEY, FOREIGN KEY field IS NULL" >::: test_left_join_with_foreign_key_null_without_is_not_null;
   ]
   in
   let test_suite = "main" >::: tests in
