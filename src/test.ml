@@ -186,6 +186,20 @@ let test_manual_param = [
   ];
 ]
 
+let test_coalesce_knows_first_not_null_arg = [
+  tt "CREATE TABLE tbl_test_coalesce ( field INT NULL )" [] [];
+  tt "SELECT COALESCE(field, 123, NULL, NULL, NUll) AS field_not_null FROM tbl_test_coalesce" [
+    attr "field_not_null" Int ~extra:[]
+  ] []; 
+]
+
+let test_coalesce_doesnt_infect = [
+  tt "CREATE TABLE tbl_test_coalesce ( field INT NOT NULL )" [] [];
+  tt "SELECT COALESCE(field, NULL) AS field_not_null FROM tbl_test_coalesce" [
+    attr "field_not_null" Int ~extra:[]
+  ] []; 
+]
+
 
 let run () =
   Gen.params_mode := Some Named;
@@ -199,6 +213,8 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
+    "coalesce knows first not null arg" >::: test_coalesce_knows_first_not_null_arg;
+    "coalesce doesn't infect null field woth nullability" >::: test_coalesce_doesnt_infect;
   ]
   in
   let test_suite = "main" >::: tests in
