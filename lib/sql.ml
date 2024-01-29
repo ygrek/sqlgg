@@ -154,7 +154,7 @@ type attr = {name : string; domain : Type.t; extra : Constraints.t; }
 
 let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-  let domain = Type.{ t = Option.default Int kind; nullability = if Constraints.mem Null extra then Nullable else Strict } in
+  let domain = Type.{ t = Option.default Int kind; nullability = if  not @@ Constraints.mem NotNull extra then Nullable else Strict } in
   {name;domain;extra}
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
