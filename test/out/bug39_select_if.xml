@@ -10,16 +10,16 @@
    <value name="x" type="Datetime"/>
   </in>
   <out>
-   <value name="id" type="Int"/>
-   <value name="host" type="Text"/>
-   <value name="_2" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
+   <value name="host" type="Text" nullable="true"/>
+   <value name="_2" type="Int" nullable="true"/>
   </out>
  </stmt>
  <table name="profiles">
   <schema>
-   <value name="id" type="Int"/>
-   <value name="host" type="Text"/>
-   <value name="today_count" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
+   <value name="host" type="Text" nullable="true"/>
+   <value name="today_count" type="Int" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

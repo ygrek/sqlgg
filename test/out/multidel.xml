@@ -14,7 +14,7 @@
    <value name="foo" type="Text" nullable="true"/>
   </in>
   <out>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="foo" type="Text" nullable="true"/>
   </out>
  </stmt>
@@ -81,7 +81,7 @@
  </table>
  <table name="foo">
   <schema>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="foo" type="Text" nullable="true"/>
   </schema>
  </table>

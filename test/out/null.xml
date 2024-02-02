@@ -20,7 +20,7 @@
  <stmt name="list" sql="SELECT `id`, IFNULL(`nullable`, 0) `nullable` FROM `test`" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Int"/>
   </out>
  </stmt>
@@ -42,7 +42,7 @@
  <stmt name="list_nullable" sql="SELECT `id`, `nullable` FROM test" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
@@ -79,7 +79,7 @@
  <stmt name="select_plus" sql="SELECT id + IFNULL(nullable_int, 0) FROM test" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="_0" type="Int"/>
+   <value name="_0" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_plus_null" sql="SELECT id + NULL FROM test" category="DQL" kind="select" cardinality="n">
@@ -103,11 +103,11 @@
  </stmt>
  <stmt name="get_max" sql="SELECT&#x0A;  max(nullable),&#x0A;  max(id),&#x0A;  IF(max(nullable) IS NULL, now(), max(nullable)),&#x0A;  IF(max(nullable) IS NULL, NULL, max(nullable))&#x0A;FROM&#x0A;  test&#x0A;WHERE&#x0A;  id = @id&#x0A;LIMIT 1" category="DQL" kind="select" cardinality="1">
   <in>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
   </in>
   <out>
    <value name="_0" type="Datetime" nullable="true"/>
-   <value name="_1" type="Int"/>
+   <value name="_1" type="Int" nullable="true"/>
    <value name="_2" type="Datetime" nullable="true"/>
    <value name="_3" type="Datetime" nullable="true"/>
   </out>
@@ -127,7 +127,7 @@
    <value name="x" type="Int" nullable="true"/>
   </in>
   <out>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="started_at" type="Datetime" nullable="true"/>
    <value name="finished_at" type="Datetime" nullable="true"/>
    <value name="started_at_should_be_nullable" type="Datetime"/>
@@ -136,15 +136,15 @@
  </stmt>
  <table name="tests">
   <schema>
-   <value name="test_id" type="Int"/>
-   <value name="run_id" type="Int"/>
+   <value name="test_id" type="Int" nullable="true"/>
+   <value name="run_id" type="Int" nullable="true"/>
    <value name="started_at" type="Datetime"/>
    <value name="finished_at" type="Datetime"/>
   </schema>
  </table>
  <table name="test">
   <schema>
-   <value name="id" type="Int"/>
+   <value name="id" type="Int" nullable="true"/>
    <value name="nullable" type="Datetime" nullable="true"/>
    <value name="nullable_too" type="Datetime" nullable="true"/>
    <value name="nullable_int" type="Int" nullable="true"/>

@@ -37,46 +37,53 @@ let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
 let attr ?(extra=[]) n d = make_attribute n (Some d) (Constraints.of_list extra)
+let attr' ?(extra=[]) ?(nullability=Type.Strict) name kind =
+  let domain: Type.t = { t = kind; nullability; } in
+  {name;domain;extra=Constraints.of_list extra }
+
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
 let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
+let param_nullable t = new_param { label = None; pos = (0,0) } (Type.nullable t)
 let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
 
 let test = Type.[
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
-     [attr "str" Text]
-     [param  Int];
-  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
-     [attr "x" Text; attr "z" Int]
-     [param Int; named "id" Int; named "lim" Int; ];
+     [attr' ~nullability:(Nullable) "str" Text]
+     [param_nullable Int];
+   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
+     [attr' "x" Text; attr' ~nullability:(Nullable) "z" Int]
+     [param_nullable Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
-     [attr "name" Text; attr "other_name" Text]
-     [named "delta" Int];
+     [  attr' ~nullability:(Nullable) "name" Text;
+        attr' ~nullability:(Nullable) "other_name" Text
+     ]
+     [named_nullable "delta" Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
-     [attr "name" Text;]
-     [named "x" Int; param Int; named "x" Int; param Int;];
+     [attr' ~nullability:(Nullable) "name" Text;]
+     [named_nullable "x" Int; param_nullable Int; named_nullable "x" Int; param_nullable Int;];
   tt "insert into test values"
      []
-     [named "id" Int; named "str" Text; named "name" Text];
+     [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
   tt "insert into test (str,name) values"
      []
-     [named "str" Text; named "name" Text];
+     [named_nullable "str" Text; named_nullable "name" Text];
   tt "insert into test values (2,'hello' || ' world',@name)"
      []
-     [named "name" Text];
-  tt "insert or replace into test values (2,?,?)" [] [param Text; param Text;];
-  tt "replace into test values (2,?,?)" [] [param Text; param Text;];
-  tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
-    [attr "str" Text; attr "q" Text]
-    [named "id" Int; named "id" Int; named "def" Text];
-  wrong "insert into test values (1,2)";
+     [named_nullable "name" Text];
+  tt "insert or replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
+  tt "replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
+ tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
+    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" Text]
+    [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" Text];
+   wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)
   tt "select str from test where id>=@id and id-@x<@id"
-    [attr "str" Text;]
-    [named "id" Int; named "x" Int; named "id" Int];
+    [attr' ~nullability:(Nullable) "str" Text;]
+    [named_nullable "id" Int; named_nullable "x" Int; named_nullable "id" Int];
   tt "select 3/5"
-    [attr "" Float;]
+    [attr' ~nullability:(Strict) "" Float;]
     [];
 ]
 
@@ -109,22 +116,22 @@ let test4 =
   tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
-  tt "select 1" a [] ~kind:(Select `One);
-  tt "select greatest(1+2,10)" a [] ~kind:(Select `One);
-  tt "select greatest(1+2,10) where 1 = 2" a [] ~kind:(Select `Zero_one);
-  tt "select 1 from test4" a [] ~kind:(Select `Nat);
-  tt "select 1+2 from test4" a [] ~kind:(Select `Nat);
+  tt "select 1" [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `One);
+  tt "select greatest(1+2,10)"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `One);
+  tt "select greatest(1+2,10) where 1 = 2"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Zero_one);
+  tt "select 1 from test4"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
+  tt "select 1+2 from test4"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
   tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
-    [attr "" Int; attr "" Text] [] ~kind:(Select `Nat);
-  tt "select greatest(10,x) from test4" a [] ~kind:(Select `Nat);
-  tt "select 1+2 from test4 where x=y" a [] ~kind:(Select `Nat);
-  tt "select max(x) as q from test4 where y = x + @n" [attr "q" Int] [named "n" Int] ~kind:(Select `One);
-  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named "n" Int] ~kind:(Select `One);
+    [attr' ~nullability:(Strict)  "" Int; attr' ~nullability:(Strict) "" Text] [] ~kind:(Select `Nat);
+  tt "select greatest(10,x) from test4" [attr' ~nullability:(Nullable) "" Int] [] ~kind:(Select `Nat);
+  tt "select 1+2 from test4 where x=y"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
+  tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:(Nullable) "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
 ]
 
 let test_parsing = [
-  tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT DEFAULT -1) ENGINE=MEMORY" [] [];
-  tt "SELECT 2+3, 2+-3, -10 FROM test5_1" [attr "" Int; attr "" Int; attr "" Int] [];
+  tt "CREATE TABLE test5_1 (x INT NOT NULL, y INT NOT NULL DEFAULT -1) ENGINE=MEMORY" [] [];
+  tt "SELECT 2+3, 2+-3, -10 FROM test5_1" [attr' "" Int; attr' "" Int; attr' "" Int] [];
 ]
 
 (*
@@ -151,12 +158,12 @@ let test_join_result_cols () =
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x"
     (ints ["j";"i";"k"])
-    [named "x" Int];
+    [named_nullable "x" Int];
 (*   NATURAL JOIN with common column qualified in WHERE *)
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
     (ints ["j";"i";"k"])
-    [named "x" Int];
+    [named_nullable "x" Int];
   ()
 
 let test_enum = [
