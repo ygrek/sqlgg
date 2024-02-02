@@ -7,8 +7,8 @@
  </stmt>
  <stmt name="add_person" sql="INSERT INTO person (name,surname) VALUES (@name,@surname)" category="DML" kind="insert" target="person" cardinality="0">
   <in>
-   <value name="name" type="Text"/>
-   <value name="surname" type="Text"/>
+   <value name="name" type="Text" nullable="true"/>
+   <value name="surname" type="Text" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -18,9 +18,9 @@
  </stmt>
  <stmt name="add_money" sql="INSERT INTO money VALUES (@src,@dst,@amount)" category="DML" kind="insert" target="money" cardinality="0">
   <in>
-   <value name="src" type="Int"/>
-   <value name="dst" type="Int"/>
-   <value name="amount" type="Int"/>
+   <value name="src" type="Int" nullable="true"/>
+   <value name="dst" type="Int" nullable="true"/>
+   <value name="amount" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -28,7 +28,7 @@
   <in/>
   <out>
    <value name="fullname" type="Text"/>
-   <value name="total" type="Int"/>
+   <value name="total" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="list_donors" sql="SELECT DISTINCT surname FROM person JOIN money ON src = id AND dst = (SELECT id FROM person WHERE surname LIKE @_0) LIMIT @limit" category="DQL" kind="select" cardinality="n">
@@ -37,7 +37,7 @@
    <value name="limit" type="Int"/>
   </in>
   <out>
-   <value name="surname" type="Text"/>
+   <value name="surname" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="drop_person" sql="DROP TABLE IF EXISTS person" category="DDL" kind="drop" target="person" cardinality="0">

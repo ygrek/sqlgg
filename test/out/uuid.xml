@@ -8,12 +8,12 @@
  <stmt name="select_1" sql="SELECT * FROM XXX" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Text"/>
+   <value name="id" type="Text" nullable="true"/>
   </out>
  </stmt>
  <table name="xxx">
   <schema>
-   <value name="id" type="Text"/>
+   <value name="id" type="Text" nullable="true"/>
   </schema>
  </table>
 </sqlgg>
