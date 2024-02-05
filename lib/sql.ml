@@ -164,7 +164,35 @@ struct
   type t = attr list
     [@@deriving show]
 
-  exception Error of t * string
+  exception Error of t * string  
+
+  module Source = struct
+    module Attr = struct 
+      type 'a t = { attr: attr; sources: 'a list } [@@deriving show]
+      
+      let by_name name sattr = sattr.attr.name = name
+    end
+      
+    type 'a t = 'a Attr.t list
+
+    let find_by_name t name = List.find_all (Attr.by_name name) t
+
+    let find t name =
+      match find_by_name t name with
+      | [x] -> x
+      | [] -> raise (Error (List.map (fun i -> i.Attr.attr) t,"missing attribute : " ^ name))
+      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ name))
+     
+    let mem_by_name t a =
+      match find_by_name t a.Attr.attr.name with
+      | [_] -> true
+      | [] -> false
+      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ a.attr.name))
+
+    let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
+
+    let from_schema list = List.map (fun sattr -> sattr.Attr.attr) list
+  end 
 
   let raise_error t fmt = Printf.ksprintf (fun s -> raise (Error (t,s))) fmt
 
@@ -177,14 +205,6 @@ struct
     | [x] -> x
     | [] -> raise (Error (t,"missing attribute : " ^ name))
     | _ -> raise (Error (t,"duplicate attribute : " ^ name))
-
-  let mem_by_name t a =
-    match find_by_name t a.name with
-    | [_] -> true
-    | [] -> false
-    | _ -> raise (Error (t,"duplicate attribute : " ^ a.name))
-
-  let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
 
   let make_unique = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name && a1.name <> "")
   let is_unique t = List.length (make_unique t) = List.length t
@@ -222,17 +242,23 @@ struct
 
     (* TODO check that attribute types match (ignoring nullability)? *)
     let natural t1 t2 =
-      let (common,t1only) = List.partition (fun a -> mem_by_name t2 a) t1 in
-      if 0 = List.length common then raise (Error (t1,"no common attributes for natural join of " ^ (names t1) ^ " and " ^ (names t2)));
-      common @ t1only @ sub_by_name t2 common
+      let (common,t1only) = List.partition (fun a -> Source.mem_by_name t2 a) t1 in
+      Source.Attr.(
+        if 0 = List.length common then 
+          let t1_attrs = List.map (fun i -> i.attr) t1 in
+          raise (Error (t1_attrs,"no common attributes for natural join of " ^
+           (names (t1_attrs)) ^ " and " ^ (names (List.map (fun i -> i.attr) t2))))
+      );
+      common @ t1only @ Source.sub_by_name t2 common
 
     let using l t1 t2 =
-      let common = List.map (find t1) l in
-      List.iter (fun a -> let (_:attr) = find t2 a.name in ()) common;
-      common @ sub_by_name t1 common @ sub_by_name t2 common
+      let common = List.map (Source.find t1) l in
+      List.iter (fun a -> let _ = Source.find t2 a.Source.Attr.attr.name in ()) common;
+      common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
     let join typ cond a b =
-      let nullable = List.map (fun a -> { a with domain = Type.make_nullable a.domain }) in
+      let nullable = List.map (fun data -> 
+        Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
       | Inner -> action a b
@@ -245,7 +271,11 @@ struct
   let cross_all l = List.fold_left Join.cross [] l
 
   let compound t1 t2 =
-    if List.length t1 <> List.length t2 then raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)));
+    let open Source in
+    let open Attr in
+    if List.length t1 <> List.length t2 then 
+      raise (Error (List.map (fun i -> i.attr) t1, (to_string (List.map (fun i -> i.attr) t1)) 
+          ^ " differs in size to " ^ (to_string (List.map (fun i -> i.attr) t2))));
     let show_name i a =
       match a.name with
       | "" -> sprintf "column %d (of %d)" (i+1) (List.length t1)
@@ -253,11 +283,11 @@ struct
     in
     List.combine t1 t2
     |> List.mapi begin fun i (a1,a2) ->
-      match Type.supertype a1.domain a2.domain with
-      | Some t -> { a1 with domain=t }
-      | None -> raise (Error (t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
-        (show_name i a1) (Type.show a1.domain)
-        (show_name i a2) (Type.show a2.domain)))
+      match Type.supertype a1.attr.domain a2.attr.domain with
+      | Some t -> { a1 with attr = { a1.attr with domain=t } }
+      | None -> raise (Error (List.map (fun i -> i.attr) t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
+        (show_name i a1.attr) (Type.show a1.attr.domain)
+        (show_name i a2.attr) (Type.show a2.attr.domain)))
     end
 
   let add t col pos =

@@ -130,8 +130,8 @@
    <value name="id" type="Int"/>
    <value name="started_at" type="Datetime" nullable="true"/>
    <value name="finished_at" type="Datetime" nullable="true"/>
-   <value name="started_at_should_be_nullable" type="Datetime"/>
-   <value name="finished_at_should_be_nullable" type="Datetime"/>
+   <value name="started_at_should_be_nullable" type="Datetime" nullable="true"/>
+   <value name="finished_at_should_be_nullable" type="Datetime" nullable="true"/>
   </out>
  </stmt>
  <table name="tests">
