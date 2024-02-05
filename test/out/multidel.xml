@@ -68,8 +68,8 @@
  </stmt>
  <stmt name="delete_foo_not_alias" sql="DELETE foo&#x0A;FROM foo as f LEFT JOIN bar as b ON f.id = b.foo_id&#x0A;WHERE bar.baz = @bad OR b.baz = @bad2" category="DML" kind="delete" target="foo" cardinality="0">
   <in>
-   <value name="bad" type="Text"/>
-   <value name="bad2" type="Text"/>
+   <value name="bad" type="Text" nullable="true"/>
+   <value name="bad2" type="Text" nullable="true"/>
   </in>
   <out/>
  </stmt>

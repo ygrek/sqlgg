@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_account_types" sql="CREATE TABLE IF NOT EXISTS account_types ( &#x0A;    type_id INT NOT NULL PRIMARY KEY, &#x0A;    type_name VARCHAR(255) NOT NULL &#x0A;)" category="DDL" kind="create" target="account_types" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_users" sql="CREATE TABLE IF NOT EXISTS users (&#x0A;    id INT NOT NULL, &#x0A;    user_id INT NOT NULL PRIMARY KEY, &#x0A;    name VARCHAR(255), &#x0A;    email VARCHAR(255), &#x0A;    account_type_id INT NULL, &#x0A;    FOREIGN KEY (account_type_id) &#x0A;    REFERENCES account_types(type_id)&#x0A;)" category="DDL" kind="create" target="users" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT &#x0A;    users.name,&#x0A;    users.email, &#x0A;    account_types.type_name FROM users &#x0A;LEFT JOIN account_types ON users.account_type_id = account_types.type_id" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="name" type="Text" nullable="true"/>
+   <value name="email" type="Text" nullable="true"/>
+   <value name="type_name" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="users">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="user_id" type="Int"/>
+   <value name="name" type="Text" nullable="true"/>
+   <value name="email" type="Text" nullable="true"/>
+   <value name="account_type_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="account_types">
+  <schema>
+   <value name="type_id" type="Int"/>
+   <value name="type_name" type="Text"/>
+  </schema>
+ </table>
+</sqlgg>
