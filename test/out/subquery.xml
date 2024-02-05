@@ -13,7 +13,7 @@
   <in/>
   <out>
    <value name="m_id" type="Int"/>
-   <value name="d_id" type="Int"/>
+   <value name="d_id" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_3" sql="SELECT x.* FROM (&#x0A;  SELECT 1, 'foo', NULL&#x0A;) x" category="DQL" kind="select" cardinality="n">
