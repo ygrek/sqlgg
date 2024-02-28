@@ -110,6 +110,7 @@ struct
   | Group of t (* _ -> t *)
   | Agg (* 'a -> 'a *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
+  | Coalesce of tyvar * tyvar
   | Ret of kind (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
@@ -125,13 +126,13 @@ struct
   | Group ret -> fprintf pp "|_| -> %s" (show ret)
   | Ret ret -> fprintf pp "_ -> %s" (show_kind ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | F _ | Multi _ -> false
+  | Ret _ | F _ | Multi _ | Coalesce _ -> false
 end
 
 module Constraint =
@@ -426,6 +427,7 @@ val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
+val add_multi: Type.func -> string -> unit
 val sponge : Type.func
 
 end = struct
@@ -487,7 +489,7 @@ let () =
   "floor" |> monomorphic int [float];
   "nullif" |> add 2 (F (Var 0 (* TODO nullable *), [Var 0; Var 0]));
   "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
-  ["least";"greatest";"coalesce"] ||> multi_polymorphic;
+  ["least";"greatest";] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
   ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ text) (Typ text);
   "date" |> monomorphic datetime [datetime];
@@ -505,4 +507,5 @@ let () =
   "substring_index" |> monomorphic text [text; text; int];
   "last_insert_id" |> monomorphic int [];
   "last_insert_id" |> monomorphic int [int];
+  add_multi Type.(Coalesce (Var 0, Var 0)) "coalesce";
   ()
