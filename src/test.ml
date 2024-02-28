@@ -37,6 +37,11 @@ let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
 let attr ?(extra=[]) n d = make_attribute n (Some d) (Constraints.of_list extra)
+
+let attr' ?(extra=[]) ?(nullability=Type.Strict) name kind =
+  let domain: Type.t = { t = kind; nullability; } in
+  {name;domain;extra=Constraints.of_list extra }
+
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
 let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
 let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
@@ -186,6 +191,12 @@ let test_manual_param = [
   ];
 ]
 
+let test_coalesce = [
+  tt "CREATE TABLE test8 (x integer unsigned null)" [] [];
+  tt "SELECT COALESCE(x, null, null) as x FROM test8" [attr' ~nullability:(Nullable) "x" Int;] [];
+  tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr "x" Int;] [];
+]
+
 
 let run () =
   Gen.params_mode := Some Named;
@@ -199,6 +210,7 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
+    "test_coalesce" >::: test_coalesce;
   ]
   in
   let test_suite = "main" >::: tests in
