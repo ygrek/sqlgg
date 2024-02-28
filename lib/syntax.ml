@@ -207,13 +207,7 @@ and assign_types expr =
           | Multi (ret,each_arg) -> F (ret, List.map (fun _ -> each_arg) types)
           | x -> x
         in
-        let (ret,inferred_params) = match func, types with
-        | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ]
-        | Group typ, _ -> typ, types
-        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
-        | F (ret, args), _ ->
+        let convert_args ret args = 
           let typevar = Hashtbl.create 10 in
           List.iter2 begin fun arg typ ->
             match arg with
@@ -237,8 +231,29 @@ and assign_types expr =
           if !debug then typevar |> Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ));
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
           let args = List.map convert args in
+          args, convert ret in
+
+        let (ret,inferred_params) = match func, types with
+        | Multi _, _ -> assert false (* rewritten into F above *)
+        | Agg, [typ]
+        | Group typ, _ -> typ, types
+        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
+        | Coalesce (ret, each_arg) , _ -> 
+          let args = List.map (fun _ -> each_arg) types in
+          let args, ret = convert_args ret args in
+          let ret = types
+            |> List.find_map_opt (fun arg -> 
+              match arg.nullability with 
+              | Strict -> Some { ret with nullability = Strict }
+              | _ -> None ) 
+            |> Option.default (
+              let nullable = common_nullability args in
+              undepend ret nullable ) in
+          ret , args
+        | F (ret, args), _ ->
+          let args, ret = convert_args ret args in
           let nullable = common_nullability args in
-          let ret = convert ret in
           undepend ret nullable, args
         | Ret Any, _ -> (* lame *)
           begin match common_supertype types with
