@@ -202,9 +202,10 @@ and assign_types expr =
             (String.concat ", " @@ List.map show types)
         in
         if !debug then eprintfn "func %s" (show_func ());
+        let types_to_arg each_arg = List.map (Fun.const each_arg) types in
         let func =
           match func with
-          | Multi (ret,each_arg) -> F (ret, List.map (fun _ -> each_arg) types)
+          | Multi (ret,each_arg) -> F (ret, types_to_arg each_arg)
           | x -> x
         in
         let convert_args ret args = 
@@ -240,16 +241,15 @@ and assign_types expr =
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Coalesce (ret, each_arg) , _ -> 
-          let args = List.map (fun _ -> each_arg) types in
+          let args = types_to_arg each_arg in
           let args, ret = convert_args ret args in
-          let ret = types
-            |> List.find_map_opt (fun arg -> 
-              match arg.nullability with 
-              | Strict -> Some { ret with nullability = Strict }
-              | _ -> None ) 
-            |> Option.default (
-              let nullable = common_nullability args in
-              undepend ret nullable ) in
+          let has_one_strict = List.exists (fun arg ->
+            match arg.nullability with 
+            | Strict -> true | _ -> false
+          ) types in
+          let ret = if has_one_strict then
+            { ret with nullability = Strict }
+            else args |> common_nullability |> undepend ret in 
           ret , args
         | F (ret, args), _ ->
           let args, ret = convert_args ret args in
