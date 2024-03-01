@@ -62,7 +62,10 @@ let rec is_grouping = function
 | Column _
 | SelectExpr _
 | Inparam _
-| Inserted _ -> false
+| Inserted _ 
+| Not_null _ 
+| Is_null _ 
+| Bool_binop _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
   | None -> failed ~at:p.pos "inconsistent grouping in choice branches"
@@ -144,6 +147,7 @@ let rec resolve_columns env expr =
     eprintf "schema: "; Sql.Schema.print (Schema.Source.from_schema env.schema);
     Tables.print stderr env.tables;
   end;
+  let poly ret args = Fun (F (Typ ret, List.map (fun _ -> Type.Var 0) args), args) in
   let rec each e =
     match e with
     | Value x -> ResValue x
@@ -155,6 +159,9 @@ let rec resolve_columns env expr =
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
+    | Not_null expr -> each @@ poly (Type.strict Bool) [expr]
+    | Is_null expr -> each @@ poly (Type.strict Bool) [expr]
+    | Bool_binop (And, e1, e2) | Bool_binop(Or, e1, e2) | Bool_binop(Xor, e1, e2) -> each @@ Type.(Fun ((fixed Bool [Bool;Bool]),[e1;e2]))
     | Fun (r,l) ->
       ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
@@ -350,6 +357,7 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
+  | Not_null _ | Is_null _ | Bool_binop _  -> failwith "FIXME?"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
@@ -373,6 +381,21 @@ and eval_select env { columns; from; where; group; having; } =
     else if group = [] && exists_grouping columns then `One
     else `Nat
   in
+  (* a is null or b is null or c is not null *)
+  let schema = List.map (fun i -> 
+    let rec fn = function 
+     | Is_null _ -> false
+     | Not_null (Column e) -> e.cname = i.Schema.Source.Attr.attr.name
+     | Bool_binop (Or, e1, e2) -> fn e1 && fn e2
+     | Bool_binop (And, e1, e2) -> fn e1 || fn e2
+     | Fun (_, exprs) -> List.exists fn exprs
+     | _ -> false in
+    let result = where |> Option.map fn |> Option.default false in
+    if result then 
+      { i with attr = { i.Schema.Source.Attr.attr with domain = { i.Schema.Source.Attr.attr.domain with nullability = Strict;}; extra = Constraints.empty  } } 
+    else i
+  ) env.schema in
+  let env = { env with schema } in
   let final_schema = infer_schema env columns in
   let make_unique = List.unique ~cmp:(fun a1 a2 -> 
     (* let l1 = List.map (fun i -> i.tn) a1.sources in

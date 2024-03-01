@@ -375,7 +375,7 @@ expr:
     | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret Any),[e1;e2]) } (* mysql special *)
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
-    | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
+    | e1=expr b=boolean_bin_op e2=expr %prec AND { Bool_binop (b, e1, e2) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun ((fixed Text [Text;Text]),[e1;e2]) }
     | e=like_expr esc=escape?
@@ -414,7 +414,8 @@ expr:
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
     | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
-    | e=expr IS NOT? NULL { poly (strict Bool) [e] }
+    | e=expr IS NULL { Is_null e }
+    | e=expr IS NOT NULL { Not_null e }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ (strict Bool), [Typ (depends Any)]),[SelectExpr (select,`Exists)]) }
@@ -489,7 +490,7 @@ func_params: DISTINCT? l=expr_list { l }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
 comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP | NOT_DISTINCT_OP { }
-boolean_bin_op: AND | OR | XOR { }
+boolean_bin_op: AND { And } | OR { Or } | XOR { Xor }
 
 unary_op: EXCL { }
         | TILDE { }

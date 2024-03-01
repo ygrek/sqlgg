@@ -389,6 +389,7 @@ and select_full = {
 }
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
+and bool_binop = And | Or | Xor
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
@@ -399,6 +400,9 @@ and expr =
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
+  | Not_null of expr
+  | Is_null of expr
+  | Bool_binop of bool_binop * expr * expr
 and column =
   | All
   | AllOf of table_name
