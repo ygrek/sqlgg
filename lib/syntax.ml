@@ -161,7 +161,7 @@ let rec resolve_columns env expr =
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Not_null expr -> each @@ poly (Type.strict Bool) [expr]
     | Is_null expr -> each @@ poly (Type.strict Bool) [expr]
-    | Bool_binop (And, e1, e2) | Bool_binop(Or, e1, e2) | Bool_binop(Xor, e1, e2) -> each @@ Type.(Fun ((fixed Bool [Bool;Bool]),[e1;e2]))
+    | Bool_binop (_, e1, e2) -> each @@ Type.(Fun ((fixed Bool [Bool;Bool]),[e1;e2]))
     | Fun (r,l) ->
       ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
@@ -357,13 +357,13 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
-  | Not_null _ | Is_null _ | Bool_binop _  -> failwith "FIXME?"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> ResFun (x,List.map ensure_res_expr l) (* FIXME *)
-  | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
+  | SelectExpr _ 
+  | Not_null _ | Is_null _ | Bool_binop _ -> failwith "not implemented : ensure_res_expr for SELECT"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
@@ -381,7 +381,6 @@ and eval_select env { columns; from; where; group; having; } =
     else if group = [] && exists_grouping columns then `One
     else `Nat
   in
-  (* a is null or b is null or c is not null *)
   let schema = List.map (fun i -> 
     let rec fn = function 
      | Is_null _ -> false
