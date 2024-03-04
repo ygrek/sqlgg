@@ -186,6 +186,14 @@ let test_manual_param = [
   ];
 ]
 
+let test_left_join = [
+  tt "CREATE TABLE account_types ( type_id INT NOT NULL PRIMARY KEY, type_name VARCHAR(255) NOT NULL )" [] [];
+  tt "CREATE TABLE users (id INT NOT NULL, user_id INT NOT NULL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT NULL, FOREIGN KEY (account_type_id) REFERENCES account_types(type_id))" [][];
+  tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
+  [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
+  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);}] [];
+]
+
 
 let run () =
   Gen.params_mode := Some Named;
@@ -199,6 +207,7 @@ let run () =
     "JOIN result columns" >:: test_join_result_cols;
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
+    "test_left_join" >::: test_left_join;
   ]
   in
   let test_suite = "main" >::: tests in
