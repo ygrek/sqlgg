@@ -126,7 +126,7 @@ let test4 =
   tt "select greatest(10,x) from test4" [attr' ~nullability:(Nullable) "" Int] [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
   tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:(Nullable) "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
-  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:(Strict) "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
 ]
 
 let test_parsing = [
@@ -201,6 +201,11 @@ let test_left_join = [
   {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);}] [];
 ]
 
+let test_coalesce = [
+  tt "CREATE TABLE test8 (x integer unsigned null)" [] [];
+  tt "SELECT COALESCE(x, null, null) as x FROM test8" [attr' ~nullability:(Nullable) "x" Int;] [];
+  tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
+]
 
 let run () =
   Gen.params_mode := Some Named;
@@ -215,6 +220,7 @@ let run () =
     "enum" >::: test_enum;
     "manual_param" >::: test_manual_param;
     "test_left_join" >::: test_left_join;
+    "test_coalesce" >::: test_coalesce;
   ]
   in
   let test_suite = "main" >::: tests in

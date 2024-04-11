@@ -202,18 +202,13 @@ and assign_types expr =
             (String.concat ", " @@ List.map show types)
         in
         if !debug then eprintfn "func %s" (show_func ());
+        let types_to_arg each_arg = List.map (Fun.const each_arg) types in
         let func =
           match func with
-          | Multi (ret,each_arg) -> F (ret, List.map (fun _ -> each_arg) types)
+          | Multi (ret,each_arg) -> F (ret, types_to_arg each_arg)
           | x -> x
         in
-        let (ret,inferred_params) = match func, types with
-        | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ]
-        | Group typ, _ -> typ, types
-        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
-        | F (ret, args), _ ->
+        let convert_args ret args = 
           let typevar = Hashtbl.create 10 in
           List.iter2 begin fun arg typ ->
             match arg with
@@ -237,8 +232,28 @@ and assign_types expr =
           if !debug then typevar |> Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ));
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
           let args = List.map convert args in
+          args, convert ret in
+
+        let (ret,inferred_params) = match func, types with
+        | Multi _, _ -> assert false (* rewritten into F above *)
+        | Agg, [typ]
+        | Group typ, _ -> typ, types
+        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
+        | Coalesce (ret, each_arg) , _ -> 
+          let args = types_to_arg each_arg in
+          let args, ret = convert_args ret args in
+          let has_one_strict = List.exists (fun arg ->
+            match arg.nullability with 
+            | Strict -> true | _ -> false
+          ) types in
+          let ret = if has_one_strict then
+            { ret with nullability = Strict }
+            else args |> common_nullability |> undepend ret in 
+          ret , args
+        | F (ret, args), _ ->
+          let args, ret = convert_args ret args in
           let nullable = common_nullability args in
-          let ret = convert ret in
           undepend ret nullable, args
         | Ret Any, _ -> (* lame *)
           begin match common_supertype types with
