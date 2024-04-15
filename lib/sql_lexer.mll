@@ -103,6 +103,7 @@ let keywords =
    "into",INTO;
    "is", IS;
    "join",JOIN;
+   "straight_join",STRAIGHT_JOIN;
    "key",KEY;
    "lag", LAG;
    "language", LANGUAGE;
