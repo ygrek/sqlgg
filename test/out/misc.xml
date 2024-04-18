@@ -261,7 +261,7 @@
  </stmt>
  <table name="oauth_tokens">
   <schema>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="unique_value_google_drive" type="Text" nullable="true"/>
   </schema>
  </table>

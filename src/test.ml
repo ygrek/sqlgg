@@ -207,6 +207,11 @@ let test_coalesce = [
   tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
 ]
 
+let test_coalesce = [
+  tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
+  tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:(Strict) "x" Int;] [];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =

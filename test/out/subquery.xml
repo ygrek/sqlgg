@@ -12,7 +12,7 @@
  <stmt name="select_2" sql="SELECT m.`id` m_id, d.`id` d_id&#x0A;FROM `master` m&#x0A;LEFT JOIN `detail` d ON d.`id` = (&#x0A;  SELECT dd.`id`&#x0A;  FROM `detail` dd&#x0A;  WHERE dd.`master_id` = m.`id`&#x0A;  ORDER BY dd.`id` DESC&#x0A;  LIMIT 1&#x0A;)" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="m_id" type="Int" nullable="true"/>
+   <value name="m_id" type="Int"/>
    <value name="d_id" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -40,7 +40,7 @@
  <stmt name="select_6" sql="SELECT id, NULL FROM master&#x0A;UNION SELECT id, NOW() FROM master" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="_1" type="Datetime" nullable="true"/>
   </out>
  </stmt>
@@ -50,14 +50,14 @@
  </stmt>
  <table name="detail">
   <schema>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="master_id" type="Int" nullable="true"/>
    <value name="at" type="Datetime" nullable="true"/>
   </schema>
  </table>
  <table name="master">
   <schema>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
   </schema>
  </table>
 </sqlgg>
