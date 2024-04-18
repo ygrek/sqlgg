@@ -11,35 +11,35 @@
  </stmt>
  <stmt name="select_2" sql="SELECT pk, LAG(pk) OVER (ORDER BY pk) AS l,&#x0A;  LAG(pk,1) OVER (ORDER BY pk) AS l1,&#x0A;  LAG(pk+@inc,2) OVER (ORDER BY pk) AS l2,&#x0A;  LAG(pk,0) OVER (ORDER BY pk) AS l0,&#x0A;  LAG(pk,-1) OVER (ORDER BY pk) AS lm1,&#x0A;  LAG(pk,-2) OVER (ORDER BY pk) AS lm2 &#x0A;FROM t1" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="inc" type="Int" nullable="true"/>
+   <value name="inc" type="Int"/>
   </in>
   <out>
-   <value name="pk" type="Int" nullable="true"/>
-   <value name="l" type="Int" nullable="true"/>
-   <value name="l1" type="Int" nullable="true"/>
-   <value name="l2" type="Int" nullable="true"/>
-   <value name="l0" type="Int" nullable="true"/>
-   <value name="lm1" type="Int" nullable="true"/>
-   <value name="lm2" type="Int" nullable="true"/>
+   <value name="pk" type="Int"/>
+   <value name="l" type="Int"/>
+   <value name="l1" type="Int"/>
+   <value name="l2" type="Int"/>
+   <value name="l0" type="Int"/>
+   <value name="lm1" type="Int"/>
+   <value name="lm2" type="Int"/>
   </out>
  </stmt>
  <stmt name="select_3" sql="SELECT pk, LEAD(pk) OVER (ORDER BY pk) AS l,&#x0A;  LEAD(pk,1) OVER (ORDER BY pk) AS l1,&#x0A;  LEAD(pk+@inc,2) OVER (ORDER BY pk) AS l2,&#x0A;  LEAD(pk,0) OVER (ORDER BY pk) AS l0,&#x0A;  LEAD(pk,-1) OVER (ORDER BY pk) AS lm1,&#x0A;  LEAD(pk,-2) OVER (ORDER BY pk) AS lm2 &#x0A;FROM t1" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="inc" type="Int" nullable="true"/>
+   <value name="inc" type="Int"/>
   </in>
   <out>
-   <value name="pk" type="Int" nullable="true"/>
-   <value name="l" type="Int" nullable="true"/>
-   <value name="l1" type="Int" nullable="true"/>
-   <value name="l2" type="Int" nullable="true"/>
-   <value name="l0" type="Int" nullable="true"/>
-   <value name="lm1" type="Int" nullable="true"/>
-   <value name="lm2" type="Int" nullable="true"/>
+   <value name="pk" type="Int"/>
+   <value name="l" type="Int"/>
+   <value name="l1" type="Int"/>
+   <value name="l2" type="Int"/>
+   <value name="l0" type="Int"/>
+   <value name="lm1" type="Int"/>
+   <value name="lm2" type="Int"/>
   </out>
  </stmt>
  <table name="t1">
   <schema>
-   <value name="pk" type="Int" nullable="true"/>
+   <value name="pk" type="Int"/>
    <value name="a" type="Int" nullable="true"/>
    <value name="b" type="Int" nullable="true"/>
    <value name="c" type="Text" nullable="true"/>

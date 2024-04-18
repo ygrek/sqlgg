@@ -8,7 +8,7 @@
  <stmt name="select_1" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` MICROSECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -16,7 +16,7 @@
  <stmt name="select_2" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` SECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -24,7 +24,7 @@
  <stmt name="select_3" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -32,7 +32,7 @@
  <stmt name="select_4" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -40,7 +40,7 @@
  <stmt name="select_5" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -48,7 +48,7 @@
  <stmt name="select_6" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` WEEK &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -56,7 +56,7 @@
  <stmt name="select_7" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` MONTH &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -64,7 +64,7 @@
  <stmt name="select_8" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` QUARTER &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -72,7 +72,7 @@
  <stmt name="select_9" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` YEAR &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -80,7 +80,7 @@
  <stmt name="select_10" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` SECOND_MICROSECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -88,7 +88,7 @@
  <stmt name="select_11" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE_MICROSECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -96,7 +96,7 @@
  <stmt name="select_12" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` MINUTE_SECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -104,7 +104,7 @@
  <stmt name="select_13" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_MICROSECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -112,7 +112,7 @@
  <stmt name="select_14" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_SECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -120,7 +120,7 @@
  <stmt name="select_15" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` HOUR_MINUTE &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -128,7 +128,7 @@
  <stmt name="select_16" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_MICROSECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -136,7 +136,7 @@
  <stmt name="select_17" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_SECOND &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -144,7 +144,7 @@
  <stmt name="select_18" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_MINUTE &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -152,7 +152,7 @@
  <stmt name="select_19" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` DAY_HOUR &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
@@ -160,14 +160,14 @@
  <stmt name="select_20" sql="SELECT * FROM events WHERE stamp + INTERVAL `interval` YEAR_MONTH &lt; NOW()" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
  <table name="events">
   <schema>
-   <value name="id" type="Int" nullable="true"/>
+   <value name="id" type="Int"/>
    <value name="stamp" type="Datetime" nullable="true"/>
    <value name="interval" type="Int" nullable="true"/>
   </schema>
