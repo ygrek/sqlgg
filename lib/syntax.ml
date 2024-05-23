@@ -406,7 +406,7 @@ let annotate_select select types =
   in
   { select with select = { select1 with columns = loop [] select1.columns types }, compound }
 
-let eval (stmt:Sql.stmt) =
+let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   match stmt with
   | Create (name,`Schema schema) ->
@@ -490,12 +490,17 @@ let eval (stmt:Sql.stmt) =
     let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
     let _attrs, params, _ = eval_select_full empty_env { select; order = []; limit = None } in
     [], params, Delete targets
-  | Set (_name, e) ->
-    let p = match e with
-      | Column _ -> [] (* this is not column but some db-specific identifier *)
-      | _ -> get_params_of_res_expr (ensure_res_expr e)
+  | Set (vars, stmt) ->
+    let p =
+      vars |> List.map (fun (_k,e) ->
+        match e with
+        | Column _ -> [] (* this is not column but some db-specific identifier *)
+        | _ -> get_params_of_res_expr (ensure_res_expr e)) |> List.concat
     in
-    [], p, Other
+    begin match stmt with
+    | None -> [], p, Other
+    | Some stmt -> let (schema,p2,kind) = eval stmt in (schema, p @ p2, kind)
+    end
   | Update (table,ss,w,o,lim) ->
     let t = Tables.get table in
     let params = update_tables [snd t,[],[t]] ss w in

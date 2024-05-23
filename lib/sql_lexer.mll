@@ -153,6 +153,7 @@ let keywords =
    "share", SHARE;
    "some",SOME;
    "spatial", SPATIAL;
+   "statement", STATEMENT;
    "substr", SUBSTRING;
    "substring", SUBSTRING;
    "table",TABLE;
