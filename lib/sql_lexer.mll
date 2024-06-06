@@ -103,6 +103,7 @@ let keywords =
    "into",INTO;
    "is", IS;
    "join",JOIN;
+   "straight_join",STRAIGHT_JOIN;
    "key",KEY;
    "lag", LAG;
    "language", LANGUAGE;
@@ -153,6 +154,7 @@ let keywords =
    "share", SHARE;
    "some",SOME;
    "spatial", SPATIAL;
+   "statement", STATEMENT;
    "substr", SUBSTRING;
    "substring", SUBSTRING;
    "table",TABLE;
