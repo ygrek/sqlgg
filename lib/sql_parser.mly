@@ -32,7 +32,7 @@
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
-       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
+       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET STRAIGHT_JOIN JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED DOUBLECOLON
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -90,6 +90,7 @@ input: statement EOF { $1 }
 if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
+assign: name=IDENT EQUAL e=expr { name, e }
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
@@ -147,10 +148,11 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 DeleteMulti (targets, tables, w)
               }
-         | SET name=IDENT EQUAL e=expr
+         | SET kv=assign
               {
-                Set (name, e)
+                Set ([kv], None)
               }
+         | SET STATEMENT vars=separated_nonempty_list(COMMA, assign) FOR stmt=statement { Set (vars, Some stmt) }
          | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
            RETURNS ret=sql_type
            routine_extra?
@@ -216,8 +218,10 @@ inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
 left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
 right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
+straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { src, j, c }
+straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
 join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
            | j=natural(left_join)
@@ -228,6 +232,7 @@ join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
            | j=cond(right_join)
            | j=cond(full_join)
            | j=cond(inner_join) { j }
+           | j=straight_cond(straight_join) { j }
 
 join_cond: ON e=expr { On e }
          | USING l=sequence(IDENT) { Using l }
