@@ -335,7 +335,7 @@ type stmt =
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
-| CreateRoutine of string * Type.t option * (string * Type.t * expr option) list
+| CreateRoutine of table_name * Type.t option * (string * Type.t * expr option) list (* table_name represents possibly namespaced function name *)
 
 (*
 open Schema

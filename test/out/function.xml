@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_routine_increment" sql="CREATE OR REPLACE FUNCTION increment(i INT) RETURNS INT AS $$&#x0A;BEGIN&#x0A;    RETURN i + 1;&#x0A;END;&#x0A;$$ LANGUAGE plpgsql" category="DDL" kind="create_routine" target="increment">
+ <stmt name="create_routine_ns_increment" sql="CREATE OR REPLACE FUNCTION ns.increment(i INT) RETURNS INT AS $$&#x0A;BEGIN&#x0A;    RETURN i + 1;&#x0A;END;&#x0A;$$ LANGUAGE plpgsql" category="DDL" kind="create_routine" target="ns.increment">
   <in/>
   <out/>
  </stmt>
- <stmt name="select_1" sql="SELECT increment(2)" category="DQL" kind="select" cardinality="1">
+ <stmt name="select_1" sql="SELECT ns.increment(2)" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Int"/>

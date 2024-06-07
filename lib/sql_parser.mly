@@ -153,21 +153,21 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Set ([kv], None)
               }
          | SET STATEMENT vars=separated_nonempty_list(COMMA, assign) FOR stmt=statement { Set (vars, Some stmt) }
-         | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
+         | CREATE or_replace? FUNCTION name=table_name params=sequence(func_parameter)
            RETURNS ret=sql_type
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret ret) name;
+                Function.add (List.length params) (Ret ret) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
-         | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
+         | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret Any) name; (* FIXME void *)
+                Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -398,7 +398,7 @@ expr:
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
-    | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
+    | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
     | e=expr IS NOT? NULL { Fun (Ret Bool, [e]) }
     | e1=expr IS NOT? distinct_from? e2=expr { poly Bool [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly Bool [e;a;b] }
