@@ -190,12 +190,11 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN) { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
                 | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
 
-(* ugly, can you fixme? *)
-(* ignoring everything after RPAREN (NB one look-ahead token) *)
-table_def_done: parser_state_ignore RPAREN IGNORED* parser_state_normal { }
+(* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
+ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
 
 parser_state_ignore: { Parser_state.mode_ignore () }
 parser_state_normal: { Parser_state.mode_normal () }
