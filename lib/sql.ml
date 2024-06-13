@@ -139,7 +139,7 @@ struct
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
     [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault
     [@@deriving show{with_path=false}, ord]
 end
 
