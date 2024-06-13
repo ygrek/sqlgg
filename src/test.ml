@@ -168,16 +168,16 @@ let test_join_result_cols () =
 
 let test_enum = [
   tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test6" [attr "x" Text ~extra:[NotNull]; attr "y" Int] [];
-  tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull]; attr "" Int] [];
+  tt "SELECT * FROM test6" [attr "x" Text ~extra:[NotNull;]; attr ~extra:[WithDefault;] "y" Int] [];
+  tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull;]; attr "" Int] [];
 ]
 
 let test_manual_param = [
   tt "CREATE TABLE test7 (x INT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test7 WHERE x = @x_arg" [attr "x" Int ~extra:[Null];] [
+  tt "SELECT * FROM test7 WHERE x = @x_arg" [attr "x" Int ~extra:[Null; WithDefault];] [
     named_nullable "x_arg" Int
   ];
-  tt "SELECT * FROM test7 WHERE x = @x_arg::Int" [attr "x" Int ~extra:[Null];] [
+  tt "SELECT * FROM test7 WHERE x = @x_arg::Int" [attr "x" Int ~extra:[Null; WithDefault];] [
     named "x_arg" Int
   ];
   tt "INSERT INTO test7 VALUES (@x_arg)" [] [
@@ -212,6 +212,15 @@ let test_coalesce = [
   tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:(Strict) "x" Int;] [];
 ]
 
+let test_not_null_default_field = [
+  tt "CREATE TABLE test10 (id INT PRIMARY KEY, name VARCHAR(255) NOT NULL)" [] [];
+  wrong "INSERT INTO test10 (id) VALUES (1)";
+  tt "INSERT INTO test10 (id, name) VALUES (1, '2')" [] [];
+  tt "CREATE TABLE test11 (aa int(10) unsigned NOT NULL DEFAULT 2, b TEXT NOT NULL)" [][];
+  tt "INSERT INTO test11 (b) VALUES ('abcd')" [][];
+
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -226,6 +235,7 @@ let run () =
     "manual_param" >::: test_manual_param;
     "test_left_join" >::: test_left_join;
     "test_coalesce" >::: test_coalesce;
+    "test_not_null_default_field" >::: test_not_null_default_field;
   ]
   in
   let test_suite = "main" >::: tests in

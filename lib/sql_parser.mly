@@ -351,9 +351,9 @@ column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NULL { Some Null }
                 | UNIQUE KEY? { Some Unique }
                 | AUTOINCREMENT { Some Autoincrement }
+                | DEFAULT default_value { Some WithDefault }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
-                | DEFAULT default_value { None }
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
