@@ -339,16 +339,16 @@ reference_action_clause:
 
 reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-
+  
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
                 | NULL { Some Null }
                 | UNIQUE KEY? { Some Unique }
                 | AUTOINCREMENT { Some Autoincrement }
+                | DEFAULT default_value { Some WithDefault }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
-                | DEFAULT e=default_value { match e with Value { t = Any; nullability = _ } -> Some Null | _ -> None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 

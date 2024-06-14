@@ -139,7 +139,7 @@ struct
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
     [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault
     [@@deriving show{with_path=false}, ord]
 end
 
@@ -154,7 +154,7 @@ type attr = {name : string; domain : Type.t; extra : Constraints.t; }
 
 let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-  let domain = Type.{ t = Option.default Int kind; nullability = if Constraints.mem Null extra then Nullable else Strict } in
+  let domain = Type.{ t = Option.default Int kind; nullability = if Constraints.mem NotNull extra then Strict else Nullable } in
   {name;domain;extra}
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}

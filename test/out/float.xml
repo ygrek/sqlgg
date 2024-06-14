@@ -8,13 +8,13 @@
  <stmt name="insert" sql="insert into transactions values (@amount,@date)" category="DML" kind="insert" target="transactions" cardinality="0">
   <in>
    <value name="amount" type="Float"/>
-   <value name="date" type="Datetime"/>
+   <value name="date" type="Datetime" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="select" sql="select amount + 2.5 from transactions where `date` &gt; @date and amount &gt; @limit" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="date" type="Datetime"/>
+   <value name="date" type="Datetime" nullable="true"/>
    <value name="limit" type="Float"/>
   </in>
   <out>
@@ -24,7 +24,7 @@
  <table name="transactions">
   <schema>
    <value name="amount" type="Float"/>
-   <value name="date" type="Datetime"/>
+   <value name="date" type="Datetime" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

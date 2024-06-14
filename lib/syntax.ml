@@ -34,7 +34,22 @@ let get_or_failwith = function `Error s -> failwith s | `Ok t -> t
 let values_or_all table names =
   let schema = Tables.get_schema table in
   match names with
-  | Some names -> Schema.project names schema
+  | Some names -> 
+    let req_missing =
+      List.filter_map
+        (fun { extra; name; _ } ->
+          let open Constraints in
+          if inter (of_list [Autoincrement; WithDefault; NotNull]) extra = of_list [NotNull]
+            && not @@ List.mem name names then Some name
+          else None
+        )
+        schema
+    in
+    begin match req_missing with 
+    | [] -> ()
+    | fields -> 
+        fail "Fields: (%s) don't have a default value" (String.concat "," fields) end;    
+    Schema.project names schema
   | None -> schema
 
 let rec get_params_of_res_expr (e:res_expr) =
