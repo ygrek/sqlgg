@@ -431,4 +431,7 @@ let () =
   "substring_index" |> monomorphic Text [Text; Text; Int];
   "last_insert_id" |> monomorphic Int [];
   "last_insert_id" |> monomorphic Int [Int];
+  "uuid" |> monomorphic Text [];
+  "uuid_short" |> monomorphic Int [];
+  "is_uuid" |> monomorphic Bool [Text];
   ()
