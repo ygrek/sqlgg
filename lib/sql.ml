@@ -436,7 +436,7 @@ type stmt =
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
 | UpdateMulti of source list * assignments * expr option
 | Select of select_full
-| CreateRoutine of string * Type.kind option * (string * Type.kind * expr option) list
+| CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
 
 (*
 open Schema
@@ -508,6 +508,7 @@ let () =
   let float = strict Float in
   let text = strict Text in
   let datetime = strict Datetime in
+  let bool = strict Bool in
   "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
   "count" |> add 1 (Group int);
   "avg" |> add 1 (Group float);
@@ -539,4 +540,7 @@ let () =
   "last_insert_id" |> monomorphic int [];
   "last_insert_id" |> monomorphic int [int];
   add_multi Type.(Coalesce (Var 0, Var 0)) "coalesce";
+  "uuid" |> monomorphic text [];
+  "uuid_short" |> monomorphic int [];
+  "is_uuid" |> monomorphic bool [text];
   ()

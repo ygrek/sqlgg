@@ -1,7 +1,7 @@
-CREATE OR REPLACE FUNCTION increment(i INT) RETURNS INT AS $$
+CREATE OR REPLACE FUNCTION ns.increment(i INT) RETURNS INT AS $$
 BEGIN
     RETURN i + 1;
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT increment(2);
+SELECT ns.increment(2);
