@@ -336,12 +336,15 @@ let gen_tuple_printer _label schema =
     (String.concat ", " params)
     (String.concat " " @@
      List.mapi
-       (fun idx { name; domain; _ } ->
-          (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
-          sprintf
-            {|Buffer.add_string _sqlgg_b (T.Types.%s.to_literal %s);|}
-            (in_var_module name domain) name)
-       schema)
+     (fun idx attr ->
+        let { name; domain; _ } = attr in
+        (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
+        sprintf {|Buffer.add_string _sqlgg_b (%s);|}
+          (let to_literal = sprintf "T.Types.%s.to_literal %s" (in_var_module name domain) in
+           if is_attr_nullable attr then 
+           (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
+           else to_literal name))
+     schema)
 
 let gen_tuple_substitution id schema =
   match id.label with
