@@ -124,7 +124,7 @@ let generate_code (x,_) index stmt =
     | Delete t         -> ["kind", "delete"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
     | Alter t          -> ["kind", "alter"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | CreateRoutine s  -> ["kind", "create_routine"; "target", s]
+    | CreateRoutine s  -> ["kind", "create_routine"; "target", Sql.show_table_name s]
     | Other            -> ["kind", "other"]
   in
   let nodes = [ input; output] in

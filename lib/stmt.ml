@@ -20,7 +20,7 @@ type kind = | Select of cardinality
             | Delete of Sql.table_name list
             | Alter of Sql.table_name list
             | Drop of Sql.table_name
-            | CreateRoutine of string
+            | CreateRoutine of Sql.table_name (** namespaced function name *)
             | Other
             [@@deriving show {with_path=false}]
 

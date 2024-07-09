@@ -153,21 +153,21 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Set ([kv], None)
               }
          | SET STATEMENT vars=separated_nonempty_list(COMMA, assign) FOR stmt=statement { Set (vars, Some stmt) }
-         | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
+         | CREATE or_replace? FUNCTION name=table_name params=sequence(func_parameter)
            RETURNS ret=sql_type
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret ret) name;
+                Function.add (List.length params) (Ret ret) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
-         | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
+         | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret Any) name; (* FIXME void *)
+                Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -190,12 +190,11 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN) { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
                 | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
 
-(* ugly, can you fixme? *)
-(* ignoring everything after RPAREN (NB one look-ahead token) *)
-table_def_done: parser_state_ignore RPAREN IGNORED* parser_state_normal { }
+(* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
+ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
 
 parser_state_ignore: { Parser_state.mode_ignore () }
 parser_state_normal: { Parser_state.mode_normal () }
@@ -418,7 +417,7 @@ expr:
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
-    | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
+    | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
