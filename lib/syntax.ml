@@ -590,7 +590,7 @@ let rec eval (stmt:Sql.stmt) =
     let p3 = params_of_order o [] [(f, s)] in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
-    let sources = List.map (resolve_source empty_env) tables in
+    let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
     let params = update_tables sources ss w in
     [], params, Update None
   | Select select -> 
