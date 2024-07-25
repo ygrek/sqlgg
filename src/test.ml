@@ -218,7 +218,26 @@ let test_not_null_default_field = [
   tt "INSERT INTO test10 (id, name) VALUES (1, '2')" [] [];
   tt "CREATE TABLE test11 (aa int(10) unsigned NOT NULL DEFAULT 2, b TEXT NOT NULL)" [][];
   tt "INSERT INTO test11 (b) VALUES ('abcd')" [][];
+]
 
+let test_update_join = [
+  tt "CREATE TABLE test12 (c_id INT PRIMARY KEY, c_name VARCHAR(50) NOT NULL)" [] [];
+  tt "CREATE TABLE test13 (s_id INT PRIMARY KEY, s_name VARCHAR(50) NOT NULL, c_id INT NOT NULL)" [] [];
+  tt "CREATE TABLE test14 (s_id INT PRIMARY KEY, g INT NOT NULL)" [] [];
+
+  tt {|
+    UPDATE test12
+    JOIN test13 t13 ON t13.c_id = test12.c_id
+    JOIN test14 t14 ON t14.s_id = t13.s_id
+    SET t14.g = t14.g + 100, 
+    test12.c_name = @c_name,
+    t13.s_name = @s_name
+    WHERE test12.c_id = @c_id
+  |} [] [
+    named "c_name" Text;
+    named "s_name" Text;
+    named "c_id" Int
+  ];
 ]
 
 let run () =
@@ -236,6 +255,7 @@ let run () =
     "test_left_join" >::: test_left_join;
     "test_coalesce" >::: test_coalesce;
     "test_not_null_default_field" >::: test_not_null_default_field;
+    "test_update_join" >::: test_update_join;
   ]
   in
   let test_suite = "main" >::: tests in
