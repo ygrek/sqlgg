@@ -11,6 +11,7 @@ type env = {
   tables : Tables.table list;
   schema : table_name Schema.Source.t;
   insert_schema : Schema.t;
+  param_strict: bool;
 }
 
 (* expr with all name references resolved to values or "functions" *)
@@ -23,7 +24,15 @@ type res_expr =
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   [@@deriving show]
 
-let empty_env = { tables = []; schema = []; insert_schema = []; }
+let is_param = function
+  | ResValue _ -> false
+  | ResInparam _ -> false
+  | ResChoices _ -> false
+  | ResInChoice _ -> false
+  | ResFun _ -> false 
+  | ResParam _ -> true
+
+let empty_env = { tables = []; schema = []; insert_schema = []; param_strict = false; }
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -191,7 +200,7 @@ let rec resolve_columns env expr =
   each expr
 
 (** assign types to parameters where possible *)
-and assign_types expr =
+and assign_types { param_strict; _ } expr =
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
@@ -278,6 +287,12 @@ and assign_types expr =
         | Ret ret, _ ->
           let nullability = common_nullability types in
           { t = ret; nullability; }, types (* ignoring arguments FIXME *)
+        | Comparison, _  ->
+          let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
+          let nullable = common_nullability args in
+          if param_strict && List.exists is_param params then 
+            make_strict ret, List.map make_strict args 
+          else undepend ret nullable, args
         in
         let assign inferred x =
           match x with
@@ -296,7 +311,7 @@ and assign_types expr =
 and resolve_types env expr =
   let expr = resolve_columns env expr in
   try
-    assign_types expr
+    assign_types env expr
   with
     exn ->
       eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
@@ -366,7 +381,8 @@ and params_of_order order final_schema tables =
   List.concat @@
   List.map
     (fun (order, direction) ->
-       let env = { tables; insert_schema = []; schema = final_schema :: tbls |> all_columns } in
+       let env = { tables; insert_schema = []; schema = final_schema :: tbls |> all_columns;
+        param_strict = false } in
        let p1 = get_params_l env [ order ] in
        let p2 =
          match direction with
@@ -412,7 +428,7 @@ and eval_select env { columns; from; where; group; having; } =
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
   let env = { env with schema = Schema.Join.cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
-  let p3 = get_params_opt env where in
+  let p3 = get_params_opt { env with param_strict = true } where in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
   (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
@@ -461,9 +477,10 @@ let update_tables sources ss w =
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
   let result = get_columns_schema tables (List.map fst ss) in
-  let env = { tables; schema; insert_schema=List.map (fun i -> i.Schema.Source.Attr.attr) result } in
+  let env = { tables; schema; insert_schema=List.map (fun i -> i.Schema.Source.Attr.attr) result;
+    param_strict = false } in
   let p1 = params_of_assigns env ss in
-  let p2 = get_params_opt env w in
+  let p2 = get_params_opt { env with param_strict = true } w in
   p0 @ p1 @ p2
 
 let annotate_select select types =
@@ -511,7 +528,7 @@ let rec eval (stmt:Sql.stmt) =
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
-    let env = { tables = [Tables.get table]; schema ; insert_schema = expect; } in
+    let env = { empty_env with tables = [Tables.get table]; schema ; insert_schema = expect; } in
     let params, inferred = match values with
     | None -> [], Some (Values, expect)
     | Some values ->
@@ -534,13 +551,13 @@ let rec eval (stmt:Sql.stmt) =
   | Insert { target=table; action=`Param (names, param_id); on_duplicate; } ->
     let expect = values_or_all table names in
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
-    let env = { tables = [Tables.get table]; schema; insert_schema = expect; } in
+    let env = { empty_env with tables = [Tables.get table]; schema; insert_schema = expect; } in
     let params = [ TupleList (param_id, expect) ] in
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None, table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
-    let env = { tables = [Tables.get table]; 
+    let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
       insert_schema = expect;
     } in
@@ -553,7 +570,9 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
-    let env = { tables = [Tables.get table]; schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); insert_schema = expect;} in
+    let env = { tables = [Tables.get table]; 
+      schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
+      insert_schema = expect; param_strict = false} in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns env ss, None
@@ -562,7 +581,9 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt { tables=[t]; schema=List.map (fun attr -> { Schema.Source.Attr.sources=[t |> fst]; attr }) (t |> snd); insert_schema=[]; } where in
+    let p = get_params_opt { tables=[t]; 
+      schema=List.map (fun attr -> { Schema.Source.Attr.sources=[t |> fst]; attr }) (t |> snd); 
+      insert_schema=[]; param_strict = true } where in
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
