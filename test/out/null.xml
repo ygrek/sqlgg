@@ -124,7 +124,7 @@
  </stmt>
  <stmt name="select_18" sql="SELECT&#x0A;  test.id,&#x0A;  started_at,&#x0A;  finished_at,&#x0A;  last_test.started_at as started_at_should_be_nullable,&#x0A;  last_test.finished_at as finished_at_should_be_nullable&#x0A;FROM test&#x0A;LEFT JOIN (&#x0A;  SELECT test_id, started_at, finished_at&#x0A;  FROM tests aux&#x0A;  WHERE run_id = (SELECT MAX(run_id) FROM tests WHERE aux.test_id = test_id)&#x0A;) last_test ON last_test.test_id = test.id&#x0A;WHERE&#x0A;  test.nullable_int = @x" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="x" type="Int" nullable="true"/>
+   <value name="x" type="Int"/>
   </in>
   <out>
    <value name="id" type="Int"/>

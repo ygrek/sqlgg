@@ -246,12 +246,14 @@ let test_param_not_null_by_default = [
   tt {| 
     SELECT a FROM test15 
     WHERE a = @a 
-    AND a + b = @ab 
+    AND a + b = @ab
+    AND a + @x = 10
     AND c = @c AND a < (@a2 :: Int Null)
-    AND (SELECT d FROM test16 LIMIT 1) = @d 
+    AND (SELECT d FROM test16 LIMIT 1) = @d
   |} [attr "a" Int ~extra:[];] [
     named "a" Int;
     named "ab" Int;
+    named_nullable "x" Int;
     named "c" Text;
     named_nullable "a2" Int;
     named "d" Int;
