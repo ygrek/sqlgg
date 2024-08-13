@@ -36,7 +36,7 @@
  </stmt>
  <stmt name="select_6" sql="SELECT x FROM test WHERE @_0 &gt;= `key` ORDER BY `key` DESC LIMIT 1" category="DQL" kind="select" cardinality="0,1">
   <in>
-   <value name="_0" type="Text" nullable="true"/>
+   <value name="_0" type="Text"/>
   </in>
   <out>
    <value name="x" type="Int" nullable="true"/>
@@ -44,7 +44,7 @@
  </stmt>
  <stmt name="select_7" sql="SELECT x FROM test WHERE `key` &lt; @_0" category="DQL" kind="select" cardinality="n">
   <in>
-   <value name="_0" type="Text" nullable="true"/>
+   <value name="_0" type="Text"/>
   </in>
   <out>
    <value name="x" type="Int" nullable="true"/>

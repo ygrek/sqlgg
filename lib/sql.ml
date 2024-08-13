@@ -33,6 +33,8 @@ struct
   let nullable = nullability Nullable
   let make_nullable { t; nullability=_ } = nullable t
 
+  let make_strict { t; nullability=_ } = strict t
+
   let (=) : t -> t -> bool = equal
 
   let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
@@ -111,6 +113,7 @@ struct
   | Agg (* 'a -> 'a *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Coalesce of tyvar * tyvar
+  | Comparison
   | Ret of kind (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
@@ -127,12 +130,13 @@ struct
   | Ret ret -> fprintf pp "_ -> %s" (show_kind ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Comparison -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | F _ | Multi _ | Coalesce _ -> false
+  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
 end
 
 module Constraint =
