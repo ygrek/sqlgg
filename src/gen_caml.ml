@@ -382,9 +382,12 @@ let make_sql l =
       ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
       bprintf b ")";
       loop true tl
-    | SubstTuple (id, schema) :: tl ->
+    | SubstTuple (id, schema, kind) :: tl ->
       if app then bprintf b " ^ ";
-      Buffer.add_string b (gen_tuple_substitution id schema);
+      let add_tuple () = Buffer.add_string b (gen_tuple_substitution id schema) in
+      match kind with 
+      | Insertion -> add_tuple()
+      | Where_in -> bprintf b "%s ^ " (quote "("); add_tuple(); bprintf b " ^ %s" (quote ")");
       loop true tl
   in
   Buffer.add_string b "(";
@@ -434,7 +437,8 @@ let generate_stmt style index stmt =
     match
       List.find_map
         (function
-          | SubstTuple (id, _) -> Some id
+          | SubstTuple (id, _, Insertion) -> Some id
+          | SubstTuple (_, _, Where_in) -> None
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with

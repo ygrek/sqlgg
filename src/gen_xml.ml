@@ -59,8 +59,8 @@ let value ?(inparam=false) v =
 
 let tuplelist_value_of_param = function
   | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ -> None
-  | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
-  | TupleList ({ label = Some name; _ }, schema) ->
+  | TupleList ({ label = None; _ }, _, _) -> failwith "empty label in tuple subst"
+  | TupleList ({ label = Some name; _ }, schema, _) ->
     let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in
     Some (Node ("value", attrs, []))
@@ -81,7 +81,7 @@ let get_sql_string stmt =
   let rec map i = function
   | Static s -> s
   | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
-  | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
+  | SubstTuple (id, _, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> "{TODO dynamic choice}"
   in
