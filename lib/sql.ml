@@ -353,8 +353,8 @@ and var =
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
-| TupleList of param_id * schema * tuple_list_kind 
-and tuple_list_kind = Insertion | Where_in
+| TupleList of param_id * tuple_list_kind 
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -406,7 +406,7 @@ and expr =
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
-  | InTupleList of col_name list * param_id
+  | InTupleList of expr list * param_id
 and column =
   | All
   | AllOf of table_name

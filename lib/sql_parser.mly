@@ -405,7 +405,7 @@ expr:
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
-    | LPAREN names=commas(attr_name) RPAREN in_or_not_in p=PARAM
+    | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
       {
         InTupleList(names, p)
       }      

@@ -346,14 +346,15 @@ let gen_tuple_printer _label schema =
            else to_literal name))
      schema)
 
-let gen_tuple_substitution id schema =
-  match id.label with
-  | None -> failwith "empty label in tuple param"
-  | Some label ->
-    sprintf
-      {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
-      (gen_tuple_printer label schema)
-      label
+let resolve_tuple_label id = match id.label with
+| None -> failwith "empty label in tuple param"
+| Some label -> label
+
+let gen_tuple_substitution label schema =
+  sprintf
+    {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
+    (gen_tuple_printer label schema)
+    label 
 
 let make_sql l =
   let b = Buffer.create 100 in
@@ -382,13 +383,21 @@ let make_sql l =
       ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
       bprintf b ")";
       loop true tl
-    | SubstTuple (id, schema, kind) :: tl ->
+    | SubstTuple (id, Insertion schema) :: tl ->
       if app then bprintf b " ^ ";
-      let add_tuple () = Buffer.add_string b (gen_tuple_substitution id schema) in
-      match kind with 
-      | Insertion -> add_tuple()
-      | Where_in -> bprintf b "%s ^ " (quote "("); add_tuple(); bprintf b " ^ %s" (quote ")");
+      let label = resolve_tuple_label id in
+      Buffer.add_string b (gen_tuple_substitution label schema);
       loop true tl
+    | SubstTuple (id, Where_in types) :: tl ->
+      if app then bprintf b " ^ ";
+      let label = resolve_tuple_label id in
+      let attrs = List.mapi (fun idx domain -> {
+        name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty
+      }) types in
+      bprintf b "%s ^ " (quote "(");
+      Buffer.add_string b (gen_tuple_substitution label attrs);
+      bprintf b " ^ %s" (quote ")");
+      loop true tl  
   in
   Buffer.add_string b "(";
   loop false l;
@@ -437,8 +446,8 @@ let generate_stmt style index stmt =
     match
       List.find_map
         (function
-          | SubstTuple (id, _, Insertion) -> Some id
-          | SubstTuple (_, _, Where_in) -> None
+          | SubstTuple (id, Insertion _) -> Some id
+          | SubstTuple (_, Where_in _) -> None
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with
