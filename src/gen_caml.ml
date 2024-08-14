@@ -356,6 +356,11 @@ let gen_tuple_substitution label schema =
     (gen_tuple_printer label schema)
     label 
 
+let make_schema_of_tuple_types label =
+  List.mapi (fun idx domain -> {
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty
+  })   
+
 let make_sql l =
   let b = Buffer.create 100 in
   let rec loop app = function
@@ -391,11 +396,9 @@ let make_sql l =
     | SubstTuple (id, Where_in types) :: tl ->
       if app then bprintf b " ^ ";
       let label = resolve_tuple_label id in
-      let attrs = List.mapi (fun idx domain -> {
-        name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty
-      }) types in
+      let schema = make_schema_of_tuple_types label types in
       bprintf b "%s ^ " (quote "(");
-      Buffer.add_string b (gen_tuple_substitution label attrs);
+      Buffer.add_string b (gen_tuple_substitution label schema);
       bprintf b " ^ %s" (quote ")");
       loop true tl  
   in
