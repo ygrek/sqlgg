@@ -19,12 +19,15 @@ type env = {
 type res_expr =
   | ResValue of Type.t (** literal value *)
   | ResParam of param
+  | ResInTupleList of param_id * res_in_tuple_list
   | ResInparam of param
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   [@@deriving show]
-
+  
+and res_in_tuple_list = 
+  ResTyped of Type.t list | Res of res_expr list
 let empty_env = { tables = []; schema = []; insert_schema = []; set_tyvar_strict = false; }
 
 let flat_map f l = List.flatten (List.map f l)
@@ -60,8 +63,10 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResParam p -> Single p::acc
+    | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun (_,l) -> List.fold_left loop acc l
+    | ResInTupleList _ 
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
     | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
@@ -79,6 +84,7 @@ let rec is_grouping = function
 | Column _
 | SelectExpr _
 | Inparam _
+| InTupleList _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -169,6 +175,19 @@ let rec resolve_columns env expr =
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
     | Param x -> ResParam x
+    | InTupleList (exprs, param_id) -> 
+      let res_exprs = List.map (fun expr ->
+        let res_expr = each expr in
+        match res_expr with 
+        | ResValue _
+        | ResParam _
+        | ResFun _ -> res_expr
+        | ResInparam _
+        | ResChoices _
+        | ResInTupleList _
+        | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
+      ) exprs in
+      ResInTupleList (param_id, Res res_exprs)
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
@@ -193,13 +212,24 @@ let rec resolve_columns env expr =
   each expr
 
 (** assign types to parameters where possible *)
-and assign_types { set_tyvar_strict; _ } expr =
+and assign_types env expr =
+  let { set_tyvar_strict; _ } = env in
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
+    | ResInTupleList (param_id, kind) -> 
+      (match kind with 
+      | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
+         let typ = expr |> typeof |> snd |> get_or_failwith in 
+         if Type.is_any typ then 
+            fail "If you need to have a field as parameter in the left part you should specify a type"
+         else typ
+        ) res_exprs)), `Ok (Type.strict Bool) 
+      | ResTyped _ -> assert false
+      )
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
     | ResChoices (n,l) ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
@@ -391,6 +421,7 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
+  | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
@@ -547,7 +578,7 @@ let rec eval (stmt:Sql.stmt) =
     let expect = values_or_all table names in
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; insert_schema = expect; } in
-    let params = [ TupleList (param_id, expect) ] in
+    let params = [ TupleList (param_id, Insertion expect) ] in
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None, table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->

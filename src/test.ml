@@ -269,6 +269,16 @@ let test_param_not_null_by_default = [
   ];
 ]
 
+(* Since @abc is tuple list, but TupleList isn't a Sql.type *)
+let test_in_clause_with_tuple_sets () = 
+  do_test "CREATE TABLE test17 (a INT, b INT NULL, c TEXT NULL)" [] [];
+  let stmt = parse {| 
+    SELECT a FROM test17 
+    WHERE (a, b, c) IN @abc
+  |} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:(Nullable) "a" Int] stmt.schema;
+  ()
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -286,6 +296,7 @@ let run () =
     "test_not_null_default_field" >::: test_not_null_default_field;
     "test_update_join" >::: test_update_join;
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
+    "test_in_clause_with_tuple_sets" >:: test_in_clause_with_tuple_sets;
   ]
   in
   let test_suite = "main" >::: tests in

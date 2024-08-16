@@ -73,7 +73,7 @@ type sql =
   | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
   | SubstIn of Sql.param
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
-  | SubstTuple of Sql.param_id * Sql.schema
+  | SubstTuple of Sql.param_id * Sql.tuple_list_kind
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -131,11 +131,11 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
-    | TupleList (id, schema) :: tl ->
+    | TupleList (id, kind) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let acc = SubstTuple (id, schema) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
