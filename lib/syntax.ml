@@ -283,7 +283,7 @@ and assign_types env expr =
 
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ]
+        | Agg, [typ] -> make_nullable typ, types
         | Group typ, _ -> typ, types
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())

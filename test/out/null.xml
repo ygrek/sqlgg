@@ -107,7 +107,7 @@
   </in>
   <out>
    <value name="_0" type="Datetime" nullable="true"/>
-   <value name="_1" type="Int"/>
+   <value name="_1" type="Int" nullable="true"/>
    <value name="_2" type="Datetime" nullable="true"/>
    <value name="_3" type="Datetime" nullable="true"/>
   </out>

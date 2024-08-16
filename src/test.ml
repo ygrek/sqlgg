@@ -279,6 +279,16 @@ let test_in_clause_with_tuple_sets () =
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:(Nullable) "a" Int] stmt.schema;
   ()
 
+let test_agg_nullable = [
+  tt "CREATE TABLE test18 (id INT, value INT NOT NULL)" [] [];
+  tt {| 
+    SELECT AVG(value) as avg_value FROM test18
+  |} [attr' ~nullability:(Nullable) "avg_value" Float] [];
+  tt {| 
+    SELECT MAX(value) as max_value FROM test18
+  |} [attr' ~nullability:(Nullable) "max_value" Int] [];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -297,6 +307,7 @@ let run () =
     "test_update_join" >::: test_update_join;
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
     "test_in_clause_with_tuple_sets" >:: test_in_clause_with_tuple_sets;
+    "test_agg_nullable" >::: test_agg_nullable;
   ]
   in
   let test_suite = "main" >::: tests in
