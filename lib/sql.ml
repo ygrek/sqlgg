@@ -517,8 +517,8 @@ let () =
   let bool = strict Bool in
   "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
   "count" |> add 1 (Group int);
-  "avg" |> add 1 (Group float);
-  ["max";"min";"sum"] ||> add 1 Agg; (* TODO nullable, think no rows *)
+  "avg" |> add 1 (Group (nullable Float));
+  ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
   ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic text [text];
   "hex" |> monomorphic text [int];
