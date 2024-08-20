@@ -35,6 +35,8 @@ struct
 
   let make_strict { t; nullability=_ } = strict t
 
+  let is_strict { nullability; _ } = nullability = Strict
+
   let (=) : t -> t -> bool = equal
 
   let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
@@ -135,6 +137,10 @@ struct
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
+  | Group _ | Agg -> true
+  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
+
+  let is_agg = function 
   | Group _ | Agg -> true
   | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
 end
