@@ -92,7 +92,7 @@ let main () =
   [
     "-version", Arg.Unit show_version, " Show version";
     "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
-    "-gen", Arg.String set_out, "cxx|caml|java|xml|csharp|none Set output language (default: none)";
+    "-gen", Arg.String set_out, "cxx|caml|caml_io|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
     "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> set debug level";
