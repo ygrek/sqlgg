@@ -345,12 +345,12 @@ and assign_types env expr =
           | x -> x
         in
         ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
-  and typeof ?(under_agg=false) expr =
+  and typeof ~under_agg expr =
     let r = typeof_ ~under_agg expr in
     if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
     r
   in
-  typeof expr
+  typeof ~under_agg:false expr
 
 and resolve_types env expr =
   let expr = resolve_columns env expr in
