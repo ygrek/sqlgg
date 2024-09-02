@@ -139,10 +139,6 @@ struct
   let is_grouping = function
   | Group _ | Agg -> true
   | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
-
-  let is_agg = function 
-  | Group _ | Agg -> true
-  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
 end
 
 module Constraint =

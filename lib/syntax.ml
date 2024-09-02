@@ -25,7 +25,7 @@ type res_expr =
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
-  | ResSelectExpr of Type.func * res_expr list
+  | ResAggValue of res_expr
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -68,10 +68,10 @@ let values_or_all table names =
 let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
+    | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
-    | ResSelectExpr (_, l)
     | ResFun (_,l) -> List.fold_left loop acc l
     | ResInTupleList _ 
     | ResValue _ -> acc
@@ -166,6 +166,20 @@ let _print_env env =
   Sql.Schema.print @@ Schema.Source.from_schema env.schema;
   Tables.print stderr env.tables
 
+let resolve_aggregations = 
+  let rec handle ~is_agg res_expr = 
+    match res_expr with
+    | ResFun (Agg, res) -> ResFun(Agg, List.map (handle ~is_agg:true) res)
+    | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
+    | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
+    | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
+    | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
+    | ResValue _ | ResParam _ 
+    | ResInparam _| ResChoices (_, _)
+    | ResAggValue _ | ResInTupleList _ -> res_expr
+  in
+  handle ~is_agg:false  
+
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
   if !debug then
@@ -188,7 +202,7 @@ let rec resolve_columns env expr =
         match res_expr with 
         | ResValue _
         | ResParam _
-        | ResSelectExpr _
+        | ResAggValue _
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -199,7 +213,8 @@ let rec resolve_columns env expr =
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
-    | Fun (r,l) -> ResFun (r, List.map each l)
+    | Fun (r,l) ->
+      ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
       let rec params_of_var = function
         | Single p -> [ResParam p]
@@ -212,9 +227,9 @@ let rec resolve_columns env expr =
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> ResSelectExpr (Type.Ret domain.t, as_params p) (* use nullable *)
+      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret domain.t, as_params p) (* use nullable *)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResSelectExpr (Type.Ret Any, as_params p)
+      | _, `Exists -> ResFun (Type.Ret Any, as_params p)
   in
   each expr
 
@@ -222,7 +237,7 @@ let rec resolve_columns env expr =
 and assign_types env expr =
   let { set_tyvar_strict; _ } = env in
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
-  let rec typeof_ ~under_agg (e:res_expr) = (* FIXME simplify *)
+  let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
@@ -230,33 +245,29 @@ and assign_types env expr =
     | ResInTupleList (param_id, kind) -> 
       (match kind with 
       | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
-         let typ = expr |> typeof ~under_agg |> snd |> get_or_failwith in 
+         let typ = expr |> typeof |> snd |> get_or_failwith in 
          if Type.is_any typ then 
             fail "If you need to have a field as parameter in the left part you should specify a type"
          else typ
         ) res_exprs)), `Ok (Type.strict Bool) 
       | ResTyped _ -> assert false
       )
-    | ResInChoice (n, k, e) -> let e, t = typeof ~under_agg e in ResInChoice (n, k, e), t
+    | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
     | ResChoices (n,l) ->
-      let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map (typeof ~under_agg) e) l in
+      let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
         match Type.common_subtype @@ List.map get_or_failwith @@ List.filter_map identity t with
         | None -> `Error "no common subtype for all choice branches"
         | Some t -> `Ok t
       in
       ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
-    | ResSelectExpr(func, params) -> 
-      let (res, typ) = typeof ~under_agg (ResFun (func, params)) in 
+    | ResAggValue (res) -> 
+      let (res, typ) = typeof res in 
       let typ = get_or_failwith typ in
-      (* Any nested query under aggregation is a possible no-rows result that returns as NULL *)
-      let typ = if under_agg then Type.make_nullable typ else typ in 
-      res, `Ok typ
+      res, `Ok (Type.make_nullable typ)
     | ResFun (func,params) ->
         let open Type in
-        let (params,types) = params 
-          |> List.map (typeof ~under_agg:(is_agg func)) 
-          |> List.split in
+        let (params,types) = params |> List.map typeof |> List.split in
         let types = List.map get_or_failwith types in
         let show_func () =
           sprintf "%s applied to (%s)"
@@ -299,9 +310,8 @@ and assign_types env expr =
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
         | Agg, [typ] ->
-          let typ = 
-            if env.query_has_grouping && is_strict typ then 
-            typ else make_nullable typ  in
+          (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
+          let typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
           typ, types
         | Group typ, _ -> typ, types
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
@@ -345,15 +355,15 @@ and assign_types env expr =
           | x -> x
         in
         ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
-  and typeof ~under_agg expr =
-    let r = typeof_ ~under_agg expr in
+  and typeof expr =
+    let r = typeof_ expr in
     if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
     r
   in
-  typeof ~under_agg:false expr
+  typeof expr
 
 and resolve_types env expr =
-  let expr = resolve_columns env expr in
+  let expr = expr |> resolve_columns env |> resolve_aggregations in
   try
     assign_types env expr
   with
