@@ -35,6 +35,8 @@ struct
 
   let make_strict { t; nullability=_ } = strict t
 
+  let is_strict { nullability; _ } = nullability = Strict
+
   let (=) : t -> t -> bool = equal
 
   let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")

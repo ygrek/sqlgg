@@ -13,6 +13,7 @@ type env = {
   insert_schema : Schema.t;
   (* it is used to apply non-null comparison semantics inside WHERE expressions *)
   set_tyvar_strict: bool;
+  query_has_grouping: bool;
 }
 
 (* expr with all name references resolved to values or "functions" *)
@@ -24,11 +25,16 @@ type res_expr =
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
+  | ResAggValue of res_expr
   [@@deriving show]
   
 and res_in_tuple_list = 
   ResTyped of Type.t list | Res of res_expr list
-let empty_env = { tables = []; schema = []; insert_schema = []; set_tyvar_strict = false; }
+let empty_env = { query_has_grouping = false; 
+  tables = []; schema = []; 
+  insert_schema = []; 
+  set_tyvar_strict = false; 
+}
 
 let flat_map f l = List.flatten (List.map f l)
 
@@ -62,6 +68,7 @@ let values_or_all table names =
 let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
+    | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
@@ -159,6 +166,20 @@ let _print_env env =
   Sql.Schema.print @@ Schema.Source.from_schema env.schema;
   Tables.print stderr env.tables
 
+let resolve_aggregations = 
+  let rec handle ~is_agg res_expr = 
+    match res_expr with
+    | ResFun (Agg, res) -> ResFun(Agg, List.map (handle ~is_agg:true) res)
+    | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
+    | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
+    | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
+    | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
+    | ResValue _ | ResParam _ 
+    | ResInparam _| ResChoices (_, _)
+    | ResAggValue _ | ResInTupleList _ -> res_expr
+  in
+  handle ~is_agg:false  
+
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
   if !debug then
@@ -181,6 +202,7 @@ let rec resolve_columns env expr =
         match res_expr with 
         | ResValue _
         | ResParam _
+        | ResAggValue _
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -239,6 +261,10 @@ and assign_types env expr =
         | Some t -> `Ok t
       in
       ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
+    | ResAggValue (res) -> 
+      let (res, typ) = typeof res in 
+      let typ = get_or_failwith typ in
+      res, `Ok (Type.make_nullable typ)
     | ResFun (func,params) ->
         let open Type in
         let (params,types) = params |> List.map typeof |> List.split in
@@ -283,7 +309,10 @@ and assign_types env expr =
 
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ] -> make_nullable typ, types
+        | Agg, [typ] ->
+          (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
+          let typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
+          typ, types
         | Group typ, _ -> typ, types
         | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
@@ -334,7 +363,7 @@ and assign_types env expr =
   typeof expr
 
 and resolve_types env expr =
-  let expr = resolve_columns env expr in
+  let expr = expr |> resolve_columns env |> resolve_aggregations in
   try
     assign_types env expr
   with
@@ -406,8 +435,8 @@ and params_of_order order final_schema tables =
   List.concat @@
   List.map
     (fun (order, direction) ->
-       let env = { tables; insert_schema = []; schema = final_schema :: tbls |> all_columns;
-        set_tyvar_strict = false } in
+       let env = { empty_env with 
+        tables; insert_schema = []; schema = final_schema :: tbls |> all_columns;  } in
        let p1 = get_params_l env [ order ] in
        let p2 =
          match direction with
@@ -440,6 +469,7 @@ and eval_nested env nested =
 
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
+  let env = { env with query_has_grouping = List.length group > 0 } in
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
     else if group = [] && exists_grouping columns then `One
@@ -503,8 +533,8 @@ let update_tables sources ss w =
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
   let result = get_columns_schema tables (List.map fst ss) in
-  let env = { tables; schema; insert_schema=List.map (fun i -> i.Schema.Source.Attr.attr) result;
-    set_tyvar_strict = false } in
+  let env = { empty_env with 
+    tables; schema; insert_schema=List.map (fun i -> i.Schema.Source.Attr.attr) result; } in
   let p1 = params_of_assigns env ss in
   let p2 = get_params_opt { env with set_tyvar_strict = true } w in
   p0 @ p1 @ p2
@@ -596,9 +626,9 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
-    let env = { tables = [Tables.get table]; 
+    let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
-      insert_schema = expect; set_tyvar_strict = false} in
+      insert_schema = expect;} in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns env ss, None
@@ -607,7 +637,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
-    let p = get_params_opt { tables=[t]; 
+    let p = get_params_opt { empty_env with tables=[t]; 
       schema=List.map (fun attr -> { Schema.Source.Attr.sources=[t |> fst]; attr }) (t |> snd); 
       insert_schema=[]; set_tyvar_strict = true } where in
     [], p, Delete [table]

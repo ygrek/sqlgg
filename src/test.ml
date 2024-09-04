@@ -280,6 +280,18 @@ let test_in_clause_with_tuple_sets () =
   ()
 
 let test_agg_nullable = [
+  tt {|
+    CREATE TABLE test19 (
+      a INT NOT NULL,
+      b INT NOT NULL
+    )
+  |} [] [];
+  tt {|
+    CREATE TABLE test20 (
+      c INT NOT NULL,
+      d INT NOT NULL
+    )
+  |} [] [];
   tt "CREATE TABLE test18 (id INT, value INT NOT NULL)" [] [];
   tt {| 
     SELECT AVG(value) as avg_value FROM test18
@@ -287,6 +299,63 @@ let test_agg_nullable = [
   tt {| 
     SELECT MAX(value) as max_value FROM test18
   |} [attr' ~nullability:(Nullable) "max_value" Int] [];
+  tt {| 
+    SELECT MAX(value) as max_value FROM test18 GROUP BY id
+  |} [attr' "max_value" Int] [];
+  tt {| 
+    SELECT MAX(value) as max_value, MAX(id) as max_id
+    FROM test18 GROUP BY id
+  |} [attr' "max_value" Int; attr' "max_id" ~nullability:(Nullable) Int] [];
+  tt {| 
+    SELECT AVG(value) as avg_value, AVG(id) as avg_id
+    FROM test18
+  |} [
+    attr' "avg_value" ~nullability:(Nullable) Float; 
+    attr' "avg_id" ~nullability:(Nullable) Float
+  ] [];
+  tt {| 
+    SELECT MAX((SELECT value FROM test18 WHERE value = 100)) AS result
+    FROM test18
+    GROUP BY value
+  |} [
+  attr' "result" ~nullability:(Nullable) Int; 
+  ] [];
+  tt {| 
+    SELECT MAX((
+      SELECT MAX((
+        SELECT value FROM test18 WHERE value = 100 GROUP BY value
+      )) AS result_0
+    )) AS result
+    FROM test18
+    GROUP BY value
+  |} [
+  attr' "result" ~nullability:(Nullable) Int; 
+  ] [];
+  tt {| 
+    SELECT MAX(COALESCE(((SELECT value FROM test18 WHERE value = 100)), 1)) AS result
+    FROM test18
+    GROUP BY value
+  |} [
+  attr' "result" Int; 
+  ] [];
+  tt {|
+    SELECT MAX(c) as result
+    FROM test19
+    LEFT JOIN test20 on test19.a = test20.c
+    GROUP BY b
+  |} [ attr' ~nullability:(Nullable) "result" Int; ][];
+  tt {|
+    SELECT MAX(a) as result
+    FROM test19
+    LEFT JOIN test20 on test19.a = test20.c
+    GROUP BY b
+  |} [ attr' "result" Int; ][];
+  tt {|
+    SELECT MAX(c) as result
+    FROM test19
+    JOIN test20 on test19.a = test20.c
+    GROUP BY b
+  |} [ attr' "result" Int; ][];
 ]
 
 let run () =
