@@ -123,10 +123,17 @@ let exists_grouping columns =
   List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
 
 (* all columns from tables, without duplicates *)
-(* FIXME check type of duplicates *)
-let make_unique = List.unique ~cmp:Schema.Source.Attr.(fun a1 a2 -> a1.attr.name = a2.attr.name && a1.attr.name <> "")
+let make_unique =
+  List.unique ~cmp:(fun a1 a2 ->
+      (* Check if alias has same name as column *)
+      (List.length a2.Schema.Source.Attr.sources = 0
+      (* Check if columns are from the same table (source)  *)
+      || (List.length a1.sources = List.length a2.sources && List.for_all2 ( = ) a1.sources a2.sources))
+      && a1.attr.name = a2.attr.name
+      (* Check if the tested column is unnamed (not a column) and unaliased *)
+      && a1.attr.name <> "")
 
-let all_columns  = make_unique $ Schema.cross_all
+let all_columns = make_unique $ Schema.cross_all
 
 let all_tbl_columns = all_columns $ List.map snd
 
@@ -196,7 +203,12 @@ let resolve_aggregations =
     | ResInparam _| ResChoices (_, _)
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
-  handle ~is_agg:false  
+  handle ~is_agg:false 
+  
+let update_schema_with_aliases all_schema final_schema = 
+  List.filter (fun s1 ->
+    List.for_all (fun s2 -> s2.Schema.Source.Attr.attr.name <> s1.Schema.Source.Attr.attr.name) final_schema
+  ) all_schema @ final_schema
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
@@ -446,15 +458,11 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
 
-and params_of_order order final_schema tables =
-  let tbls = tables |> List.map (fun (source, schema) -> 
-    List.map (fun attr -> { Schema.Source.Attr.attr; sources=[source] }) schema
-  ) in
+and params_of_order order final_schema env =
   List.concat @@
   List.map
     (fun (order, direction) ->
-       let env = { empty_env with 
-        tables; insert_schema = []; schema = final_schema :: tbls |> all_columns;  } in
+       let env = { env with schema = update_schema_with_aliases env.schema final_schema ;  } in
        let p1 = get_params_l env [ order ] in
        let p2 =
          match direction with
@@ -494,18 +502,16 @@ and eval_select env { columns; from; where; group; having; } =
     else `Nat
   in
   let final_schema = infer_schema env columns in
-  let make_unique = List.unique ~cmp:(fun a1 a2 -> 
-    (* let l1 = List.map (fun i -> i.tn) a1.sources in
-    let l2 = List.map (fun i -> i.tn) a2.sources in
-    l1 = l2 && *)
-     a1.Schema.Source.Attr.attr.name = a2.attr.name && a1.attr.name <> "") in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
-  let env = { env with schema = Schema.Join.cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
-  let p3 = get_params_opt { env with set_tyvar_strict = true } where in
+  let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema) } in (* enrich schema in scope with aliases *)
+  (* WHERE requires explicit column source when ambiguous fields are present *)
+  let p3 = get_params_opt { env with set_tyvar_strict = true; } where in
+  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
+  let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
-  (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
+  (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
 
 (** @return final schema, params and tables that can be referenced by outside scope *)
 and resolve_source env (x,alias) =
@@ -513,9 +519,7 @@ and resolve_source env (x,alias) =
   | `Select select ->
     let (s,p,_) = eval_select_full env select in
     let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list alias; i.Schema.Source.Attr.sources] }) s in
-    s, p, (match alias with None -> [] | Some name -> 
-      (* print_endline (RT); *)
-      [name, Schema.Source.from_schema s])
+    s, p, (match alias with None -> [] | Some name -> [name, Schema.Source.from_schema s])
   | `Nested s ->
     let (env,p) = eval_nested env (Some s) in
     let s = infer_schema env [All] in

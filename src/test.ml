@@ -51,7 +51,7 @@ let test = Type.[
   tt "SELECT str FROM test WHERE id=?"
      [attr' ~nullability:(Nullable) "str" Text]
      [param Int];
-   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
+  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr' "x" Text; attr' ~nullability:(Nullable) "z" Int]
      [param_nullable Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
@@ -89,7 +89,8 @@ let test = Type.[
 
 let test2 = [
   tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
-  tt    "update test, (select * from test2) as x set str = x.str where test.id=x.id" [] [];
+  (* Column 'str' in field list is ambiguous *)
+  wrong "update test, (select * from test2) as x set str = x.str where test.id=x.id";
   tt    "update test, (select * from test2) as x set name = x.str where test.id=x.id" [] [];
   tt    "update test, (select * from test2) as x set test.str = x.str where test.id=x.id" [] [];
   wrong "update test, (select * from test2) as x set test.name = x.name where test.id=x.id";
