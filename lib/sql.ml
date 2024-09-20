@@ -522,10 +522,12 @@ let () =
   "avg" |> add 1 (Group (nullable Float));
   ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
-  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic text [text];
+  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"; "trim"; "to_base64"] ||> monomorphic text [text];
   "hex" |> monomorphic text [int];
   "length" |> monomorphic int [text];
   ["random"] ||> monomorphic int [];
+  "rand" |> monomorphic int [];
+  "rand" |> monomorphic int [int];
   "floor" |> monomorphic int [float];
   "nullif" |> add 2 (F (Var 0 (* TODO nullable *), [Var 0; Var 0]));
   "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
@@ -542,7 +544,7 @@ let () =
   "unix_timestamp" |> monomorphic int [datetime];
   ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
-  "substring" |> monomorphic text [text; int];
+  ["substring"; "sha2"] ||> monomorphic text [text; int];
   "substring" |> monomorphic text [text; int; int];
   "substring_index" |> monomorphic text [text; text; int];
   "last_insert_id" |> monomorphic int [];
@@ -551,4 +553,6 @@ let () =
   "uuid" |> monomorphic text [];
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];
+  ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
+  "date_format" |> monomorphic text [datetime; text];
   ()
