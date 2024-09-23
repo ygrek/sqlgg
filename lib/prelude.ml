@@ -9,6 +9,11 @@ let flip f x y = f y x
 let tuck l x = l := x :: !l
 let option_list = function Some x -> [x] | None -> []
 
+let get_lazy_opt default_fn x =
+  match x with
+  | None -> default_fn ()
+  | Some y -> y
+
 let fail fmt = Printf.ksprintf failwith fmt
 let failed ~at fmt = Printf.ksprintf (fun s -> raise (At (at, Failure s))) fmt
 let printfn fmt = Printf.ksprintf print_endline fmt

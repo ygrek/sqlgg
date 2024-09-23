@@ -374,6 +374,10 @@ type select_result = (schema * param list)
 
 type direction = [ `Fixed | `Param of param_id ] [@@deriving show]
 
+type cte_supported_compound_op = [ `Union | `Union_all ] [@@deriving show]
+
+type compound_op = [ cte_supported_compound_op | `Except | `Intersect ] [@@deriving show]
+
 type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
 type col_name = {
@@ -392,7 +396,7 @@ and select = {
   having : expr option;
 }
 and select_full = {
-  select : select * select list;
+  select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
 }
@@ -431,6 +435,8 @@ type insert_action =
   on_duplicate : assignments option;
 }
 
+type cte = { cte_name: string;  cols: string list option; stmt: select_full; }
+
 type stmt =
 | Create of table_name * [ `Schema of schema | `Select of select_full ]
 | Drop of table_name
@@ -445,6 +451,7 @@ type stmt =
 | UpdateMulti of nested list * assignments * expr option
 | Select of select_full
 | CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
+| Cte_select of { ctes: cte list; stmt: select_full; is_recursive: bool; }
 
 (*
 open Schema

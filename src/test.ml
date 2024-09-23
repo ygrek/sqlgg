@@ -358,6 +358,52 @@ let test_agg_nullable = [
   |} [ attr' "result" Int; ][];
 ]
 
+let cte_possible_rec_non_shared_select_only = [
+  tt {|
+    WITH RECURSIVE sequence_cte AS (
+      SELECT 1 AS num
+      UNION ALL
+      SELECT num + @param1
+      FROM sequence_cte
+      WHERE num < @param2
+    )
+    SELECT num
+    FROM sequence_cte
+  |} [
+    attr' "num" Int;
+  ] [
+    named "param1" Int;
+    named "param2" Int;
+  ];
+  wrong {|
+    WITH RECURSIVE sequence_cte AS (
+      SELECT 1 AS num
+      UNION ALL
+      SELECT num + @param1
+      FROM sequence_cte
+      WHERE num < @param2
+      UNION ALL 
+      SELECT 'string'
+    )
+    SELECT num
+    FROM sequence_cte
+  |};
+  tt {|
+    CREATE TABLE test21 (
+      num INT
+    )
+  |} [][];
+  tt {|
+    WITH cte AS (
+      SELECT num
+      FROM test21
+      WHERE num <= 3
+    )
+    SELECT num
+    FROM cte
+  |} [ attr' ~nullability:(Nullable) "num" Int;][];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -377,6 +423,7 @@ let run () =
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
     "test_in_clause_with_tuple_sets" >:: test_in_clause_with_tuple_sets;
     "test_agg_nullable" >::: test_agg_nullable;
+    "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
   ]
   in
   let test_suite = "main" >::: tests in

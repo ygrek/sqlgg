@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test_table1" sql="CREATE TABLE test_table1 (&#x0A;    col1 INT,&#x0A;    col2 INT,&#x0A;    col3 DECIMAL(10, 2)&#x0A;)" category="DDL" kind="create" target="test_table1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test_table2" sql="CREATE TABLE test_table2 (&#x0A;    col4 INT,&#x0A;    col5 VARCHAR(50)&#x0A;)" category="DDL" kind="create" target="test_table2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="WITH cte1 AS (&#x0A;    SELECT col2, AVG(col3) AS col6&#x0A;    FROM test_table1&#x0A;    GROUP BY col2&#x0A;),&#x0A;cte2 AS (&#x0A;    SELECT t2.col4, t2.col5, c1.col6&#x0A;    FROM test_table2 t2&#x0A;    JOIN cte1 c1 ON t2.col4 = c1.col2&#x0A;    WHERE c1.col6 &gt; @some_value&#x0A;)&#x0A;SELECT *&#x0A;FROM cte2" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="some_value" type="Float"/>
+  </in>
+  <out>
+   <value name="col4" type="Int" nullable="true"/>
+   <value name="col5" type="Text" nullable="true"/>
+   <value name="col6" type="Float" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="test_table2">
+  <schema>
+   <value name="col4" type="Int" nullable="true"/>
+   <value name="col5" type="Text" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test_table1">
+  <schema>
+   <value name="col1" type="Int" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+   <value name="col3" type="Decimal" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
