@@ -32,7 +32,7 @@
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
-       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET JOIN LIKE_OP LIKE
+       LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET STRAIGHT_JOIN JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED DOUBLECOLON
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -90,6 +90,7 @@ input: statement EOF { $1 }
 if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
+assign: name=IDENT EQUAL e=expr { name, e }
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
@@ -134,7 +135,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Update (table,ss,w,o,lim)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
-         | update_cmd tables=commas(source) SET ss=commas(set_column) w=where?
+         | update_cmd tables=commas(table_list) SET ss=commas(set_column) w=where?
               {
                 UpdateMulti (tables,ss,w)
               }
@@ -147,25 +148,26 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 DeleteMulti (targets, tables, w)
               }
-         | SET name=IDENT EQUAL e=expr
+         | SET kv=assign
               {
-                Set (name, e)
+                Set ([kv], None)
               }
-         | CREATE or_replace? FUNCTION name=IDENT params=sequence(func_parameter)
+         | SET STATEMENT vars=separated_nonempty_list(COMMA, assign) FOR stmt=statement { Set (vars, Some stmt) }
+         | CREATE or_replace? FUNCTION name=table_name params=sequence(func_parameter)
            RETURNS ret=sql_type
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret ret) name;
+                Function.add (List.length params) (Ret ret) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
-         | CREATE or_replace? PROCEDURE name=IDENT params=sequence(proc_parameter)
+         | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
            routine_extra?
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret Any) name; (* FIXME void *)
+                Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -188,12 +190,11 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) table_def_done { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN) { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
                 | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
 
-(* ugly, can you fixme? *)
-(* ignoring everything after RPAREN (NB one look-ahead token) *)
-table_def_done: parser_state_ignore RPAREN IGNORED* parser_state_normal { }
+(* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
+ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
 
 parser_state_ignore: { Parser_state.mode_ignore () }
 parser_state_normal: { Parser_state.mode_normal () }
@@ -216,8 +217,10 @@ inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
 left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
 right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
+straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { src, j, c }
+straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
 join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
            | j=natural(left_join)
@@ -228,6 +231,7 @@ join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
            | j=cond(right_join)
            | j=cond(full_join)
            | j=cond(inner_join) { j }
+           | j=straight_cond(straight_join) { j }
 
 join_cond: ON e=expr { On e }
          | USING l=sequence(IDENT) { Using l }
@@ -301,6 +305,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
+            | ALGORITHM EQUAL algorithm { `None }
             | either(DEFAULT,pair(CONVERT,TO))? charset collate? { `None }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
@@ -339,16 +344,16 @@ reference_action_clause:
 
 reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-
+  
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
                 | NULL { Some Null }
                 | UNIQUE KEY? { Some Unique }
                 | AUTOINCREMENT { Some Autoincrement }
+                | DEFAULT default_value { Some WithDefault }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
-                | DEFAULT e=default_value { match e with Value { t = Any; nullability = _ } -> Some Null | _ -> None } (* FIXME check type with column *)
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
@@ -376,7 +381,8 @@ expr:
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
     | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun (Comparison, [e1; e2]) }
+    | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2]}
     | e1=expr CONCAT_OP e2=expr { Fun ((fixed Text [Text;Text]),[e1;e2]) }
     | e=like_expr esc=escape?
       {
@@ -400,6 +406,10 @@ expr:
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
+    | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
+      {
+        InTupleList(names, p)
+      }      
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p (depends Any)) }
     | p=PARAM DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
@@ -413,7 +423,7 @@ expr:
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
-    | f=IDENT LPAREN p=func_params RPAREN { Fun (Function.lookup f (List.length p), p) }
+    | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
@@ -488,7 +498,7 @@ func_params: DISTINCT? l=expr_list { l }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
-comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP | NOT_DISTINCT_OP { }
+comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
 boolean_bin_op: AND | OR | XOR { }
 
 unary_op: EXCL { }
@@ -541,3 +551,8 @@ strict_type:
 manual_type:
     | strict_type      { strict   $1 }
     | strict_type NULL { nullable $1 } 
+
+algorithm:
+ | INPLACE { }
+ | COPY { }
+ | INSTANT { }

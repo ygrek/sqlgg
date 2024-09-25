@@ -8,7 +8,7 @@
  <stmt name="insert" sql="insert into transactions values (@amount,@date)" category="DML" kind="insert" target="transactions" cardinality="0">
   <in>
    <value name="amount" type="Float"/>
-   <value name="date" type="Datetime"/>
+   <value name="date" type="Datetime" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -24,7 +24,7 @@
  <table name="transactions">
   <schema>
    <value name="amount" type="Float"/>
-   <value name="date" type="Datetime"/>
+   <value name="date" type="Datetime" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

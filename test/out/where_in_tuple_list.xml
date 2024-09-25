@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_table1" sql="CREATE TABLE table1 (&#x0A;  col1 TEXT NULL,&#x0A;  col2 INT NULL&#x0A;)" category="DDL" kind="create" target="table1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="SELECT `col1`, `col2`&#x0A;FROM `table1`&#x0A;WHERE (1, col1, col2, col1 + col1, 6, 11, (@test3 :: Text)) IN @@@in_ AND col2 &gt; 3" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="in_" type="list(Int, Text, Int, Text, Int, Int, Text)"/>
+  </in>
+  <out>
+   <value name="col1" type="Text" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="table1">
+  <schema>
+   <value name="col1" type="Text" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>

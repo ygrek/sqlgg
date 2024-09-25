@@ -40,11 +40,11 @@
  <table name="t1">
   <schema>
    <value name="pk" type="Int"/>
-   <value name="a" type="Int"/>
-   <value name="b" type="Int"/>
-   <value name="c" type="Text"/>
-   <value name="d" type="Float"/>
-   <value name="e" type="Float"/>
+   <value name="a" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
+   <value name="c" type="Text" nullable="true"/>
+   <value name="d" type="Float" nullable="true"/>
+   <value name="e" type="Float" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

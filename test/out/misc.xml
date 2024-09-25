@@ -14,8 +14,8 @@
  <stmt name="select_2" sql="SELECT * FROM test WHERE x IS NOT NULL" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="x" type="Int"/>
-   <value name="key" type="Text"/>
+   <value name="x" type="Int" nullable="true"/>
+   <value name="key" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="create_index_key" sql="CREATE INDEX `key` ON test(`key`(20))" category="DDL" kind="create_index" target="key" cardinality="0">
@@ -25,7 +25,7 @@
  <stmt name="select_4" sql="SELECT avg(x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
-   <value name="_0" type="Float"/>
+   <value name="_0" type="Float" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_5" sql="SELECT count(*) FROM test" category="DQL" kind="select" cardinality="1">
@@ -39,7 +39,7 @@
    <value name="_0" type="Text"/>
   </in>
   <out>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_7" sql="SELECT x FROM test WHERE `key` &lt; @_0" category="DQL" kind="select" cardinality="n">
@@ -47,7 +47,7 @@
    <value name="_0" type="Text"/>
   </in>
   <out>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="create_appointments" sql="CREATE TABLE appointments (alert_at DATETIME)" category="DDL" kind="create" target="appointments" cardinality="0">
@@ -63,7 +63,7 @@
  <stmt name="select_10" sql="SELECT SUM(CASE WHEN x &gt; 10 THEN 1 ELSE 0 END) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
-   <value name="_0" type="Int"/>
+   <value name="_0" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="create_issue14" sql="CREATE TABLE issue14 (x integer)" category="DDL" kind="create" target="issue14" cardinality="0">
@@ -72,31 +72,31 @@
  </stmt>
  <stmt name="insert_issue14_12" sql="INSERT INTO issue14 (x) VALUES (@x)" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="insert_issue14_13" sql="INSERT INTO issue14 SET x = @x" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="insert_issue14_14" sql="INSERT INTO issue14 (x) SELECT @x" category="DML" kind="insert" target="issue14" cardinality="0">
   <in>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="insert_test_15" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = x + @_0" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="_0" type="Int"/>
+   <value name="_0" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="insert_test_16" sql="INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + @_0" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="_0" type="Int"/>
+   <value name="_0" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -131,19 +131,19 @@
  <stmt name="select_23" sql="SELECT count(*) * avg(x) FROM test" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
-   <value name="_0" type="Float"/>
+   <value name="_0" type="Float" nullable="true"/>
   </out>
  </stmt>
  <stmt name="issue45" sql="INSERT INTO test VALUES&#x0A;(1, @one),&#x0A;(2, @two),&#x0A;(3, @one)" category="DML" kind="insert" target="test" cardinality="0">
   <in>
-   <value name="two" type="Text"/>
-   <value name="one" type="Text"/>
+   <value name="two" type="Text" nullable="true"/>
+   <value name="one" type="Text" nullable="true"/>
   </in>
   <out/>
  </stmt>
  <stmt name="insert_appointments_25" sql="INSERT INTO `appointments` ( `alert_at`) VALUES (@alert)" category="DML" kind="insert" target="appointments" cardinality="0">
   <in>
-   <value name="alert" type="Datetime"/>
+   <value name="alert" type="Datetime" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -163,7 +163,7 @@
   <in/>
   <out>
    <value name="_0" type="Int"/>
-   <value name="_1" type="Int"/>
+   <value name="_1" type="Int" nullable="true"/>
   </out>
  </stmt>
  <stmt name="issue54_mysql" sql="SELECT 0 &lt;=&gt; 0, 0 &lt;=&gt; null, null &lt;=&gt; 0, null &lt;=&gt; null" category="DQL" kind="select" cardinality="1">
@@ -197,8 +197,8 @@
  </stmt>
  <stmt name="delete_test_33" sql="delete from test&#x0A;where x in (@x1, @x2)&#x0A;  and not exists (select 1 from workareas where work_id = test.x)" category="DML" kind="delete" target="test" cardinality="0">
   <in>
-   <value name="x1" type="Int"/>
-   <value name="x2" type="Int"/>
+   <value name="x1" type="Int" nullable="true"/>
+   <value name="x2" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -209,14 +209,14 @@
  <stmt name="issue63" sql="select * from issue63 where x like 'hello%' or y like 'world%'" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="x" type="Text"/>
-   <value name="y" type="Text"/>
+   <value name="x" type="Text" nullable="true"/>
+   <value name="y" type="Text" nullable="true"/>
   </out>
  </stmt>
  <stmt name="last_insert_id" sql="INSERT INTO `workareas` (`about`,`k`) VALUES (NULLIF(@about, ''),@k)&#x0A;ON DUPLICATE KEY UPDATE&#x0A;  `work_id` = LAST_INSERT_ID(`work_id`)" category="DML" kind="insert" target="workareas" cardinality="0">
   <in>
    <value name="about" type="Text"/>
-   <value name="k" type="Int"/>
+   <value name="k" type="Int" nullable="true"/>
   </in>
   <out/>
  </stmt>
@@ -239,20 +239,20 @@
  <stmt name="group_by_having" sql="select x, count(*) nr from test group by x having nr &gt; 1" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
    <value name="nr" type="Int"/>
   </out>
  </stmt>
  <stmt name="select_alias" sql="select x &lt;&gt; 0 AS y from test" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="y" type="Bool"/>
+   <value name="y" type="Bool" nullable="true"/>
   </out>
  </stmt>
  <stmt name="select_alias_change_type" sql="select x &lt;&gt; 0 AS x from test" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="x" type="Bool"/>
+   <value name="x" type="Bool" nullable="true"/>
   </out>
  </stmt>
  <stmt name="create_oauth_tokens" sql="CREATE TABLE IF NOT EXISTS `oauth_tokens` (&#x0A;  `id` INTEGER UNSIGNED PRIMARY KEY AUTO_INCREMENT,&#x0A;  `unique_value_google_drive` BINARY(16) AS (&#x0A;  CASE WHEN `client_name` = &quot;google-drive&quot; THEN&#x0A;    UNHEX(MD5(CONCAT_WS(&quot;|&quot;, `creator_user_id`, `email`)))&#x0A;  ELSE&#x0A;    NULL&#x0A;  END) UNIQUE&#x0A;)" category="DDL" kind="create" target="oauth_tokens" cardinality="0">
@@ -262,42 +262,42 @@
  <table name="oauth_tokens">
   <schema>
    <value name="id" type="Int"/>
-   <value name="unique_value_google_drive" type="Text"/>
+   <value name="unique_value_google_drive" type="Text" nullable="true"/>
   </schema>
  </table>
  <table name="adr">
   <schema>
    <value name="word" type="Text"/>
-   <value name="amount" type="Int"/>
+   <value name="amount" type="Int" nullable="true"/>
   </schema>
  </table>
  <table name="issue63">
   <schema>
-   <value name="x" type="Text"/>
-   <value name="y" type="Text"/>
+   <value name="x" type="Text" nullable="true"/>
+   <value name="y" type="Text" nullable="true"/>
   </schema>
  </table>
  <table name="workareas">
   <schema>
-   <value name="work_id" type="Int"/>
-   <value name="about" type="Text"/>
-   <value name="k" type="Int"/>
+   <value name="work_id" type="Int" nullable="true"/>
+   <value name="about" type="Text" nullable="true"/>
+   <value name="k" type="Int" nullable="true"/>
   </schema>
  </table>
  <table name="issue14">
   <schema>
-   <value name="x" type="Int"/>
+   <value name="x" type="Int" nullable="true"/>
   </schema>
  </table>
  <table name="appointments">
   <schema>
-   <value name="alert_at" type="Datetime"/>
+   <value name="alert_at" type="Datetime" nullable="true"/>
   </schema>
  </table>
  <table name="test">
   <schema>
-   <value name="x" type="Int"/>
-   <value name="key" type="Text"/>
+   <value name="x" type="Int" nullable="true"/>
+   <value name="key" type="Text" nullable="true"/>
   </schema>
  </table>
 </sqlgg>

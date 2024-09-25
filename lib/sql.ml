@@ -33,6 +33,10 @@ struct
   let nullable = nullability Nullable
   let make_nullable { t; nullability=_ } = nullable t
 
+  let make_strict { t; nullability=_ } = strict t
+
+  let is_strict { nullability; _ } = nullability = Strict
+
   let (=) : t -> t -> bool = equal
 
   let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
@@ -110,6 +114,8 @@ struct
   | Group of t (* _ -> t *)
   | Agg (* 'a -> 'a *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
+  | Coalesce of tyvar * tyvar
+  | Comparison
   | Ret of kind (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
@@ -125,13 +131,14 @@ struct
   | Group ret -> fprintf pp "|_| -> %s" (show ret)
   | Ret ret -> fprintf pp "_ -> %s" (show_kind ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  | Multi (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Comparison -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Group _ | Agg -> true
-  | Ret _ | F _ | Multi _ -> false
+  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
 end
 
 module Constraint =
@@ -139,7 +146,7 @@ struct
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
     [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault
     [@@deriving show{with_path=false}, ord]
 end
 
@@ -154,7 +161,8 @@ type attr = {name : string; domain : Type.t; extra : Constraints.t; }
 
 let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-  let domain = Type.{ t = Option.default Int kind; nullability = if Constraints.mem Null extra then Nullable else Strict } in
+  let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey] 
+    then Strict else Nullable } in
   {name;domain;extra}
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
@@ -164,7 +172,35 @@ struct
   type t = attr list
     [@@deriving show]
 
-  exception Error of t * string
+  exception Error of t * string  
+
+  module Source = struct
+    module Attr = struct 
+      type 'a t = { attr: attr; sources: 'a list } [@@deriving show]
+      
+      let by_name name sattr = sattr.attr.name = name
+    end
+      
+    type 'a t = 'a Attr.t list
+
+    let find_by_name t name = List.find_all (Attr.by_name name) t
+
+    let find t name =
+      match find_by_name t name with
+      | [x] -> x
+      | [] -> raise (Error (List.map (fun i -> i.Attr.attr) t,"missing attribute : " ^ name))
+      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ name))
+     
+    let mem_by_name t a =
+      match find_by_name t a.Attr.attr.name with
+      | [_] -> true
+      | [] -> false
+      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ a.attr.name))
+
+    let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
+
+    let from_schema list = List.map (fun sattr -> sattr.Attr.attr) list
+  end 
 
   let raise_error t fmt = Printf.ksprintf (fun s -> raise (Error (t,s))) fmt
 
@@ -177,14 +213,6 @@ struct
     | [x] -> x
     | [] -> raise (Error (t,"missing attribute : " ^ name))
     | _ -> raise (Error (t,"duplicate attribute : " ^ name))
-
-  let mem_by_name t a =
-    match find_by_name t a.name with
-    | [_] -> true
-    | [] -> false
-    | _ -> raise (Error (t,"duplicate attribute : " ^ a.name))
-
-  let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
 
   let make_unique = List.unique ~cmp:(fun a1 a2 -> a1.name = a2.name && a1.name <> "")
   let is_unique t = List.length (make_unique t) = List.length t
@@ -222,17 +250,23 @@ struct
 
     (* TODO check that attribute types match (ignoring nullability)? *)
     let natural t1 t2 =
-      let (common,t1only) = List.partition (fun a -> mem_by_name t2 a) t1 in
-      if 0 = List.length common then raise (Error (t1,"no common attributes for natural join of " ^ (names t1) ^ " and " ^ (names t2)));
-      common @ t1only @ sub_by_name t2 common
+      let (common,t1only) = List.partition (fun a -> Source.mem_by_name t2 a) t1 in
+      Source.Attr.(
+        if 0 = List.length common then 
+          let t1_attrs = List.map (fun i -> i.attr) t1 in
+          raise (Error (t1_attrs,"no common attributes for natural join of " ^
+           (names (t1_attrs)) ^ " and " ^ (names (List.map (fun i -> i.attr) t2))))
+      );
+      common @ t1only @ Source.sub_by_name t2 common
 
     let using l t1 t2 =
-      let common = List.map (find t1) l in
-      List.iter (fun a -> let (_:attr) = find t2 a.name in ()) common;
-      common @ sub_by_name t1 common @ sub_by_name t2 common
+      let common = List.map (Source.find t1) l in
+      List.iter (fun a -> let _ = Source.find t2 a.Source.Attr.attr.name in ()) common;
+      common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
     let join typ cond a b =
-      let nullable = List.map (fun a -> { a with domain = Type.make_nullable a.domain }) in
+      let nullable = List.map (fun data -> 
+        Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
       | Inner -> action a b
@@ -245,7 +279,11 @@ struct
   let cross_all l = List.fold_left Join.cross [] l
 
   let compound t1 t2 =
-    if List.length t1 <> List.length t2 then raise (Error (t1, (to_string t1) ^ " differs in size to " ^ (to_string t2)));
+    let open Source in
+    let open Attr in
+    if List.length t1 <> List.length t2 then 
+      raise (Error (List.map (fun i -> i.attr) t1, (to_string (List.map (fun i -> i.attr) t1)) 
+          ^ " differs in size to " ^ (to_string (List.map (fun i -> i.attr) t2))));
     let show_name i a =
       match a.name with
       | "" -> sprintf "column %d (of %d)" (i+1) (List.length t1)
@@ -253,11 +291,11 @@ struct
     in
     List.combine t1 t2
     |> List.mapi begin fun i (a1,a2) ->
-      match Type.supertype a1.domain a2.domain with
-      | Some t -> { a1 with domain=t }
-      | None -> raise (Error (t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
-        (show_name i a1) (Type.show a1.domain)
-        (show_name i a2) (Type.show a2.domain)))
+      match Type.supertype a1.attr.domain a2.attr.domain with
+      | Some t -> { a1 with attr = { a1.attr with domain=t } }
+      | None -> raise (Error (List.map (fun i -> i.attr) t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
+        (show_name i a1.attr) (Type.show a1.attr.domain)
+        (show_name i a2.attr) (Type.show a2.attr.domain)))
     end
 
   let add t col pos =
@@ -317,7 +355,8 @@ and var =
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
-| TupleList of param_id * schema
+| TupleList of param_id * tuple_list_kind 
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -369,6 +408,7 @@ and expr =
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
+  | InTupleList of expr list * param_id
 and column =
   | All
   | AllOf of table_name
@@ -400,11 +440,11 @@ type stmt =
 | Insert of insert_action
 | Delete of table_name * expr option
 | DeleteMulti of table_name list * nested * expr option
-| Set of string * expr
+| Set of (string * expr) list * stmt option
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
-| UpdateMulti of source list * assignments * expr option
+| UpdateMulti of nested list * assignments * expr option
 | Select of select_full
-| CreateRoutine of string * Type.kind option * (string * Type.kind * expr option) list
+| CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
 
 (*
 open Schema
@@ -426,6 +466,7 @@ val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
+val add_multi: Type.func -> string -> unit
 val sponge : Type.func
 
 end = struct
@@ -475,19 +516,22 @@ let () =
   let float = strict Float in
   let text = strict Text in
   let datetime = strict Datetime in
+  let bool = strict Bool in
   "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
   "count" |> add 1 (Group int);
-  "avg" |> add 1 (Group float);
-  ["max";"min";"sum"] ||> add 1 Agg; (* TODO nullable, think no rows *)
+  "avg" |> add 1 (Group (nullable Float));
+  ["max";"min";"sum"] ||> add 1 Agg;
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
-  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"] ||> monomorphic text [text];
+  ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"; "trim"; "to_base64"] ||> monomorphic text [text];
   "hex" |> monomorphic text [int];
   "length" |> monomorphic int [text];
   ["random"] ||> monomorphic int [];
+  "rand" |> monomorphic int [];
+  "rand" |> monomorphic int [int];
   "floor" |> monomorphic int [float];
   "nullif" |> add 2 (F (Var 0 (* TODO nullable *), [Var 0; Var 0]));
   "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
-  ["least";"greatest";"coalesce"] ||> multi_polymorphic;
+  ["least";"greatest";] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
   ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ text) (Typ text);
   "date" |> monomorphic datetime [datetime];
@@ -500,9 +544,15 @@ let () =
   "unix_timestamp" |> monomorphic int [datetime];
   ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
-  "substring" |> monomorphic text [text; int];
+  ["substring"; "sha2"] ||> monomorphic text [text; int];
   "substring" |> monomorphic text [text; int; int];
   "substring_index" |> monomorphic text [text; text; int];
   "last_insert_id" |> monomorphic int [];
   "last_insert_id" |> monomorphic int [int];
+  add_multi Type.(Coalesce (Var 0, Var 0)) "coalesce";
+  "uuid" |> monomorphic text [];
+  "uuid_short" |> monomorphic int [];
+  "is_uuid" |> monomorphic bool [text];
+  ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
+  "date_format" |> monomorphic text [datetime; text];
   ()

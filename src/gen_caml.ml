@@ -336,21 +336,30 @@ let gen_tuple_printer _label schema =
     (String.concat ", " params)
     (String.concat " " @@
      List.mapi
-       (fun idx { name; domain; _ } ->
-          (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
-          sprintf
-            {|Buffer.add_string _sqlgg_b (T.Types.%s.to_literal %s);|}
-            (in_var_module name domain) name)
-       schema)
+     (fun idx attr ->
+        let { name; domain; _ } = attr in
+        (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
+        sprintf {|Buffer.add_string _sqlgg_b (%s);|}
+          (let to_literal = sprintf "T.Types.%s.to_literal %s" (in_var_module name domain) in
+           if is_attr_nullable attr then 
+           (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
+           else to_literal name))
+     schema)
 
-let gen_tuple_substitution id schema =
-  match id.label with
-  | None -> failwith "empty label in tuple param"
-  | Some label ->
-    sprintf
-      {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
-      (gen_tuple_printer label schema)
-      label
+let resolve_tuple_label id = match id.label with
+| None -> failwith "empty label in tuple param"
+| Some label -> label
+
+let gen_tuple_substitution label schema =
+  sprintf
+    {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
+    (gen_tuple_printer label schema)
+    label 
+
+let make_schema_of_tuple_types label =
+  List.mapi (fun idx domain -> {
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty
+  })   
 
 let make_sql l =
   let b = Buffer.create 100 in
@@ -379,10 +388,19 @@ let make_sql l =
       ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
       bprintf b ")";
       loop true tl
-    | SubstTuple (id, schema) :: tl ->
+    | SubstTuple (id, Insertion schema) :: tl ->
       if app then bprintf b " ^ ";
-      Buffer.add_string b (gen_tuple_substitution id schema);
+      let label = resolve_tuple_label id in
+      Buffer.add_string b (gen_tuple_substitution label schema);
       loop true tl
+    | SubstTuple (id, Where_in types) :: tl ->
+      if app then bprintf b " ^ ";
+      let label = resolve_tuple_label id in
+      let schema = make_schema_of_tuple_types label types in
+      bprintf b "%s ^ " (quote "(");
+      Buffer.add_string b (gen_tuple_substitution label schema);
+      bprintf b " ^ %s" (quote ")");
+      loop true tl  
   in
   Buffer.add_string b "(";
   loop false l;
@@ -431,7 +449,8 @@ let generate_stmt style index stmt =
     match
       List.find_map
         (function
-          | SubstTuple (id, _) -> Some id
+          | SubstTuple (id, Insertion _) -> Some id
+          | SubstTuple (_, Where_in _) -> None
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with

@@ -18,13 +18,13 @@
  <table name="database2.test">
   <schema>
    <value name="id" type="Int"/>
-   <value name="amount" type="Int"/>
+   <value name="amount" type="Int" nullable="true"/>
   </schema>
  </table>
  <table name="database1.test">
   <schema>
    <value name="id" type="Int"/>
-   <value name="txt" type="Text"/>
+   <value name="txt" type="Text" nullable="true"/>
   </schema>
  </table>
 </sqlgg>
