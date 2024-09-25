@@ -207,7 +207,7 @@ let test_coalesce = [
   tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
 ]
 
-let test_coalesce = [
+let test_primary_strict = [
   tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
   tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:(Strict) "x" Int;] [];
 ]
@@ -503,6 +503,7 @@ let run () =
     "manual_param" >::: test_manual_param;
     "test_left_join" >::: test_left_join;
     "test_coalesce" >::: test_coalesce;
+    "test_primary_strict" >::: test_primary_strict;
     "test_not_null_default_field" >::: test_not_null_default_field;
     "test_update_join" >::: test_update_join;
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
