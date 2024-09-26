@@ -395,11 +395,14 @@ and select = {
   group : expr list;
   having : expr option;
 }
-and select_full = {
+and cte_item = { cte_name: string; cols: string list option; stmt: select_complete; }
+and cte = { cte_items: cte_item list; is_recursive: bool; }
+and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
 }
+and select_full = { select_complete: select_complete; cte: cte option; }
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and expr =
@@ -435,8 +438,6 @@ type insert_action =
   on_duplicate : assignments option;
 }
 
-type cte = { cte_name: string;  cols: string list option; stmt: select_full; }
-
 type stmt =
 | Create of table_name * [ `Schema of schema | `Select of select_full ]
 | Drop of table_name
@@ -451,7 +452,6 @@ type stmt =
 | UpdateMulti of nested list * assignments * expr option
 | Select of select_full
 | CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
-| Cte_select of { ctes: cte list; stmt: select_full; is_recursive: bool; }
 
 (*
 open Schema

@@ -92,7 +92,8 @@ if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
-cte: cte_name=IDENT cols=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt RPAREN { { cte_name; cols;stmt } }
+cte_item: cte_name=IDENT cols=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN {{ cte_name; cols; stmt }}
+cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive }}
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
@@ -172,7 +173,6 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
-         | is_recursive=cte_with ctes=commas(cte) stmt=select_stmt { Cte_select { ctes; stmt; is_recursive }}     
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
@@ -203,13 +203,16 @@ parser_state_ignore: { Parser_state.mode_ignore () }
 parser_state_normal: { Parser_state.mode_normal () }
 parser_state_ident: { Parser_state.mode_ident () }
 
-cte_with:
-  WITH { false }
-  | WITH RECURSIVE { true }
+cte_with: WITH { false } | WITH RECURSIVE { true }
 
-select_stmt: select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+select_stmt: cte=cte? select_complete=select_stmt_plain
               {
-                { select = ($1, other); order=o; limit=lim; }
+                { select_complete; cte; }
+              }
+
+select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+              {
+                { select = (core, other); order=o; limit=lim; }
               }
 
 select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?

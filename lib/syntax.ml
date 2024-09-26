@@ -143,9 +143,10 @@ let resolve_column ~env {cname;tname} =
     match find_by_name t name with
     | [x] -> x
     | [] -> raise (Schema.Error (err_data,"missing attribute : " ^ name))
-    | _ -> raise (Schema.Error (err_data,"duplicate attribute : " ^ name)) in
-  let default_result () = find (Option.map_default (schema_of ~env) env.schema tname) cname in  
-  get_lazy_opt default_result result
+    | _ -> raise (Schema.Error (err_data,"duplicate attribute : " ^ name)) in  
+  match result with 
+  | None -> find (Option.map_default (schema_of ~env) env.schema tname) cname
+  | Some result -> result
 
 let resolve_column_assignments ~env l =
   let open Schema.Source in 
@@ -519,13 +520,50 @@ and resolve_source env (x,alias) =
     let s3 = List.map (fun attr -> { Schema.Source.Attr.attr; sources }) s  in
     s3, [], List.map (fun name -> name, s) sources
 
-and eval_select_full env stmt =
-  let (s1,p1,tbls,cardinality) = eval_select env (fst @@ stmt.select) in
-  eval_compound ~env:{ env with tables = tbls; } (p1, s1, cardinality, stmt)
+and eval_select_full env { select_complete; cte } =
+  let ctes, p1 = Option.map_default eval_cte ([], []) cte in
+  let env = { env with ctes = ctes @ env.ctes } in
+  let (s1, p2, tbls, cardinality) = eval_select env (fst @@ select_complete.select) in
+  eval_compound ~env:{ env with tables = tbls; } (p1 @ p2, s1, cardinality, select_complete)
+
+and eval_cte { cte_items; is_recursive } = 
+  let open Schema.Source in
+  List.fold_left
+    (fun (acc_ctes, acc_vars) cte ->
+      let env = { empty_env with ctes = acc_ctes } in
+      let tbl_name = make_table_name cte.cte_name in
+      let s1, p1, _kind =
+        let stmt = if is_recursive then (
+          let { select = select, other; _ } = cte.stmt in
+          let other = List.map (fun cmb -> match fst cmb with 
+            | #cte_supported_compound_op -> cmb
+            | `Except | `Intersect -> 
+              fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name
+          ) other in
+          { cte.stmt with select = select, other }
+        )
+        else cte.stmt in
+        let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
+        let a1 = from_schema s1 in
+        let ctes = if is_recursive then (tbl_name, a1) :: env.ctes else env.ctes in
+        eval_compound
+          ~env:{ env with tables = tbls; ctes  }
+          (p1, s1, cardinality, stmt)
+      in
+      let a1 = from_schema s1 in
+      let select_all = Option.default (List.map (fun i -> i.name) a1) cte.cols in
+      let s2 = 
+        try 
+          List.map2 (fun col cut -> { cut with name = col }) select_all a1 
+        with 
+          List.Different_list_size _ -> 
+            fail "%s: SELECT list and column names list have different column counts" cte.cte_name in
+      (tbl_name, s2) :: acc_ctes, p1 @ acc_vars)
+    ([], []) cte_items  
 
 and eval_compound ~env result = 
   let (p1, s1, cardinality, stmt) = result in
-  let { select=(_select, other); order; limit; } = stmt in
+  let { select=(_select, other); order; limit; _; } = stmt in
   let other = List.map snd other in
   let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
   let cardinality = if other = [] then cardinality else `Nat in
@@ -629,7 +667,8 @@ let rec eval (stmt:Sql.stmt) =
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
       insert_schema = expect;
     } in
-    let select = annotate_select select (List.map (fun a -> a.domain) expect) in
+    let select_complete = annotate_select select.select_complete (List.map (fun a -> a.domain) expect) in
+    let select = { select with select_complete } in
     let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound
       ((List.map (fun attr -> {sources=[]; attr;})) expect)
@@ -657,7 +696,8 @@ let rec eval (stmt:Sql.stmt) =
     (* use dummy columns to verify targets match the provided tables  *)
     let columns = List.map (fun tn -> AllOf tn) targets in
     let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
-    let _attrs, params, _ = eval_select_full empty_env { select; order = []; limit = None } in
+    let select_complete = { select; order = []; limit = None} in
+    let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
   | Set (vars, stmt) ->
     let p =
@@ -687,42 +727,6 @@ let rec eval (stmt:Sql.stmt) =
     from_schema schema , a ,b
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name
-  | Cte_select { ctes; stmt; is_recursive } ->
-    let ctes, p1 =
-    List.fold_left
-      (fun (acc_ctes, acc_vars) cte ->
-        let env = { empty_env with ctes = acc_ctes } in
-        let tbl_name = make_table_name cte.cte_name in
-        let s1, p1, _kind =
-          if is_recursive then (
-            let { select = select, other; _ } = cte.stmt in
-            let other = List.map (fun cmb -> match fst cmb with 
-              | #cte_supported_compound_op -> cmb
-              | `Except | `Intersect -> 
-                fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name
-            ) other in
-            let stmt = { cte.stmt with select = select, other } in
-            let s1, p1, tbls, cardinality = eval_select env select in
-            let a1 = from_schema s1 in
-            eval_compound
-              ~env:{ env with tables = tbls; ctes = (tbl_name, a1) :: env.ctes }
-              (p1, s1, cardinality, stmt))
-          else eval_select_full env cte.stmt
-        in
-        let a1 = from_schema s1 in
-        let select_all = Option.default (List.map (fun i -> i.name) a1) cte.cols in
-        let s2 = 
-          try 
-            List.map2 (fun col cut -> { cut with name = col }) select_all a1 
-          with 
-            List.Different_list_size _ -> 
-              fail "%s: SELECT list and column names list have different column counts" cte.cte_name in
-        (tbl_name, s2) :: acc_ctes, p1 @ acc_vars)
-      ([], []) ctes
-    in
-    let s1, p2, b = eval_select_full { empty_env with ctes } stmt in
-    from_schema s1, p1 @ p2, b
-
 
 (* FIXME unify each choice separately *)
 let unify_params l =

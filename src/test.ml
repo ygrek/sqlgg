@@ -402,6 +402,55 @@ let cte_possible_rec_non_shared_select_only = [
     SELECT num
     FROM cte
   |} [ attr' ~nullability:(Nullable) "num" Int;][];
+  tt {|
+    CREATE TABLE test22 (
+      col_id INT PRIMARY KEY,
+      col_value DECIMAL(10, 2),
+      col_group VARCHAR(100)
+    )
+  |} [][];
+  tt {|
+    SELECT * FROM test22 
+    WHERE col_id IN (
+        WITH cte_filtered_ids AS (
+          SELECT col_id FROM test22 WHERE col_value > 60000
+        )
+        SELECT col_id FROM cte_filtered_ids
+    )
+  |} [
+    attr' ~extra:[PrimaryKey] "col_id" Int;
+    attr' ~nullability:Nullable "col_value" Decimal;
+    attr' ~nullability:Nullable "col_group" Text;
+  ] [
+  ];
+  tt {|
+    SELECT *
+    FROM (
+        WITH cte_grouped AS (
+            SELECT col_group, AVG(col_value) AS avg_value
+            FROM test22
+            GROUP BY col_group
+        )
+        SELECT col_group, avg_value
+        FROM cte_grouped
+    ) AS dt
+    WHERE dt.avg_value
+  |} [
+    attr' ~nullability:Nullable "col_group" Text;
+    attr' ~nullability:Nullable "avg_value" Float;
+  ] [];
+  tt {|
+    INSERT INTO test22 (col_id, col_value, col_group)
+    WITH new_values AS (
+        SELECT 101 AS col_id, 55 AS col_value, 'Group A' AS col_group
+        UNION ALL
+        SELECT 102, 60, 'Group B'
+        UNION ALL
+        SELECT 103, 70, 'Group A'
+    )
+    SELECT col_id, col_value, col_group
+    FROM new_values
+  |}[][];
 ]
 
 let run () =
