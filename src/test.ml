@@ -478,6 +478,15 @@ let cte_possible_rec_non_shared_select_only = [
     attr' ~nullability:Nullable ~extra:[] "explicit_null_doesnt_become_not_null" Any;
   ] [
   ];
+  wrong {|
+    WITH cte(num_name_just_an_alias_here) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT num_name_just_an_alias_here + 1 FROM cte
+      LIMIT 10
+    )
+    SELECT * FROM cte
+  |};
 ]
 
 let run () =
