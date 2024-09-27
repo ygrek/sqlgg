@@ -10,6 +10,11 @@ let debug = ref false
 type env = {
   tables : Tables.table list;
   schema : table_name Schema.Source.t;
+  (* 
+    1. CTEs = tables for the current statement (not keeping during whole .sql)
+    2. It merges with global tables during source resolving
+    3. The Tables field mostly stores aliases and forms a scheme
+  *)
   ctes : Tables.table list;
   insert_schema : Schema.t;
   (* it is used to apply non-null comparison semantics inside WHERE expressions *)
