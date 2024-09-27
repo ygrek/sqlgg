@@ -451,6 +451,33 @@ let cte_possible_rec_non_shared_select_only = [
     SELECT col_id, col_value, col_group
     FROM new_values
   |}[][];
+  tt {|
+    WITH RECURSIVE cte(num_name_just_an_alias_here) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT num_name_just_an_alias_here + 1 FROM cte
+      LIMIT 10
+    )
+    SELECT * FROM cte
+  |} [attr' "num_name_just_an_alias_here" ~extra:[] Int;] [];
+  tt {|
+    WITH cte(cg) AS (
+      SELECT col_group FROM test22 WHERE col_id > 60000
+    )
+    SELECT cg FROM cte
+  |} [
+    attr' ~nullability:Nullable ~extra:[] "cg" Text;
+  ] [
+  ];
+  tt {|
+    WITH cte(explicit_null_doesnt_become_not_null) AS (
+      SELECT NULL
+    )
+    SELECT * FROM cte
+  |} [
+    attr' ~nullability:Nullable ~extra:[] "explicit_null_doesnt_become_not_null" Any;
+  ] [
+  ];
 ]
 
 let run () =

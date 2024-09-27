@@ -163,9 +163,11 @@ let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey] 
     then Strict else Nullable } in
-  {name;domain;extra}
+  {name;domain;extra}  
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
+
+let make_attribute' ?(extra = Constraints.empty) name domain = { name; domain; extra } 
 
 module Schema =
 struct
@@ -395,7 +397,7 @@ and select = {
   group : expr list;
   having : expr option;
 }
-and cte_item = { cte_name: string; cols: string list option; stmt: select_complete; }
+and cte_item = { cte_name: string; cols: schema option; stmt: select_complete; }
 and cte = { cte_items: cte_item list; is_recursive: bool; }
 and select_complete = {
   select : select * (compound_op * select) list;

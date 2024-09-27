@@ -537,33 +537,33 @@ and eval_cte { cte_items; is_recursive } =
     (fun (acc_ctes, acc_vars) cte ->
       let env = { empty_env with ctes = acc_ctes } in
       let tbl_name = make_table_name cte.cte_name in
+      let a1 = List.map (fun attr -> Attr.{ sources = []; attr }) in
       let s1, p1, _kind =
-        let stmt = if is_recursive then (
+        if is_recursive then (
           let { select = select, other; _ } = cte.stmt in
-          let other = List.map (fun cmb -> match fst cmb with 
-            | #cte_supported_compound_op -> cmb
-            | `Except | `Intersect -> 
-              fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name
-          ) other in
-          { cte.stmt with select = select, other }
-        )
-        else cte.stmt in
-        let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
-        let a1 = from_schema s1 in
-        let ctes = if is_recursive then (tbl_name, a1) :: env.ctes else env.ctes in
-        eval_compound
-          ~env:{ env with tables = tbls; ctes  }
-          (p1, s1, cardinality, stmt)
+          let other =
+            List.map
+              (fun cmb ->
+                match fst cmb with
+                | #cte_supported_compound_op -> cmb
+                | `Except | `Intersect ->
+                  fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name)
+              other
+          in
+          let stmt = { cte.stmt with select = select, other } in
+          let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
+          (* UNIONed fields access by alias to itself cte *)
+          let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
+          let a2 = from_schema s2 in
+          eval_compound
+            ~env:{ env with tables = tbls; ctes = (tbl_name, a2) :: env.ctes } 
+            (p1, s1, cardinality, stmt))
+        else (
+          let s1, p1, tbls, cardinality = eval_select env (fst cte.stmt.select) in
+          eval_compound ~env:{ env with tables = tbls } (p1, s1, cardinality, cte.stmt))
       in
-      let a1 = from_schema s1 in
-      let select_all = Option.default (List.map (fun i -> i.name) a1) cte.cols in
-      let s2 = 
-        try 
-          List.map2 (fun col cut -> { cut with name = col }) select_all a1 
-        with 
-          List.Different_list_size _ -> 
-            fail "%s: SELECT list and column names list have different column counts" cte.cte_name in
-      (tbl_name, s2) :: acc_ctes, p1 @ acc_vars)
+      let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
+      (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars)
     ([], []) cte_items  
 
 and eval_compound ~env result = 
