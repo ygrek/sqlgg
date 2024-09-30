@@ -22,6 +22,7 @@ type env = {
   query_has_grouping: bool;
 }
 
+(* Merge global tables with ctes during resolving sources in SELECT .. FROM sources, JOIN *)
 module Tables_with_derived = struct
   open Tables
 
@@ -148,7 +149,8 @@ let resolve_column ~env {cname;tname} =
     match find_by_name t name with
     | [x] -> x
     | [] -> raise (Schema.Error (err_data,"missing attribute : " ^ name))
-    | _ -> raise (Schema.Error (err_data,"duplicate attribute : " ^ name)) in  
+    | _ -> raise (Schema.Error (err_data,"duplicate attribute : " ^ name))
+  in  
   match result with 
   | None -> find (Option.map_default (schema_of ~env) env.schema tname) cname
   | Some result -> result
@@ -533,38 +535,37 @@ and eval_select_full env { select_complete; cte } =
 
 and eval_cte { cte_items; is_recursive } = 
   let open Schema.Source in
-  List.fold_left
-    (fun (acc_ctes, acc_vars) cte ->
-      let env = { empty_env with ctes = acc_ctes } in
-      let tbl_name = make_table_name cte.cte_name in
-      let a1 = List.map (fun attr -> Attr.{ sources = []; attr }) in
-      let s1, p1, _kind =
-        if is_recursive then (
-          let { select = select, other; _ } = cte.stmt in
-          let other =
-            List.map
-              (fun cmb ->
-                match fst cmb with
-                | #cte_supported_compound_op -> cmb
-                | `Except | `Intersect ->
-                  fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name)
-              other
-          in
-          let stmt = { cte.stmt with select = select, other } in
-          let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
-          (* UNIONed fields access by alias to itself cte *)
-          let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
-          let a2 = from_schema s2 in
-          eval_compound
-            ~env:{ env with tables = tbls; ctes = (tbl_name, a2) :: env.ctes } 
-            (p1, s1, cardinality, stmt))
-        else (
-          let s1, p1, tbls, cardinality = eval_select env (fst cte.stmt.select) in
-          eval_compound ~env:{ env with tables = tbls } (p1, s1, cardinality, cte.stmt))
-      in
-      let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
-      (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars)
-    ([], []) cte_items  
+  List.fold_left begin fun (acc_ctes, acc_vars) cte ->
+    let env = { empty_env with ctes = acc_ctes } in
+    let tbl_name = make_table_name cte.cte_name in
+    let a1 = List.map (fun attr -> Attr.{ sources = []; attr }) in
+    let s1, p1, _kind =
+      if is_recursive then 
+      begin  
+        let { select = select, other; _ } = cte.stmt in
+        let other = other |> List.map begin fun cmb ->
+          match fst cmb with
+          | #cte_supported_compound_op -> cmb
+          | `Except | `Intersect ->
+            fail "%s: Recursive table reference in EXCEPT or INTERSECT operand is not allowed in CTEs" cte.cte_name
+        end
+        in
+        let stmt = { cte.stmt with select = select, other } in
+        let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
+        (* UNIONed fields access by alias to itself cte *)
+        let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
+        let a2 = from_schema s2 in
+        eval_compound
+          ~env:{ env with tables = tbls; ctes = (tbl_name, a2) :: env.ctes } 
+          (p1, s1, cardinality, stmt)
+      end    
+      else (
+        let s1, p1, tbls, cardinality = eval_select env (fst cte.stmt.select) in
+        eval_compound ~env:{ env with tables = tbls } (p1, s1, cardinality, cte.stmt))
+    in
+    let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
+    (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars end
+  ([], []) cte_items  
 
 and eval_compound ~env result = 
   let (p1, s1, cardinality, stmt) = result in
