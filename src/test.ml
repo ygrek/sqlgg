@@ -359,7 +359,121 @@ let test_agg_nullable = [
   |} [ attr' "result" Int; ][];
 ]
 
+<<<<<<< HEAD
 let cte_possible_rec_non_shared_select_only = [
+||||||| parent of dab6cce (fix ambiguous test, make clearly update_schema_with_aliases)
+let test_ambiguous = [
+  tt "CREATE TABLE test21 (id INT, column_a TEXT, column_b BOOL)" [] [];
+  tt "CREATE TABLE test22 (id INT, column_d INT)" [] [];
+  wrong "select id from test21 join test22 on test21.id = test22.id order by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id order by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  wrong "select test21.id from test21 join test22 on test21.id = test22.id where id > 2 order by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id group by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "select test21.id as test from test21 join test22 on test21.id = test22.id group by column_a" [
+    attr' ~nullability:(Nullable) "test" Int;
+  ][];
+  tt "select test21.id, test22.id from test21 join test22 on test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  wrong "select id, id from test21 join test22 on test21.id = test22.id group by id";
+  wrong "select test21.id, test22.id from test21 join test22 on test21.id = test22.id group by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id group by id, column_a" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "SELECT COUNT(column_a) as column_a FROM test21 WHERE column_a = @column_a" [
+    attr' "column_a" Int;
+  ] [
+    named "column_a" Int;
+  ];
+  wrong "select * from test21 join test22 on test21.id = test22.id group by id" ;
+  tt "CREATE TABLE test23 (id INT)" [] [];
+  tt "CREATE TABLE test24 (id INT)" [] [];
+  wrong "select * from foo join bar on foo.id = bar.id order by id";
+  wrong "select * from foo join bar on foo.id";
+  tt "SELECT test21.id AS id, test22.id AS id FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "SELECT test21.id, test22.id FROM test21 JOIN test22 ON test21.id = test22.id GROUP BY test21.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ][];
+  wrong "SELECT COUNT(id) FROM test21 JOIN test22 ON test21.id = test22.id";
+  wrong "SELECT COUNT(id) as id FROM test21 JOIN test22 ON test21.id = test22.id";
+  wrong "SELECT id FROM test21 JOIN test22 ON test21.id = test22.id WHERE id > 2";
+  tt "SELECT test21.id AS test_id, test22.id AS other_id FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "test_id" Int;
+    attr' ~nullability:(Nullable) "other_id" Int;
+  ] [];
+  tt "SELECT COUNT(test21.id) AS count_id FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' "count_id" Int;
+  ] [];
+  tt "CREATE TABLE test25 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test26 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test27 (id INT, value INT)" [] [];
+=======
+let test_ambiguous = [
+  tt "CREATE TABLE test21 (id INT, column_a TEXT, column_b BOOL)" [] [];
+  tt "CREATE TABLE test22 (id INT, column_d INT)" [] [];
+  wrong "select id from test21 join test22 on test21.id = test22.id order by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id order by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  (* Wrong parses and asserts fail *)
+  wrong "select test21.id from test21 join test22 on test21.id = test22.id where id > 2 order by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id group by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "select test21.id as test from test21 join test22 on test21.id = test22.id group by column_a" [
+    attr' ~nullability:(Nullable) "test" Int;
+  ][];
+  tt "select test21.id, test22.id from test21 join test22 on test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  (* Wrong parses and asserts fail *)
+  wrong "select id, id from test21 join test22 on test21.id = test22.id group by id";
+  wrong "select id as id1, id as id2 from test21 join test22 on test21.id = test22.id group by id";
+  wrong "select test21.id, test22.id from test21 join test22 on test21.id = test22.id group by id";
+  tt "select test21.id from test21 join test22 on test21.id = test22.id group by id, column_a" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "SELECT COUNT(column_a) as column_a FROM test21 WHERE column_a = @column_a" [
+    attr' "column_a" Int;
+  ] [
+    named "column_a" Int;
+  ];
+  wrong "select * from test21 join test22 on test21.id = test22.id group by id" ;
+  tt "CREATE TABLE test23 (id INT)" [] [];
+  tt "CREATE TABLE test24 (id INT)" [] [];
+  wrong "select * from foo join bar on foo.id";
+  tt "SELECT test21.id AS id1, test22.id AS id2 FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "id1" Int;
+    attr' ~nullability:(Nullable) "id2" Int;
+  ] [];
+  tt "SELECT test21.id, test22.id FROM test21 JOIN test22 ON test21.id = test22.id GROUP BY test21.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ][];
+  wrong "SELECT COUNT(id) FROM test21 JOIN test22 ON test21.id = test22.id";
+  wrong "SELECT COUNT(id) as id FROM test21 JOIN test22 ON test21.id = test22.id";
+  wrong "SELECT id FROM test21 JOIN test22 ON test21.id = test22.id WHERE id > 2";
+  tt "SELECT test21.id AS test_id, test22.id AS other_id FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' ~nullability:(Nullable) "test_id" Int;
+    attr' ~nullability:(Nullable) "other_id" Int;
+  ] [];
+  tt "SELECT COUNT(test21.id) AS count_id FROM test21 JOIN test22 ON test21.id = test22.id" [
+    attr' "count_id" Int;
+  ] [];
+  tt "CREATE TABLE test25 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test26 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test27 (id INT, value INT)" [] [];
+>>>>>>> dab6cce (fix ambiguous test, make clearly update_schema_with_aliases)
   tt {|
     WITH RECURSIVE sequence_cte AS (
       SELECT 1 AS num

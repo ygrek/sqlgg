@@ -123,12 +123,11 @@ let exists_grouping columns =
   List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
 
 (* all columns from tables, without duplicates *)
+(* FIXME check type of duplicates *)
 let make_unique =
   List.unique ~cmp:(fun a1 a2 ->
-      (* Check if alias has same name as column *)
-      (List.length a2.Schema.Source.Attr.sources = 0
-      (* Check if columns are from the same table (source)  *)
-      || (List.length a1.sources = List.length a2.sources && List.for_all2 ( = ) a1.sources a2.sources))
+      (* Check if alias has same name as column OR if columns are from the same table (source)  *)
+      (a2.Schema.Source.Attr.sources = [] || a1.Schema.Source.Attr.sources = a2.sources)
       && a1.attr.name = a2.attr.name
       (* Check if the tested column is unnamed (not a column) and unaliased *)
       && a1.attr.name <> "")
@@ -206,9 +205,10 @@ let resolve_aggregations =
   handle ~is_agg:false 
   
 let update_schema_with_aliases all_schema final_schema = 
-  List.filter (fun s1 ->
+  let applied = List.filter (fun s1 ->
     List.for_all (fun s2 -> s2.Schema.Source.Attr.attr.name <> s1.Schema.Source.Attr.attr.name) final_schema
-  ) all_schema @ final_schema
+  ) all_schema in 
+  applied @ final_schema
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
