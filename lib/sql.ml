@@ -163,9 +163,11 @@ let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey] 
     then Strict else Nullable } in
-  {name;domain;extra}
+  {name;domain;extra}  
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
+
+let make_attribute' ?(extra = Constraints.empty) name domain = { name; domain; extra } 
 
 module Schema =
 struct
@@ -374,6 +376,10 @@ type select_result = (schema * param list)
 
 type direction = [ `Fixed | `Param of param_id ] [@@deriving show]
 
+type cte_supported_compound_op = [ `Union | `Union_all ] [@@deriving show]
+
+type compound_op = [ cte_supported_compound_op | `Except | `Intersect ] [@@deriving show]
+
 type int_or_param = [`Const of int | `Limit of param]
 type limit_t = [ `Limit | `Offset ]
 type col_name = {
@@ -391,11 +397,14 @@ and select = {
   group : expr list;
   having : expr option;
 }
-and select_full = {
-  select : select * select list;
+and cte_item = { cte_name: string; cols: schema option; stmt: select_complete; }
+and cte = { cte_items: cte_item list; is_recursive: bool; }
+and select_complete = {
+  select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
 }
+and select_full = { select_complete: select_complete; cte: cte option; }
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and expr =

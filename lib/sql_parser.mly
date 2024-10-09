@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM RECURSIVE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -91,6 +91,13 @@ if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
+
+cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN 
+          {
+            let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
+            { cte_name; cols; stmt }
+          }
+cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive }}
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
@@ -200,9 +207,16 @@ parser_state_ignore: { Parser_state.mode_ignore () }
 parser_state_normal: { Parser_state.mode_normal () }
 parser_state_ident: { Parser_state.mode_ident () }
 
-select_stmt: select_core other=list(preceded(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+cte_with: WITH { false } | WITH RECURSIVE { true }
+
+select_stmt: cte=cte? select_complete=select_stmt_plain
               {
-                { select = ($1, other); order=o; limit=lim; }
+                { select_complete; cte; }
+              }
+
+select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+              {
+                { select = (core, other); order=o; limit=lim; }
               }
 
 select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
@@ -538,7 +552,11 @@ sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
-compound_op: UNION ALL? | EXCEPT | INTERSECT { }
+compound_op: 
+  | UNION { `Union }
+  | UNION ALL { `Union_all }
+  | EXCEPT { `Except } 
+  | INTERSECT { `Intersect }
 
 strict_type:
     | T_TEXT     { Text }

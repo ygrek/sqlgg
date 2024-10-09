@@ -358,6 +358,137 @@ let test_agg_nullable = [
   |} [ attr' "result" Int; ][];
 ]
 
+let cte_possible_rec_non_shared_select_only = [
+  tt {|
+    WITH RECURSIVE sequence_cte AS (
+      SELECT 1 AS num
+      UNION ALL
+      SELECT num + @param1
+      FROM sequence_cte
+      WHERE num < @param2
+    )
+    SELECT num
+    FROM sequence_cte
+  |} [
+    attr' "num" Int;
+  ] [
+    named "param1" Int;
+    named "param2" Int;
+  ];
+  wrong {|
+    WITH RECURSIVE sequence_cte AS (
+      SELECT 1 AS num
+      UNION ALL
+      SELECT num + @param1
+      FROM sequence_cte
+      WHERE num < @param2
+      UNION ALL 
+      SELECT 'string'
+    )
+    SELECT num
+    FROM sequence_cte
+  |};
+  tt {|
+    CREATE TABLE test21 (
+      num INT
+    )
+  |} [][];
+  tt {|
+    WITH cte AS (
+      SELECT num
+      FROM test21
+      WHERE num <= 3
+    )
+    SELECT num
+    FROM cte
+  |} [ attr' ~nullability:(Nullable) "num" Int;][];
+  tt {|
+    CREATE TABLE test22 (
+      col_id INT PRIMARY KEY,
+      col_value DECIMAL(10, 2),
+      col_group VARCHAR(100)
+    )
+  |} [][];
+  tt {|
+    SELECT * FROM test22 
+    WHERE col_id IN (
+        WITH cte_filtered_ids AS (
+          SELECT col_id FROM test22 WHERE col_value > 60000
+        )
+        SELECT col_id FROM cte_filtered_ids
+    )
+  |} [
+    attr' ~extra:[PrimaryKey] "col_id" Int;
+    attr' ~nullability:Nullable "col_value" Decimal;
+    attr' ~nullability:Nullable "col_group" Text;
+  ] [
+  ];
+  tt {|
+    SELECT *
+    FROM (
+        WITH cte_grouped AS (
+            SELECT col_group, AVG(col_value) AS avg_value
+            FROM test22
+            GROUP BY col_group
+        )
+        SELECT col_group, avg_value
+        FROM cte_grouped
+    ) AS dt
+    WHERE dt.avg_value
+  |} [
+    attr' ~nullability:Nullable "col_group" Text;
+    attr' ~nullability:Nullable "avg_value" Float;
+  ] [];
+  tt {|
+    INSERT INTO test22 (col_id, col_value, col_group)
+    WITH new_values AS (
+        SELECT 101 AS col_id, 55 AS col_value, 'Group A' AS col_group
+        UNION ALL
+        SELECT 102, 60, 'Group B'
+        UNION ALL
+        SELECT 103, 70, 'Group A'
+    )
+    SELECT col_id, col_value, col_group
+    FROM new_values
+  |}[][];
+  tt {|
+    WITH RECURSIVE cte(num_name_just_an_alias_here) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT num_name_just_an_alias_here + 1 FROM cte
+      LIMIT 10
+    )
+    SELECT * FROM cte
+  |} [attr' "num_name_just_an_alias_here" ~extra:[] Int;] [];
+  tt {|
+    WITH cte(cg) AS (
+      SELECT col_group FROM test22 WHERE col_id > 60000
+    )
+    SELECT cg FROM cte
+  |} [
+    attr' ~nullability:Nullable ~extra:[] "cg" Text;
+  ] [
+  ];
+  tt {|
+    WITH cte(explicit_null_doesnt_become_not_null) AS (
+      SELECT NULL
+    )
+    SELECT * FROM cte
+  |} [
+    attr' ~nullability:Nullable ~extra:[] "explicit_null_doesnt_become_not_null" Any;
+  ] [
+  ];
+  wrong {|
+    WITH cte(num_name_just_an_alias_here) AS (
+      SELECT 1 AS n
+      UNION ALL
+      SELECT num_name_just_an_alias_here + 1 FROM cte
+      LIMIT 10
+    )
+    SELECT * FROM cte
+  |};
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -377,6 +508,7 @@ let run () =
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
     "test_in_clause_with_tuple_sets" >:: test_in_clause_with_tuple_sets;
     "test_agg_nullable" >::: test_agg_nullable;
+    "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
   ]
   in
   let test_suite = "main" >::: tests in
