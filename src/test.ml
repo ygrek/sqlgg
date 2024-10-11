@@ -51,7 +51,7 @@ let test = Type.[
   tt "SELECT str FROM test WHERE id=?"
      [attr' ~nullability:(Nullable) "str" Text]
      [param Int];
-   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
+  tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
      [attr' "x" Text; attr' ~nullability:(Nullable) "z" Int]
      [param_nullable Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
@@ -89,7 +89,8 @@ let test = Type.[
 
 let test2 = [
   tt "CREATE TABLE test2 (id INT, str TEXT)" [] [];
-  tt    "update test, (select * from test2) as x set str = x.str where test.id=x.id" [] [];
+  (* Column 'str' in field list is ambiguous *)
+  wrong "update test, (select * from test2) as x set str = x.str where test.id=x.id";
   tt    "update test, (select * from test2) as x set name = x.str where test.id=x.id" [] [];
   tt    "update test, (select * from test2) as x set test.str = x.str where test.id=x.id" [] [];
   wrong "update test, (select * from test2) as x set test.name = x.name where test.id=x.id";
@@ -207,7 +208,7 @@ let test_coalesce = [
   tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
 ]
 
-let test_coalesce = [
+let test_primary_strict = [
   tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
   tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:(Strict) "x" Int;] [];
 ]
@@ -489,6 +490,85 @@ let cte_possible_rec_non_shared_select_only = [
   |};
 ]
 
+let test_ambiguous = [
+  tt "CREATE TABLE test23 (id INT, column_a TEXT, column_b BOOL)" [] [];
+  tt "CREATE TABLE test24 (id INT, column_d INT)" [] [];
+  wrong "select id from test23 join test24 on test23.id = test24.id order by id";
+  (* The difference between this example, and the same but with WHERE (following "wrong" fn) is
+     sql engine uses those columns that were mentioned in the SELECT statement, 
+     while it doesn't do that for WHERE.
+  *)
+  tt "select test23.id from test23 join test24 on test23.id = test24.id order by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  (* Wrong parses and asserts fail *)
+  wrong "select test23.id from test23 join test24 on test23.id = test24.id where id > 2 order by id";
+  tt "select test23.id from test23 join test24 on test23.id = test24.id group by id" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "select test23.id as test from test23 join test24 on test23.id = test24.id group by column_a" [
+    attr' ~nullability:(Nullable) "test" Int;
+  ][];
+  tt "select test23.id, test24.id from test23 join test24 on test23.id = test24.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  (* Wrong parses and asserts fail *)
+  wrong "select id, id from test23 join test24 on test23.id = test24.id group by id";
+  wrong "select id as id1, id as id2 from test23 join test24 on test23.id = test24.id group by id";
+  wrong "select test23.id, test24.id from test23 join test24 on test23.id = test24.id group by id";
+  tt "select test23.id from test23 join test24 on test23.id = test24.id group by id, column_a" [
+    attr' ~nullability:(Nullable) "id" Int;
+  ] [];
+  tt "SELECT COUNT(column_a) as column_a FROM test23 WHERE column_a = @column_a" [
+    (* COUNT(column_a :: Text) :: Int *)
+    attr' "column_a" Int;
+  ] [
+    named "column_a" Text;
+  ];
+  wrong "select * from test23 join test24 on test23.id = test24.id group by id" ;
+  tt "CREATE TABLE test25 (id INT)" [] [];
+  tt "CREATE TABLE test26 (id INT)" [] [];
+  wrong "select * from foo join bar on foo.id";
+  tt "SELECT test23.id AS id1, test24.id AS id2 FROM test23 JOIN test24 ON test23.id = test24.id" [
+    attr' ~nullability:(Nullable) "id1" Int;
+    attr' ~nullability:(Nullable) "id2" Int;
+  ] [];
+  tt "SELECT test23.id, test24.id FROM test23 JOIN test24 ON test23.id = test24.id GROUP BY test23.id" [
+    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:(Nullable) "id" Int;
+  ][];
+  wrong "SELECT COUNT(id) FROM test23 JOIN test24 ON test23.id = test24.id";
+  wrong "SELECT COUNT(id) as id FROM test23 JOIN test24 ON test23.id = test24.id";
+  wrong "SELECT id FROM test23 JOIN test24 ON test23.id = test24.id WHERE id > 2";
+  tt "SELECT test23.id AS test_id, test24.id AS other_id FROM test23 JOIN test24 ON test23.id = test24.id" [
+    attr' ~nullability:(Nullable) "test_id" Int;
+    attr' ~nullability:(Nullable) "other_id" Int;
+  ] [];
+  tt "SELECT COUNT(test23.id) AS count_id FROM test23 JOIN test24 ON test23.id = test24.id" [
+    attr' "count_id" Int;
+  ] [];
+  tt "CREATE TABLE test27 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test28 (id INT, value INT)" [] [];
+  tt "CREATE TABLE test29 (id INT, value INT)" [] [];
+  tt {|
+    SELECT t1.id AS id_from_test27, t2.value AS value_from_test28, t3.value AS value_from_test29
+    FROM test27 t1
+    JOIN test28 t2 ON t1.id = t2.id
+    JOIN test29 t3 ON t1.id = t3.id
+  |}[
+    attr' ~nullability:(Nullable) "id_from_test27" Int;
+    attr' ~nullability:(Nullable) "value_from_test28" Int;
+    attr' ~nullability:(Nullable) "value_from_test29" Int;
+  ][];
+  (* In WHERE aliases aren't available *)
+  wrong {|
+    SELECT MAX(id) AS max_id
+    FROM test23
+    WHERE max_id > 0
+  |};  
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -503,12 +583,14 @@ let run () =
     "manual_param" >::: test_manual_param;
     "test_left_join" >::: test_left_join;
     "test_coalesce" >::: test_coalesce;
+    "test_primary_strict" >::: test_primary_strict;
     "test_not_null_default_field" >::: test_not_null_default_field;
     "test_update_join" >::: test_update_join;
     "test_param_not_null_by_default" >::: test_param_not_null_by_default;
     "test_in_clause_with_tuple_sets" >:: test_in_clause_with_tuple_sets;
     "test_agg_nullable" >::: test_agg_nullable;
     "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
+    "test_ambiguous" >::: test_ambiguous;
   ]
   in
   let test_suite = "main" >::: tests in

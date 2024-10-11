@@ -124,9 +124,15 @@ let exists_grouping columns =
 
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
-let make_unique = List.unique ~cmp:Schema.Source.Attr.(fun a1 a2 -> a1.attr.name = a2.attr.name && a1.attr.name <> "")
+let make_unique =
+  List.unique ~cmp:(fun a1 a2 ->
+    (* Check if columns are from the same table (source)  *)
+    a1.Schema.Source.Attr.sources = a2.sources
+    && a1.attr.name = a2.attr.name
+    (* Check if columns are named *)
+    && a1.attr.name <> "")
 
-let all_columns  = make_unique $ Schema.cross_all
+let all_columns = make_unique $ Schema.cross_all
 
 let all_tbl_columns = all_columns $ List.map snd
 
@@ -196,7 +202,11 @@ let resolve_aggregations =
     | ResInparam _| ResChoices (_, _)
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
-  handle ~is_agg:false  
+  handle ~is_agg:false 
+  
+let update_schema_with_aliases all_schema final_schema = 
+  let applied = all_schema |> List.filter (fun s1 -> List.for_all Schema.Source.Attr.(fun s2 -> s2.attr.name <> s1.attr.name) final_schema) in  
+  applied @ final_schema
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
@@ -446,15 +456,11 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
 
-and params_of_order order final_schema tables =
-  let tbls = tables |> List.map (fun (source, schema) -> 
-    List.map (fun attr -> { Schema.Source.Attr.attr; sources=[source] }) schema
-  ) in
+and params_of_order order final_schema env =
   List.concat @@
   List.map
     (fun (order, direction) ->
-       let env = { empty_env with 
-        tables; insert_schema = []; schema = final_schema :: tbls |> all_columns;  } in
+       let env = { env with schema = update_schema_with_aliases env.schema final_schema ;  } in
        let p1 = get_params_l env [ order ] in
        let p2 =
          match direction with
@@ -494,18 +500,19 @@ and eval_select env { columns; from; where; group; having; } =
     else `Nat
   in
   let final_schema = infer_schema env columns in
-  let make_unique = List.unique ~cmp:(fun a1 a2 -> 
-    (* let l1 = List.map (fun i -> i.tn) a1.sources in
-    let l2 = List.map (fun i -> i.tn) a2.sources in
-    l1 = l2 && *)
-     a1.Schema.Source.Attr.attr.name = a2.attr.name && a1.attr.name <> "") in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
-  let env = { env with schema = Schema.Join.cross env.schema final_schema |> make_unique } in (* enrich schema in scope with aliases *)
-  let p3 = get_params_opt { env with set_tyvar_strict = true } where in
+  let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema) } in (* enrich schema in scope with aliases *)
+  (* WHERE requires explicit column source when ambiguous fields are present *)
+  let p3 = get_params_opt { env with set_tyvar_strict = true; 
+    (* Aliases aren't available on the WHERE stage *)
+    schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema; 
+  } where in
+  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
+  let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
-  (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env.tables, cardinality)
+  (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
 
 (** @return final schema, params and tables that can be referenced by outside scope *)
 and resolve_source env (x,alias) =
@@ -513,9 +520,7 @@ and resolve_source env (x,alias) =
   | `Select select ->
     let (s,p,_) = eval_select_full env select in
     let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list alias; i.Schema.Source.Attr.sources] }) s in
-    s, p, (match alias with None -> [] | Some name -> 
-      (* print_endline (RT); *)
-      [name, Schema.Source.from_schema s])
+    s, p, (match alias with None -> [] | Some name -> [name, Schema.Source.from_schema s])
   | `Nested s ->
     let (env,p) = eval_nested env (Some s) in
     let s = infer_schema env [All] in
@@ -530,8 +535,8 @@ and resolve_source env (x,alias) =
 and eval_select_full env { select_complete; cte } =
   let ctes, p1 = Option.map_default eval_cte ([], []) cte in
   let env = { env with ctes = ctes @ env.ctes } in
-  let (s1, p2, tbls, cardinality) = eval_select env (fst @@ select_complete.select) in
-  eval_compound ~env:{ env with tables = tbls; } (p1 @ p2, s1, cardinality, select_complete)
+  let (s1, p2, env, cardinality) = eval_select env (fst @@ select_complete.select) in
+  eval_compound ~env:{ env with tables = env.tables; } (p1 @ p2, s1, cardinality, select_complete)
 
 and eval_cte { cte_items; is_recursive } = 
   let open Schema.Source in
@@ -551,17 +556,17 @@ and eval_cte { cte_items; is_recursive } =
         end
         in
         let stmt = { cte.stmt with select = select, other } in
-        let s1, p1, tbls, cardinality = eval_select env (fst stmt.select) in
+        let s1, p1, env, cardinality = eval_select env (fst stmt.select) in
         (* UNIONed fields access by alias to itself cte *)
         let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
         let a2 = from_schema s2 in
         eval_compound
-          ~env:{ env with tables = tbls; ctes = (tbl_name, a2) :: env.ctes } 
+          ~env:{ env with ctes = (tbl_name, a2) :: env.ctes } 
           (p1, s1, cardinality, stmt)
       end    
       else (
-        let s1, p1, tbls, cardinality = eval_select env (fst cte.stmt.select) in
-        eval_compound ~env:{ env with tables = tbls } (p1, s1, cardinality, cte.stmt))
+        let s1, p1, env, cardinality = eval_select env (fst cte.stmt.select) in
+        eval_compound ~env:{ env with tables = env.tables } (p1, s1, cardinality, cte.stmt))
     in
     let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
     (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars end
@@ -575,7 +580,7 @@ and eval_compound ~env result =
   let cardinality = if other = [] then cardinality else `Nat in
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
-  let p3 = params_of_order order final_schema env.tables in
+  let p3 = params_of_order order final_schema env in
   let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single p) p, x | None -> [],false in
   (*                 Schema.check_unique schema; *)
   let cardinality =
@@ -722,7 +727,7 @@ let rec eval (stmt:Sql.stmt) =
     let r = List.map (fun attr -> {Schema.Source.Attr.attr; sources=[f] }) s in
 
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
-    let p3 = params_of_order o [] [(f, s)] in
+    let p3 = params_of_order o [] { empty_env with tables = [(f, s)] } in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
