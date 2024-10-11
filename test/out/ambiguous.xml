@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test28" sql="CREATE TABLE test28 (&#x0A;    employee_id INT,&#x0A;    department_id INT,&#x0A;    salary DECIMAL(10, 2)&#x0A;)" category="DDL" kind="create" target="test28" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test29" sql="CREATE TABLE test29 (&#x0A;    department_id INT,&#x0A;    department_name VARCHAR(100)&#x0A;)" category="DDL" kind="create" target="test29" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test30" sql="CREATE TABLE test30 (&#x0A;    project_id INT,&#x0A;    department_id INT,&#x0A;    project_name VARCHAR(100)&#x0A;)" category="DDL" kind="create" target="test30" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test31" sql="CREATE TABLE test31 (&#x0A;    employee_id INT,&#x0A;    project_id INT&#x0A;)" category="DDL" kind="create" target="test31" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_4" sql="SELECT&#x0A;    d.department_name,&#x0A;    ds.total_salary,&#x0A;    COALESCE(pc.project_count, 0) AS project_count,&#x0A;    (ds.total_salary / NULLIF(COALESCE(pc.project_count, 0), 0)) AS avg_salary_per_project&#x0A;FROM&#x0A;    (&#x0A;        SELECT&#x0A;            e.department_id,&#x0A;            SUM(e.salary) AS total_salary&#x0A;        FROM&#x0A;            test28 e&#x0A;        GROUP BY&#x0A;            e.department_id&#x0A;    ) AS ds&#x0A;JOIN&#x0A;    (&#x0A;        SELECT&#x0A;            p.department_id,&#x0A;            COUNT(ep.project_id) AS project_count&#x0A;        FROM&#x0A;            test30 p&#x0A;        LEFT JOIN&#x0A;            test31 ep ON p.project_id = ep.project_id&#x0A;        GROUP BY&#x0A;            p.department_id&#x0A;    ) AS pc ON ds.department_id = pc.department_id&#x0A;JOIN&#x0A;    test29 d ON ds.department_id = d.department_id&#x0A;ORDER BY&#x0A;    ds.total_salary DESC" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="department_name" type="Text" nullable="true"/>
+   <value name="total_salary" type="Decimal" nullable="true"/>
+   <value name="project_count" type="Int"/>
+   <value name="avg_salary_per_project" type="Float" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="test31">
+  <schema>
+   <value name="employee_id" type="Int" nullable="true"/>
+   <value name="project_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test30">
+  <schema>
+   <value name="project_id" type="Int" nullable="true"/>
+   <value name="department_id" type="Int" nullable="true"/>
+   <value name="project_name" type="Text" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test29">
+  <schema>
+   <value name="department_id" type="Int" nullable="true"/>
+   <value name="department_name" type="Text" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test28">
+  <schema>
+   <value name="employee_id" type="Int" nullable="true"/>
+   <value name="department_id" type="Int" nullable="true"/>
+   <value name="salary" type="Decimal" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
