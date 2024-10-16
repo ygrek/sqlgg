@@ -565,4 +565,5 @@ let () =
   ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
   "date_format" |> monomorphic text [datetime; text];
   "json_remove" |> multi ~ret:(Typ text) (Typ text);
+  "json_array" |> multi ~ret:(Typ text) (Typ text);
   ()
