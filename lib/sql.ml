@@ -564,4 +564,5 @@ let () =
   "is_uuid" |> monomorphic bool [text];
   ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
   "date_format" |> monomorphic text [datetime; text];
+  "json_remove" |> multi ~ret:(Typ text) (Typ text);
   ()

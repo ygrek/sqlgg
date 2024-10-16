@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="select_0" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b')" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="select_1" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','$.c')" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
+</sqlgg>
