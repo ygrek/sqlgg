@@ -93,7 +93,7 @@ if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
-cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN 
+cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
           {
             let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
             { cte_name; cols; stmt }
@@ -360,7 +360,7 @@ reference_action_clause:
 
 reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-  
+
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
@@ -425,7 +425,7 @@ expr:
     | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
       {
         InTupleList(names, p)
-      }      
+      }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p (depends Any)) }
     | p=PARAM DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
@@ -554,10 +554,10 @@ sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
-compound_op: 
+compound_op:
   | UNION { `Union }
   | UNION ALL { `Union_all }
-  | EXCEPT { `Except } 
+  | EXCEPT { `Except }
   | INTERSECT { `Intersect }
 
 strict_type:
@@ -570,7 +570,7 @@ strict_type:
 
 manual_type:
     | strict_type      { strict   $1 }
-    | strict_type NULL { nullable $1 } 
+    | strict_type NULL { nullable $1 }
 
 algorithm:
  | INPLACE { }

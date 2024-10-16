@@ -161,28 +161,28 @@ type attr = {name : string; domain : Type.t; extra : Constraints.t; }
 
 let make_attribute name kind extra =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-  let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey] 
+  let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
     then Strict else Nullable } in
-  {name;domain;extra}  
+  {name;domain;extra}
 
 let unnamed_attribute domain = {name="";domain;extra=Constraints.empty}
 
-let make_attribute' ?(extra = Constraints.empty) name domain = { name; domain; extra } 
+let make_attribute' ?(extra = Constraints.empty) name domain = { name; domain; extra }
 
 module Schema =
 struct
   type t = attr list
     [@@deriving show]
 
-  exception Error of t * string  
+  exception Error of t * string
 
   module Source = struct
-    module Attr = struct 
+    module Attr = struct
       type 'a t = { attr: attr; sources: 'a list } [@@deriving show]
-      
+
       let by_name name sattr = sattr.attr.name = name
     end
-      
+
     type 'a t = 'a Attr.t list
 
     let find_by_name t name = List.find_all (Attr.by_name name) t
@@ -192,7 +192,7 @@ struct
       | [x] -> x
       | [] -> raise (Error (List.map (fun i -> i.Attr.attr) t,"missing attribute : " ^ name))
       | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ name))
-     
+
     let mem_by_name t a =
       match find_by_name t a.Attr.attr.name with
       | [_] -> true
@@ -202,7 +202,7 @@ struct
     let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
 
     let from_schema list = List.map (fun sattr -> sattr.Attr.attr) list
-  end 
+  end
 
   let raise_error t fmt = Printf.ksprintf (fun s -> raise (Error (t,s))) fmt
 
@@ -254,7 +254,7 @@ struct
     let natural t1 t2 =
       let (common,t1only) = List.partition (fun a -> Source.mem_by_name t2 a) t1 in
       Source.Attr.(
-        if 0 = List.length common then 
+        if 0 = List.length common then
           let t1_attrs = List.map (fun i -> i.attr) t1 in
           raise (Error (t1_attrs,"no common attributes for natural join of " ^
            (names (t1_attrs)) ^ " and " ^ (names (List.map (fun i -> i.attr) t2))))
@@ -267,7 +267,7 @@ struct
       common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
     let join typ cond a b =
-      let nullable = List.map (fun data -> 
+      let nullable = List.map (fun data ->
         Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
@@ -283,8 +283,8 @@ struct
   let compound t1 t2 =
     let open Source in
     let open Attr in
-    if List.length t1 <> List.length t2 then 
-      raise (Error (List.map (fun i -> i.attr) t1, (to_string (List.map (fun i -> i.attr) t1)) 
+    if List.length t1 <> List.length t2 then
+      raise (Error (List.map (fun i -> i.attr) t1, (to_string (List.map (fun i -> i.attr) t1))
           ^ " differs in size to " ^ (to_string (List.map (fun i -> i.attr) t2))));
     let show_name i a =
       match a.name with
@@ -357,7 +357,7 @@ and var =
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
-| TupleList of param_id * tuple_list_kind 
+| TupleList of param_id * tuple_list_kind
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
