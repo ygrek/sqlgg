@@ -43,6 +43,7 @@
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM RECURSIVE
+       SHARED EXCLUSIVE NONE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -320,6 +321,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.name,column,pos) }
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
+            | LOCK EQUAL lock { `None }
             | either(DEFAULT,pair(CONVERT,TO))? charset collate? { `None }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
@@ -574,3 +576,9 @@ algorithm:
  | INPLACE { }
  | COPY { }
  | INSTANT { }
+
+lock:
+ | NONE {}
+ | EXCLUSIVE {}
+ | DEFAULT {}
+ | SHARED {}
