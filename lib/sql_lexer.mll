@@ -113,6 +113,9 @@ let keywords =
    "limit",LIMIT;
    "local",LOCAL;
    "lock", LOCK;
+   "shared", SHARED;
+   "exclusive", EXCLUSIVE;
+   "none", NONE;
    "microsecond", MICROSECOND;
    "minute", MINUTE;
    "minute_microsecond", MINUTE_MICROSECOND;
