@@ -8,3 +8,6 @@ SELECT JSON_REMOVE('{"a":1,"b":2,"c":3}','$.b','$.c');
 
 SELECT JSON_ARRAY('a','b','c');
 --> '["a","b","c"]'
+
+SELECT JSON_SET('{"a":1,"b":2,"c":3}','$.b','foo');
+--> '{"a":1,"b":"foo","c":3}'
