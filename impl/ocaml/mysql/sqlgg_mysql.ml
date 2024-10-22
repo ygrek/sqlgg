@@ -123,6 +123,7 @@ type 'a connection = Mysql.dbd
 type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
+type execute_response = int64
 
 module Types = T
 open Types

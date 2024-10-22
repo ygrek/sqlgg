@@ -27,6 +27,7 @@ module type M = sig
   type params
   type row
   type result
+  type execute_response
 
   (** datatypes *)
   module Types : sig
@@ -101,9 +102,9 @@ module type M = sig
 
   (** Execute non-query.
     @raise Oops on error
-    @return number of affected rows
+    @return execute_response
   *)
-  val execute : [>`WR] connection -> string -> (statement -> result) -> int64
+  val execute : [>`WR] connection -> string -> (statement -> result) -> execute_response
 
 end
 
@@ -123,6 +124,6 @@ module type M_io = sig
 
   val select_one : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b IO.future
 
-  val execute : [>`WR] connection -> string -> (statement -> result IO.future) -> int64 IO.future
+  val execute : [>`WR] connection -> string -> (statement -> result IO.future) -> execute_response IO.future
 
 end

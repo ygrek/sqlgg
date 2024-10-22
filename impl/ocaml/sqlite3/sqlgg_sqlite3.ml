@@ -72,6 +72,7 @@ type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit
+type execute_response = int64
 
 type num = int64
 type text = string
