@@ -102,7 +102,6 @@ module type M = sig
 
   (** Execute non-query.
     @raise Oops on error
-    @return execute_response
   *)
   val execute : [>`WR] connection -> string -> (statement -> result) -> execute_response
 
