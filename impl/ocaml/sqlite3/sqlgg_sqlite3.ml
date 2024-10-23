@@ -72,7 +72,6 @@ type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit
-type execute_response = int
 
 type num = int64
 type text = string
@@ -159,7 +158,7 @@ let execute db sql set_params =
     set_params stmt;
     let rc = S.step (fst stmt) in
     if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
-    S.changes db
+    { Sqlgg_traits.affected_rows = Int64.of_int (S.changes db); insert_id = S.last_insert_rowid db }
   )
 
 let select_one_maybe db sql set_params convert =

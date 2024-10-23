@@ -20,6 +20,8 @@ module type Value = sig
   val to_literal : t -> string
 end
 
+type execute_response = { affected_rows: int64; insert_id: int64 }
+
 module type M = sig
 
   type statement
@@ -27,7 +29,6 @@ module type M = sig
   type params
   type row
   type result
-  type execute_response
 
   (** datatypes *)
   module Types : sig
