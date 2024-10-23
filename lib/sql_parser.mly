@@ -43,7 +43,7 @@
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM RECURSIVE
-       SHARED EXCLUSIVE NONE
+       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -93,7 +93,7 @@ if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
-cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN 
+cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
           {
             let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
             { cte_name; cols; stmt }
@@ -360,7 +360,7 @@ reference_action_clause:
 
 reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-  
+
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
@@ -425,7 +425,7 @@ expr:
     | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
       {
         InTupleList(names, p)
-      }      
+      }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=PARAM { Param (new_param p (depends Any)) }
     | p=PARAM DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
@@ -436,6 +436,9 @@ expr:
     | DATE LPAREN e=expr RPAREN { Fun (Function.lookup "date" 1, [e]) }
     | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
+    | JSON_ARRAY LPAREN l=expr_list RPAREN { Fun (Function.lookup "json_array" (List.length l), l) }
+    | JSON_REMOVE LPAREN j=expr COMMA fs=expr_list RPAREN { Fun (Function.lookup "json_remove" (List.length fs + 1), fs @ [j]) }
+    | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun (Function.lookup "json_set" 3, [j;k;v]) }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
@@ -554,10 +557,10 @@ sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
-compound_op: 
+compound_op:
   | UNION { `Union }
   | UNION ALL { `Union_all }
-  | EXCEPT { `Except } 
+  | EXCEPT { `Except }
   | INTERSECT { `Intersect }
 
 strict_type:
@@ -570,7 +573,7 @@ strict_type:
 
 manual_type:
     | strict_type      { strict   $1 }
-    | strict_type NULL { nullable $1 } 
+    | strict_type NULL { nullable $1 }
 
 algorithm:
  | INPLACE { }
