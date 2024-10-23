@@ -72,7 +72,7 @@ type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit
-type execute_response = int64
+type execute_response = int
 
 type num = int64
 type text = string
@@ -159,7 +159,7 @@ let execute db sql set_params =
     set_params stmt;
     let rc = S.step (fst stmt) in
     if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
-    Int64.of_int (S.changes db)
+    S.changes db
   )
 
 let select_one_maybe db sql set_params convert =
