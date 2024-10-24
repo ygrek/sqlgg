@@ -458,7 +458,7 @@ let generate_stmt style index stmt =
     | Some id ->
     match id.label with
     | None -> failwith "empty label in tuple substitution"
-    | Some label -> sprintf {|( match %s with [] -> IO.return { Sqlgg_traits.affected_rows = 0L; insert_id = 0L } | _ :: _ -> %s)|} label exec
+    | Some label -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = 0L } | _ :: _ -> %s)|} label exec
   in
   output "%s%s" bind exec;
   if style = `Fold then output "(fun () -> IO.return !r_acc)";
