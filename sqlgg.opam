@@ -33,3 +33,7 @@ It starts off with SQL schema and queries, and generates code (or XML, allowing
 further code generation for various purposes). Generated code only defines a mapping
 of output columns and query parameters to the host language, trying to be as unobtrusive
 as possible and leaving the choice of SQL database (and API to access it) to the developer."""
+
+conflicts: [
+  "mariadb" {<= "1.1.6"}
+]
