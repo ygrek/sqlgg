@@ -705,8 +705,7 @@ let rec eval (stmt:Sql.stmt) =
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
-    let columns = List.map (fun tn -> AllOf tn) targets in
-    let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
+    let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
     let select_complete = { select; order = []; limit = None} in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
