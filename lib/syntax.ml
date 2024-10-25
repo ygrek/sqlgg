@@ -705,8 +705,7 @@ let rec eval (stmt:Sql.stmt) =
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
-    let columns = List.map (fun tn -> AllOf tn) targets in
-    let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
+    let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
     let select_complete = { select; order = []; limit = None} in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
@@ -725,9 +724,9 @@ let rec eval (stmt:Sql.stmt) =
     let f, s = Tables.get table in
 
     let r = List.map (fun attr -> {Schema.Source.Attr.attr; sources=[f] }) s in
-
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
-    let p3 = params_of_order o [] { empty_env with tables = [(f, s)] } in
+    let env = { empty_env with schema = update_schema_with_aliases [] r } in
+    let p3 = params_of_order o [] { env with tables = [(f, s)] } in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
