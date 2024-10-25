@@ -566,5 +566,5 @@ let () =
   "date_format" |> monomorphic text [datetime; text];
   "json_remove" |> multi ~ret:(Typ text) (Typ text);
   "json_array" |> multi ~ret:(Typ text) (Typ text);
-  "json_set" |> monomorphic text [text; text; text];
+  "json_set" |> add 3 (F (Typ text, [Typ text; Typ text; Var 0]));
   ()
