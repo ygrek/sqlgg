@@ -725,9 +725,9 @@ let rec eval (stmt:Sql.stmt) =
     let f, s = Tables.get table in
 
     let r = List.map (fun attr -> {Schema.Source.Attr.attr; sources=[f] }) s in
-
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
-    let p3 = params_of_order o [] { empty_env with tables = [(f, s)] } in
+    let env = { empty_env with schema = update_schema_with_aliases [] r } in
+    let p3 = params_of_order o [] { env with tables = [(f, s)] } in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
