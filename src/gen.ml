@@ -74,6 +74,7 @@ type sql =
   | SubstIn of Sql.param
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
+  | SubstBoolChoice of Sql.param_id * bool * sql list * Sql.var list
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -136,6 +137,19 @@ let substitute_vars s vars subst_param =
       assert (i2 > i1);
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      loop acc i2 parami tl
+    | BoolChoice (flag, name, vars) :: tl ->
+      let (c1,c2) = name.pos in
+      assert ((c2 = 0 && c1 = 1) || c2 > c1);
+      assert (c1 > i);
+      let pieces =
+        let (acc,last) = loop [] c1 0 vars in
+        List.rev (Static (String.slice ~first:last ~last:(c2 - 1) s) :: acc)
+      in
+      let (i1,i2) = name.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
+      let acc = SubstBoolChoice (name, flag, pieces, vars) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
@@ -210,6 +224,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
+      | BoolChoice (_, id, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
     l
@@ -226,6 +241,7 @@ let rec params_only l =
       | Sql.Single p -> [p]
       | SingleIn _ -> []
       | ChoiceIn { vars; _ } -> params_only vars
+      | BoolChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
       | TupleList _ -> [])
     l

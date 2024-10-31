@@ -362,6 +362,7 @@ and var =
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
+| BoolChoice of bool * param_id * var list
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -422,11 +423,12 @@ and expr =
   | Column of col_name
   | Inserted of string (** inserted value *)
   | InTupleList of expr list * param_id
+  | BoolChoices of { flag: bool; choice_id: param_id; choice: expr }
 and column =
   | All
   | AllOf of table_name
   | Expr of expr * string option (** name *)
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}]  
 
 type columns = column list [@@deriving show]
 
@@ -443,6 +445,13 @@ type insert_action =
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
 }
+
+let make_where_choices ~pos choice flag =
+  BoolChoices { 
+    flag; 
+    choice_id = { label=(Some "choice"); pos }; 
+    choice;
+  }
 
 type stmt =
 | Create of table_name * [ `Schema of schema | `Select of select_full ]
