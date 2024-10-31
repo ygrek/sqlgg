@@ -42,7 +42,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM RECURSIVE
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
@@ -88,6 +88,10 @@
 
 input: statement EOF { $1 }
 
+param: 
+  | QSTN { { label=None; pos = ($startofs, $endofs) } }
+  | PARAM  { $1 }
+
 if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
@@ -126,7 +130,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=PARAM ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=on_duplicate?
               {
                 Insert { target; action=`Param (names, p); on_duplicate=ss; }
               }
@@ -279,7 +283,7 @@ update_or_share_of: OF commas(IDENT) { }
 with_lock: WITH LOCK { }
 
 int_or_param: i=INTEGER { `Const i }
-            | p=PARAM { `Param p }
+            | p=param { `Param p }
 
 limit_t: LIMIT lim=int_or_param { make_limit [`Limit,lim] }
        | LIMIT ofs=int_or_param COMMA lim=int_or_param { make_limit [`Offset,ofs; `Limit,lim] }
@@ -290,7 +294,7 @@ limit: limit_t { fst $1 }
 order: ORDER BY l=commas(pair(expr,order_type?)) { l }
 order_type:
           | DESC | ASC { `Fixed }
-          | PARAM { `Param $1 }
+          | param { `Param $1 }
 
 from: FROM t=table_list { t }
 where: WHERE e=expr { e }
@@ -417,19 +421,21 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | e1=expr k=in_or_not_in p=PARAM
+    | e1=expr k=in_or_not_in p=param
       {
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
-    | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
+    | LPAREN names=commas(expr) RPAREN in_or_not_in p=param
       {
         InTupleList(names, p)
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=PARAM { Param (new_param p (depends Any)) }
-    | p=PARAM DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
-    | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
+    | p=param { Param (new_param p (depends Any)) }
+    | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
+    | e=expr QSTN { make_where_choices ~pos:($startofs, $endofs) e true }
+    | e=expr EXCL { make_where_choices ~pos:($startofs, $endofs) e false }
+    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
@@ -574,6 +580,7 @@ strict_type:
 manual_type:
     | strict_type      { strict   $1 }
     | strict_type NULL { nullable $1 }
+    | strict_type QSTN { nullable $1 }
 
 algorithm:
  | INPLACE { }

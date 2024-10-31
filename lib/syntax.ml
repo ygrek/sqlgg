@@ -41,6 +41,7 @@ type res_expr =
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
+  | ResBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr }
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -86,6 +87,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     match e with
     | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
+    | ResBoolChoice { flag; choice_id; res_choice} -> 
+      BoolChoice (flag, choice_id, get_params_of_res_expr res_choice) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun (_,l) -> List.fold_left loop acc l
@@ -108,6 +111,7 @@ let rec is_grouping = function
 | SelectExpr _
 | Inparam _
 | InTupleList _
+| BoolChoices _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -174,7 +178,10 @@ let resolve_column_assignments ~env l =
     (* add equality on param and column type *)
     let equality typ expr = Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr]) in
     match expr with
-    | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+    | Choices (n,l) ->
+      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+    | BoolChoices { flag; choice_id; choice; } ->
+      BoolChoices { flag; choice_id; choice = (equality typ) choice } (* FIXME hack, should propagate properly *)
     | _ -> equality typ expr
   end
 
@@ -198,7 +205,7 @@ let resolve_aggregations =
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
     | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
-    | ResValue _ | ResParam _ 
+    | ResValue _ | ResParam _  | ResBoolChoice _
     | ResInparam _| ResChoices (_, _)
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
@@ -220,6 +227,8 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x
     | Column col -> ResValue (resolve_column ~env col).attr.domain
+    | BoolChoices { flag; choice_id; choice; } -> 
+      ResBoolChoice { res_choice = each choice; flag; choice_id }
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
@@ -235,6 +244,7 @@ let rec resolve_columns env expr =
         | ResInparam _
         | ResChoices _
         | ResInTupleList _
+        | ResBoolChoice _
         | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
       ResInTupleList (param_id, Res res_exprs)
@@ -258,6 +268,7 @@ let rec resolve_columns env expr =
           let (p, vars) = extract_singlein [] vars in
           ResInChoice (param, kind, ResInparam p) :: as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
+        | BoolChoice (_, p, _) -> failed ~at:p.pos "BoolChoice isn't supported in Select"
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
       and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
@@ -302,6 +313,14 @@ and assign_types env expr =
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
+    | ResBoolChoice choice ->
+      let (res_choice, t) = typeof choice.res_choice in
+      let t =
+        match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
+        | None -> `Error "no common subtype for all choice branches"
+        | Some t -> `Ok t
+      in
+      ResBoolChoice { choice with res_choice }, t
     | ResInTupleList (param_id, kind) -> 
       (match kind with 
       | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
@@ -473,7 +492,7 @@ and do_join (env,params) ((schema1,params1,_tables),join_type,join_cond) =
   let env = { env with schema } in
   let p = match join_cond with
   | Default | Natural | Using _ -> []
-  | On e -> get_params env e (* TODO should use final schema (same as tables)? *)
+  | On e -> get_params { env with set_tyvar_strict = true } e (* TODO should use final schema (same as tables)? *)
   in
   env, params @ params1 @ p
 
@@ -505,6 +524,7 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
+  | BoolChoices { choice_id; _ } -> failed ~at:choice_id.pos "ensure_res_expr BoolChoice TBD"
   | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
@@ -794,9 +814,12 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ; } -> remember id.label typ
+  | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
+  | BoolChoice (_, p, l) ->
+    check_choice_name p;
+    List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
@@ -808,6 +831,7 @@ let unify_params l =
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
+  | BoolChoice (f, p, l) -> BoolChoice (f, p, (List.map map l))
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in

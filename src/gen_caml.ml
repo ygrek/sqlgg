@@ -191,6 +191,7 @@ let match_variant_wildcard i name args =
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
+  | BoolChoice _
   | ChoiceIn { param = { label = None; _ }; _ }
   | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
@@ -228,6 +229,18 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
+  | BoolChoice(_, name, vars) -> 
+    output "begin match %s with" (make_param_name index name);
+    [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
+      output "| %s%s -> %s"
+      (make_variant_name i label)
+      (match vars with [] -> "" | l -> " ("^String.concat "," (names_of_vars l)^")")
+      (match vars with [] -> "()" | _ -> "");
+      inc_indent ();
+      List.iter (set_var index) vars;
+      dec_indent ()
+    end;
+    output "end;"
   | Choice (name,ctors) ->
     output "begin match %s with" (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -249,6 +262,7 @@ let rec eval_count_params vars =
     list_separate
       (function
         | Single _ -> `Left true
+        | BoolChoice _ -> `Left true
         | SingleIn _ -> `Left false
         | TupleList _ -> `Left true
         | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
@@ -284,7 +298,8 @@ let rec eval_count_params vars =
       sprintf " + (match %s with " (make_param_name i name) ^
       (ctors |> List.mapi (fun i ctor ->
         match ctor with
-        | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
+        | Verbatim (n,_) -> 
+          sprintf "%s -> 0" (vname n)
         | Simple (param,args) -> sprintf "%s -> %s" (match_variant_pattern i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
@@ -306,6 +321,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
+      | BoolChoice (f, p, v) -> Some (BoolChoice (f, p, exclude_in_vars v))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
@@ -400,7 +416,13 @@ let make_sql l =
       bprintf b "%s ^ " (quote "(");
       Buffer.add_string b (gen_tuple_substitution label schema);
       bprintf b " ^ %s" (quote ")");
-      loop true tl  
+      loop true tl
+    | SubstBoolChoice (param_id, flag, sql, _args) :: tl -> 
+      if app then bprintf b " ^ ";
+      bprintf b "(match %s with" (make_param_name 0 param_id);
+      bprintf b " | None -> \"%b\"" flag;
+      bprintf b " | Some _ ->"; loop false sql; bprintf b ")";
+      loop true tl
   in
   Buffer.add_string b "(";
   loop false l;
@@ -450,7 +472,7 @@ let generate_stmt style index stmt =
       List.find_map
         (function
           | SubstTuple (id, Insertion _) -> Some id
-          | SubstTuple (_, Where_in _) -> None
+          | SubstTuple (_, Where_in _) | SubstBoolChoice _
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with
