@@ -428,7 +428,7 @@ and column =
   | All
   | AllOf of table_name
   | Expr of expr * string option (** name *)
-  [@@deriving show {with_path=false}]  
+  [@@deriving show {with_path=false}]
 
 type columns = column list [@@deriving show]
 

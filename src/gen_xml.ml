@@ -88,7 +88,6 @@ let get_sql_string stmt =
   | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> "{TODO dynamic choice}"
-  | SubstBoolChoice _ -> "NOT INPLMENTEd"
   in
   String.concat "" @@ List.mapi map @@ get_sql stmt
 
