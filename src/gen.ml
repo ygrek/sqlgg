@@ -137,7 +137,7 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
-    | BoolChoice (flag, name, vars, (c1, c2)) :: tl ->
+    | OptionBoolChoice (flag, name, vars, (c1, c2)) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
@@ -229,7 +229,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
-      | BoolChoice (_, id, _, _) -> [id]
+      | OptionBoolChoice (_, id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
     l
@@ -246,7 +246,7 @@ let rec params_only l =
       | Sql.Single p -> [p]
       | SingleIn _ -> []
       | ChoiceIn { vars; _ } -> params_only vars
-      | BoolChoice _
+      | OptionBoolChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
       | TupleList _ -> [])
     l
