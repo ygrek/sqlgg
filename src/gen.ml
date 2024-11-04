@@ -137,29 +137,25 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
-    | BoolChoice (flag, name, vars) :: tl ->
-      let (c1,c2) = name.pos in
+    | BoolChoice (flag, name, vars, (c1, c2)) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (_acc, last) = loop [] c1 0 vars in
+        let (acc, last) = loop [] c1 0 vars in
         let s = 
-          let sql = [Static (String.slice ~first:last ~last:(c2 - 1) s)] in
+          let sql = List.rev(Static (String.slice ~first:last ~last:(c2 - 1) s) :: acc) in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           ctor, args, sql, `Classic in
         let n = 
-          let sql = Static (flag |> Bool.to_string |> String.uppercase_ascii) in
+          let sql = Static (Printf.sprintf " %s " (flag |> Bool.to_string |> String.uppercase_ascii)) in
           let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
           let args = None in
           ctor, args, [sql], `Classic in
         [s; n]
       in
-      let (i1,i2) = name.pos in
-      assert (i2 > i1);
-      assert (i1 > i);
-      let acc = Dynamic (name, pieces) :: acc in
-      loop acc i2 parami tl
+      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:c1 s) :: acc in
+      loop acc c2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
   let acc = List.rev (Static (String.slice ~first:last s) :: acc) in
@@ -233,7 +229,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
-      | BoolChoice (_, id, _) -> [id]
+      | BoolChoice (_, id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
     l
