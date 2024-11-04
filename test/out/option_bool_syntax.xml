@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test_30" sql="CREATE TABLE test30 ( a INT NOT NULL, b INT NOT NULL )" category="DDL" kind="create" target="test30" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test_31" sql="CREATE TABLE test31 ( c INT NOT NULL, d INT NOT NULL, r TEXT NOT NULL )" category="DDL" kind="create" target="test31" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_all_test30" sql="SELECT *&#x0A;FROM test30&#x0A;LEFT JOIN test31 on test31.c = @test31a&#x0A;WHERE {TODO dynamic choice} AND {TODO dynamic choice} AND r = @var3 AND (c = @var4)&#x0A;GROUP BY b" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="test31a" type="Int"/>
+   <value name="choice2" type="Int"/>
+   <value name="choice3" type="Text"/>
+   <value name="var3" type="Text"/>
+   <value name="var4" type="Int" nullable="true"/>
+  </in>
+  <out>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
+   <value name="c" type="Int" nullable="true"/>
+   <value name="d" type="Int" nullable="true"/>
+   <value name="r" type="Text" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="test31">
+  <schema>
+   <value name="c" type="Int"/>
+   <value name="d" type="Int"/>
+   <value name="r" type="Text"/>
+  </schema>
+ </table>
+ <table name="test30">
+  <schema>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
+  </schema>
+ </table>
+</sqlgg>
