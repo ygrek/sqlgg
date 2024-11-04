@@ -145,13 +145,13 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
-    | OptionBoolChoice (flag, name, vars, (c1, c2)) :: tl ->
+    | OptionBoolChoice (flag, name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc, last) = loop [] (c1 + 1) 0 vars in
+        let (acc, last) = loop [] c1 0 vars in
         let s = 
-          let sql = List.rev(Static (String.slice ~first:last ~last:(c2 - 2) s) :: acc) in
+          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
@@ -162,8 +162,8 @@ let substitute_vars s vars subst_param =
           {ctor; args; sql=[sql]; is_poly=false} in
         [s; n]
       in
-      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:c1 s) :: acc in
-      loop acc c2 parami tl
+      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
+      loop acc f2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
   let acc = List.rev (Static (String.slice ~first:last s) :: acc) in

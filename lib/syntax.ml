@@ -41,7 +41,7 @@ type res_expr =
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
-  | ResOptionBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr; pos: (int * int) }
+  | ResOptionBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
   
 and res_in_tuple_list = 

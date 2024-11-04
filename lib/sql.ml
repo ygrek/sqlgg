@@ -340,6 +340,7 @@ let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn 
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
 type table = table_name * schema [@@deriving show]
+type pos = (int * int) [@@deriving show]
 
 let print_table out (name,schema) =
   IO.write_line out (show_table_name name);
@@ -349,7 +350,7 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = { label : string option; pos : int * int; } [@@deriving show]
+type param_id = { label : string option; pos : pos; } [@@deriving show]
 type param = { id : param_id; typ : Type.t; } [@@deriving show]
 let new_param id typ = { id; typ; }
 type params = param list [@@deriving show]
@@ -362,7 +363,7 @@ and var =
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
-| OptionBoolChoice of bool * param_id * var list * (int * int)
+| OptionBoolChoice of bool * param_id * var list * (pos * pos)
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -423,7 +424,7 @@ and expr =
   | Column of col_name
   | Inserted of string (** inserted value *)
   | InTupleList of expr list * param_id
-  | OptionBoolChoices of { flag: bool; choice: expr; pos: (int * int) }
+  | OptionBoolChoices of { flag: bool; choice: expr; pos: (pos * pos) }
 and column =
   | All
   | AllOf of table_name
