@@ -362,7 +362,7 @@ and var =
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
-| BoolChoice of bool * param_id * var list * (int * int)
+| OptionBoolChoice of bool * param_id * var list * (int * int)
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -423,7 +423,7 @@ and expr =
   | Column of col_name
   | Inserted of string (** inserted value *)
   | InTupleList of expr list * param_id
-  | BoolChoices of { flag: bool; choice: expr; pos: (int * int) }
+  | OptionBoolChoices of { flag: bool; choice: expr; pos: (int * int) }
 and column =
   | All
   | AllOf of table_name

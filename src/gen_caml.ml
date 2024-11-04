@@ -193,7 +193,7 @@ let match_variant_wildcard i name args kind =
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
-  | BoolChoice _
+  | OptionBoolChoice _
   | ChoiceIn { param = { label = None; _ }; _ }
   | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
@@ -231,12 +231,12 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
-  | BoolChoice(_, name, vars, _) -> 
+  | OptionBoolChoice(_, name, vars, _) -> 
     output "begin match %s with" (make_param_name index name);
     [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
       output "| %s%s -> %s"
       (make_variant_name' i label)
-      (match vars with [] -> "" | l -> " ("^String.concat "," (names_of_vars l)^")")
+      (match vars with [] -> "" | l -> " (" ^String.concat "," (names_of_vars l) ^ ")")
       (match vars with [] -> "()" | _ -> "");
       inc_indent ();
       List.iter (set_var index) vars;
@@ -264,7 +264,7 @@ let rec eval_count_params vars =
     list_separate
       (function
         | Single _ -> `Left true
-        | BoolChoice _ -> `Left true
+        | OptionBoolChoice _ -> `Left true
         | SingleIn _ -> `Left false
         | TupleList _ -> `Left true
         | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
@@ -323,7 +323,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
-      | BoolChoice (f, p, v, pos) -> Some (BoolChoice (f, p, exclude_in_vars v, pos))
+      | OptionBoolChoice (f, p, v, pos) -> Some (OptionBoolChoice (f, p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
