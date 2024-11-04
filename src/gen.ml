@@ -145,6 +145,7 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
+    (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
     | OptionBoolChoice (flag, name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
