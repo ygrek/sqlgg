@@ -41,7 +41,7 @@ type res_expr =
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
-  | ResBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr }
+  | ResBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr; pos: (int * int) }
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -87,8 +87,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     match e with
     | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
-    | ResBoolChoice { flag; choice_id; res_choice} -> 
-      BoolChoice (flag, choice_id, get_params_of_res_expr res_choice) :: acc
+    | ResBoolChoice { flag; choice_id; res_choice; pos} -> 
+      BoolChoice (flag, choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun (_,l) -> List.fold_left loop acc l
@@ -180,8 +180,8 @@ let resolve_column_assignments ~env l =
     match expr with
     | Choices (n,l) ->
       Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
-    | BoolChoices { flag; choice_id; choice; } ->
-      BoolChoices { flag; choice_id; choice = (equality typ) choice } (* FIXME hack, should propagate properly *)
+    | BoolChoices ch ->
+      BoolChoices { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
     | _ -> equality typ expr
   end
 
@@ -215,6 +215,19 @@ let update_schema_with_aliases all_schema final_schema =
   let applied = all_schema |> List.filter (fun s1 -> List.for_all Schema.Source.Attr.(fun s2 -> s2.attr.name <> s1.attr.name) final_schema) in  
   applied @ final_schema
 
+let rec bool_choice_id = function
+  | Column _
+  | Inserted _
+  | SelectExpr _
+  | BoolChoices _
+  | Choices _
+  | Value _ -> None 
+  | Inparam p
+  | Param p -> Some p.id
+  | Fun (_, exprs) -> List.find_map bool_choice_id exprs
+  | InTupleList (_, p) -> Some p
+  | InChoice(p, _, _) -> Some p
+
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
   if !debug then
@@ -227,8 +240,13 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x
     | Column col -> ResValue (resolve_column ~env col).attr.domain
-    | BoolChoices { flag; choice_id; choice; } -> 
-      ResBoolChoice { res_choice = each choice; flag; choice_id }
+    | BoolChoices { flag; choice; pos } ->
+      let choice_id = match bool_choice_id choice with
+      | Some choice_id -> choice_id
+      | None -> 
+        fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
+      in
+      ResBoolChoice { res_choice = each choice; flag; choice_id; pos }
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
@@ -268,7 +286,7 @@ let rec resolve_columns env expr =
           let (p, vars) = extract_singlein [] vars in
           ResInChoice (param, kind, ResInparam p) :: as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
-        | BoolChoice (_, p, _) -> failed ~at:p.pos "BoolChoice isn't supported in Select"
+        | BoolChoice (_, p, _, _) -> failed ~at:p.pos "BoolChoice isn't supported in Select"
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
       and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
@@ -524,7 +542,6 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
-  | BoolChoices { choice_id; _ } -> failed ~at:choice_id.pos "ensure_res_expr BoolChoice TBD"
   | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
@@ -532,6 +549,7 @@ and ensure_res_expr = function
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> ResFun (x,List.map ensure_res_expr l) (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
+  | BoolChoices _ -> failwith  "BoolChoice is used in WHERE expr only"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
@@ -817,7 +835,7 @@ let unify_params l =
   | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
-  | BoolChoice (_, p, l) ->
+  | BoolChoice (_, p, l, _) ->
     check_choice_name p;
     List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
@@ -831,7 +849,7 @@ let unify_params l =
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
-  | BoolChoice (f, p, l) -> BoolChoice (f, p, (List.map map l))
+  | BoolChoice (f, p, l, pos) -> BoolChoice (f, p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in

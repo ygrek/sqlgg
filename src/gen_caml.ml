@@ -231,7 +231,7 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
-  | BoolChoice(_, name, vars) -> 
+  | BoolChoice(_, name, vars, _) -> 
     output "begin match %s with" (make_param_name index name);
     [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
       output "| %s%s -> %s"
@@ -323,7 +323,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
-      | BoolChoice (f, p, v) -> Some (BoolChoice (f, p, exclude_in_vars v))
+      | BoolChoice (f, p, v, pos) -> Some (BoolChoice (f, p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
