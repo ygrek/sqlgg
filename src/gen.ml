@@ -70,10 +70,17 @@ let choose_name props kind index =
 
 type sql =
     Static of string
-  | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list * [`Classic | `Poly]) list)
+  | Dynamic of Sql.param_id * sql_dynamic_ctor list 
   | SubstIn of Sql.param
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
+
+and sql_dynamic_ctor = { 
+  ctor: Sql.param_id; 
+  args: Sql.var list option; 
+  sql: sql list;
+  is_poly: bool;
+}
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -115,15 +122,16 @@ let substitute_vars s vars subst_param =
           let (c1,c2) = ctor.pos in
           assert ((c2 = 0 && c1 = 1) || c2 > c1);
           assert (c1 > i);
-          let pieces =
+          let sql =
             match args with
             | None -> [Static ""]
             | Some l ->
               let (acc,last) = loop [] c1 0 l in
               List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
           in
-          ctor, args, pieces, `Poly
-        | Verbatim (n,v) -> { label = Some n; pos = (0,0) }, Some [], [Static v], `Poly
+          { ctor; sql; args; is_poly=true }
+        | Verbatim (n,v) ->
+          { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
         end
       in
       let (i1,i2) = name.pos in
@@ -141,17 +149,17 @@ let substitute_vars s vars subst_param =
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc, last) = loop [] c1 0 vars in
+        let (acc, last) = loop [] (c1 + 1) 0 vars in
         let s = 
-          let sql = List.rev(Static (String.slice ~first:last ~last:(c2 - 1) s) :: acc) in
+          let sql = List.rev(Static (String.slice ~first:last ~last:(c2 - 2) s) :: acc) in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
-          ctor, args, sql, `Classic in
+          {ctor; args; sql; is_poly=false} in
         let n = 
           let sql = Static (Printf.sprintf " %s " (flag |> Bool.to_string |> String.uppercase_ascii)) in
           let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
           let args = None in
-          ctor, args, [sql], `Classic in
+          {ctor; args; sql=[sql]; is_poly=false} in
         [s; n]
       in
       let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:c1 s) :: acc in
