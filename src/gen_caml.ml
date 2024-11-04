@@ -179,15 +179,17 @@ let list_separate f l =
   List.iter (fun x -> match f x with `Left x -> tuck a x | `Right x -> tuck b x) l;
   List.rev !a, List.rev !b
 
-let make_variant_name i name =
-  "`" ^ match name with
+let make_variant_name' i name = 
+  match name with
   | None -> sprintf "V_%d" i
   | Some n -> String.capitalize_ascii n
 
+let make_variant_name i name kind = (match kind with `Poly ->  "`" | `Classic -> "") ^ make_variant_name' i name
+
 let vname n = make_variant_name 0 (Some n)
 
-let match_variant_wildcard i name args =
-  sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
+let match_variant_wildcard i name args kind =
+  sprintf "%s%s" (make_variant_name i name kind) (match args with Some [] | None -> "" | Some _ -> " _")
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
@@ -196,9 +198,9 @@ let match_arg_pattern = function
   | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
 
-let match_variant_pattern i name args =
+let match_variant_pattern i name args kind =
   sprintf "%s%s"
-    (make_variant_name i name)
+    (make_variant_name i name kind)
     (match args with
      | Some [] | None -> ""
      | Some l ->
@@ -233,7 +235,7 @@ let rec set_var index var =
     output "begin match %s with" (make_param_name index name);
     [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
       output "| %s%s -> %s"
-      (make_variant_name i label)
+      (make_variant_name' i label)
       (match vars with [] -> "" | l -> " ("^String.concat "," (names_of_vars l)^")")
       (match vars with [] -> "()" | _ -> "");
       inc_indent ();
@@ -247,13 +249,13 @@ let rec set_var index var =
       match ctor with
       | Simple (param,args) ->
         output "| %s%s -> %s"
-          (make_variant_name i param.label)
+          (make_variant_name i param.label `Poly)
           (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
           (match args with Some [] | None -> "()" | Some _ -> "");
         inc_indent ();
         List.iter (set_var index) (Option.default [] args);
         dec_indent ()
-      | Verbatim (n,_) -> output "| %s -> ()" (vname n)
+      | Verbatim (n,_) -> output "| %s -> ()" (vname n `Poly)
     end;
     output "end;"
 
@@ -299,8 +301,8 @@ let rec eval_count_params vars =
       (ctors |> List.mapi (fun i ctor ->
         match ctor with
         | Verbatim (n,_) -> 
-          sprintf "%s -> 0" (vname n)
-        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_pattern i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+          sprintf "%s -> 0" (vname n `Poly)
+        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_pattern i param.label args `Poly) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
   in
@@ -401,7 +403,7 @@ let make_sql l =
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
+      ctors |> List.iteri (fun i (name,args,l, kind) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args kind); loop false l);
       bprintf b ")";
       loop true tl
     | SubstTuple (id, Insertion schema) :: tl ->
@@ -416,12 +418,6 @@ let make_sql l =
       bprintf b "%s ^ " (quote "(");
       Buffer.add_string b (gen_tuple_substitution label schema);
       bprintf b " ^ %s" (quote ")");
-      loop true tl
-    | SubstBoolChoice (param_id, flag, sql, _args) :: tl -> 
-      if app then bprintf b " ^ ";
-      bprintf b "(match %s with" (make_param_name 0 param_id);
-      bprintf b " | None -> \"%b\"" flag;
-      bprintf b " | Some _ ->"; loop false sql; bprintf b ")";
       loop true tl
   in
   Buffer.add_string b "(";
@@ -472,7 +468,7 @@ let generate_stmt style index stmt =
       List.find_map
         (function
           | SubstTuple (id, Insertion _) -> Some id
-          | SubstTuple (_, Where_in _) | SubstBoolChoice _
+          | SubstTuple (_, Where_in _)
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with

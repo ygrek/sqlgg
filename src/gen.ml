@@ -70,11 +70,10 @@ let choose_name props kind index =
 
 type sql =
     Static of string
-  | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
+  | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list * [`Classic | `Poly]) list)
   | SubstIn of Sql.param
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
-  | SubstBoolChoice of Sql.param_id * bool * sql list * Sql.var list
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -123,8 +122,8 @@ let substitute_vars s vars subst_param =
               let (acc,last) = loop [] c1 0 l in
               List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
           in
-          ctor, args, pieces
-        | Verbatim (n,v) -> { label = Some n; pos = (0,0) }, Some [], [Static v]
+          ctor, args, pieces, `Poly
+        | Verbatim (n,v) -> { label = Some n; pos = (0,0) }, Some [], [Static v], `Poly
         end
       in
       let (i1,i2) = name.pos in
@@ -143,13 +142,23 @@ let substitute_vars s vars subst_param =
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc,last) = loop [] c1 0 vars in
-        List.rev (Static (String.slice ~first:last ~last:(c2 - 1) s) :: acc)
+        let (_acc, last) = loop [] c1 0 vars in
+        let s = 
+          let sql = [Static (String.slice ~first:last ~last:(c2 - 1) s)] in
+          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let args = Some(vars) in
+          ctor, args, sql, `Classic in
+        let n = 
+          let sql = Static (flag |> Bool.to_string |> String.uppercase_ascii) in
+          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let args = None in
+          ctor, args, [sql], `Classic in
+        [s; n]
       in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let acc = SubstBoolChoice (name, flag, pieces, vars) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let acc = Dynamic (name, pieces) :: acc in
       loop acc i2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
