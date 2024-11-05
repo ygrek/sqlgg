@@ -116,7 +116,7 @@ struct
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Coalesce of tyvar * tyvar
   | Comparison
-  | Ret of kind (* _ -> t *) (* TODO eliminate *)
+  | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
 
   let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
@@ -129,7 +129,7 @@ struct
   function
   | Agg -> fprintf pp "|'a| -> 'a"
   | Group ret -> fprintf pp "|_| -> %s" (show ret)
-  | Ret ret -> fprintf pp "_ -> %s" (show_kind ret)
+  | Ret ret -> fprintf pp "_ -> %s" (show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
   | Comparison -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)

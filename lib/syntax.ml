@@ -255,9 +255,9 @@ let rec resolve_columns env expr =
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret domain.t, as_params p) (* use nullable *)
+      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret (Type.nullable domain.t), as_params p) (* use nullable *)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret Any, as_params p)
+      | _, `Exists -> ResFun (Type.Ret (Type.nullable Any), as_params p)
   in
   each expr
 
@@ -359,14 +359,14 @@ and assign_types env expr =
           let args, ret = convert_args ret args in
           let nullable = common_nullability args in
           undepend ret nullable, args
-        | Ret Any, _ -> (* lame *)
+        | Ret t, _ when is_any t -> (* lame *)
           begin match common_supertype types with
           | Some t -> t, List.map (fun _ -> t) types
           | None -> { t = Any; nullability = common_nullability types }, types
           end
         | Ret ret, _ ->
-          let nullability = common_nullability types in
-          { t = ret; nullability; }, types (* ignoring arguments FIXME *)
+          let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
+          { ret with nullability; }, types (* ignoring arguments FIXME *)
         | Comparison, _  ->
           if set_tyvar_strict then 
             let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
