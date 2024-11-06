@@ -110,9 +110,11 @@ struct
   type tyvar = Typ of t | Var of int
   let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 
+  type agg_fun = Self | Compute of t (* max, min | avg *)
+
   type func =
-  | Group of t (* _ -> t *)
-  | Agg (* 'a -> 'a *)
+  | Count (* _ -> t *)
+  | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
   | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Coalesce of tyvar * tyvar
   | Comparison
@@ -127,8 +129,9 @@ struct
   let pp_func pp =
     let open Format in
   function
-  | Agg -> fprintf pp "|'a| -> 'a"
-  | Group ret -> fprintf pp "|_| -> %s" (show ret)
+  | Agg Self -> fprintf pp "|'a| -> 'a"
+  | Agg Compute t -> fprintf pp "|'a| -> %s" (show t)
+  | Count -> fprintf pp "[_] -> int"
   | Ret ret -> fprintf pp "_ -> %s" (show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
@@ -137,7 +140,7 @@ struct
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
-  | Group _ | Agg -> true
+  | Count | Agg _ -> true
   | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
 end
 
@@ -526,10 +529,10 @@ let () =
   let text = strict Text in
   let datetime = strict Datetime in
   let bool = strict Bool in
-  "count" |> add 0 (Group int); (* count( * ) - asterisk is treated as no parameters in parser *)
-  "count" |> add 1 (Group int);
-  "avg" |> add 1 (Group (nullable Float));
-  ["max";"min";"sum"] ||> add 1 Agg;
+  "count" |> add 0 Count; (* count( * ) - asterisk is treated as no parameters in parser *)
+  "count" |> add 1 Count;
+  ["max";"min";"sum";] ||> add 1 (Agg Self);
+  "avg" |> add 1 (Agg (Compute (nullable Float)));
   ["max";"min"] ||> multi_polymorphic; (* sqlite3 *)
   ["lower";"upper";"unhex";"md5";"sha";"sha1";"sha2"; "trim"; "to_base64"] ||> monomorphic text [text];
   "hex" |> monomorphic text [int];

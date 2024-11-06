@@ -193,7 +193,7 @@ let _print_env env =
 let resolve_aggregations = 
   let rec handle ~is_agg res_expr = 
     match res_expr with
-    | ResFun (Agg, res) -> ResFun(Agg, List.map (handle ~is_agg:true) res)
+    | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
     | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
@@ -255,9 +255,21 @@ let rec resolve_columns env expr =
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret (Type.nullable domain.t), as_params p) (* use nullable *)
+      | [ {domain;_} ], `AsValue ->
+        (* This function should be raised? *)
+        let rec no_rows_null = function
+        | Fun (Count, _) -> Type.depends
+        | Fun (_, [e]) -> no_rows_null e
+        | _ -> Type.nullable
+        in
+        (* The only way to have a result in a subquery is to use the count function. 
+           Any other expression could possibly return no rows. *)
+        let fn = match select.select_complete.select with 
+        | ({ columns = [Expr(e, _)]; _ }, _) -> no_rows_null e
+        | _ -> Type.nullable in
+         ResFun (Type.Ret (fn domain.t), as_params p) (* use nullable *)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret (Type.nullable Any), as_params p)
+      | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
   in
   each expr
 
@@ -337,12 +349,15 @@ and assign_types env expr =
 
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ] ->
+        | Agg kind, [typ] ->
+          let typ = match kind with 
+          | Self -> typ 
+          | Compute typ -> typ in
           (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
           let typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
           typ, types
-        | Group typ, _ -> typ, types
-        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | Count, _ -> strict Type.Int, types
+        | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Coalesce (ret, each_arg) , _ -> 
           let args = types_to_arg each_arg in
