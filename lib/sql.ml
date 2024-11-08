@@ -110,7 +110,9 @@ struct
   type tyvar = Typ of t | Var of int
   let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 
-  type agg_fun = Self | Count | Avg (* max, min | count | avg *)
+  type agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
+    | Count (* count it's count function which never returns null  *) 
+    | Avg (* avg it's avg function that returns float *)
 
   type func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)

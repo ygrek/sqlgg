@@ -261,19 +261,24 @@ let rec resolve_columns env expr =
           | Fun (Agg Count, _)
           | SelectExpr (_, _) -> Some domain
           | Fun (_, exprs) -> List.find_map with_count exprs
-          | Value _| Param _| Inparam _| Choices (_, _) | InChoice (_, _, _)
+          | Choices (_, chs) ->
+            List.fold_left (fun acc (_, e) -> match acc with
+              | None -> None
+              | Some _ -> Option.map_default with_count None e
+            ) (Some domain) chs
+          | Value _| Param _| Inparam _ | InChoice (_, _, _)
           | Column _| Inserted _| InTupleList (_, _) -> None
         in
         let default_null = Type.make_nullable domain in
-        (* The only way to have a result in a subquery is to use the count function. 
+        (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
            Any other expression could possibly return no rows. *)
         let typ = match select.select_complete.select with 
         | ({ having = Some _; _ }, _) -> Type.nullable domain.t
         | ({ columns = [Expr(c, _)]; _ }, _) -> c |> with_count |> Option.default default_null
         | ({ columns = [_]; _ }, _) -> default_null
-        | _ -> raise (Schema.Error (schema, "Different count of selected columns are presented"))
+        | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
         in
-        ResFun (Type.Ret (typ), as_params p) (* use nullable *)
+        ResFun (Type.Ret (typ), as_params p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
       | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
   in
