@@ -569,6 +569,165 @@ let test_ambiguous = [
   |};  
 ]
 
+let test_subquery_nullability = [
+  tt {| 
+    CREATE TABLE table_30 (
+      column_1 INT PRIMARY KEY,
+      column_2 VARCHAR(50) NOT NULL,
+      column_3 VARCHAR(50)
+    )
+  |} [] [];
+  
+  tt {| 
+    CREATE TABLE table_31 (
+      column_4 INT PRIMARY KEY,
+      column_5 INT NOT NULL,
+      column_6 DATE NOT NULL,
+      column_7 DECIMAL(10, 2),
+      FOREIGN KEY (column_5) REFERENCES table_30(column_1)
+    )
+  |} [] [];
+  
+  (* Possible no rows and which means possible null *)
+  tt {| 
+    SELECT 
+      t30.column_2 AS info1,
+      t30.column_3 AS info2,
+      (SELECT MAX(column_6)
+       FROM table_31 t31
+       WHERE t31.column_5 > 99999
+       GROUP BY t31.column_5
+       LIMIT 1
+      ) AS max_info
+    FROM table_30 t30
+    JOIN table_31 t31 ON t30.column_1 = t31.column_5
+    GROUP BY t30.column_1, t30.column_2, t30.column_3
+  |} [
+    attr' ~extra:[NotNull] "info1" Text;
+    attr' ~nullability:Nullable "info2" Text;
+    attr' ~nullability:Nullable "max_info" Datetime;
+  ] [];
+  
+  (* Count never returns null, it's counter and it isn't aggregation *)
+  tt {| 
+    SELECT 
+      t30.column_2 AS info1,
+      t30.column_3 AS info2,
+      (SELECT COUNT(column_6)
+       FROM table_31 t31
+       WHERE t31.column_5 > 99999
+       GROUP BY t31.column_5
+       LIMIT 1
+      ) AS max_info
+    FROM table_30 t30
+    JOIN table_31 t31 ON t30.column_1 = t31.column_5
+    GROUP BY t30.column_1, t30.column_2, t30.column_3
+  |} [
+    attr' ~extra:[NotNull] "info1" Text;
+    attr' ~nullability:Nullable "info2" Text;
+    attr' "max_info" Int;
+  ] [];
+
+  (* dependent + null = null *)
+  tt {| 
+    SELECT 
+      t30.column_2 AS info1,
+      t30.column_3 AS info2,
+      (SELECT IF(COUNT(column_6) = 1111111, 3, NULL)
+       FROM table_31 t31
+       WHERE t31.column_5 > 99999
+       GROUP BY t31.column_5
+       LIMIT 1
+      ) AS max_info
+    FROM table_30 t30
+    JOIN table_31 t31 ON t30.column_1 = t31.column_5
+    GROUP BY t30.column_1, t30.column_2, t30.column_3
+  |} [
+    attr' ~extra:[NotNull] "info1" Text;
+    attr' ~nullability:Nullable "info2" Text;
+    attr' ~nullability:Nullable "max_info" Int;
+  ] [];
+
+  tt {| 
+    SELECT (SELECT 1 WHERE 0) as result
+  |} [
+    attr' ~nullability:Nullable  "result" Int;
+  ] [];
+
+ (* no way to have null *)
+  tt {| 
+    SELECT 1 as one, (SELECT COUNT(NULL)) as result
+  |} [
+    attr' "one" Int;
+    attr' "result" Int;
+  ] [];
+
+  (* no way to have null *)
+  tt {| 
+   SELECT 1 as one, (SELECT COUNT(NULL) HAVING FALSE) as result
+  |} [
+   attr' "one" Int;
+   attr' ~nullability:Nullable "result" Int;
+  ] [];
+
+  (* it doesn't return null, reason: WHERE is evaluated after the Aggregation *)
+  tt {| 
+    SELECT 1 as one, (SELECT COUNT(NULL) + 1 WHERE 0) as result
+  |} [
+    attr' "one" Int;
+    attr' "result" Int;
+  ] [];
+
+  tt {| 
+    SELECT 1 as one, (SELECT (SELECT (SELECT (SELECT COUNT(NULL))))) as result
+  |} [
+    attr' "one" Int;
+    attr' "result" Int;
+  ] [];
+
+  tt {| 
+    SELECT 1 as one, (SELECT (SELECT (SELECT (SELECT COUNT(NULL) + 1) + 1) + 1)) as result
+  |} [
+    attr' "one" Int;
+    attr' "result" Int;
+  ] [];
+
+  tt {| 
+   SELECT 1 AS one, 
+    (SELECT 
+        IF(
+            (SELECT 
+                (SELECT COUNT(NULL) + 1) + 1
+            ) + 1 > 49876, 
+            129, 
+            NULL
+        )
+    ) AS result
+  |} [
+    attr' "one" Int;
+    attr' ~nullability:Nullable "result" Int;
+  ] [];
+
+  (* good reflects the essence of what is happening *)
+  tt {|SELECT 1 AS one, (SELECT COUNT(NULL) + 1 + MAX(NULL)) AS result|} [
+   attr' "one" Int;
+   attr' ~nullability:Nullable "result" Int;
+ ] [];
+
+  tt {| 
+    SELECT 
+      1 as one,
+      (SELECT column_6
+       FROM table_31 t31
+       WHERE t31.column_5 = 123
+      ) as abcd
+    FROM table_30 t30
+  |} [
+    attr' "one" Int;
+    attr' ~nullability:Nullable "abcd" Datetime;
+  ] [];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -591,6 +750,7 @@ let run () =
     "test_agg_nullable" >::: test_agg_nullable;
     "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
     "test_ambiguous" >::: test_ambiguous;
+    "test_subquery_nullability" >::: test_subquery_nullability;
   ]
   in
   let test_suite = "main" >::: tests in

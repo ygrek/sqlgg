@@ -193,7 +193,7 @@ let _print_env env =
 let resolve_aggregations = 
   let rec handle ~is_agg res_expr = 
     match res_expr with
-    | ResFun (Agg, res) -> ResFun(Agg, List.map (handle ~is_agg:true) res)
+    | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
     | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
@@ -255,9 +255,32 @@ let rec resolve_columns env expr =
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret domain.t, as_params p) (* use nullable *)
+      | [ {domain;_} ], `AsValue ->
+        (* This function should be raised? *)
+        let rec with_count = function 
+          | Fun (Agg Count, _)
+          | SelectExpr (_, _) -> Some domain
+          | Fun (_, exprs) -> List.find_map with_count exprs
+          | Choices (_, chs) ->
+            List.fold_left (fun acc (_, e) -> match acc with
+              | None -> None
+              | Some _ -> Option.map_default with_count None e
+            ) (Some domain) chs
+          | Value _| Param _| Inparam _ | InChoice (_, _, _)
+          | Column _| Inserted _| InTupleList (_, _) -> None
+        in
+        let default_null = Type.make_nullable domain in
+        (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
+           Any other expression could possibly return no rows. *)
+        let typ = match select.select_complete.select with 
+        | ({ having = Some _; _ }, _) -> Type.nullable domain.t
+        | ({ columns = [Expr(c, _)]; _ }, _) -> c |> with_count |> Option.default default_null
+        | ({ columns = [_]; _ }, _) -> default_null
+        | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
+        in
+        ResFun (Type.Ret (typ), as_params p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret Any, as_params p)
+      | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
   in
   each expr
 
@@ -334,15 +357,14 @@ and assign_types env expr =
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
           let args = List.map convert args in
           args, convert ret in
-
+        (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
+        let consider_groupping typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ] ->
-          (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
-          let typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
-          typ, types
-        | Group typ, _ -> typ, types
-        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
+        | Agg Avg, [_] -> consider_groupping @@ nullable Float, types
+        | Agg Self, [typ] -> consider_groupping typ, types
+        | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Coalesce (ret, each_arg) , _ -> 
           let args = types_to_arg each_arg in
@@ -359,14 +381,14 @@ and assign_types env expr =
           let args, ret = convert_args ret args in
           let nullable = common_nullability args in
           undepend ret nullable, args
-        | Ret Any, _ -> (* lame *)
+        | Ret t, _ when is_any t -> (* lame *)
           begin match common_supertype types with
           | Some t -> t, List.map (fun _ -> t) types
           | None -> { t = Any; nullability = common_nullability types }, types
           end
         | Ret ret, _ ->
-          let nullability = common_nullability types in
-          { t = ret; nullability; }, types (* ignoring arguments FIXME *)
+          let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
+          { ret with nullability }, types (* ignoring arguments FIXME *)
         | Comparison, _  ->
           if set_tyvar_strict then 
             let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in

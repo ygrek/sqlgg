@@ -167,7 +167,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret ret) name.tn; (* FIXME store function namespace *)
+                Function.add (List.length params) (Ret (depends ret)) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
          | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
@@ -175,7 +175,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
+                Function.add (List.length params) (Ret (depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -392,10 +392,10 @@ insert_expr: e=expr { `Expr e }
            | DEFAULT { `Default }
 
 expr:
-      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
-    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret Any),[e1;e2]) } (* mysql special *)
-    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
-    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
+      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret (depends Any)),[e1;e2]) } (* TODO default Int *)
+    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret (depends Any)),[e1;e2]) } (* mysql special *)
+    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret (depends Float)),[e1;e2]) }
+    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret (depends Int)),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun (Comparison, [e1; e2]) }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2]}
@@ -441,7 +441,7 @@ expr:
     | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun (Function.lookup "json_set" 3, [j;k;v]) }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
-    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
+    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret (depends t), [e]) }
     | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
