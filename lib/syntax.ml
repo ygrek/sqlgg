@@ -247,7 +247,7 @@ let rec resolve_columns env expr =
       let rec params_of_var = function
         | Single p -> [ResParam p]
         (* Better do not separate ChoiceIn and SingleIn , fix it subsequently *)
-        | SingleIn _ -> []
+        | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
         | ChoiceIn { vars; param; kind } -> 
           (* SingleIn is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here) *)
           let rec extract_singlein = (function
