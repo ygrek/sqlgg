@@ -250,13 +250,12 @@ let rec resolve_columns env expr =
         | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
         | ChoiceIn { vars; param; kind } -> 
           (* SingleIn is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here) *)
-          let rec extract_singlein = (function
-            | [] -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
-            (* The rest vars are params contained in the left side part of the expression (before IN)  *)
-            | (SingleIn p) :: xs -> (p, xs)
-            | xs -> extract_singlein xs
-          ) in
-          let (p, vars) = extract_singlein vars in
+          let rec extract_singlein acc = function
+          | [] -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
+           (* The rest vars are params contained in the left side part of the expression (before IN)  *)
+          | (SingleIn p) :: xs -> (p, List.rev_append acc xs)
+          | x :: xs -> extract_singlein (x :: acc) xs in
+          let (p, vars) = extract_singlein [] vars in
           ResInChoice (param, kind, ResInparam p) :: as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
