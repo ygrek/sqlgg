@@ -53,6 +53,13 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="update_11" sql="UPDATE tbl2 t2&#x0A;SET t2.col1 = t2.col1 + 1000&#x0A;WHERE t2.id IN (&#x0A;    SELECT t3.tbl2_id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t4.col2&#x0A;        FROM tbl4 t4&#x0A;        WHERE @left_side_isnt_missed IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN  @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="left_side_isnt_missed" type="Int" nullable="true"/>
+   <value name="t1_c2" type="set(Text)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
  <table name="tbl4">
   <schema>
    <value name="id" type="Int"/>
