@@ -247,7 +247,20 @@ let rec resolve_columns env expr =
       let rec params_of_var = function
         | Single p -> [ResParam p]
         | SingleIn p -> [ResInparam p]
-        | ChoiceIn { vars; _ } -> as_params vars
+        | ChoiceIn { vars; param; kind } -> 
+          let vars = as_params vars in
+          (* ResInparam is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here), 
+             while the rest vars are params from the left side expression (before IN) *)
+          let result = List.find_opt (function
+            | ResInparam p -> p.id.label = param.label
+            | ResValue _ | ResParam _ | ResInTupleList _
+            | ResChoices _ | ResInChoice _
+            | ResFun _ | ResAggValue _ -> false
+          ) vars in
+          begin match result with 
+          | Some x -> ResInChoice (param, kind, x) :: List.remove vars x
+          | None -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
+           end
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
       and as_params p = flat_map params_of_var p in
