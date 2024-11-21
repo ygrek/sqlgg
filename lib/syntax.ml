@@ -246,7 +246,7 @@ let rec resolve_columns env expr =
     | SelectExpr (select, usage) ->
       let rec params_of_var = function
         | Single p -> [ResParam p]
-        | SingleIn p -> [ResParam p]
+        | SingleIn p -> [ResInparam p]
         | ChoiceIn { vars; _ } -> as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
