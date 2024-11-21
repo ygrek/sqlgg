@@ -103,3 +103,19 @@ WHERE t2.id IN (
         )
     )
 );
+
+UPDATE tbl2 t2
+SET t2.col1 = t2.col1 + 1000
+WHERE t2.id IN (
+    SELECT t3.tbl2_id
+    FROM tbl3 t3
+    WHERE t3.col2 IN (
+        SELECT t4.col2
+        FROM tbl4 t4
+        WHERE @left_side_isnt_missed IN (
+            SELECT t1.id
+            FROM tbl1 t1
+            WHERE t1.col2 IN  @t1_c2
+        )
+    )
+);
