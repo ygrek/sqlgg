@@ -600,7 +600,7 @@ and eval_cte { cte_items; is_recursive } =
         eval_compound ~env:{ env with tables = env.tables } (p1, s1, cardinality, cte.stmt))
     in
     let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
-    (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars end
+    (tbl_name, from_schema s2) :: acc_ctes, acc_vars @ p1 end
   ([], []) cte_items  
 
 and eval_compound ~env result = 

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test_table" sql="CREATE TABLE test_table (&#x0A;    test_1_column DATETIME,&#x0A;    test_2_column INT,&#x0A;    test_3_column INT&#x0A;)" category="DDL" kind="create" target="test_table" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="WITH RECURSIVE test_1 AS (&#x0A;    SELECT MAKEDATE(@year, 1) AS date_&#x0A;    UNION ALL&#x0A;    SELECT date_ + INTERVAL 1 DAY&#x0A;    FROM test_1&#x0A;    WHERE date_ + INTERVAL 1 DAY &lt; LEAST(MAKEDATE(@year + 1, 1), CURRENT_DATE + INTERVAL 1 DAY)&#x0A;),&#x0A;test_1_1 AS (&#x0A;    SELECT&#x0A;        DATE(test_1_column) AS test_1_column_1,&#x0A;        COUNT(DISTINCT test_2_column) AS test_2_count,&#x0A;        COUNT(DISTINCT test_3_column) AS test_3_count&#x0A;    FROM test_table&#x0A;    WHERE test_1_column &gt;= MAKEDATE(@year, 1) &#x0A;      AND test_1_column &lt; MAKEDATE(@year + 1, 1)&#x0A;    GROUP BY DATE(test_1_column)&#x0A;),&#x0A;test_2 AS (&#x0A;    SELECT&#x0A;        COUNT(1) AS test_2_count_1,&#x0A;        COUNT(DISTINCT test_3_column) AS test_3_count_1&#x0A;    FROM test_table&#x0A;    WHERE test_1_column &gt;= MAKEDATE(@year, 1) &#x0A;      AND test_1_column &lt; MAKEDATE(@year + 1, 1)&#x0A;)&#x0A;SELECT&#x0A;    test_2.test_2_count_1,&#x0A;    test_2.test_3_count_1,&#x0A;    COALESCE(test_1_1.test_2_count, 0) AS test_2_count,&#x0A;    COALESCE(test_1_1.test_3_count, 0) AS test_3_count,&#x0A;    test_1.date_&#x0A;FROM test_1&#x0A;LEFT JOIN test_1_1 ON test_1.date_ = test_1_1.test_1_column_1&#x0A;CROSS JOIN test_2&#x0A;ORDER BY test_1.date_ DESC" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="year" type="Int"/>
+  </in>
+  <out>
+   <value name="test_2_count_1" type="Int"/>
+   <value name="test_3_count_1" type="Int"/>
+   <value name="test_2_count" type="Int"/>
+   <value name="test_3_count" type="Int"/>
+   <value name="date_" type="Datetime"/>
+  </out>
+ </stmt>
+ <table name="test_table">
+  <schema>
+   <value name="test_1_column" type="Datetime" nullable="true"/>
+   <value name="test_2_column" type="Int" nullable="true"/>
+   <value name="test_3_column" type="Int" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
