@@ -571,4 +571,5 @@ let () =
   "json_remove" |> multi ~ret:(Typ text) (Typ text);
   "json_array" |> multi ~ret:(Typ text) (Typ text);
   "json_set" |> add 3 (F (Typ text, [Typ text; Typ text; Var 0]));
+  "makedate" |> monomorphic datetime [int; int];
   ()
