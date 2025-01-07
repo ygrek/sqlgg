@@ -41,7 +41,7 @@ type res_expr =
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
-  | ResOptionBoolChoice of { flag: bool; choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
+  | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -87,8 +87,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     match e with
     | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
-    | ResOptionBoolChoice { flag; choice_id; res_choice; pos} -> 
-      OptionBoolChoice (flag, choice_id, get_params_of_res_expr res_choice, pos) :: acc
+    | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
+      OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun (_,l) -> List.fold_left loop acc l
@@ -240,13 +240,13 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x
     | Column col -> ResValue (resolve_column ~env col).attr.domain
-    | OptionBoolChoices { flag; choice; pos } ->
+    | OptionBoolChoices { choice; pos } ->
       let choice_id = match bool_choice_id choice with
       | Some choice_id -> choice_id
       | None -> 
         fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
       in
-      ResOptionBoolChoice { res_choice = each choice; flag; choice_id; pos }
+      ResOptionBoolChoice { res_choice = each choice; choice_id; pos }
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
@@ -286,7 +286,7 @@ let rec resolve_columns env expr =
           let (p, vars) = extract_singlein [] vars in
           ResInChoice (param, kind, ResInparam p) :: as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
-        | OptionBoolChoice (_, p, _, _) -> failed ~at:p.pos "BoolChoice isn't supported in Select"
+        | OptionBoolChoice ( p, _, _) -> failed  ~at:p.pos "BoolChoice isn't supported in Select"
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
       and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
@@ -304,6 +304,7 @@ let rec resolve_columns env expr =
               | None -> None
               | Some _ -> Option.map_default with_count None e
             ) (Some domain) chs
+          | OptionBoolChoices { choice; _ } -> with_count choice  
           | Value _| Param _| Inparam _ | InChoice (_, _, _)
           | Column _| Inserted _| InTupleList (_, _) -> None
         in
@@ -835,7 +836,7 @@ let unify_params l =
   | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
-  | OptionBoolChoice (_, p, l, _) ->
+  | OptionBoolChoice (p, l, _) ->
     check_choice_name p;
     List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
@@ -849,7 +850,7 @@ let unify_params l =
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
-  | OptionBoolChoice (f, p, l, pos) -> OptionBoolChoice (f, p, (List.map map l), pos)
+  | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in

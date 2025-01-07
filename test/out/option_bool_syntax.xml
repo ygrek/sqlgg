@@ -9,13 +9,12 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="select_all_test30" sql="SELECT *&#x0A;FROM test30&#x0A;LEFT JOIN test31 on test31.c = @test31a&#x0A;WHERE {TODO dynamic choice} AND {TODO dynamic choice} AND r = @var3 AND (c = @var4)&#x0A;GROUP BY b" category="DQL" kind="select" cardinality="n">
+ <stmt name="select_all_test30" sql="SELECT *&#x0A;FROM test30&#x0A;LEFT JOIN test31 on test31.c = @test31a&#x0A;WHERE {TODO dynamic choice} OR {TODO dynamic choice} OR {TODO dynamic choice}&#x0A;GROUP BY b" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="test31a" type="Int"/>
    <value name="choice2" type="Int"/>
    <value name="choice3" type="Text"/>
-   <value name="var3" type="Text"/>
-   <value name="var4" type="Int" nullable="true"/>
+   <value name="choice4" type="Int"/>
   </in>
   <out>
    <value name="a" type="Int"/>

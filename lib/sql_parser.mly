@@ -433,8 +433,7 @@ expr:
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param { Param (new_param p (depends Any)) }
     | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
-    | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; flag=true; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
-    | LCURLY e=expr RCURLY EXCL { OptionBoolChoices ({ choice=e; flag=false; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
+    | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
@@ -580,7 +579,6 @@ strict_type:
 manual_type:
     | strict_type      { strict   $1 }
     | strict_type NULL { nullable $1 }
-    | strict_type QSTN { nullable $1 }
 
 algorithm:
  | INPLACE { }
