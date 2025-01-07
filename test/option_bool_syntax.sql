@@ -7,5 +7,5 @@ CREATE TABLE test31 ( c INT NOT NULL, d INT NOT NULL, r TEXT NOT NULL );
 SELECT *
 FROM test30
 LEFT JOIN test31 on test31.c = @test31a
-WHERE { c = @choice2 }? OR { r = @choice3 }! AND r = @var3 AND (c = @var4 :: Int?)
+WHERE { c = @choice2 }? OR { r = @choice3 }? OR { c = @choice4 }?
 GROUP BY b;

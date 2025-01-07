@@ -146,7 +146,7 @@ let substitute_vars s vars subst_param =
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
     (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
-    | OptionBoolChoice (flag, name, vars, ((f1, f2), (c1, c2))) :: tl ->
+    | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
@@ -157,7 +157,7 @@ let substitute_vars s vars subst_param =
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
         let n = 
-          let sql = Static (Printf.sprintf " %s " (flag |> Bool.to_string |> String.uppercase_ascii)) in
+          let sql = Static " TRUE " in
           let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
@@ -238,7 +238,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
-      | OptionBoolChoice (_, id, _, _) -> [id]
+      | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
     l

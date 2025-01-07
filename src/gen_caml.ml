@@ -231,7 +231,7 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
-  | OptionBoolChoice(_, name, vars, _) -> 
+  | OptionBoolChoice(name, vars, _) -> 
     output "begin match %s with" (make_param_name index name);
     [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
       output "| %s%s -> %s"
@@ -260,23 +260,24 @@ let rec set_var index var =
     output "end;" 
 
 let rec eval_count_params vars =
-  let (static, all_choices) =
-    list_separate
-      (function
-        | Single _ -> `Left true
-        | OptionBoolChoice _ -> `Left true
-        | SingleIn _ -> `Left false
-        | TupleList _ -> `Left true
-        | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
-        | Choice (name,c) -> `Right (`Choice (name, c)))
-      vars
-  in
-  let choices, choices_in =
-    list_separate
-      (function
-        | `Choice (name, c) -> `Left (name, c)
-        | `ChoiceIn t -> `Right t)
-      all_choices
+  let (static, choices, bool_choices, choices_in) =
+    let classify_var = function
+      | Single _ | TupleList _ -> `Static true
+      | SingleIn _ -> `Static false
+      | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
+      | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
+      | Choice (name, c) -> `Choice (name, c)
+    in
+    let rec group_vars (static, choices, bool_choices, choices_in) = function
+      | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in)
+      | x::xs ->
+        match classify_var x with
+        | `Static v -> group_vars (v::static, choices, bool_choices, choices_in) xs
+        | `BoolChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
+        | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
+        | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
+    in
+    group_vars ([], [], [], []) vars
   in
   let static = string_of_int (List.length @@ List.filter (fun x -> x) static) in
   let choices_in =
@@ -292,6 +293,14 @@ let rec eval_count_params vars =
              (eval_count_params vars)) |>
       String.concat ""
   in
+  let bool_choices = match bool_choices with
+  | [] -> ""
+  | _ -> bool_choices |> List.mapi begin fun i ((param_id, vars)) ->
+    sprintf " + (match %s with %s -> 1 | %s -> 0)"
+      (make_param_name i param_id)
+      (match_variant_pattern i (Some "Some") (Some vars) ~is_poly:false)
+      (match_variant_pattern i (Some "None") None ~is_poly:false)
+  end |> String.concat "" in
   let choices =
     match choices with
     | [] -> ""
@@ -308,7 +317,7 @@ let rec eval_count_params vars =
       ^ ")"
     end |> String.concat ""
   in
-  static ^ choices_in ^ choices
+  static ^ choices_in ^ choices ^ bool_choices
 
 let output_params_binder _ vars =
   output "let set_params stmt =";
@@ -325,7 +334,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
-      | OptionBoolChoice (f, p, v, pos) -> Some (OptionBoolChoice (f, p, exclude_in_vars v, pos))
+      | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->

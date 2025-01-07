@@ -363,8 +363,8 @@ and var =
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
-(* It differs from Choice that in this case we should generate sql ("TRUE" or "FALSE"), it doesn't seem reusable *)
-| OptionBoolChoice of bool * param_id * var list * (pos * pos)
+(* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
+| OptionBoolChoice of param_id * var list * (pos * pos)
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -428,7 +428,7 @@ and expr =
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
-  | OptionBoolChoices of { flag: bool; choice: expr; pos: (pos * pos) } 
+  | OptionBoolChoices of { choice: expr; pos: (pos * pos) } 
 and column =
   | All
   | AllOf of table_name

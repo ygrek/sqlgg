@@ -96,7 +96,7 @@ let rec params_only l =
   List.map
     (function
       | Sql.Single p -> [p]
-      | OptionBoolChoice (_, _, v, _) -> params_only v
+      | OptionBoolChoice (_, v, _) -> params_only v
       | SingleIn _ -> []
       | ChoiceIn { vars; _ } -> params_only vars
       | Choice (_,choices) ->
