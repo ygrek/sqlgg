@@ -315,7 +315,7 @@ ruleMain = parse
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
 
-  | "?" { PARAM { label=None; pos = pos lexbuf } }
+  | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
