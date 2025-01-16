@@ -63,7 +63,7 @@ let tuplelist_value_of_param = function
   | TupleList ({ label = Some name; _ }, kind) ->
     let schema = match kind with 
     | Insertion schema -> schema 
-    | Where_in types -> Gen_caml.make_schema_of_tuple_types name types
+    | Where_in types | ValueRows types -> Gen_caml.make_schema_of_tuple_types name types
     in
     let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in

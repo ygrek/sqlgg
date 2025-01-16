@@ -728,6 +728,35 @@ let test_subquery_nullability = [
   ] [];
 ]
 
+let test_values_row = [
+  tt {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW('c', 3) ) AS x (txt, i)
+    ON t30.column_2 = x.txt
+  |} [
+    attr' ~extra:[NotNull] "column_2" Text;
+    attr' "i" Int;
+  ] [];
+
+  (* Unification fail (last ROW has different type) *)
+  wrong {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW(2, 3) ) AS x (txt, i)
+    ON t30.column_2 = x.txt
+  |} ;
+
+  (* Alias error *)
+  wrong {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW(2, 3) ) AS y (txt, i)
+    ON t30.column_2 = y.txt
+  |};
+]
+
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -751,6 +780,7 @@ let run () =
     "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
     "test_ambiguous" >::: test_ambiguous;
     "test_subquery_nullability" >::: test_subquery_nullability;
+    "test_values_row" >::: test_values_row;
   ]
   in
   let test_suite = "main" >::: tests in

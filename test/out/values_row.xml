@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_products" sql="CREATE TABLE products (&#x0A;    id SERIAL PRIMARY KEY,       &#x0A;    name VARCHAR(255) NOT NULL&#x0A;)" category="DDL" kind="create" target="products" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_entitlements" sql="CREATE TABLE entitlements (&#x0A;    id SERIAL PRIMARY KEY,      &#x0A;    product_id INT NOT NULL,     &#x0A;    entitlement INT NOT NULL&#x0A;)" category="DDL" kind="create" target="entitlements" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_2" sql="SELECT entitlement, product_name&#x0A;FROM products p&#x0A;JOIN ( VALUES @@@values ) AS x (product_name, entitlement)&#x0A;ON p.name = x.product_name" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="values" type="list(Text, Int)"/>
+  </in>
+  <out>
+   <value name="entitlement" type="Int"/>
+   <value name="product_name" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="insert_entitlements_3" sql="INSERT INTO entitlements ( product_id, entitlement )&#x0A;SELECT p.id, x.entitlement&#x0A;FROM products p&#x0A;JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW('c', 3) ) AS x (product_name, entitlement)&#x0A;ON p.name = x.product_name" category="DML" kind="insert" target="entitlements" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <table name="entitlements">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="product_id" type="Int"/>
+   <value name="entitlement" type="Int"/>
+  </schema>
+ </table>
+ <table name="products">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="name" type="Text"/>
+  </schema>
+ </table>
+</sqlgg>
