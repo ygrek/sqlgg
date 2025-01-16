@@ -181,7 +181,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Function.add (List.length params) (Ret (depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
-              }
+              }   
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
@@ -259,8 +259,15 @@ join_cond: ON e=expr { On e }
 source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
        | LPAREN s=table_list RPAREN { `Nested s }
+       | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
-source: src=source1 alias=maybe_as { src, Option.map Sql.make_table_name alias }
+source: src=source1 alias=maybe_as_with_detupled? { 
+  src, 
+  Option.map (fun (tbl, cols) -> 
+    let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
+    { table_name = Sql.make_table_name tbl; column_aliases; }
+  ) alias 
+}
 
 insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
@@ -308,6 +315,8 @@ column1:
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }
+
+maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
@@ -465,6 +474,13 @@ expr:
       }
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ (depends Bool);Var 0;Var 0]), [e1;e2;e3]) }
     | e=window_function OVER window_spec { e }
+
+values_stmt1: 
+  | expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
+  | id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types } }
+
+values_stmt: 
+  | VALUES kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit; }}
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:
