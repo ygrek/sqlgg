@@ -618,9 +618,9 @@ and resolve_source env (x, alias) =
         let select = dummy_select exprs in
         let select_complete = { select = select, unions; order=row_order; limit=row_limit; } in
         eval_select_full env { select_complete; cte = None }
-      | RowParam { id; types } -> 
+      | RowParam { id; types; values_start_pos } ->
         List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
-          types, [ TupleList (id, ValueRows types) ], Stmt.Select `Nat
+          types, [ TupleList (id, ValueRows { types; values_start_pos }) ], Stmt.Select `Nat
     in
     match alias with 
     | Some { table_name; column_aliases = Some col_schema } -> 
