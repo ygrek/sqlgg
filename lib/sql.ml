@@ -365,7 +365,7 @@ and var =
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
-and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of Type.t list 
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -413,7 +413,7 @@ and select_complete = {
   limit : limit option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
-and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; } 
+and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
 and row_values = {
   row_constructor_list: row_constructor_list;
   row_order: order;
