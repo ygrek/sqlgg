@@ -434,11 +434,16 @@ let make_sql l =
       Buffer.add_string b (gen_tuple_substitution ~is_row:false label schema);
       bprintf b " ^ %s" (quote ")");
       loop true tl
-    | SubstTuple (id, ValueRows types) :: tl ->
+    | SubstTuple (id, ValueRows { types; _ }) :: tl ->
         if app then bprintf b " ^ ";
         let label = resolve_tuple_label id in
         let schema = make_schema_of_tuple_types label types in
-        Buffer.add_string b (gen_tuple_substitution ~is_row:true label schema);
+        let empty = schema 
+          |> List.map (Fun.const "NULL") 
+          |> String.join ", " 
+          |> sprintf {|"SELECT %s WHERE FALSE"|} in
+        let not_empty = gen_tuple_substitution ~is_row:true label schema in
+        Buffer.add_string b @@ sprintf {|( if %s = [] then %s else ( "VALUES " ^ %s ) )|} label empty not_empty;
         loop true tl  
   in
   Buffer.add_string b "(";

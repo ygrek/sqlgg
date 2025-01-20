@@ -476,11 +476,11 @@ expr:
     | e=window_function OVER window_spec { e }
 
 values_stmt1: 
-  | expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
-  | id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types } }
+  | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
+  | VALUES id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types; values_start_pos = $startofs  } }
 
 values_stmt: 
-  | VALUES kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit; }}
+  | kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit;}}
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:

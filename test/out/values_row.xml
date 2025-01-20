@@ -9,7 +9,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="select_2" sql="SELECT entitlement, product_name&#x0A;FROM products p&#x0A;JOIN ( VALUES @@@values ) AS x (product_name, entitlement)&#x0A;ON p.name = x.product_name" category="DQL" kind="select" cardinality="n">
+ <stmt name="select_2" sql="SELECT entitlement, product_name&#x0A;FROM products p&#x0A;JOIN ( @@@values ) AS x (product_name, entitlement)&#x0A;ON p.name = x.product_name" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="values" type="list(Text, Int)"/>
   </in>
