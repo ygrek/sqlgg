@@ -72,7 +72,7 @@ type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit
-type execute_response = { affected_rows: int64; insert_id: int64 }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 type num = int64
 type text = string
@@ -159,7 +159,12 @@ let execute db sql set_params =
     set_params stmt;
     let rc = S.step (fst stmt) in
     if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
-    { affected_rows = Int64.of_int (S.changes db); insert_id = S.last_insert_rowid db }
+    let insert_id =
+      match S.last_insert_rowid db with
+      | 0L -> None
+      | x -> Some x
+    in
+    { affected_rows = Int64.of_int (S.changes db); insert_id; }
   )
 
 let select_one_maybe db sql set_params convert =

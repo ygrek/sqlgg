@@ -27,7 +27,7 @@ module type M = sig
   type params
   type row
   type result
-  type execute_response = { affected_rows: int64; insert_id: int64 }
+  type execute_response = { affected_rows: int64; insert_id: int64 option }
 
   (** datatypes *)
   module Types : sig
