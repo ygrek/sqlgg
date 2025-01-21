@@ -198,7 +198,7 @@ type 'a connection = M.t
 type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
 type result = M.Res.t
-type execute_response = { affected_rows: int64; insert_id: int64 }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = Types
 
@@ -289,8 +289,13 @@ let execute db sql set_params =
   with_stmt db sql @@ fun stmt ->
   let open IO in
   set_params stmt >>=
-  fun res -> return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id = Int64.of_int (M.Res.insert_id res) }
-
+  fun res -> 
+    let insert_id =
+      match M.Res.insert_id res with
+      | 0 -> None
+      | x -> Some (Int64.of_int x)
+    in
+    return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id }
 
 let select_one_maybe db sql set_params convert =
   with_stmt db sql @@ fun stmt ->

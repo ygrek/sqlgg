@@ -123,7 +123,7 @@ type 'a connection = Mysql.dbd
 type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
-type execute_response = { affected_rows: int64; insert_id: int64 }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = T
 open Types
@@ -204,7 +204,12 @@ let execute db sql set_params =
   with_stmt db sql (fun stmt ->
     let _ = set_params stmt in
     if 0 <> P.real_status stmt then oops "execute : %s" sql;
-    { affected_rows = P.affected stmt; insert_id = P.insert_id stmt})
+    let insert_id =
+      match P.insert_id stmt with
+      | 0L -> None
+      | x -> Some x
+    in
+    { affected_rows = P.affected stmt; insert_id; })
 
 let select_one_maybe db sql set_params convert =
   with_stmt db sql (fun stmt ->
