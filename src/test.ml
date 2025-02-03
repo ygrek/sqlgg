@@ -756,6 +756,68 @@ let test_values_row = [
   |};
 ]
 
+let test_select_exposed_alias = [
+  tt {|
+    CREATE TABLE table_32 (
+      col_1 INT PRIMARY KEY,
+      col_2 VARCHAR(100),
+      col_3 VARCHAR(50),
+      col_4 DECIMAL(10,2)
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE table_33 (
+      col_1 INT PRIMARY KEY,
+      col_2 INT,
+      col_3 INT,
+      col_4 DATE
+    )
+  |} [] [];
+
+  tt {| SELECT y.* FROM (
+    SELECT col_1, col_2, col_1 * col_2 as calc FROM table_33
+  ) as y (a, b, c) |} [
+    attr' "a" Int;
+    attr' ~nullability:Nullable "b" Int;
+    attr' ~nullability:Nullable "c" Int;
+  ] [];
+
+  tt {| SELECT z.* FROM (
+    SELECT 
+        t1.col_3,
+        COUNT(*) as cnt,
+        SUM(t2.col_3 * t1.col_4) as calc,
+        t1.col_4
+    FROM table_32 t1
+    JOIN table_33 t2 ON t1.col_1 = t2.col_2
+    GROUP BY t1.col_3
+  ) as z (a, b, c, d) |} [
+    attr' ~nullability:Nullable "a" Text;
+    attr' "b" Int;
+    attr' ~nullability:Nullable "c" Decimal;
+    attr' ~nullability:Nullable "d" Decimal;
+  ] [];
+
+  tt {| SELECT outer_x.* FROM (
+    SELECT inner_x.*,
+           NOT inner_x.d as bonus_not
+    FROM (
+        SELECT 
+            'abc' as str,
+            42 as num,
+            2.5 as price,
+            true as flag
+    ) as inner_x (a, b, c, d)
+  ) as outer_x (str, num, price, flag, bonus) |} [
+    attr' "str" Text;
+    attr' "num" Int;
+    attr' "price" Float;
+    attr' "flag" Bool;
+    attr' "bonus" Bool;
+] [];
+]
+
 
 let run () =
   Gen.params_mode := Some Named;
@@ -781,6 +843,7 @@ let run () =
     "test_ambiguous" >::: test_ambiguous;
     "test_subquery_nullability" >::: test_subquery_nullability;
     "test_values_row" >::: test_values_row;
+    "test_select_exposed_alias" >::: test_select_exposed_alias;
   ]
   in
   let test_suite = "main" >::: tests in
