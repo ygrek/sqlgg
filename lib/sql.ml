@@ -365,7 +365,7 @@ and var =
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
-and tuple_list_kind = Insertion of schema | Where_in of Type.t list
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -392,10 +392,11 @@ type limit_t = [ `Limit | `Offset ]
 type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
-}
+} [@@deriving show]
+type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 and limit = param list * bool
 and nested = source * (source * Schema.Join.typ * join_condition) list
-and source = [ `Select of select_full | `Table of table_name | `Nested of nested ] * table_name option (* alias *)
+and source = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ] * source_alias option (* alias *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -412,6 +413,12 @@ and select_complete = {
   limit : limit option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
+and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
+and row_values = {
+  row_constructor_list: row_constructor_list;
+  row_order: order;
+  row_limit: limit option;
+}
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and expr =
