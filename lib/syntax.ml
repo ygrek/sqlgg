@@ -586,12 +586,22 @@ and eval_select env { columns; from; where; group; having; } =
 
 (** @return final schema, params and tables that can be referenced by outside scope *)
 and resolve_source env (x, alias) =
+  let resolve_schema_with_alias schema = begin match alias with 
+    | Some { table_name; column_aliases = Some col_schema } -> 
+      let schema = Schema.compound ((List.map (fun attr -> Schema.Source.Attr.{sources=[]; attr;})) col_schema) schema in
+      schema, [table_name, Schema.Source.from_schema schema]
+    | Some { table_name; column_aliases = None } -> 
+      let schema = List.map (fun i -> { i with Schema.Source.Attr.sources = table_name :: i.Schema.Source.Attr.sources }) schema in
+      schema, [table_name, Schema.Source.from_schema schema]
+    | None -> schema, [] 
+  end in
   match x with
   | `Select select ->
     let (s,p,_) = eval_select_full env select in
-    let alias = Option.map (fun { table_name; _ } -> table_name) alias in
-    let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list alias; i.Schema.Source.Attr.sources] }) s in
-    s, p, (match alias with None -> [] | Some name -> [name, Schema.Source.from_schema s])
+    let tbl_alias = Option.map (fun { table_name; _ } -> table_name) alias in
+    let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list tbl_alias; i.Schema.Source.Attr.sources] }) s in
+    let s, tables = resolve_schema_with_alias s in
+    s, p, tables
   | `Nested s ->
     let (env,p) = eval_nested env (Some s) in
     let s = infer_schema env [All] in
@@ -622,14 +632,8 @@ and resolve_source env (x, alias) =
         List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
           types, [ TupleList (id, ValueRows { types; values_start_pos }) ], Stmt.Select `Nat
     in
-    match alias with 
-    | Some { table_name; column_aliases = Some col_schema } -> 
-      let s = Schema.compound ((List.map (fun attr -> Schema.Source.Attr.{sources=[]; attr;})) col_schema) s in
-      s, p, [table_name, Schema.Source.from_schema s]
-    | Some { table_name; column_aliases = None } -> 
-      let s = List.map (fun i -> { i with Schema.Source.Attr.sources = table_name :: i.Schema.Source.Attr.sources }) s in
-      s, p, [table_name, Schema.Source.from_schema s]
-    | None -> s, p, []
+    let s, tables = resolve_schema_with_alias s in
+    s, p, tables
 
 and eval_select_full env { select_complete; cte } =
   let ctes, p1 = Option.map_default eval_cte ([], []) cte in
