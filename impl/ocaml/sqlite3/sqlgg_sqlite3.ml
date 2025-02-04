@@ -67,6 +67,14 @@ module Types = struct
   module Any = Text
 end
 
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 type statement = S.stmt * string
 type 'a connection = S.db
 type params = statement * int * int ref
@@ -110,6 +118,17 @@ let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
 let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty Conv.decimal
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.float
+
+module Make_enum (E: Enum) = struct 
+
+  include E
+
+  let get_column, get_column_nullable = failwith "sqlite does not support enums"
+
+  let set_param = failwith "sqlite does not support enums"
+
+  let to_literal = failwith "sqlite does not support enums"
+end
 
 let test_ok sql rc =
   if rc <> S.Rc.OK then
