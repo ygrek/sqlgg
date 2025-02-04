@@ -65,6 +65,14 @@ module type FNS = sig
   val maybe_insert : [>`WR] connection -> string -> (statement -> result io_future) -> maybe_insert_response io_future
 end
 
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 module type M = sig
 
   type statement
