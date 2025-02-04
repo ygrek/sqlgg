@@ -24,7 +24,7 @@ let do_test sql ?kind schema params =
   let stmt = parse sql in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
-    (List.map (function Single p -> p | OptionBoolChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false) stmt.vars);
+    (List.map (function Single p -> p | OptionBoolChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ | EnumCtor _ -> assert false) stmt.vars);
   match kind with
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
   | None -> ()
@@ -167,11 +167,13 @@ let test_join_result_cols () =
     [named "x" Int];
   ()
 
-let test_enum = [
-  tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test6" [attr "x" Text ~extra:[NotNull;]; attr ~extra:[WithDefault;] "y" Int] [];
-  tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull;]; attr "" Int] [];
-]
+let test_enum = 
+  let enum = Sql.(Type.(Enum (Enum_kind.Ctors.of_list ["true"; "false"]))) in
+  [
+    tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
+    tt "SELECT * FROM test6" [attr "x" enum ~extra:[NotNull;]; attr ~extra:[WithDefault;] "y" Int] [];
+    tt "SELECT x, y+10 FROM test6" [attr "x" enum ~extra:[NotNull;]; attr "" Int] [];
+  ]
 
 let test_manual_param = [
   tt "CREATE TABLE test7 (x INT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
@@ -818,6 +820,50 @@ let test_select_exposed_alias = [
 ] [];
 ]
 
+let test_another_enum = [
+ tt "CREATE TABLE test35 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
+ 
+ tt "SELECT status FROM test35" [
+   attr' ~extra:[NotNull; WithDefault] "status" 
+     (Type.(Enum (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"])))
+ ] [];
+
+ tt "INSERT INTO test35 (status) VALUES (@status)" [] [
+   named "status" (Type.(Enum (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"])))
+ ];
+]
+
+let test_another_enum_2 () = 
+  do_test "CREATE TABLE test36 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
+  
+  let stmt = parse {|INSERT INTO test36 VALUES(^@'pending')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt.schema;
+
+  let stmt2 = parse {|INSERT INTO test36 VALUES(^@'active')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt2.schema;
+  
+  let stmt3 = parse {|INSERT INTO test36 VALUES(^@'deleted')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt3.schema;
+
+  let stmt4 = parse {|SELECT * FROM test36 WHERE status = ^@'active'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[NotNull; WithDefault] "status" 
+      (Type.(Enum (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"] )))]
+    stmt4.schema;
+
+  let stmt5 = parse {|UPDATE test36 SET status = ^@'deleted' WHERE status = ^@'pending'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt5.schema;
+
+  let stmt6 = parse {|
+    SELECT * FROM test36 
+    WHERE status IN (^@'active', ^@'pending') 
+    AND status != ^@'deleted'
+  |} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string
+    [attr' ~extra:[NotNull; WithDefault] "status" 
+      (Type.(Enum (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"])))]
+    stmt6.schema;
+  ()
 
 let run () =
   Gen.params_mode := Some Named;
@@ -844,6 +890,8 @@ let run () =
     "test_subquery_nullability" >::: test_subquery_nullability;
     "test_values_row" >::: test_values_row;
     "test_select_exposed_alias" >::: test_select_exposed_alias;
+    "test_another_enum" >::: test_another_enum;
+    "test_another_enum_2" >:: test_another_enum_2;
   ]
   in
   let test_suite = "main" >::: tests in
