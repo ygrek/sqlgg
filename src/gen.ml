@@ -171,6 +171,16 @@ let substitute_vars s vars subst_param =
       in
       let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
       loop acc f2 parami tl
+    | EnumCtor (_, (i1,i2)) :: tl -> 
+      assert (i2 > i1);
+      assert (i1 > i);
+      let acc =
+        Static (String.slice ~first:(i1 + 2) ~last:(i2) s) ::
+        Static (String.slice ~first:i ~last:(i1) s) :: 
+        acc
+      in
+      loop acc i2 parami tl
+
   in
   let (acc,last) = loop [] 0 0 vars in
   let acc = List.rev (Static (String.slice ~first:last s) :: acc) in
@@ -180,7 +190,6 @@ let substitute_vars s vars subst_param =
   | x::xs -> squash (x::acc) xs
   in
   squash [] acc
-
 
 let subst_named index p = "@" ^ (show_param_name p index)
 let subst_oracle index p = ":" ^ (show_param_name p index)
@@ -247,7 +256,8 @@ let rec find_param_ids l =
       | Choice (id,_) -> [ id ]
       | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
-      | TupleList (id, _) -> [ id ])
+      | TupleList (id, _) -> [ id ]
+      | EnumCtor _ -> [ ])
     l
 
 let names_of_vars l =
@@ -264,7 +274,7 @@ let rec params_only l =
       | ChoiceIn { vars; _ } -> params_only vars
       | OptionBoolChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
-      | TupleList _ -> [])
+      | TupleList _ | EnumCtor _ -> [])
     l
 
 let rec inparams_only l =
