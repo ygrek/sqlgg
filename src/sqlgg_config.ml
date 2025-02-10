@@ -17,4 +17,4 @@ let gen_header : [ `Full | `Without_timestamp | `Static ] option ref = ref (Some
 
 let include_category : [ `All | `None | `Only of Stmt.category list | `Except of Stmt.category list ] ref = ref `All
 
-let enum_as_variant = Sql.Type.Enum_kind.enum_as_variant
+let type_safe_enums = Sql.Type.Enum_kind.type_safe_enums
