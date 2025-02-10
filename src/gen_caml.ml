@@ -119,21 +119,13 @@ let comment () fmt = Printf.ksprintf (indent_endline $ make_comment) fmt
 
 let empty_line () = print_newline ()
 
-let enums_hash_tbl = Hashtbl.create 20
+let enums_hash_tbl = Hashtbl.create 100
 
-let hash_enum_name ctors enum_count =
-  let hash = Type.Enum_kind.Ctors.elements ctors |> String.concat "_" in
-  if Hashtbl.mem enums_hash_tbl hash then
-    Hashtbl.find enums_hash_tbl hash, enum_count
-  else
-    let enum_count = enum_count + 1 in
-    let name = sprintf "Enum_%d" enum_count in
-    Hashtbl.add enums_hash_tbl hash name;
-    name, enum_count
+let enum_get_hash ctors = Type.Enum_kind.Ctors.elements ctors |> String.concat "_"
 
-let get_enum_name ctors =
-  let hash = Type.Enum_kind.Ctors.elements ctors |> String.concat "_" in
-  Hashtbl.find enums_hash_tbl hash
+let enum_name = Printf.sprintf "Enum_%d"
+
+let get_enum_name ctors = ctors |> enum_get_hash |> Hashtbl.find enums_hash_tbl |> fst |> enum_name
 
 module L = struct
   open Type
@@ -589,14 +581,9 @@ let generate_enum_modules stmts =
     | EnumCtor _ -> []
   ) vars in
 
-  let result = schemas_to_enums schemas @ vars_to_enums vars in
-  let (_, result) = List.fold_left_map (fun acc enum -> 
-    let (name, acc) = hash_enum_name enum acc in  acc, (enum, name)
-  ) 0 result in
-
-  let unique = List.sort_uniq (fun (_, a) (_, b) -> String.compare a b) result in
+  Hashtbl.reset enums_hash_tbl;
   
-  let generate_enum_module (enum, module_name) = 
+  let generate_enum_module enum_count enum = 
     let get_ctor_name x = x |> sanitize_to_variant_name |> vname ~is_poly:true in
     let ctor_list = Ctors.elements enum in
     output {|
@@ -606,7 +593,7 @@ let generate_enum_modules stmts =
       let proj = function  %s
     end)
     |}
-    module_name
+    (enum_name enum_count)
     (ctor_list |> List.map get_ctor_name |> String.concat " | ")
     (String.concat " "
     (List.map (fun ctor -> Printf.sprintf "| \"%s\" -> %s" (String.escaped ctor) (get_ctor_name ctor)) ctor_list))
@@ -614,7 +601,18 @@ let generate_enum_modules stmts =
     (List.map (fun ctor -> Printf.sprintf "| %s -> \"%s\"" (get_ctor_name ctor) (String.escaped ctor)) ctor_list))
   in
 
-  indented (fun () -> List.iter (fun n -> empty_line (); generate_enum_module n) unique)
+  indented (fun () -> 
+    let result = schemas_to_enums schemas @ vars_to_enums vars in
+    let (_: int * unit list) = List.fold_left_map begin fun acc enum -> 
+      let hash = enum_get_hash enum in
+      if Hashtbl.mem enums_hash_tbl hash then acc, ()
+      else begin
+        Hashtbl.add enums_hash_tbl hash (acc, enum);
+        acc + 1, begin empty_line (); generate_enum_module acc enum end
+      end
+    end 0 result in 
+    ()
+  )
   
 
 let generate ~gen_io name stmts =
@@ -628,7 +626,6 @@ let generate ~gen_io name stmts =
     | true -> "Sqlgg_traits.M_io", "T.IO"
     | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
   in
-  Hashtbl.clear enums_hash_tbl;
   output "module %s (T : %s) = struct" (String.capitalize_ascii name) traits;
   empty_line ();
   inc_indent ();

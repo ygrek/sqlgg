@@ -17,7 +17,7 @@ struct
           (String.concat "; " (elements s))  
     end
 
-    let enum_as_variant = ref true
+    let enum_as_variant = ref false
     let enum_is_str = ref false
 
     type t = Ctors.t [@@deriving eq, show{with_path=false}]
