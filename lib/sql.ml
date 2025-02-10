@@ -17,7 +17,7 @@ struct
           (String.concat "; " (elements s))  
     end
 
-    let enum_as_variant = ref false
+    let type_safe_enums = ref false
     let enum_is_str = ref false
 
     type t = Ctors.t [@@deriving eq, show{with_path=false}]
@@ -60,7 +60,7 @@ struct
   let make_strict { t; nullability=_ } = strict t
   
   let make_enum_kind ctors = 
-      if !Enum_kind.enum_as_variant then Enum (Enum_kind.make ctors) else Text 
+      if !Enum_kind.type_safe_enums then Enum (Enum_kind.make ctors) else Text 
 
   let is_strict { nullability; _ } = nullability = Strict
 
