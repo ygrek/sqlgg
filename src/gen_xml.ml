@@ -58,7 +58,7 @@ let value ?(inparam=false) v =
   Node ("value", attrs, [])
 
 let tuplelist_value_of_param = function
-  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionBoolChoice _ -> None
+  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionBoolChoice _ | EnumCtor _ -> None
   | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ label = Some name; _ }, kind) ->
     let schema = match kind with 
@@ -103,7 +103,8 @@ let rec params_only l =
         choices
         |> List.map (function Sql.Verbatim _ | Simple (_,None) -> [] | Simple (_name,Some vars) -> params_only vars) (* TODO prefix names *)
         |> List.concat
-      | TupleList _ -> [])
+      | TupleList _ -> []
+      | EnumCtor _ -> [])
     l
 
 let generate_code (x,_) index stmt =
