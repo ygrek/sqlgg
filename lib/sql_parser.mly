@@ -42,8 +42,8 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON INSTANT INPLACE COPY ALGORITHM RECURSIVE
-       SHARED EXCLUSIVE NONE
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
+       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -88,12 +88,16 @@
 
 input: statement EOF { $1 }
 
+param: 
+  | QSTN { { label=None; pos = ($startofs, $endofs) } }
+  | PARAM  { $1 }
+
 if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
-cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN 
+cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
           {
             let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
             { cte_name; cols; stmt }
@@ -126,7 +130,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=PARAM ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=on_duplicate?
               {
                 Insert { target; action=`Param (names, p); on_duplicate=ss; }
               }
@@ -167,7 +171,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret ret) name.tn; (* FIXME store function namespace *)
+                Function.add (List.length params) (Ret (depends ret)) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
          | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
@@ -175,7 +179,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret Any) name.tn; (* FIXME void *)
+                Function.add (List.length params) (Ret (depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }
 
@@ -279,7 +283,7 @@ update_or_share_of: OF commas(IDENT) { }
 with_lock: WITH LOCK { }
 
 int_or_param: i=INTEGER { `Const i }
-            | p=PARAM { `Param p }
+            | p=param { `Param p }
 
 limit_t: LIMIT lim=int_or_param { make_limit [`Limit,lim] }
        | LIMIT ofs=int_or_param COMMA lim=int_or_param { make_limit [`Offset,ofs; `Limit,lim] }
@@ -290,7 +294,7 @@ limit: limit_t { fst $1 }
 order: ORDER BY l=commas(pair(expr,order_type?)) { l }
 order_type:
           | DESC | ASC { `Fixed }
-          | PARAM { `Param $1 }
+          | param { `Param $1 }
 
 from: FROM t=table_list { t }
 where: WHERE e=expr { e }
@@ -360,7 +364,7 @@ reference_action_clause:
 
 reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
-  
+
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
@@ -392,10 +396,10 @@ insert_expr: e=expr { `Expr e }
            | DEFAULT { `Default }
 
 expr:
-      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret Any),[e1;e2]) } (* TODO default Int *)
-    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret Any),[e1;e2]) } (* mysql special *)
-    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret Float),[e1;e2]) }
-    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret Int),[e1;e2]) }
+      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret (depends Any)),[e1;e2]) } (* TODO default Int *)
+    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret (depends Any)),[e1;e2]) } (* mysql special *)
+    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret (depends Float)),[e1;e2]) }
+    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret (depends Int)),[e1;e2]) }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun (Comparison, [e1; e2]) }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2]}
@@ -417,28 +421,32 @@ expr:
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
-    | e1=expr k=in_or_not_in p=PARAM
+    | e1=expr k=in_or_not_in p=param
       {
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
-    | LPAREN names=commas(expr) RPAREN in_or_not_in p=PARAM
+    | LPAREN names=commas(expr) RPAREN in_or_not_in p=param
       {
         InTupleList(names, p)
-      }      
+      }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=PARAM { Param (new_param p (depends Any)) }
-    | p=PARAM DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
-    | p=PARAM parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
+    | p=param { Param (new_param p (depends Any)) }
+    | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
+    | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
+    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
     | DATE LPAREN e=expr RPAREN { Fun (Function.lookup "date" 1, [e]) }
     | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
+    | JSON_ARRAY LPAREN l=expr_list RPAREN { Fun (Function.lookup "json_array" (List.length l), l) }
+    | JSON_REMOVE LPAREN j=expr COMMA fs=expr_list RPAREN { Fun (Function.lookup "json_remove" (List.length fs + 1), fs @ [j]) }
+    | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun (Function.lookup "json_set" 3, [j;k;v]) }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
-    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret t, [e]) }
+    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret (depends t), [e]) }
     | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
@@ -554,10 +562,10 @@ sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
-compound_op: 
+compound_op:
   | UNION { `Union }
   | UNION ALL { `Union_all }
-  | EXCEPT { `Except } 
+  | EXCEPT { `Except }
   | INTERSECT { `Intersect }
 
 strict_type:
@@ -570,7 +578,7 @@ strict_type:
 
 manual_type:
     | strict_type      { strict   $1 }
-    | strict_type NULL { nullable $1 } 
+    | strict_type NULL { nullable $1 }
 
 algorithm:
  | INPLACE { }

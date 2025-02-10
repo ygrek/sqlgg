@@ -103,6 +103,9 @@ let keywords =
    "into",INTO;
    "is", IS;
    "join",JOIN;
+   "json_array", JSON_ARRAY;
+   "json_set", JSON_SET;
+   "json_remove", JSON_REMOVE;
    "straight_join",STRAIGHT_JOIN;
    "key",KEY;
    "lag", LAG;
@@ -312,7 +315,7 @@ ruleMain = parse
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
 
-  | "?" { PARAM { label=None; pos = pos lexbuf } }
+  | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 

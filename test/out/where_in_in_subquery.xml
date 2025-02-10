@@ -1,0 +1,117 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test30" sql="CREATE TABLE test30 (&#x0A;    id INT PRIMARY KEY, &#x0A;    column_a TEXT, &#x0A;    column_b BOOL, &#x0A;    column_c_31 INT NOT NULL&#x0A;)" category="DDL" kind="create" target="test30" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test31" sql="CREATE TABLE test31 (&#x0A;    id INT, &#x0A;    column_d INT, &#x0A;    column_c_32 INT&#x0A;)" category="DDL" kind="create" target="test31" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_test32" sql="CREATE TABLE test32 (&#x0A;    id INT, &#x0A;    column_f INT&#x0A;)" category="DDL" kind="create" target="test32" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="update_3" sql="UPDATE test30 t30&#x0A;SET&#x0A;    t30.column_a = 'the value',&#x0A;    t30.column_b = false&#x0A;WHERE&#x0A;    t30.column_c_31 IN (&#x0A;        SELECT t31.id&#x0A;        FROM test31 t31&#x0A;        WHERE t31.column_c_32 IN (&#x0A;            SELECT t32.id&#x0A;            FROM test32 t32&#x0A;            WHERE t32.column_f IN @@c_f_ids&#x0A;        )&#x0A;    )" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="c_f_ids" type="set(Int)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl1" sql="CREATE TABLE tbl1 (&#x0A;    id INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col1 INT,&#x0A;    col2 VARCHAR(50)&#x0A;)" category="DDL" kind="create" target="tbl1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl2" sql="CREATE TABLE tbl2 (&#x0A;    id INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col1 INT,&#x0A;    col2 INT,&#x0A;    tbl1_id INT&#x0A;)" category="DDL" kind="create" target="tbl2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl3" sql="CREATE TABLE tbl3 (&#x0A;    id INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col1 INT,&#x0A;    col2 INT,&#x0A;    col3 VARCHAR(100),&#x0A;    tbl2_id INT&#x0A;)" category="DDL" kind="create" target="tbl3" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl4" sql="CREATE TABLE tbl4 (&#x0A;    id INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col1 INT,&#x0A;    col2 INT,&#x0A;    col3 DECIMAL(10,2),&#x0A;    tbl3_id INT&#x0A;)" category="DDL" kind="create" target="tbl4" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="update_8" sql="UPDATE tbl4 t4&#x0A;SET t4.col3 = t4.col3 * 1.2&#x0A;WHERE t4.tbl3_id IN (&#x0A;    SELECT t3.id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t2.col2&#x0A;        FROM tbl2 t2&#x0A;        WHERE t2.col1 IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="t1_c2" type="set(Text)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="update_9" sql="UPDATE tbl3 t3&#x0A;SET t3.col3 = CONCAT('Updated: ', t3.col3)&#x0A;WHERE t3.tbl2_id IN (&#x0A;    SELECT t2.id&#x0A;    FROM tbl2 t2&#x0A;    WHERE t2.tbl1_id IN (&#x0A;        SELECT t1.id&#x0A;        FROM tbl1 t1&#x0A;        WHERE t1.col1 IN  @@t1_c1&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="t1_c1" type="set(Int)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="update_10" sql="UPDATE tbl2 t2&#x0A;SET t2.col1 = t2.col1 + 1000&#x0A;WHERE t2.id IN (&#x0A;    SELECT t3.tbl2_id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t4.col2&#x0A;        FROM tbl4 t4&#x0A;        WHERE t4.col1 IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN  @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="t1_c2" type="set(Text)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <stmt name="update_11" sql="UPDATE tbl2 t2&#x0A;SET t2.col1 = t2.col1 + 1000&#x0A;WHERE t2.id IN (&#x0A;    SELECT t3.tbl2_id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t4.col2&#x0A;        FROM tbl4 t4&#x0A;        WHERE @left_side_isnt_missed IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN  @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
+  <in>
+   <value name="left_side_isnt_missed" type="Int" nullable="true"/>
+   <value name="t1_c2" type="set(Text)" nullable="true"/>
+  </in>
+  <out/>
+ </stmt>
+ <table name="tbl4">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="col1" type="Int" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+   <value name="col3" type="Decimal" nullable="true"/>
+   <value name="tbl3_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="tbl3">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="col1" type="Int" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+   <value name="col3" type="Text" nullable="true"/>
+   <value name="tbl2_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="tbl2">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="col1" type="Int" nullable="true"/>
+   <value name="col2" type="Int" nullable="true"/>
+   <value name="tbl1_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="tbl1">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="col1" type="Int" nullable="true"/>
+   <value name="col2" type="Text" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test32">
+  <schema>
+   <value name="id" type="Int" nullable="true"/>
+   <value name="column_f" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test31">
+  <schema>
+   <value name="id" type="Int" nullable="true"/>
+   <value name="column_d" type="Int" nullable="true"/>
+   <value name="column_c_32" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="test30">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="column_a" type="Text" nullable="true"/>
+   <value name="column_b" type="Bool" nullable="true"/>
+   <value name="column_c_31" type="Int"/>
+  </schema>
+ </table>
+</sqlgg>

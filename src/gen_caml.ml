@@ -179,25 +179,28 @@ let list_separate f l =
   List.iter (fun x -> match f x with `Left x -> tuck a x | `Right x -> tuck b x) l;
   List.rev !a, List.rev !b
 
-let make_variant_name i name =
-  "`" ^ match name with
+
+let make_variant_name i name ~is_poly =
+  let prefix = if is_poly then "`" else "" in 
+  prefix ^ match name with
   | None -> sprintf "V_%d" i
   | Some n -> String.capitalize_ascii n
 
 let vname n = make_variant_name 0 (Some n)
 
-let match_variant_wildcard i name args =
-  sprintf "%s%s" (make_variant_name i name) (match args with Some [] | None -> "" | Some _ -> " _")
+let match_variant_wildcard i name args ~is_poly =
+  sprintf "%s%s" (make_variant_name i name ~is_poly) (match args with Some [] | None -> "" | Some _ -> " _")
 
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
+  | OptionBoolChoice _
   | ChoiceIn { param = { label = None; _ }; _ }
   | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
 
-let match_variant_pattern i name args =
+let match_variant_pattern i name args ~is_poly =
   sprintf "%s%s"
-    (make_variant_name i name)
+    (make_variant_name i name ~is_poly)
     (match args with
      | Some [] | None -> ""
      | Some l ->
@@ -228,39 +231,53 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
-  | Choice (name,ctors) ->
+  | OptionBoolChoice(name, vars, _) -> 
+    output "begin match %s with" (make_param_name index name);
+    [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
+      output "| %s%s -> %s"
+      (make_variant_name i label ~is_poly:false)
+      (match vars with [] -> "" | l -> " (" ^String.concat "," (names_of_vars l) ^ ")")
+      (match vars with [] -> "()" | _ -> "");
+      inc_indent ();
+      List.iter (set_var index) vars;
+      dec_indent ()
+    end;
+    output "end;"
+  | Choice (name, ctors) ->
     output "begin match %s with" (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
       match ctor with
       | Simple (param,args) ->
         output "| %s%s -> %s"
-          (make_variant_name i param.label)
+          (make_variant_name i param.label ~is_poly:true)
           (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
           (match args with Some [] | None -> "()" | Some _ -> "");
         inc_indent ();
         List.iter (set_var index) (Option.default [] args);
         dec_indent ()
-      | Verbatim (n,_) -> output "| %s -> ()" (vname n)
+      | Verbatim (n,_) -> output "| %s -> ()" (vname n ~is_poly:true)
     end;
-    output "end;"
+    output "end;" 
 
 let rec eval_count_params vars =
-  let (static, all_choices) =
-    list_separate
-      (function
-        | Single _ -> `Left true
-        | SingleIn _ -> `Left false
-        | TupleList _ -> `Left true
-        | ChoiceIn { param; vars; _ } -> `Right (`ChoiceIn (param, vars))
-        | Choice (name,c) -> `Right (`Choice (name, c)))
-      vars
-  in
-  let choices, choices_in =
-    list_separate
-      (function
-        | `Choice (name, c) -> `Left (name, c)
-        | `ChoiceIn t -> `Right t)
-      all_choices
+  let (static, choices, bool_choices, choices_in) =
+    let classify_var = function
+      | Single _ | TupleList _ -> `Static true
+      | SingleIn _ -> `Static false
+      | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
+      | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
+      | Choice (name, c) -> `Choice (name, c)
+    in
+    let rec group_vars (static, choices, bool_choices, choices_in) = function
+      | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in)
+      | x::xs ->
+        match classify_var x with
+        | `Static v -> group_vars (v::static, choices, bool_choices, choices_in) xs
+        | `BoolChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
+        | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
+        | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
+    in
+    group_vars ([], [], [], []) vars
   in
   let static = string_of_int (List.length @@ List.filter (fun x -> x) static) in
   let choices_in =
@@ -276,6 +293,14 @@ let rec eval_count_params vars =
              (eval_count_params vars)) |>
       String.concat ""
   in
+  let bool_choices = match bool_choices with
+  | [] -> ""
+  | _ -> bool_choices |> List.mapi begin fun i ((param_id, vars)) ->
+    sprintf " + (match %s with %s -> 1 | %s -> 0)"
+      (make_param_name i param_id)
+      (match_variant_pattern i (Some "Some") (Some vars) ~is_poly:false)
+      (match_variant_pattern i (Some "None") None ~is_poly:false)
+  end |> String.concat "" in
   let choices =
     match choices with
     | [] -> ""
@@ -284,12 +309,15 @@ let rec eval_count_params vars =
       sprintf " + (match %s with " (make_param_name i name) ^
       (ctors |> List.mapi (fun i ctor ->
         match ctor with
-        | Verbatim (n,_) -> sprintf "%s -> 0" (vname n)
-        | Simple (param,args) -> sprintf "%s -> %s" (match_variant_pattern i param.label args) (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
+        | Verbatim (n,_) -> 
+          sprintf "%s -> 0" (vname n ~is_poly:true)
+        | Simple (param,args) -> 
+          sprintf "%s -> %s" (match_variant_pattern i param.label args ~is_poly:true) 
+            (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
   in
-  static ^ choices_in ^ choices
+  static ^ choices_in ^ choices ^ bool_choices
 
 let output_params_binder _ vars =
   output "let set_params stmt =";
@@ -306,6 +334,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
+      | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
@@ -385,7 +414,9 @@ let make_sql l =
     | Dynamic (name, ctors) :: tl ->
       if app then bprintf b " ^ ";
       bprintf b "(match %s with" (make_param_name 0 name);
-      ctors |> List.iteri (fun i (name,args,l) -> bprintf b " %s%s -> " (if i = 0 then "" else "| ") (match_variant_pattern i name.label args); loop false l);
+      ctors |> List.iteri (fun i ({ ctor; args; sql; is_poly }) -> 
+        bprintf b " %s%s -> " (if i = 0 then "" else "| ") 
+          (match_variant_pattern i ctor.label args ~is_poly:is_poly); loop false sql);
       bprintf b ")";
       loop true tl
     | SubstTuple (id, Insertion schema) :: tl ->
@@ -400,7 +431,7 @@ let make_sql l =
       bprintf b "%s ^ " (quote "(");
       Buffer.add_string b (gen_tuple_substitution label schema);
       bprintf b " ^ %s" (quote ")");
-      loop true tl  
+      loop true tl
   in
   Buffer.add_string b "(";
   loop false l;
@@ -450,7 +481,7 @@ let generate_stmt style index stmt =
       List.find_map
         (function
           | SubstTuple (id, Insertion _) -> Some id
-          | SubstTuple (_, Where_in _) -> None
+          | SubstTuple (_, Where_in _)
           | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ -> None)
         (get_sql stmt)
     with
@@ -458,7 +489,7 @@ let generate_stmt style index stmt =
     | Some id ->
     match id.label with
     | None -> failwith "empty label in tuple substitution"
-    | Some label -> sprintf {|( match %s with [] -> IO.return 0L | _ :: _ -> %s)|} label exec
+    | Some label -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = 0L } | _ :: _ -> %s)|} label exec
   in
   output "%s%s" bind exec;
   if style = `Fold then output "(fun () -> IO.return !r_acc)";

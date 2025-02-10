@@ -41,6 +41,7 @@ type res_expr =
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
+  | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -86,6 +87,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     match e with
     | ResAggValue e -> loop acc e
     | ResParam p -> Single p::acc
+    | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
+      OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun (_,l) -> List.fold_left loop acc l
@@ -108,6 +111,7 @@ let rec is_grouping = function
 | SelectExpr _
 | Inparam _
 | InTupleList _
+| OptionBoolChoices _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -174,7 +178,10 @@ let resolve_column_assignments ~env l =
     (* add equality on param and column type *)
     let equality typ expr = Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr]) in
     match expr with
-    | Choices (n,l) -> Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+    | Choices (n,l) ->
+      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+    | OptionBoolChoices ch ->
+      OptionBoolChoices { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
     | _ -> equality typ expr
   end
 
@@ -193,12 +200,12 @@ let _print_env env =
 let resolve_aggregations = 
   let rec handle ~is_agg res_expr = 
     match res_expr with
-    | ResFun (Agg, res) -> ResFun(Agg, List.map (handle ~is_agg:true) res)
+    | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
     | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
     | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
-    | ResValue _ | ResParam _ 
+    | ResValue _ | ResParam _  | ResOptionBoolChoice _
     | ResInparam _| ResChoices (_, _)
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
@@ -207,6 +214,19 @@ let resolve_aggregations =
 let update_schema_with_aliases all_schema final_schema = 
   let applied = all_schema |> List.filter (fun s1 -> List.for_all Schema.Source.Attr.(fun s2 -> s2.attr.name <> s1.attr.name) final_schema) in  
   applied @ final_schema
+
+let rec bool_choice_id = function
+  | Column _
+  | Inserted _
+  | SelectExpr _
+  | OptionBoolChoices _
+  | Choices _
+  | Value _ -> None 
+  | Inparam p
+  | Param p -> Some p.id
+  | Fun (_, exprs) -> List.find_map bool_choice_id exprs
+  | InTupleList (_, p) -> Some p
+  | InChoice(p, _, _) -> Some p
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
@@ -220,6 +240,13 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x
     | Column col -> ResValue (resolve_column ~env col).attr.domain
+    | OptionBoolChoices { choice; pos } ->
+      let choice_id = match bool_choice_id choice with
+      | Some choice_id -> choice_id
+      | None -> 
+        fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
+      in
+      ResOptionBoolChoice { res_choice = each choice; choice_id; pos }
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
@@ -235,6 +262,7 @@ let rec resolve_columns env expr =
         | ResInparam _
         | ResChoices _
         | ResInTupleList _
+        | ResOptionBoolChoice _
         | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
       ResInTupleList (param_id, Res res_exprs)
@@ -246,18 +274,52 @@ let rec resolve_columns env expr =
     | SelectExpr (select, usage) ->
       let rec params_of_var = function
         | Single p -> [ResParam p]
-        | SingleIn p -> [ResParam p]
-        | ChoiceIn { vars; _ } -> as_params vars
+        (* Better do not separate ChoiceIn and SingleIn , fix it subsequently *)
+        | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
+        | ChoiceIn { vars; param; kind } -> 
+          (* SingleIn is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here) *)
+          let rec extract_singlein acc = function
+          | [] -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
+           (* The rest vars are params contained in the left side part of the expression (before IN)  *)
+          | (SingleIn p) :: xs -> (p, List.rev_append acc xs)
+          | x :: xs -> extract_singlein (x :: acc) xs in
+          let (p, vars) = extract_singlein [] vars in
+          ResInChoice (param, kind, ResInparam p) :: as_params vars
         | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
+        | OptionBoolChoice ( p, _, _) -> failed  ~at:p.pos "BoolChoice isn't supported in Select"
         | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
       and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> ResFun (Type.Ret domain.t, as_params p) (* use nullable *)
+      | [ {domain;_} ], `AsValue ->
+        (* This function should be raised? *)
+        let rec with_count = function 
+          | Fun (Agg Count, _)
+          | SelectExpr (_, _) -> Some domain
+          | Fun (_, exprs) -> List.find_map with_count exprs
+          | Choices (_, chs) ->
+            List.fold_left (fun acc (_, e) -> match acc with
+              | None -> None
+              | Some _ -> Option.map_default with_count None e
+            ) (Some domain) chs
+          | OptionBoolChoices { choice; _ } -> with_count choice  
+          | Value _| Param _| Inparam _ | InChoice (_, _, _)
+          | Column _| Inserted _| InTupleList (_, _) -> None
+        in
+        let default_null = Type.make_nullable domain in
+        (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
+           Any other expression could possibly return no rows. *)
+        let typ = match select.select_complete.select with 
+        | ({ having = Some _; _ }, _) -> Type.nullable domain.t
+        | ({ columns = [Expr(c, _)]; _ }, _) -> c |> with_count |> Option.default default_null
+        | ({ columns = [_]; _ }, _) -> default_null
+        | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
+        in
+        ResFun (Type.Ret (typ), as_params p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret Any, as_params p)
+      | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
   in
   each expr
 
@@ -270,6 +332,14 @@ and assign_types env expr =
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
+    | ResOptionBoolChoice choice ->
+      let (res_choice, t) = typeof choice.res_choice in
+      let t =
+        match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
+        | None -> `Error "no common subtype for all choice branches"
+        | Some t -> `Ok t
+      in
+      ResOptionBoolChoice { choice with res_choice }, t
     | ResInTupleList (param_id, kind) -> 
       (match kind with 
       | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
@@ -334,15 +404,14 @@ and assign_types env expr =
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
           let args = List.map convert args in
           args, convert ret in
-
+        (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
+        let consider_groupping typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
-        | Agg, [typ] ->
-          (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
-          let typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
-          typ, types
-        | Group typ, _ -> typ, types
-        | Agg, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
+        | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
+        | Agg Avg, [_] -> consider_groupping @@ nullable Float, types
+        | Agg Self, [typ] -> consider_groupping typ, types
+        | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Coalesce (ret, each_arg) , _ -> 
           let args = types_to_arg each_arg in
@@ -359,14 +428,14 @@ and assign_types env expr =
           let args, ret = convert_args ret args in
           let nullable = common_nullability args in
           undepend ret nullable, args
-        | Ret Any, _ -> (* lame *)
+        | Ret t, _ when is_any t -> (* lame *)
           begin match common_supertype types with
           | Some t -> t, List.map (fun _ -> t) types
           | None -> { t = Any; nullability = common_nullability types }, types
           end
         | Ret ret, _ ->
-          let nullability = common_nullability types in
-          { t = ret; nullability; }, types (* ignoring arguments FIXME *)
+          let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
+          { ret with nullability }, types (* ignoring arguments FIXME *)
         | Comparison, _  ->
           if set_tyvar_strict then 
             let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
@@ -442,7 +511,7 @@ and do_join (env,params) ((schema1,params1,_tables),join_type,join_cond) =
   let env = { env with schema } in
   let p = match join_cond with
   | Default | Natural | Using _ -> []
-  | On e -> get_params env e (* TODO should use final schema (same as tables)? *)
+  | On e -> get_params { env with set_tyvar_strict = true } e (* TODO should use final schema (same as tables)? *)
   in
   env, params @ params1 @ p
 
@@ -481,6 +550,7 @@ and ensure_res_expr = function
   | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
   | Fun (x,l) -> ResFun (x,List.map ensure_res_expr l) (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
+  | OptionBoolChoices _ -> failwith  "BoolChoice is used in WHERE expr only"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
@@ -569,7 +639,7 @@ and eval_cte { cte_items; is_recursive } =
         eval_compound ~env:{ env with tables = env.tables } (p1, s1, cardinality, cte.stmt))
     in
     let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
-    (tbl_name, from_schema s2) :: acc_ctes, p1 @ acc_vars end
+    (tbl_name, from_schema s2) :: acc_ctes, acc_vars @ p1 end
   ([], []) cte_items  
 
 and eval_compound ~env result = 
@@ -705,8 +775,7 @@ let rec eval (stmt:Sql.stmt) =
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
-    let columns = List.map (fun tn -> AllOf tn) targets in
-    let select = ({ columns; from = Some tables; where; group = []; having = None }, []) in
+    let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
     let select_complete = { select; order = []; limit = None} in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
@@ -725,9 +794,9 @@ let rec eval (stmt:Sql.stmt) =
     let f, s = Tables.get table in
 
     let r = List.map (fun attr -> {Schema.Source.Attr.attr; sources=[f] }) s in
-
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
-    let p3 = params_of_order o [] { empty_env with tables = [(f, s)] } in
+    let env = { empty_env with schema = update_schema_with_aliases [] r } in
+    let p3 = params_of_order o [] { env with tables = [(f, s)] } in
     [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
@@ -764,9 +833,12 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ; } -> remember id.label typ
+  | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
+  | OptionBoolChoice (p, l, _) ->
+    check_choice_name p;
+    List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
@@ -778,6 +850,7 @@ let unify_params l =
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
+  | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in

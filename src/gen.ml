@@ -70,10 +70,17 @@ let choose_name props kind index =
 
 type sql =
     Static of string
-  | Dynamic of (Sql.param_id * (Sql.param_id * Sql.var list option * sql list) list)
+  | Dynamic of Sql.param_id * sql_dynamic_ctor list 
   | SubstIn of Sql.param
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
+
+and sql_dynamic_ctor = { 
+  ctor: Sql.param_id; 
+  args: Sql.var list option; 
+  sql: sql list;
+  is_poly: bool;
+}
 
 let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
@@ -115,15 +122,16 @@ let substitute_vars s vars subst_param =
           let (c1,c2) = ctor.pos in
           assert ((c2 = 0 && c1 = 1) || c2 > c1);
           assert (c1 > i);
-          let pieces =
+          let sql =
             match args with
             | None -> [Static ""]
             | Some l ->
               let (acc,last) = loop [] c1 0 l in
               List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
           in
-          ctor, args, pieces
-        | Verbatim (n,v) -> { label = Some n; pos = (0,0) }, Some [], [Static v]
+          { ctor; sql; args; is_poly=true }
+        | Verbatim (n,v) ->
+          { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
         end
       in
       let (i1,i2) = name.pos in
@@ -137,6 +145,26 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop acc i2 parami tl
+    (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
+    | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
+      assert ((c2 = 0 && c1 = 1) || c2 > c1);
+      assert (c1 > i);
+      let pieces =
+        let (acc, last) = loop [] c1 0 vars in
+        let s = 
+          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) in
+          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let args = Some(vars) in
+          {ctor; args; sql; is_poly=false} in
+        let n = 
+          let sql = Static " TRUE " in
+          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let args = None in
+          {ctor; args; sql=[sql]; is_poly=false} in
+        [s; n]
+      in
+      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
+      loop acc f2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
   let acc = List.rev (Static (String.slice ~first:last s) :: acc) in
@@ -210,6 +238,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
+      | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
     l
@@ -226,6 +255,7 @@ let rec params_only l =
       | Sql.Single p -> [p]
       | SingleIn _ -> []
       | ChoiceIn { vars; _ } -> params_only vars
+      | OptionBoolChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
       | TupleList _ -> [])
     l
