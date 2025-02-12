@@ -115,7 +115,7 @@ let quote_comment_inline str =
   replace_all ~str ~sub:"(*" ~by:"( *"
 
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
-let comment () fmt = Printf.kprintf (indent_endline $ make_comment) fmt
+let comment () fmt = Printf.ksprintf (indent_endline $ make_comment) fmt
 
 let empty_line () = print_newline ()
 
