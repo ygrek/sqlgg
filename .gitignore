@@ -7,5 +7,6 @@ sqlgg.cgi
 /src/version.ml
 /src/version_release.ml
 *.html
+src/cli.exe
 # vim
 *.swp
