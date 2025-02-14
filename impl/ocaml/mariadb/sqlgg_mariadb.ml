@@ -198,7 +198,8 @@ type 'a connection = M.t
 type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
 type result = M.Res.t
-type execute_response = { affected_rows: int64; insert_id: int64 option }
+type execute_response = { affected_rows: int64; insert_id: int64 }
+type maybe_insert_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = Types
 
@@ -289,13 +290,22 @@ let execute db sql set_params =
   with_stmt db sql @@ fun stmt ->
   let open IO in
   set_params stmt >>=
-  fun res -> 
-    let insert_id =
-      match M.Res.insert_id res with
-      | 0 -> None
-      | x -> Some (Int64.of_int x)
-    in
-    return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id }
+  fun res ->
+    return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id = Int64.of_int (M.Res.insert_id res) }
+
+let insert db sql set_params =
+  let open IO in
+  execute db sql set_params >>= fun response ->
+  if Int64.equal response.insert_id 0L then
+    oops "insert has no insert_id"
+  else
+    return response
+
+let maybe_insert db sql set_params =
+  let open IO in
+  execute db sql set_params >>= fun { affected_rows; insert_id } ->
+  let maybe_insert_id = if Int64.equal insert_id 0L then None else Some insert_id in
+  return { affected_rows; maybe_insert_id }
 
 let select_one_maybe db sql set_params convert =
   with_stmt db sql @@ fun stmt ->
