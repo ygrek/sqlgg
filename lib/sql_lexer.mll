@@ -318,7 +318,6 @@ ruleMain = parse
   | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
-  | "^@" "'"  {  keep_lexeme_start lexbuf (fun () -> ENUM_LITERAL (ruleInSingleQuotes "" lexbuf)) }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
   | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }

@@ -103,7 +103,7 @@ let main () =
     "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), "only output short static header without version/timestamp";
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
-    "-type-safe-enums", Arg.Unit (fun () -> Sqlgg_config.type_safe_enums := true), " Represent enums as variants in generated code";
+    "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
