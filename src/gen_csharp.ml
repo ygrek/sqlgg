@@ -42,7 +42,8 @@ let as_api_type t =
   | Decimal -> "Decimal"
   | Datetime -> "Datetime"
   | Any -> "String"
-  | Enum _
+  | Union _
+  | StringLiteral _ -> "String"
   | Unit _ -> assert false
 
 let as_lang_type = as_api_type

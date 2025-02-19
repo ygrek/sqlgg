@@ -44,7 +44,6 @@ type res_expr =
   | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
   | ResAggValue of res_expr
   | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
-  | ResEnumCtorValue of enum_ctor_value_data
   [@@deriving show]
   
 and res_in_tuple_list = 
@@ -99,7 +98,6 @@ let rec get_params_of_res_expr (e:res_expr) =
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
     | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
-    | ResEnumCtorValue { ctor_name; pos } -> EnumCtor (ctor_name, pos) :: acc
   in
   loop [] e |> List.rev
 
@@ -116,7 +114,6 @@ let rec is_grouping = function
 | Inparam _
 | InTupleList _
 | OptionBoolChoices _
-| EnumCtor _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -211,7 +208,7 @@ let resolve_aggregations =
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
     | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
     | ResValue _ | ResParam _  | ResOptionBoolChoice _
-    | ResInparam _| ResChoices (_, _) | ResEnumCtorValue _
+    | ResInparam _| ResChoices (_, _)
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
   handle ~is_agg:false 
@@ -226,8 +223,7 @@ let rec bool_choice_id = function
   | SelectExpr _
   | OptionBoolChoices _
   | Choices _
-  | EnumCtor _
-  | Value _ -> None 
+  | Value _ -> None
   | Inparam p
   | Param p -> Some p.id
   | Fun (_, exprs) -> List.find_map bool_choice_id exprs
@@ -245,7 +241,6 @@ let rec resolve_columns env expr =
   let rec each e =
     match e with
     | Value x -> ResValue x
-    | EnumCtor { ctor_name; pos } -> ResEnumCtorValue { ctor_name; pos; }
     | Column col -> ResValue (resolve_column ~env col).attr.domain
     | OptionBoolChoices { choice; pos } ->
       let choice_id = match bool_choice_id choice with
@@ -265,7 +260,6 @@ let rec resolve_columns env expr =
         | ResValue _
         | ResParam _
         | ResAggValue _
-        | ResEnumCtorValue _ -> res_expr
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -282,7 +276,6 @@ let rec resolve_columns env expr =
     | SelectExpr (select, usage) ->
       let rec params_of_var = function
         | Single p -> [ResParam p]
-        | EnumCtor (ctor_name, pos) -> [ResEnumCtorValue { ctor_name; pos }]
         (* Better do not separate ChoiceIn and SingleIn , fix it subsequently *)
         | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
         | ChoiceIn { vars; param; kind } -> 
@@ -314,7 +307,7 @@ let rec resolve_columns env expr =
               | Some _ -> Option.map_default with_count None e
             ) (Some domain) chs
           | OptionBoolChoices { choice; _ } -> with_count choice  
-          | Value _| Param _| Inparam _ | InChoice (_, _, _) | EnumCtor _
+          | Value _| Param _| Inparam _ | InChoice (_, _, _)
           | Column _| Inserted _| InTupleList (_, _) -> None
         in
         let default_null = Type.make_nullable domain in
@@ -339,7 +332,6 @@ and assign_types env expr =
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
-    | ResEnumCtorValue { ctor_name; _ } as r -> r, `Ok Type.(strict (Enum (Enum_kind.Ctors.of_list [ctor_name])))
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
     | ResOptionBoolChoice choice ->
@@ -551,7 +543,6 @@ and params_of_order order final_schema env =
 
 and ensure_res_expr = function
   | Value x -> ResValue x
-  | EnumCtor { ctor_name; pos } -> ResEnumCtorValue { ctor_name; pos }
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
   | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
@@ -884,7 +875,7 @@ let unify_params l =
     check_choice_name p;
     List.iter traverse l
   | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
-  | TupleList _ | EnumCtor _ -> ()
+  | TupleList _ -> ()
   in
   let rec map = function
   | Single { id; typ; } ->
@@ -897,7 +888,6 @@ let unify_params l =
   | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
-  | EnumCtor _ as x -> x
   in
   List.iter traverse l;
   List.map map l

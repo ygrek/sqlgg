@@ -25,7 +25,7 @@
 %}
 
 %token <int> INTEGER
-%token <string> IDENT TEXT BLOB ENUM_LITERAL
+%token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
 %token <int> LCURLY RCURLY
@@ -425,7 +425,6 @@ expr:
     | LPAREN e=expr RPAREN { e }
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
-    | ctor_name=ENUM_LITERAL { EnumCtor { ctor_name; pos=($startofs, $endofs) }}
     | v=literal_value | v=datetime_value { v }
     | v=interval_unit { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
@@ -441,8 +440,7 @@ expr:
         InTupleList(names, p)
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=param { Param (new_param p (depends Any)) }
-    | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
+    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
     | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -482,6 +480,7 @@ values_stmt1:
 
 values_stmt: 
   | kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit;}}
+  
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:
@@ -514,7 +513,7 @@ choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
 
 strict_value:
-    | TEXT collate? { Text }
+    | TEXT { StringLiteral $1 }
     | BLOB collate? { Blob }
     | INTEGER { Int }
     | FLOAT { Float }
