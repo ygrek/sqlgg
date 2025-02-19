@@ -42,7 +42,8 @@ let as_lang_type t =
   | Bool -> "boolean"
   | Decimal -> "float" (* BigDecimal? *)
   | Datetime -> "Timestamp"
-  | Enum _
+  | StringLiteral _ -> "String"
+  | Union _
   | Unit _ -> assert false
 
 let as_api_type = String.capitalize_ascii $ as_lang_type
