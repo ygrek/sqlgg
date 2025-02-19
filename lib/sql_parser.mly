@@ -25,7 +25,7 @@
 %}
 
 %token <int> INTEGER
-%token <string> IDENT TEXT BLOB ENUM_LITERAL
+%token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
 %token <int> LCURLY RCURLY
@@ -425,7 +425,6 @@ expr:
     | LPAREN e=expr RPAREN { e }
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
-    | ctor_name=ENUM_LITERAL { EnumCtor { ctor_name; pos=($startofs, $endofs) }}
     | v=literal_value | v=datetime_value { v }
     | v=interval_unit { v }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }

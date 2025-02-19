@@ -212,7 +212,6 @@ let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
   | OptionBoolChoice _
   | ChoiceIn { param = { label = None; _ }; _ }
-  | EnumCtor _ -> "_"
   | TupleList _ -> "_"
   | ChoiceIn { param = { label = Some s; _ }; _ } -> s
 
@@ -283,7 +282,6 @@ let rec eval_count_params vars =
   let (static, choices, bool_choices, choices_in) =
     let classify_var = function
       | Single _ | TupleList _ -> `Static true
-      | EnumCtor _ -> `No
       | SingleIn _ -> `Static false
       | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
       | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
@@ -357,7 +355,7 @@ let rec exclude_in_vars l =
       | SingleIn _ -> None
       | Single _ as v -> Some v
       | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
-      | TupleList _ | EnumCtor _ -> None
+      | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
         Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
