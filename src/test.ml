@@ -864,7 +864,23 @@ let test_enum_literal () =
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string
     [attr' ~extra:[NotNull; WithDefault] "status" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))]
-    stmt6.schema
+    stmt6.schema;
+
+  ignore @@ wrong {|INSERT INTO test36 VALUES('deleteddd')|} ;
+  ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'a', 'b')))|} ;
+
+  let stmt7 = parse {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'active')))|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt7.schema;
+
+  ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'b')))|};
+  ignore @@ wrong {|INSERT INTO test36 VALUES(CONCAT(''))|};
+
+  ignore @@ wrong {|SELECT * FROM test36 WHERE status = 'activee'|};
+
+  let stmt8 = parse {|SELECT CONCAT(status, 'test') AS named FROM test36 WHERE status = 'active'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[] "named" Text]
+    stmt8.schema
 
 let run () =
   Gen.params_mode := Some Named;
