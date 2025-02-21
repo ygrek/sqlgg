@@ -20,6 +20,14 @@ module type Value = sig
   val to_literal : t -> string
 end
 
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 module type FNS = sig
   (* all types intended for subsitution *)
   type params
@@ -29,7 +37,6 @@ module type FNS = sig
   type statement
   type row
   type execute_response
-  type maybe_insert_response
 
   val finish_params : params -> result io_future
 
@@ -57,20 +64,6 @@ module type FNS = sig
     @raise Oops on error
   *)
   val execute : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
-
-  (* execute but an insert: raise if [insert_id] is 0 *)
-  val insert : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
-
-  (* insert but with special clause ON CONFLICT which might make it not insert *)
-  val maybe_insert : [>`WR] connection -> string -> (statement -> result io_future) -> maybe_insert_response io_future
-end
-
-module type Enum = sig 
-  type t
-
-  val inj: string -> t
-
-  val proj: t -> string
 end
 
 module type M = sig
@@ -80,8 +73,7 @@ module type M = sig
   type params
   type row
   type result
-  type execute_response = { affected_rows: int64; insert_id: int64 }
-  type maybe_insert_response = { affected_rows: int64; maybe_insert_id: int64 option }
+  type execute_response = { affected_rows: int64; insert_id: int64 option }
 
   (** datatypes *)
   module Types : sig
@@ -133,6 +125,14 @@ module type M = sig
   val set_param_Decimal : params -> Decimal.t -> unit
   val set_param_Datetime : params -> Datetime.t -> unit
 
+  module Make_enum: functor (E : Enum) -> sig
+    (* The type itself is not exposed to provide a user a polymorphic type without aliases. *)
+    val get_column : row -> int -> E.t
+    val get_column_nullable : row -> int -> E.t option
+    val set_param : params -> E.t -> unit
+    val to_literal : E.t -> string
+  end
+
   include FNS
     with type params := params
     with type result := result
@@ -141,7 +141,6 @@ module type M = sig
     with type statement := statement
     with type row := row
     with type execute_response := execute_response
-    with type maybe_insert_response := maybe_insert_response
 
 end
 
@@ -159,6 +158,5 @@ module type M_io = sig
     with type statement := statement
     with type row := row
     with type execute_response := execute_response
-    with type maybe_insert_response := maybe_insert_response
 
 end
