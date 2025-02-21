@@ -38,8 +38,8 @@ struct
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
     let show_kind = function 
-      | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat ", " (Enum_kind.Ctors.elements ctors))
-      (* | StringLiteral l -> sprintf "StringLiteral (%s)" l *)
+      | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
+      | StringLiteral l -> sprintf "StringLiteral (%s)" l
       | k -> show_kind k
 
   type nullability =
