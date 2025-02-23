@@ -16,3 +16,5 @@ let debug1 () = !debug_level > 0
 let gen_header : [ `Full | `Without_timestamp | `Static ] option ref = ref (Some `Full)
 
 let include_category : [ `All | `None | `Only of Stmt.category list | `Except of Stmt.category list ] ref = ref `All
+
+let enum_as_poly_variant = ref false

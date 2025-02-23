@@ -181,6 +181,7 @@ let substitute_vars s vars subst_param =
   in
   squash [] acc
 
+
 let subst_named index p = "@" ^ (show_param_name p index)
 let subst_oracle index p = ":" ^ (show_param_name p index)
 let subst_postgresql index _ = "$" ^ string_of_int (index + 1)

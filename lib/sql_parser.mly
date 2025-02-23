@@ -440,8 +440,7 @@ expr:
         InTupleList(names, p)
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=param { Param (new_param p (depends Any)) }
-    | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
+    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
     | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -481,6 +480,7 @@ values_stmt1:
 
 values_stmt: 
   | kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit;}}
+  
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:
@@ -513,7 +513,7 @@ choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
 
 strict_value:
-    | TEXT collate? { Text }
+    | TEXT { StringLiteral $1 }
     | BLOB collate? { Blob }
     | INTEGER { Int }
     | FLOAT { Float }
@@ -555,7 +555,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }
-               | ENUM sequence(TEXT) charset? collate? { Text }
+               | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
                | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }

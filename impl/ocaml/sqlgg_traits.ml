@@ -20,6 +20,14 @@ module type Value = sig
   val to_literal : t -> string
 end
 
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 module type M = sig
 
   type statement
@@ -79,6 +87,14 @@ module type M = sig
   val set_param_Float : params -> Float.t -> unit
   val set_param_Decimal : params -> Decimal.t -> unit
   val set_param_Datetime : params -> Datetime.t -> unit
+
+  module Make_enum: functor (E : Enum) -> sig
+    (* The type itself is not exposed to provide a user a polymorphic type without aliases. *)
+    val get_column : row -> int -> E.t
+    val get_column_nullable : row -> int -> E.t option
+    val set_param : params -> E.t -> unit
+    val to_literal : E.t -> string
+  end
 
   val no_params : statement -> result
 
