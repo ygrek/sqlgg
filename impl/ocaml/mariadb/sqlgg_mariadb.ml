@@ -24,6 +24,14 @@ module type Value = sig
   val to_literal : t -> string
 end
 
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 module type Types = sig
   type field
   type value
@@ -36,6 +44,7 @@ module type Types = sig
   module Datetime : Value
   module Decimal : Value
   module Any : Value
+  module Make_enum : functor (E : Enum) -> Value with type t = E.t
 end
 
 module Default_types(M : Mariadb.Nonblocking.S) : Types with
@@ -183,6 +192,20 @@ struct
     let to_value x = x
     let to_literal _ = failwith "to_literal Any"
   end)
+
+  module Make_enum (E: Enum) = Make(struct
+  
+    include E
+  
+    let of_field field = 
+      match M.Field.value field with
+      | `String x -> inj x
+      | value -> convfail "enum" field value
+  
+    let to_value v = `String (proj v)
+  
+    let to_literal = proj
+  end)
 end
 
 module Make
@@ -257,6 +280,19 @@ let set_param_Int = set_param_ty Int.to_value
 let set_param_Float = set_param_ty Float.to_value
 let set_param_Decimal = set_param_ty Decimal.to_value
 let set_param_Datetime = set_param_ty Datetime.to_value
+
+module Make_enum (E: Enum) = struct 
+
+  module E = Make_enum(E)
+
+  type t = E.t
+
+  let get_column, get_column_nullable = get_column_ty "Enum" E.of_field
+
+  let set_param = set_param_ty E.to_value
+
+  let to_literal = E.to_literal
+end
 
 let no_params stmt =
   let open IO in

@@ -119,21 +119,41 @@ let comment () fmt = Printf.kprintf (indent_endline $ make_comment) fmt
 
 let empty_line () = print_newline ()
 
+let enums_hash_tbl = Hashtbl.create 100
+
+let enum_get_hash ctors = Type.Enum_kind.Ctors.elements ctors |> String.concat "_"
+
+let enum_name = Printf.sprintf "Enum_%d"
+
+let get_enum_name ctors = ctors |> enum_get_hash |> Hashtbl.find enums_hash_tbl |> fst |> enum_name
+
 module L = struct
   open Type
 
   let as_lang_type = function
   | { t = Blob; nullability } -> type_name { t = Text; nullability }
-  | t -> type_name t
+  | { t = StringLiteral _; nullability } -> type_name { t = Text; nullability }
+  | { t = Unit _; _ }
+  | { t = Int; _ }
+  | { t = Text; _ }
+  | { t = Float; _ }
+  | { t = Bool; _ }
+  | { t = Datetime; _ }
+  | { t = Decimal; _ }
+  | { t = Union _; _ }
+  | { t = Any; _ } as t -> type_name t
 
   let as_api_type = as_lang_type
 end
 
 let get_column index attr =
-  sprintf "(T.get_column_%s%s stmt %u)"
-    (L.as_lang_type attr.domain)
-    (if is_attr_nullable attr then "_nullable" else "")
-    index
+  let rec print_column attr = match attr with
+  | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
+    sprintf "(%s.get_column%s" (get_enum_name ctors)
+  | { domain={ t = Union _; _ }; _ } as c -> print_column { c with domain = { c.domain with t = Text } }
+  | _ -> sprintf "(T.get_column_%s%s" (L.as_lang_type attr.domain) in 
+  let column = print_column attr (if is_attr_nullable attr then "_nullable" else "") in 
+  sprintf "%s stmt %u)" column index
 
 module T = Translate(L)
 
@@ -188,9 +208,6 @@ let make_variant_name i name ~is_poly =
 
 let vname n = make_variant_name 0 (Some n)
 
-let match_variant_wildcard i name args ~is_poly =
-  sprintf "%s%s" (make_variant_name i name ~is_poly) (match args with Some [] | None -> "" | Some _ -> " _")
-
 let match_arg_pattern = function
   | Sql.Single _ | SingleIn _ | Choice _
   | OptionBoolChoice _
@@ -208,20 +225,22 @@ let match_variant_pattern i name args ~is_poly =
      | l when List.for_all ((=) "_") l -> " _"
      | l -> sprintf " (%s)" (String.concat ", " l))
 
-let set_param index param =
+let rec set_param index param =
   let nullable = is_param_nullable param in
   let pname = show_param_name param index in
   let ptype = show_param_type param in
-  if nullable then
-    output "begin match %s with None -> T.set_param_null p | Some v -> T.set_param_%s p v end;" pname ptype
-  else
-    output "T.set_param_%s p %s;" ptype pname
-
+  let set_param_nullable = output "begin match %s with None -> T.set_param_null p | Some v -> %s p v end;" pname in
+  match param with
+  | { typ = { t=Union _; _}; _ } as c when not !Sqlgg_config.enum_as_poly_variant -> set_param index { c with typ = { c.typ with t = Text } }
+  | { typ = { t=Union {ctors; _}; _}; _ } when nullable -> set_param_nullable @@ (get_enum_name ctors) ^ ".set_param" 
+  | { typ = { t=Union {ctors; _}; _ }; _ } -> output "%s.set_param p %s;" (get_enum_name ctors) pname
+  | param' when nullable -> set_param_nullable @@ sprintf "T.set_param_%s" (show_param_type param') 
+  | _ -> output "T.set_param_%s p %s;" ptype pname
+  
 let rec set_var index var =
   match var with
   | Single p -> set_param index p
-  | SingleIn _ -> ()
-  | TupleList _ -> ()
+  | SingleIn _ | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
     output "begin match %s with" (make_param_name index name);
     output "| [] -> ()";
@@ -276,6 +295,7 @@ let rec eval_count_params vars =
         | `BoolChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
         | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
         | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
+        | `No ->  group_vars (static, choices, bool_choices, choices_in) xs
     in
     group_vars ([], [], [], []) vars
   in
@@ -350,12 +370,17 @@ let output_params_binder index vars =
   | [] -> "T.no_params"
   | vars -> output_params_binder index vars
 
-let in_var_module _label typ = Sql.Type.type_name typ
+
+let make_to_literal =
+  let rec go domain = match domain with 
+    | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
+    | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
+    | t -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t) in go
 
 let gen_in_substitution var =
   if Option.is_none var.id.label then failwith "empty label in IN param";
-  sprintf {code| "(" ^ String.concat ", " (List.map T.Types.%s.to_literal %s) ^ ")"|code}
-    (in_var_module (Option.get var.id.label) var.typ)
+  sprintf {code| "(" ^ String.concat ", " (List.map %s %s) ^ ")"|code}
+    (make_to_literal var.typ)
     (Option.get var.id.label)
 
 let gen_tuple_printer ~is_row _label schema =
@@ -371,7 +396,7 @@ let gen_tuple_printer ~is_row _label schema =
         let { name; domain; _ } = attr in
         (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
         sprintf {|Buffer.add_string _sqlgg_b (%s);|}
-          (let to_literal = sprintf "T.Types.%s.to_literal %s" (in_var_module name domain) in
+          (let to_literal = sprintf "%s %s" (make_to_literal domain) in
            if is_attr_nullable attr then 
            (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
            else to_literal name))
@@ -510,6 +535,80 @@ let generate_stmt style index stmt =
   dec_indent ();
   empty_line ()
 
+let sanitize_to_variant_name s =
+  let normalized =
+    let open String in
+    s 
+    |> lowercase_ascii
+    |> map (function 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' as c -> c | _ -> '_')
+    |> capitalize_ascii
+  in match normalized.[0] with
+    | '0'..'9' -> "Num_" ^ normalized
+    | _ -> normalized
+
+let generate_enum_modules stmts = 
+  let open Sql.Type.Enum_kind in
+
+  let schemas = List.concat_map (fun stmt -> stmt.Gen.schema) stmts in
+  let vars = List.concat_map (fun stmt -> stmt.Gen.vars) stmts in
+
+  let get_enum typ = match typ.Sql.Type.t with 
+    | Union { ctors; _ } -> Some ctors
+    | Unit _ | Int | Text | Blob | Float | Bool  | Datetime | Decimal | Any | StringLiteral  _ -> None
+  in
+
+  let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in
+
+  let rec vars_to_enums vars = List.concat_map (function
+    | Single { typ; _ }
+    | SingleIn { typ; _ } -> typ |> get_enum |> option_list
+    | OptionBoolChoice (_, vars, _)
+    | ChoiceIn { vars; _ } -> vars_to_enums vars
+    | Choice (_, ctor_list) -> 
+      List.concat_map ( function
+        | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
+        | Verbatim _ -> []
+      ) ctor_list
+    | TupleList (_, ( Where_in types | ValueRows { types; _ } )) -> 
+      List.concat_map (fun typ -> typ |> get_enum |> option_list) types
+    | TupleList (_, Insertion schema) -> schemas_to_enums schema
+  ) vars in
+
+  Hashtbl.reset enums_hash_tbl;
+  
+  let generate_enum_module enum_count enum = 
+    let get_ctor_name x = x |> sanitize_to_variant_name |> vname ~is_poly:true in
+    let ctor_list = Ctors.elements enum in
+    output {|
+    module %s = T.Make_enum(struct
+      type t = [%s]
+      let inj = function %s | s -> failwith (Printf.sprintf "Invalid enum value: %%s" s)
+      let proj = function  %s
+    end)
+    |}
+    (enum_name enum_count)
+    (ctor_list |> List.map get_ctor_name |> String.concat " | ")
+    (String.concat " "
+    (List.map (fun ctor -> Printf.sprintf "| \"%s\" -> %s" (String.escaped ctor) (get_ctor_name ctor)) ctor_list))
+    (String.concat "" 
+    (List.map (fun ctor -> Printf.sprintf "| %s -> \"%s\"" (get_ctor_name ctor) (String.escaped ctor)) ctor_list))
+  in
+
+  indented (fun () -> 
+    let result = schemas_to_enums schemas @ vars_to_enums vars in
+    let (_: int * unit list) = List.fold_left_map begin fun acc enum -> 
+      let hash = enum_get_hash enum in
+      if Hashtbl.mem enums_hash_tbl hash then acc, ()
+      else begin
+        Hashtbl.add enums_hash_tbl hash (acc, enum);
+        acc + 1, begin empty_line (); generate_enum_module acc enum end
+      end
+    end 0 result in 
+    ()
+  )
+
+let generate_enum_modules stmts = if !Sqlgg_config.enum_as_poly_variant then generate_enum_modules stmts
+  
 let generate ~gen_io name stmts =
 (*
   let types =
@@ -525,6 +624,7 @@ let generate ~gen_io name stmts =
   empty_line ();
   inc_indent ();
   output "module IO = %s" io;
+  generate_enum_modules stmts;
   empty_line ();
   List.iteri (generate_stmt `Direct) stmts;
   output "module Fold = struct";

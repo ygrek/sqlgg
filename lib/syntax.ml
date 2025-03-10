@@ -31,6 +31,8 @@ module Tables_with_derived = struct
   let get_from ~env name = get_from  (env.ctes @ env.tables) name
 end
 
+type enum_ctor_value_data = { ctor_name: string; pos: pos; }  [@@deriving show]
+
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
   | ResValue of Type.t (** literal value *)
@@ -221,7 +223,7 @@ let rec bool_choice_id = function
   | SelectExpr _
   | OptionBoolChoices _
   | Choices _
-  | Value _ -> None 
+  | Value _ -> None
   | Inparam p
   | Param p -> Some p.id
   | Fun (_, exprs) -> List.find_map bool_choice_id exprs

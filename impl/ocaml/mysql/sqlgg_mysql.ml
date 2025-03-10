@@ -126,6 +126,15 @@ type result = P.stmt_result
 type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = T
+
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 open Types
 
 (* compatibility *)
@@ -177,6 +186,17 @@ let set_param_Int = set_param_ty Int.to_string
 let set_param_Float = set_param_ty Float.to_string
 let set_param_Decimal = set_param_ty Decimal.to_string
 let set_param_Datetime = set_param_ty Datetime.to_string
+
+module Make_enum (E: Enum) = struct 
+
+  include E
+
+  let get_column, get_column_nullable = get_column_ty "Enum" E.inj
+
+  let set_param = set_param_ty E.proj
+
+  let to_literal = E.proj
+end
 
 let no_params stmt = P.execute stmt [||]
 
