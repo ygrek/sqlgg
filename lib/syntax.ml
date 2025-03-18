@@ -89,7 +89,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResAggValue e -> loop acc e
-    | ResSelect (_, p) -> p @ acc
+    | ResSelect (_, p) -> (List.rev p) @ acc
     | ResParam p -> Single p::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
