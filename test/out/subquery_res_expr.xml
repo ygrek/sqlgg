@@ -1,0 +1,73 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_tbl_1" sql="CREATE TABLE tbl_1 (&#x0A;    col_1_1 INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col_1_2 VARCHAR(100) NOT NULL,&#x0A;    col_1_3 VARCHAR(50) NOT NULL,&#x0A;    col_1_4 FLOAT DEFAULT 0.0,&#x0A;    col_1_5 BOOLEAN DEFAULT FALSE&#x0A;) ENGINE=InnoDB" category="DDL" kind="create" target="tbl_1" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl_2" sql="CREATE TABLE tbl_2 (&#x0A;    col_2_1 INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col_2_2 INT NOT NULL,&#x0A;    col_2_3 DATE NOT NULL,&#x0A;    col_2_4 VARCHAR(20) NOT NULL&#x0A;) ENGINE=InnoDB" category="DDL" kind="create" target="tbl_2" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_tbl_3" sql="CREATE TABLE tbl_3 (&#x0A;    col_3_1 INT AUTO_INCREMENT PRIMARY KEY,&#x0A;    col_3_2 INT NOT NULL,&#x0A;    col_3_3 INT NOT NULL,&#x0A;    col_3_4 INT DEFAULT 1,&#x0A;    col_3_5 FLOAT DEFAULT 0.0,&#x0A;    FOREIGN KEY (col_3_2) REFERENCES tbl_2(col_2_1) ON DELETE CASCADE,&#x0A;    FOREIGN KEY (col_3_3) REFERENCES tbl_1(col_1_1) ON DELETE CASCADE&#x0A;) ENGINE=InnoDB" category="DDL" kind="create" target="tbl_3" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_3" sql="SELECT col_1_2, col_1_3, col_1_4 &#x0A;FROM tbl_1&#x0A;WHERE col_1_1 IN (&#x0A;    SELECT col_1_1 &#x0A;    FROM tbl_1&#x0A;    WHERE {TODO dynamic choice}&#x0A;)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="col_1_2" type="Text"/>
+   <value name="col_1_3" type="Text"/>
+   <value name="col_1_4" type="Float" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="select_4" sql="SELECT t2.col_2_1, t2.col_2_4&#x0A;FROM tbl_2 t2&#x0A;WHERE col_2_1 IN (&#x0A;    SELECT col_2_1 &#x0A;    FROM tbl_2&#x0A;    WHERE {TODO dynamic choice}&#x0A;)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="col_2_1" type="Int"/>
+   <value name="col_2_4" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="select_5" sql="SELECT t1.col_1_2, t1.col_1_3, t1.col_1_4&#x0A;FROM tbl_1 t1&#x0A;WHERE t1.col_1_1 IN (&#x0A;    SELECT col_1_1&#x0A;    FROM tbl_1&#x0A;    WHERE {TODO dynamic choice}&#x0A;)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="col_1_2" type="Text"/>
+   <value name="col_1_3" type="Text"/>
+   <value name="col_1_4" type="Float" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="select_6" sql="SELECT t2.col_2_1, t2.col_2_2, t2.col_2_4&#x0A;FROM tbl_2 t2&#x0A;WHERE t2.col_2_1 IN (&#x0A;    SELECT t2.col_2_1&#x0A;    FROM tbl_2&#x0A;    WHERE {TODO dynamic choice}&#x0A;)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="col_2_1" type="Int"/>
+   <value name="col_2_2" type="Int"/>
+   <value name="col_2_4" type="Text"/>
+  </out>
+ </stmt>
+ <table name="tbl_3">
+  <schema>
+   <value name="col_3_1" type="Int"/>
+   <value name="col_3_2" type="Int"/>
+   <value name="col_3_3" type="Int"/>
+   <value name="col_3_4" type="Int" nullable="true"/>
+   <value name="col_3_5" type="Float" nullable="true"/>
+  </schema>
+ </table>
+ <table name="tbl_2">
+  <schema>
+   <value name="col_2_1" type="Int"/>
+   <value name="col_2_2" type="Int"/>
+   <value name="col_2_3" type="Datetime"/>
+   <value name="col_2_4" type="Text"/>
+  </schema>
+ </table>
+ <table name="tbl_1">
+  <schema>
+   <value name="col_1_1" type="Int"/>
+   <value name="col_1_2" type="Text"/>
+   <value name="col_1_3" type="Text"/>
+   <value name="col_1_4" type="Float" nullable="true"/>
+   <value name="col_1_5" type="Bool" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
