@@ -28,6 +28,51 @@ module type Enum = sig
   val proj: t -> string
 end
 
+module type FNS = sig
+  (* all types intended for subsitution *)
+  type params
+  type result
+  type 'a io_future (* this type intended for different substitutions *)
+  type 'a connection
+  type statement
+  type row
+  type execute_response
+  type maybe_insert_response
+
+  val finish_params : params -> result io_future
+
+  val no_params : statement -> result io_future
+
+  (**
+    Perform query (cardinality "any") and return results via callback for each row
+    @raise Oops on error
+  *)
+  val select : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> unit) -> unit io_future
+
+  (**
+    Perform query (cardinality "zero or one") and return first row if available
+    @raise Oops on error
+  *)
+  val select_one_maybe : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> 'b) -> 'b option io_future
+
+  (**
+    Perform query (cardinality "one") and return first row
+    @raise Oops on error
+  *)
+  val select_one : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> 'b) -> 'b io_future
+
+  (** Execute non-query.
+    @raise Oops on error
+  *)
+  val execute : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
+
+  (* execute but an insert: raise if [insert_id] is 0 *)
+  val insert : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
+
+  (* insert but with special clause ON CONFLICT which might make it not insert *)
+  val maybe_insert : [>`WR] connection -> string -> (statement -> result io_future) -> maybe_insert_response io_future
+end
+
 module type M = sig
 
   type statement
@@ -35,7 +80,8 @@ module type M = sig
   type params
   type row
   type result
-  type execute_response = { affected_rows: int64; insert_id: int64 option }
+  type execute_response = { affected_rows: int64; insert_id: int64 }
+  type maybe_insert_response = { affected_rows: int64; maybe_insert_id: int64 option }
 
   (** datatypes *)
   module Types : sig
@@ -75,7 +121,6 @@ module type M = sig
   val get_column_Datetime_nullable : row -> int -> Datetime.t option
 
   val start_params : statement -> int -> params
-  val finish_params : params -> result
 
   (** [set_param_* stmt index val]. [index] is 0-based,
     @raise Oops on error *)
@@ -96,30 +141,15 @@ module type M = sig
     val to_literal : E.t -> string
   end
 
-  val no_params : statement -> result
-
-  (**
-    Perform query (cardinality "any") and return results via callback for each row
-    @raise Oops on error
-  *)
-  val select : [>`RO] connection -> string -> (statement -> result) -> (row -> unit) -> unit
-
-  (**
-    Perform query (cardinality "zero or one") and return first row if available
-    @raise Oops on error
-  *)
-  val select_one_maybe : [>`RO] connection -> string -> (statement -> result) -> (row -> 'r) -> 'r option
-
-  (**
-    Perform query (cardinality "one") and return first row
-    @raise Oops on error
-  *)
-  val select_one : [>`RO] connection -> string -> (statement -> result) -> (row -> 'r) -> 'r
-
-  (** Execute non-query.
-    @raise Oops on error
-  *)
-  val execute : [>`WR] connection -> string -> (statement -> result) -> execute_response
+  include FNS
+    with type params := params
+    with type result := result
+    with type 'a io_future := 'a
+    with type 'a connection := 'a connection
+    with type statement := statement
+    with type row := row
+    with type execute_response := execute_response
+    with type maybe_insert_response := maybe_insert_response
 
 end
 
@@ -129,16 +159,14 @@ module type M_io = sig
 
   module IO : Sqlgg_io.M
 
-  val finish_params : params -> result IO.future
-
-  val no_params : statement -> result IO.future
-
-  val select : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
-
-  val select_one_maybe : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b option IO.future
-
-  val select_one : [>`RO] connection -> string -> (statement -> result IO.future) -> (row -> 'b) -> 'b IO.future
-
-  val execute : [>`WR] connection -> string -> (statement -> result IO.future) -> execute_response IO.future
+  include FNS
+    with type params := params
+    with type result := result
+    with type 'a io_future := 'a IO.future
+    with type 'a connection := 'a connection
+    with type statement := statement
+    with type row := row
+    with type execute_response := execute_response
+    with type maybe_insert_response := maybe_insert_response
 
 end

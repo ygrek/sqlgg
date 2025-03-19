@@ -9,3 +9,4 @@ sqlgg.cgi
 *.html
 # vim
 *.swp
+*.exe

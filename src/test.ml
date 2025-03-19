@@ -142,7 +142,7 @@ let test_parsing = [
 let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name ->
-    if String.ends_with name "?" then
+    if String.ends_with name ~suffix:"?" then
       Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; }
     else
       attr name Int)
