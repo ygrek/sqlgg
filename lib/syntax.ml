@@ -37,6 +37,7 @@ type enum_ctor_value_data = { ctor_name: string; pos: pos; }  [@@deriving show]
 type res_expr =
   | ResValue of Type.t (** literal value *)
   | ResParam of param
+  | ResSelect of Type.t * vars
   | ResInTupleList of param_id * res_in_tuple_list
   | ResInparam of param
   | ResChoices of param_id * res_expr choices
@@ -88,6 +89,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResAggValue e -> loop acc e
+    | ResSelect (_, p) -> (List.rev p) @ acc
     | ResParam p -> Single p::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
@@ -204,11 +206,12 @@ let resolve_aggregations =
     match res_expr with
     | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
     | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
+    | ResSelect _  when is_agg -> ResAggValue(res_expr)
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
     | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
     | ResValue _ | ResParam _  | ResOptionBoolChoice _
-    | ResInparam _| ResChoices (_, _)
+    | ResInparam _| ResChoices (_, _) | ResSelect _
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
   handle ~is_agg:false 
@@ -260,6 +263,7 @@ let rec resolve_columns env expr =
         | ResValue _
         | ResParam _
         | ResAggValue _
+        | ResSelect _
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -274,23 +278,6 @@ let rec resolve_columns env expr =
     | Fun (r,l) ->
       ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
-      let rec params_of_var = function
-        | Single p -> [ResParam p]
-        (* Better do not separate ChoiceIn and SingleIn , fix it subsequently *)
-        | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
-        | ChoiceIn { vars; param; kind } -> 
-          (* SingleIn is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here) *)
-          let rec extract_singlein acc = function
-          | [] -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
-           (* The rest vars are params contained in the left side part of the expression (before IN)  *)
-          | (SingleIn p) :: xs -> (p, List.rev_append acc xs)
-          | x :: xs -> extract_singlein (x :: acc) xs in
-          let (p, vars) = extract_singlein [] vars in
-          ResInChoice (param, kind, ResInparam p) :: as_params vars
-        | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
-        | OptionBoolChoice ( p, _, _) -> failed  ~at:p.pos "BoolChoice isn't supported in Select"
-        | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
-      and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
@@ -319,9 +306,9 @@ let rec resolve_columns env expr =
         | ({ columns = [_]; _ }, _) -> default_null
         | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
         in
-        ResFun (Type.Ret (typ), as_params p)
+        ResSelect (typ, p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
+      | _, `Exists -> ResSelect (Type.depends Any, p)
   in
   each expr
 
@@ -334,6 +321,7 @@ and assign_types env expr =
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
+    | ResSelect (t, _) -> e, `Ok t
     | ResOptionBoolChoice choice ->
       let (res_choice, t) = typeof choice.res_choice in
       let t =
