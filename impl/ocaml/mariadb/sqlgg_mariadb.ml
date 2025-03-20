@@ -199,7 +199,7 @@ type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
 type result = M.Res.t
 type execute_response = { affected_rows: int64; insert_id: int64 }
-type maybe_insert_response = { affected_rows: int64; insert_id: int64 option }
+type maybe_insert_response = { affected_rows: int64; maybe_insert_id: int64 option }
 
 module Types = Types
 
