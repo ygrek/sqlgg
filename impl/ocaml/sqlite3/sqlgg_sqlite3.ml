@@ -80,8 +80,7 @@ type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
 type result = unit
-type execute_response = { affected_rows: int64; insert_id: int64 }
-type maybe_insert_response = { affected_rows: int64; maybe_insert_id: int64 option }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 type num = int64
 type text = string
@@ -179,20 +178,13 @@ let execute db sql set_params =
     set_params stmt;
     let rc = S.step (fst stmt) in
     if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
-    { affected_rows = Int64.of_int (S.changes db); insert_id = S.last_insert_rowid db; }
+    let insert_id =
+      match S.last_insert_rowid db with
+      | 0L -> None
+      | x -> Some x
+    in
+    { affected_rows = Int64.of_int (S.changes db); insert_id; }
   )
-
-let insert db sql set_params =
-  let response = execute db sql set_params in
-  if Int64.equal response.insert_id 0L then
-    raise (Oops "insert got no insert_id")
-  else
-    response
-
-let maybe_insert db sql set_params =
-  let { affected_rows; insert_id } = execute db sql set_params in
-  let maybe_insert_id = if Int64.equal insert_id 0L then None else Some insert_id in
-  { affected_rows; maybe_insert_id }
 
 let select_one_maybe db sql set_params convert =
   with_sql db sql (fun stmt ->

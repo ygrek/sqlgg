@@ -179,23 +179,13 @@ let output_select1_cb _ schema =
   output "in";
   name
 
-let has_on_conflict schema =
-  (List.exists (fun { extra; _ } -> Constraints.exists (function OnConflict _ -> true |
-    PrimaryKey | NotNull | Null | Unique | Autoincrement | WithDefault
-        -> false) extra) schema)
-
 let output_schema_binder index schema kind =
-  match schema, kind with
-  | [], Stmt.Insert (_, _) ->
-      if has_on_conflict schema then
-        "insert_with_on_conflict",""
-      else
-        "insert",""
-  | [], _ -> "execute",""
-  | _, Select `Zero_one -> "select_one_maybe", output_select1_cb index schema
-  | _, Select `One -> "select_one", output_select1_cb index schema
-  | _, _ -> "select",output_schema_binder index schema
-
+  match schema with
+  | [] -> "execute",""
+  | _ -> match kind with
+         | Stmt.Select `Zero_one -> "select_one_maybe", output_select1_cb index schema
+         | Select `One -> "select_one", output_select1_cb index schema
+         | _ -> "select",output_schema_binder index schema
 
 let is_callback stmt =
   match stmt.schema, stmt.kind with
@@ -537,13 +527,7 @@ let generate_stmt style index stmt =
     | Some id ->
     match id.label with
     | None -> failwith "empty label in tuple substitution"
-    | Some label ->
-    match stmt.kind with
-    | Insert (_, _) when has_on_conflict stmt.schema ->
-        sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; maybe_insert_id = None } | _ :: _ -> %s)|} label exec
-    | _ ->
-        sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = 0L } | _ :: _ -> %s)|} label exec
-
+    | Some label -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> %s)|} label exec
   in
   output "%s%s" bind exec;
   if style = `Fold then output "(fun () -> IO.return !r_acc)";
