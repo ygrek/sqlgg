@@ -472,13 +472,14 @@ and row_values = {
 }
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
+and fun_ = { kind: Type.func; parameters: expr list; is_over_clause: bool; }
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
   | Inparam of param
   | Choices of param_id * expr choices
   | InChoice of param_id * [`In | `NotIn] * expr
-  | Fun of Type.func * expr list (** parameters *)
+  | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
@@ -538,6 +539,7 @@ let () = print (rename test "a" "new_a")
 module Function : sig
 
 val lookup : string -> int -> Type.func
+val lookup_agg : string -> int -> Type.func
 
 val add : int -> Type.func -> string -> unit
 val exclude : int -> string -> unit
@@ -579,6 +581,10 @@ let lookup name narg =
   | exception _ ->
     eprintfn "W: unknown function %S of %d arguments, treating as untyped" name narg;
     sponge
+
+let lookup_agg name narg = match lookup name narg with 
+  | Type.Agg _ as a -> a
+  | _ -> fail "Function %s is not an aggregate function" name
 
 let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
 let multi_polymorphic name = add_multi Type.(Multi (Var 0, Var 0)) name
