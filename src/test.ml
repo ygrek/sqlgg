@@ -882,6 +882,34 @@ let test_enum_literal () =
     [attr' ~extra:[] "named" Text]
     stmt8.schema
 
+let test_add_with_window_function = [
+  (* Most aggregate functions also can be used as window functions *)
+  tt {| SELECT SUM(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
+  tt {| SELECT COUNT(*) OVER() WHERE FALSE |} [attr' "" Int;] [];
+  tt {| SELECT AVG(1) OVER() WHERE FALSE |} [attr' ~nullability:(Nullable) "" Float;] [];
+  tt {| SELECT MIN(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
+  tt {| SELECT MAX(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
+  tt {| SELECT MAX(NULL) OVER() |} [attr' ~nullability:(Nullable) "" Any;] [];
+
+  (* Same but with PARTITION BY and ORDER BY *)
+  tt {| SELECT SUM(1) OVER(PARTITION BY 'a') |} [attr' "" Int;] [];
+  tt {| SELECT SUM(1) OVER(ORDER BY 1) |} [attr' "" Int;] [];
+  tt {| SELECT SUM(1) OVER(PARTITION BY 'a' ORDER BY 1) |} [attr' "" Int;] [];
+
+  tt {| SELECT 1 + (SELECT COUNT(1) OVER() WHERE FALSE) |} [attr' ~nullability:(Nullable) "" Int;] [];
+
+  tt {| SELECT CASE WHEN SUM(2) OVER() > 100 THEN 'High' ELSE 'Low' END |} 
+    [attr' "" (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["High"; "Low"]); is_closed = false }));] [];
+
+  tt {| SELECT (NULL - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) |} [attr' ~nullability:(Nullable) "" Float;] [];  
+  tt {| SELECT (0 - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) |} [attr' "" Float;] [];  
+
+  tt {| SELECT 1 + (SELECT (0 - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) ) |} [attr' ~nullability:(Nullable) "" Float;] [];
+
+  (* Non window, non agregate can't be  used *)
+  wrong "SELECT IF(TRUE, 1, 2) OVER() WHERE FALSE" ;
+]    
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -909,6 +937,7 @@ let run () =
     "test_select_exposed_alias" >::: test_select_exposed_alias;
     "test_enum_as_variant" >::: test_enum_as_variant;
     "test_enum_literal" >:: test_enum_literal;
+    "test_add_with_window_function" >::: test_add_with_window_function;
   ]
   in
   let test_suite = "main" >::: tests in

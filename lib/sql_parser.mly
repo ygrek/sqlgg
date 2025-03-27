@@ -21,7 +21,7 @@
   let maybe f = function None -> [] | Some x -> [f x]
   let option_to_list = maybe Prelude.identity
 
-  let poly ret args = Fun (F (Typ ret, List.map (fun _ -> Var 0) args), args)
+  let poly ret parameters = Fun { kind = (F (Typ ret, List.map (fun _ -> Var 0) parameters)); parameters; is_over_clause = false }
 %}
 
 %token <int> INTEGER
@@ -399,29 +399,29 @@ attr_name: cname=IDENT { { cname; tname=None} }
 
 distinct_from: DISTINCT FROM { }
 
-like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun ((fixed Bool [Text; Text]), [e1;e2]) }
+like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
 
 insert_expr: e=expr { `Expr e }
            | DEFAULT { `Default }
 
 expr:
-      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun ((Ret (depends Any)),[e1;e2]) } (* TODO default Int *)
-    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun ((Ret (depends Any)),[e1;e2]) } (* mysql special *)
-    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun ((Ret (depends Float)),[e1;e2]) }
-    | e1=expr DIV e2=expr %prec PLUS { Fun ((Ret (depends Int)),[e1;e2]) }
-    | e1=expr boolean_bin_op e2=expr %prec AND { Fun ((fixed Bool [Bool;Bool]),[e1;e2]) }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun (Comparison, [e1; e2]) }
-    | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2]}
-    | e1=expr CONCAT_OP e2=expr { Fun ((fixed Text [Text;Text]),[e1;e2]) }
+      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)
+    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* mysql special *)
+    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { kind = (Ret (depends Float)); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr DIV e2=expr %prec PLUS { Fun { kind = (Ret (depends Int)); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr boolean_bin_op e2=expr %prec AND { Fun { kind = (fixed Bool [Bool;Bool]); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison; parameters = [e1; e2]; is_over_clause = false } }
+    | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
+    | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
     | e=like_expr esc=escape?
       {
         match esc with
         | None -> e
-        | Some esc -> Fun ((fixed Bool [Bool; Text]), [e;esc])
+        | Some esc -> Fun { kind = (fixed Bool [Bool; Text]); parameters = [e;esc]; is_over_clause = false }
       }
     | unary_op e=expr { e }
     | MINUS e=expr %prec UNARY_MINUS { e }
-    | INTERVAL e=expr interval_unit { Fun (fixed Datetime [Int], [e]) }
+    | INTERVAL e=expr interval_unit { Fun { kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
@@ -444,22 +444,22 @@ expr:
     | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
-    | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun (Function.lookup "substring" 3, [s;p;n]) }
-    | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun (Function.lookup "substring" 2, [s;p]) }
-    | DATE LPAREN e=expr RPAREN { Fun (Function.lookup "date" 1, [e]) }
-    | TIME LPAREN e=expr RPAREN { Fun (Function.lookup "time" 1, [e]) }
-    | DEFAULT LPAREN a=attr_name RPAREN { Fun (Type.identity, [Column a]) }
-    | JSON_ARRAY LPAREN l=expr_list RPAREN { Fun (Function.lookup "json_array" (List.length l), l) }
-    | JSON_REMOVE LPAREN j=expr COMMA fs=expr_list RPAREN { Fun (Function.lookup "json_remove" (List.length fs + 1), fs @ [j]) }
-    | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun (Function.lookup "json_set" 3, [j;k;v]) }
+    | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
+    | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
+    | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
+    | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
+    | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
+    | JSON_ARRAY LPAREN l=expr_list RPAREN { Fun { kind = (Function.lookup "json_array" (List.length l)); parameters = l; is_over_clause = false } }
+    | JSON_REMOVE LPAREN j=expr COMMA fs=expr_list RPAREN { Fun { kind = (Function.lookup "json_remove" (List.length fs + 1)); parameters = fs @ [j]; is_over_clause = false } }
+    | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun { kind = (Function.lookup "json_set" 3); parameters = [j;k;v]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
-    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun (Ret (depends t), [e]) }
-    | f=table_name LPAREN p=func_params RPAREN { Fun (Function.lookup f.tn (List.length p), p) } (* FIXME lookup functions with namespace *)
+    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false } }
+    | f=table_name LPAREN p=func_params RPAREN { Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } }
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun (F (Typ (strict Bool), [Typ (depends Any)]),[SelectExpr (select,`Exists)]) }
+    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun { kind = (F (Typ (strict Bool), [Typ (depends Any)])); parameters = [SelectExpr (select,`Exists)]; is_over_clause = false } }
     | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
       {
         let t_args =
@@ -469,10 +469,12 @@ expr:
         in
         let t_args = t_args @ maybe (fun _ -> Var 1) e2 in
         let v_args = option_to_list e1 @ List.flatten branches @ option_to_list e2 in
-        Fun (F (Var 1, t_args), v_args)
+        Fun { kind = (F (Var 1, t_args)); parameters = v_args; is_over_clause = false }
       }
-    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ (depends Bool);Var 0;Var 0]), [e1;e2;e3]) }
+    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun { kind = (F (Var 0, [Typ (depends Bool);Var 0;Var 0])); parameters = [e1;e2;e3]; is_over_clause = false } }
     | e=window_function OVER window_spec { e }
+    | f=table_name LPAREN p=func_params RPAREN OVER window_spec 
+        { Fun { kind = (Function.lookup_agg f.tn (List.length p)); parameters = p; is_over_clause = true } }
 
 values_stmt1: 
   | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }

@@ -31,7 +31,7 @@ module Tables_with_derived = struct
   let get_from ~env name = get_from  (env.ctes @ env.tables) name
 end
 
-type enum_ctor_value_data = { ctor_name: string; pos: pos; }  [@@deriving show]
+type enum_ctor_value_data = { ctor_name: string; pos: pos; } [@@deriving show]
 
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
@@ -42,10 +42,11 @@ type res_expr =
   | ResInparam of param
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
-  | ResFun of Type.func * res_expr list (** function kind (return type and flavor), arguments *)
-  | ResAggValue of res_expr
+  | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
+
+and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
   
 and res_in_tuple_list = 
   ResTyped of Type.t list | Res of res_expr list
@@ -88,14 +89,13 @@ let values_or_all table names =
 let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
-    | ResAggValue e -> loop acc e
     | ResSelect (_, p) -> (List.rev p) @ acc
     | ResParam p -> Single p::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
-    | ResFun (_,l) -> List.fold_left loop acc l
+    | ResFun { parameters; _ } -> List.fold_left loop acc parameters
     | ResInTupleList _ 
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
@@ -123,9 +123,9 @@ let rec is_grouping = function
   | Some v -> v
   end
 | InChoice (_, _, e) -> is_grouping e
-| Fun (func,args) ->
+| Fun { kind ; parameters; _ } ->
   (* grouping function of zero or single parameter or function on grouping result *)
-  (Type.is_grouping func && List.length args <= 1) || List.exists is_grouping args
+  (Type.is_grouping kind && List.length parameters <= 1) || List.exists is_grouping parameters
 
 let exists_grouping columns =
   List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
@@ -180,7 +180,7 @@ let resolve_column_assignments ~env l =
       Sql.Type.nullable attr.attr.domain.t else attr.attr.domain in
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
-    let equality typ expr = Fun (F (Var 0, [Var 0; Var 0]), [Value typ; expr]) in
+    let equality typ expr = Fun { kind = (F (Var 0, [Var 0; Var 0])); parameters = [Value typ; expr]; is_over_clause = false } in
     match expr with
     | Choices (n,l) ->
       Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
@@ -201,21 +201,6 @@ let _print_env env =
   Sql.Schema.print @@ Schema.Source.from_schema env.schema;
   Tables.print stderr env.tables
 
-let resolve_aggregations = 
-  let rec handle ~is_agg res_expr = 
-    match res_expr with
-    | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
-    | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
-    | ResSelect _  when is_agg -> ResAggValue(res_expr)
-    | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
-    | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
-    | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
-    | ResValue _ | ResParam _  | ResOptionBoolChoice _
-    | ResInparam _| ResChoices (_, _) | ResSelect _
-    | ResAggValue _ | ResInTupleList _ -> res_expr
-  in
-  handle ~is_agg:false 
-  
 let update_schema_with_aliases all_schema final_schema = 
   let applied = all_schema |> List.filter (fun s1 -> List.for_all Schema.Source.Attr.(fun s2 -> s2.attr.name <> s1.attr.name) final_schema) in  
   applied @ final_schema
@@ -229,7 +214,7 @@ let rec bool_choice_id = function
   | Value _ -> None
   | Inparam p
   | Param p -> Some p.id
-  | Fun (_, exprs) -> List.find_map bool_choice_id exprs
+  | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
   | InTupleList (_, p) -> Some p
   | InChoice(p, _, _) -> Some p
 
@@ -262,7 +247,6 @@ let rec resolve_columns env expr =
         match res_expr with 
         | ResValue _
         | ResParam _
-        | ResAggValue _
         | ResSelect _
         | ResFun _ -> res_expr
         | ResInparam _
@@ -275,25 +259,26 @@ let rec resolve_columns env expr =
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
-    | Fun (r,l) ->
-      ResFun (r,List.map each l)
+    | Fun { kind; parameters; is_over_clause } ->
+      ResFun { kind; parameters = List.map each parameters; is_over_clause }  
     | SelectExpr (select, usage) ->
       let (schema,p,_) = eval_select_full env select in
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue ->
+      | [ {domain;_} ], `AsValue -> 
         (* This function should be raised? *)
         let rec with_count = function 
-          | Fun (Agg Count, _)
+          | Fun { kind = Agg Count; is_over_clause = false; _ }
           | SelectExpr (_, _) -> Some domain
-          | Fun (_, exprs) -> List.find_map with_count exprs
+          | Fun { parameters; is_over_clause = false; _ } -> List.find_map with_count parameters
           | Choices (_, chs) ->
             List.fold_left (fun acc (_, e) -> match acc with
               | None -> None
               | Some _ -> Option.map_default with_count None e
             ) (Some domain) chs
           | OptionBoolChoices { choice; _ } -> with_count choice  
+          | Fun { is_over_clause = true; _ }
           | Value _| Param _| Inparam _ | InChoice (_, _, _)
           | Column _| Inserted _| InTupleList (_, _) -> None
         in
@@ -349,23 +334,19 @@ and assign_types env expr =
         | Some t -> `Ok t
       in
       ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
-    | ResAggValue (res) -> 
-      let (res, typ) = typeof res in 
-      let typ = get_or_failwith typ in
-      res, `Ok (Type.make_nullable typ)
-    | ResFun (func,params) ->
+    | ResFun { kind; parameters; is_over_clause}  ->
         let open Type in
-        let (params,types) = params |> List.map typeof |> List.split in
+        let (params,types) = parameters |> List.map typeof |> List.split in
         let types = List.map get_or_failwith types in
         let show_func () =
           sprintf "%s applied to (%s)"
-            (string_of_func func)
+            (string_of_func kind)
             (String.concat ", " @@ List.map show types)
         in
         if !debug then eprintfn "func %s" (show_func ());
         let types_to_arg each_arg = List.map (const each_arg) types in
         let func =
-          match func with
+          match kind with
           | Multi (ret,each_arg) -> F (ret, types_to_arg each_arg)
           | x -> x
         in
@@ -394,13 +375,16 @@ and assign_types env expr =
           let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
           let args = List.map convert args in
           args, convert ret in
-        (* With GROUP BY, the query returns no rows if no groups exist. If groups exist, we check nullability (affects no rows) of stmt. *)
-        let consider_groupping typ = if env.query_has_grouping && is_strict typ then typ else make_nullable typ in
+
+        (* With GROUP BY, the query returns no rows if no groups exist. With OVER clause, the query returns no rows if the outer query filter eliminates all rows.
+           In both cases, if we're in a context that expects a value (like a subquery), the result should be nullable. *)
+        let consider_agg_nullability typ = if (env.query_has_grouping || is_over_clause) && is_strict typ then typ else make_nullable typ in
+
         let (ret,inferred_params) = match func, types with
         | Multi _, _ -> assert false (* rewritten into F above *)
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
-        | Agg Avg, [_] -> consider_groupping @@ nullable Float, types
-        | Agg Self, [typ] -> consider_groupping typ, types
+        | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
+        | Agg Self, [typ] -> consider_agg_nullability typ, types
         | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Coalesce (ret, each_arg) , _ -> 
@@ -441,7 +425,7 @@ and assign_types env expr =
           | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
           | x -> x
         in
-        ResFun (func,(List.map2 assign inferred_params params)), `Ok ret
+        ResFun { kind = func; parameters = (List.map2 assign inferred_params params); is_over_clause }, `Ok ret
   and typeof expr =
     let r = typeof_ expr in
     if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
@@ -450,7 +434,7 @@ and assign_types env expr =
   typeof expr
 
 and resolve_types env expr =
-  let expr = expr |> resolve_columns env |> resolve_aggregations in
+  let expr = expr |> resolve_columns env in
   try
     assign_types env expr
   with
@@ -537,8 +521,9 @@ and ensure_res_expr = function
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"
-  | Fun (func,_) when Type.is_grouping func -> failwith "Grouping function not allowed in simple expression"
-  | Fun (x,l) -> ResFun (x,List.map ensure_res_expr l) (* FIXME *)
+  | Fun { kind; _ } when Type.is_grouping kind -> failwith "Grouping function not allowed in simple expression"
+  | Fun { kind; parameters; is_over_clause } ->
+     ResFun { kind; parameters = List.map ensure_res_expr parameters; is_over_clause } (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
   | OptionBoolChoices _ -> failwith  "BoolChoice is used in WHERE expr only"
 
@@ -698,7 +683,7 @@ let annotate_select select types =
     match cols, types with
     | [], [] -> List.rev acc
     | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
-    | Expr (e,name) :: cols, t :: types -> loop (Expr (Fun (F (Typ t, [Typ t]), [e]), name) :: acc) cols types
+    | Expr (e,name) :: cols, t :: types -> loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols types
     | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
   in
   { select with select = { select1 with columns = loop [] select1.columns types }, compound }
@@ -751,7 +736,7 @@ let rec eval (stmt:Sql.stmt) =
           (* pair up columns with inserted values *)
           List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple
           (* resolve DEFAULTs *)
-          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun (Type.identity, [Column col]))
+          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun { kind = Type.identity; parameters = [Column col]; is_over_clause = false})
         end
       in
       params_of_assigns env (List.concat assigns), None
