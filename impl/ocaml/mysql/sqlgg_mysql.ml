@@ -123,10 +123,18 @@ type 'a connection = Mysql.dbd
 type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
-type execute_response = { affected_rows: int64; insert_id: int64 }
-type maybe_insert_response = { affected_rows: int64; maybe_insert_id: int64 option }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = T
+
+module type Enum = sig 
+  type t
+
+  val inj: string -> t
+
+  val proj: t -> string
+end
+
 open Types
 
 (* compatibility *)
@@ -179,6 +187,17 @@ let set_param_Float = set_param_ty Float.to_string
 let set_param_Decimal = set_param_ty Decimal.to_string
 let set_param_Datetime = set_param_ty Datetime.to_string
 
+module Make_enum (E: Enum) = struct 
+
+  include E
+
+  let get_column, get_column_nullable = get_column_ty "Enum" E.inj
+
+  let set_param = set_param_ty E.proj
+
+  let to_literal = E.proj
+end
+
 let no_params stmt = P.execute stmt [||]
 
 let try_finally final f x =
@@ -205,19 +224,12 @@ let execute db sql set_params =
   with_stmt db sql (fun stmt ->
     let _ = set_params stmt in
     if 0 <> P.real_status stmt then oops "execute : %s" sql;
-    { affected_rows = P.affected stmt; insert_id = P.insert_id stmt; })
-
-let insert db sql set_params =
-  let response = execute db sql set_params in
-  if Int64.equal response.insert_id 0L then
-    oops "insert has no insert_id"
-  else
-    response
-
-let maybe_insert db sql set_params =
-  let {affected_rows; insert_id} = execute db sql set_params in
-  let maybe_insert_id = if Int64.equal insert_id 0L then None else Some insert_id in
-  { affected_rows; maybe_insert_id }
+    let insert_id =
+      match P.insert_id stmt with
+      | 0L -> None
+      | x -> Some x
+    in
+    { affected_rows = P.affected stmt; insert_id; })
 
 let select_one_maybe db sql set_params convert =
   with_stmt db sql (fun stmt ->

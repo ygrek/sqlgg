@@ -31,10 +31,13 @@ module Tables_with_derived = struct
   let get_from ~env name = get_from  (env.ctes @ env.tables) name
 end
 
+type enum_ctor_value_data = { ctor_name: string; pos: pos; }  [@@deriving show]
+
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
   | ResValue of Type.t (** literal value *)
   | ResParam of param
+  | ResSelect of Type.t * vars
   | ResInTupleList of param_id * res_in_tuple_list
   | ResInparam of param
   | ResChoices of param_id * res_expr choices
@@ -86,6 +89,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResAggValue e -> loop acc e
+    | ResSelect (_, p) -> (List.rev p) @ acc
     | ResParam p -> Single p::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
@@ -202,11 +206,12 @@ let resolve_aggregations =
     match res_expr with
     | ResFun (Agg kind, res) -> ResFun(Agg kind, List.map (handle ~is_agg:true) res)
     | ResFun (Ret _, _) when is_agg -> ResAggValue(res_expr)
+    | ResSelect _  when is_agg -> ResAggValue(res_expr)
     | ResFun (fn, res) -> ResFun(fn, List.map (handle ~is_agg) res)
     | ResInTupleList (param_id, Res res) -> ResInTupleList(param_id, Res (List.map (handle ~is_agg) res))
     | ResInChoice(param_id, kind, res) -> ResInChoice(param_id, kind, (handle ~is_agg res))
     | ResValue _ | ResParam _  | ResOptionBoolChoice _
-    | ResInparam _| ResChoices (_, _)
+    | ResInparam _| ResChoices (_, _) | ResSelect _
     | ResAggValue _ | ResInTupleList _ -> res_expr
   in
   handle ~is_agg:false 
@@ -221,7 +226,7 @@ let rec bool_choice_id = function
   | SelectExpr _
   | OptionBoolChoices _
   | Choices _
-  | Value _ -> None 
+  | Value _ -> None
   | Inparam p
   | Param p -> Some p.id
   | Fun (_, exprs) -> List.find_map bool_choice_id exprs
@@ -258,6 +263,7 @@ let rec resolve_columns env expr =
         | ResValue _
         | ResParam _
         | ResAggValue _
+        | ResSelect _
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -272,23 +278,6 @@ let rec resolve_columns env expr =
     | Fun (r,l) ->
       ResFun (r,List.map each l)
     | SelectExpr (select, usage) ->
-      let rec params_of_var = function
-        | Single p -> [ResParam p]
-        (* Better do not separate ChoiceIn and SingleIn , fix it subsequently *)
-        | SingleIn p -> failed ~at:p.id.pos "Unexpected right side of WHERE IN"
-        | ChoiceIn { vars; param; kind } -> 
-          (* SingleIn is the right-side parameter inside WHERE IN expression (e.g., expr IN @param2, this is @param2 here) *)
-          let rec extract_singlein acc = function
-          | [] -> failed ~at:param.pos "Invalid IN containing left part and containing nothing inside ()"
-           (* The rest vars are params contained in the left side part of the expression (before IN)  *)
-          | (SingleIn p) :: xs -> (p, List.rev_append acc xs)
-          | x :: xs -> extract_singlein (x :: acc) xs in
-          let (p, vars) = extract_singlein [] vars in
-          ResInChoice (param, kind, ResInparam p) :: as_params vars
-        | Choice (_,l) -> l |> flat_map (function Simple (_, vars) -> Option.map_default as_params [] vars | Verbatim _ -> [])
-        | OptionBoolChoice ( p, _, _) -> failed  ~at:p.pos "BoolChoice isn't supported in Select"
-        | TupleList (p, _) -> failed ~at:p.pos "FIXME TupleList in SELECT subquery"
-      and as_params p = flat_map params_of_var p in
       let (schema,p,_) = eval_select_full env select in
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
@@ -317,9 +306,9 @@ let rec resolve_columns env expr =
         | ({ columns = [_]; _ }, _) -> default_null
         | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
         in
-        ResFun (Type.Ret (typ), as_params p)
+        ResSelect (typ, p)
       | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
-      | _, `Exists -> ResFun (Type.Ret (Type.depends Any), as_params p)
+      | _, `Exists -> ResSelect (Type.depends Any, p)
   in
   each expr
 
@@ -332,6 +321,7 @@ and assign_types env expr =
     | ResValue t -> e, `Ok t
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
+    | ResSelect (t, _) -> e, `Ok t
     | ResOptionBoolChoice choice ->
       let (res_choice, t) = typeof choice.res_choice in
       let t =
@@ -585,12 +575,23 @@ and eval_select env { columns; from; where; group; having; } =
   (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
 
 (** @return final schema, params and tables that can be referenced by outside scope *)
-and resolve_source env (x,alias) =
+and resolve_source env (x, alias) =
+  let resolve_schema_with_alias schema = begin match alias with 
+    | Some { table_name; column_aliases = Some col_schema } -> 
+      let schema = Schema.compound ((List.map (fun attr -> Schema.Source.Attr.{sources=[]; attr;})) col_schema) schema in
+      schema, [table_name, Schema.Source.from_schema schema]
+    | Some { table_name; column_aliases = None } -> 
+      let schema = List.map (fun i -> { i with Schema.Source.Attr.sources = table_name :: i.Schema.Source.Attr.sources }) schema in
+      schema, [table_name, Schema.Source.from_schema schema]
+    | None -> schema, [] 
+  end in
   match x with
   | `Select select ->
     let (s,p,_) = eval_select_full env select in
-    let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list alias; i.Schema.Source.Attr.sources] }) s in
-    s, p, (match alias with None -> [] | Some name -> [name, Schema.Source.from_schema s])
+    let tbl_alias = Option.map (fun { table_name; _ } -> table_name) alias in
+    let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list tbl_alias; i.Schema.Source.Attr.sources] }) s in
+    let s, tables = resolve_schema_with_alias s in
+    s, p, tables
   | `Nested s ->
     let (env,p) = eval_nested env (Some s) in
     let s = infer_schema env [All] in
@@ -598,9 +599,31 @@ and resolve_source env (x,alias) =
     s, p, env.tables
   | `Table s ->
     let (name,s) = Tables_with_derived.get ~env s in
+    let alias = Option.map (fun { table_name; _ } -> table_name) alias in
     let sources = (name :: option_list alias) in
     let s3 = List.map (fun attr -> { Schema.Source.Attr.attr; sources }) s  in
     s3, [], List.map (fun name -> name, s) sources
+  | `ValueRows { row_constructor_list; row_order; row_limit; } ->
+    (* 
+      The columns of the table output from VALUES have the implicitly 
+      named columns column_0, column_1, column_2, and so on
+      https://dev.mysql.com/doc/refman/8.4/en/values.html
+    *)
+    let exprs_to_cols = List.mapi (fun idx expr -> Expr (expr, Some (Printf.sprintf "column_%d" idx))) in
+    let dummy_select exprs = { columns = exprs_to_cols exprs; from = None; where = None; group = []; having = None } in
+    let (s, p, _) = match row_constructor_list with
+      | RowExprList [] -> failwith "Each row of a VALUES clause must have at least one column"
+      | RowExprList (exprs :: xs) ->
+        let unions = List.map (fun exprs -> `Union, dummy_select exprs ) xs in
+        let select = dummy_select exprs in
+        let select_complete = { select = select, unions; order=row_order; limit=row_limit; } in
+        eval_select_full env { select_complete; cte = None }
+      | RowParam { id; types; values_start_pos } ->
+        List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
+          types, [ TupleList (id, ValueRows { types; values_start_pos }) ], Stmt.Select `Nat
+    in
+    let s, tables = resolve_schema_with_alias s in
+    s, p, tables
 
 and eval_select_full env { select_complete; cte } =
   let ctes, p1 = Option.map_default eval_cte ([], []) cte in
@@ -646,17 +669,17 @@ and eval_compound ~env result =
   let (p1, s1, cardinality, stmt) = result in
   let { select=(_select, other); order; limit; _; } = stmt in
   let other = List.map snd other in
-  let (s2l,p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
+  let (s2l, p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
   let cardinality = if other = [] then cardinality else `Nat in
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
   let p3 = params_of_order order final_schema env in
   let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single p) p, x | None -> [],false in
-  (*                 Schema.check_unique schema; *)
+  (* Schema.check_unique schema; *)
   let cardinality =
     if limit1 && cardinality = `Nat then `Zero_one
-      else cardinality in
-  final_schema,(p1@(List.flatten p2l)@p3@p4 : var list), Stmt.Select cardinality  
+    else cardinality in
+  final_schema, ( p1 @ (List.flatten p2l) @ p3 @ p4 : var list), Stmt.Select cardinality  
 
 let update_tables ~env sources ss w =
   let schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources in

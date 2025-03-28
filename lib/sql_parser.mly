@@ -181,7 +181,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Function.add (List.length params) (Ret (depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
-              }
+              }   
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
@@ -259,8 +259,15 @@ join_cond: ON e=expr { On e }
 source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
        | LPAREN s=table_list RPAREN { `Nested s }
+       | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
-source: src=source1 alias=maybe_as { src, Option.map Sql.make_table_name alias }
+source: src=source1 alias=maybe_as_with_detupled? { 
+  src, 
+  Option.map (fun (tbl, cols) -> 
+    let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
+    { table_name = Sql.make_table_name tbl; column_aliases; }
+  ) alias 
+}
 
 insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
@@ -308,6 +315,8 @@ column1:
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }
+
+maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
@@ -431,8 +440,7 @@ expr:
         InTupleList(names, p)
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=param { Param (new_param p (depends Any)) }
-    | p=param DOUBLECOLON t=manual_type { Param (new_param { p with pos=($startofs, $endofs) } t) }
+    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
     | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -466,6 +474,14 @@ expr:
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun (F (Var 0, [Typ (depends Bool);Var 0;Var 0]), [e1;e2;e3]) }
     | e=window_function OVER window_spec { e }
 
+values_stmt1: 
+  | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
+  | VALUES id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types; values_start_pos = $startofs  } }
+
+values_stmt: 
+  | kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit;}}
+  
+
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:
   | either(FIRST_VALUE,LAST_VALUE) LPAREN e=expr RPAREN { e }
@@ -497,7 +513,7 @@ choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
 
 strict_value:
-    | TEXT collate? { Text }
+    | TEXT { StringLiteral $1 }
     | BLOB collate? { Blob }
     | INTEGER { Int }
     | FLOAT { Float }
@@ -539,7 +555,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }
-               | ENUM sequence(TEXT) charset? collate? { Text }
+               | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
                | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }

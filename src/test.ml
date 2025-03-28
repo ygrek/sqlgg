@@ -74,8 +74,8 @@ let test = Type.[
   tt "insert or replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
   tt "replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
  tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
-    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" Text]
-    [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" Text];
+    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" (StringLiteral "qqq")]
+    [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" (StringLiteral "qqq")];
    wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)
@@ -169,8 +169,8 @@ let test_join_result_cols () =
 
 let test_enum = [
   tt "CREATE TABLE test6 (x enum('true','false') COLLATE utf8_bin NOT NULL, y INT DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test6" [attr "x" Text ~extra:[NotNull;]; attr ~extra:[WithDefault;] "y" Int] [];
-  tt "SELECT x, y+10 FROM test6" [attr "x" Text ~extra:[NotNull;]; attr "" Int] [];
+  tt "SELECT * FROM test6" [attr "x" (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["true"; "false"]); is_closed = true })) ~extra:[NotNull;]; attr ~extra:[WithDefault;] "y" Int] [];
+  tt "SELECT x, y+10 FROM test6" [attr "x" (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["true"; "false"]); is_closed = true })) ~extra:[NotNull;]; attr "" Int] [];
 ]
 
 let test_manual_param = [
@@ -728,6 +728,160 @@ let test_subquery_nullability = [
   ] [];
 ]
 
+let test_values_row = [
+  tt {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW('c', 3) ) AS x (txt, i)
+    ON t30.column_2 = x.txt
+  |} [
+    attr' ~extra:[NotNull] "column_2" Text;
+    attr' "i" Int;
+  ] [];
+
+  (* Unification fail (last ROW has different type) *)
+  wrong {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW(2, 3) ) AS x (txt, i)
+    ON t30.column_2 = x.txt
+  |} ;
+
+  (* Alias error *)
+  wrong {|
+    SELECT column_2, i
+    FROM table_30 t30
+    JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW(2, 3) ) AS y (txt, i)
+    ON t30.column_2 = y.txt
+  |};
+]
+
+let test_select_exposed_alias = [
+  tt {|
+    CREATE TABLE table_32 (
+      col_1 INT PRIMARY KEY,
+      col_2 VARCHAR(100),
+      col_3 VARCHAR(50),
+      col_4 DECIMAL(10,2)
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE table_33 (
+      col_1 INT PRIMARY KEY,
+      col_2 INT,
+      col_3 INT,
+      col_4 DATE
+    )
+  |} [] [];
+
+  tt {| SELECT y.* FROM (
+    SELECT col_1, col_2, col_1 * col_2 as calc FROM table_33
+  ) as y (a, b, c) |} [
+    attr' "a" Int;
+    attr' ~nullability:Nullable "b" Int;
+    attr' ~nullability:Nullable "c" Int;
+  ] [];
+
+  tt {| SELECT z.* FROM (
+    SELECT 
+        t1.col_3,
+        COUNT(*) as cnt,
+        SUM(t2.col_3 * t1.col_4) as calc,
+        t1.col_4
+    FROM table_32 t1
+    JOIN table_33 t2 ON t1.col_1 = t2.col_2
+    GROUP BY t1.col_3
+  ) as z (a, b, c, d) |} [
+    attr' ~nullability:Nullable "a" Text;
+    attr' "b" Int;
+    attr' ~nullability:Nullable "c" Decimal;
+    attr' ~nullability:Nullable "d" Decimal;
+  ] [];
+
+  tt {| SELECT outer_x.* FROM (
+    SELECT inner_x.*,
+           NOT inner_x.d as bonus_not
+    FROM (
+        SELECT 
+            'abc' as str,
+            42 as num,
+            2.5 as price,
+            true as flag
+    ) as inner_x (a, b, c, d)
+  ) as outer_x (str, num, price, flag, bonus) |} [
+    attr' "str" (StringLiteral "abc");
+    attr' "num" Int;
+    attr' "price" Float;
+    attr' "flag" Bool;
+    attr' "bonus" Bool;
+] [];
+]
+
+let test_enum_as_variant = [
+  "test_enum_as_variant" >:: (fun _ ->
+
+    do_test "CREATE TABLE test35 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
+ 
+    do_test "SELECT status FROM test35" [
+      attr' ~extra:[NotNull; WithDefault] "status" 
+        (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))
+    ] [];
+   
+    do_test "INSERT INTO test35 (status) VALUES (@status)" [] [
+      named "status" (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))
+    ];
+  )
+]
+
+let test_enum_literal () = 
+
+  do_test "CREATE TABLE test36 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
+  
+  let stmt = parse {|INSERT INTO test36 VALUES('pending')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt.schema;
+
+  let stmt2 = parse {|INSERT INTO test36 VALUES('active')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt2.schema;
+  
+  let stmt3 = parse {|INSERT INTO test36 VALUES('deleted')|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt3.schema;
+
+  let stmt4 = parse {|SELECT * FROM test36 WHERE status = 'active'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[NotNull; WithDefault] "status" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"] ); is_closed = true }))]
+    stmt4.schema;
+
+  let stmt5 = parse {|UPDATE test36 SET status = 'deleted' WHERE status = 'pending'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt5.schema;
+
+  let stmt6 = parse {|
+    SELECT * FROM test36 
+    WHERE status IN ('active', 'pending') 
+    AND status != 'deleted'
+  |} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string
+    [attr' ~extra:[NotNull; WithDefault] "status" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))]
+    stmt6.schema;
+
+  ignore @@ wrong {|INSERT INTO test36 VALUES('deleteddd')|} ;
+  ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'a', 'b')))|} ;
+
+  let stmt7 = parse {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'active')))|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt7.schema;
+
+  ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'b')))|};
+  ignore @@ wrong {|INSERT INTO test36 VALUES(CONCAT(''))|};
+
+  ignore @@ wrong {|SELECT * FROM test36 WHERE status = 'activee'|};
+
+  let stmt8 = parse {|SELECT CONCAT(status, 'test') AS named FROM test36 WHERE status = 'active'|} in
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[] "named" Text]
+    stmt8.schema
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -751,6 +905,10 @@ let run () =
     "cte_possible_rec_non_shared_select_only" >::: cte_possible_rec_non_shared_select_only;
     "test_ambiguous" >::: test_ambiguous;
     "test_subquery_nullability" >::: test_subquery_nullability;
+    "test_values_row" >::: test_values_row;
+    "test_select_exposed_alias" >::: test_select_exposed_alias;
+    "test_enum_as_variant" >::: test_enum_as_variant;
+    "test_enum_literal" >:: test_enum_literal;
   ]
   in
   let test_suite = "main" >::: tests in

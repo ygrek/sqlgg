@@ -6,6 +6,22 @@ open Prelude
 
 module Type =
 struct
+
+  module Enum_kind = struct
+
+    module Ctors =  struct 
+      include Set.Make(String)
+  
+      let pp fmt s = 
+        Format.fprintf fmt "{%s}" 
+          (String.concat "; " (elements s))  
+    end
+
+    type t = Ctors.t [@@deriving eq, show{with_path=false}]
+
+    let make ctors =  Ctors.of_list ctors
+  end
+
   type kind =
     | Unit of [`Interval]
     | Int
@@ -15,9 +31,16 @@ struct
     | Bool
     | Datetime
     | Decimal
+    | Union of { ctors: Enum_kind.t; is_closed: bool }
+    | StringLiteral of string
     | Any (* FIXME - Top and Bottom ? *)
     [@@deriving eq, show{with_path=false}]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
+
+    let show_kind = function 
+      | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
+      | StringLiteral l -> sprintf "StringLiteral (%s)" l
+      | k -> show_kind k
 
   type nullability =
   | Nullable (** can be NULL *)
@@ -34,6 +57,8 @@ struct
   let make_nullable { t; nullability=_ } = nullable t
 
   let make_strict { t; nullability=_ } = strict t
+  
+  let make_enum_kind ctors = Union { ctors = (Enum_kind.make ctors); is_closed = true }
 
   let is_strict { nullability; _ } = nullability = Strict
 
@@ -50,19 +75,34 @@ struct
   let is_unit = function { t = Unit _; _ } -> true | _ -> false
 
   (** @return (subtype, supertype) *)
-  let order_kind x y =
-    if equal_kind x y then
-      `Equal
-    else
-      match x,y with
-      | Any, t | t, Any -> `Order (t,t)
-      | Int, Float | Float, Int -> `Order (Int,Float)
-      (* arbitrary decision : allow int<->decimal but require explicit cast for floats *)
-      | Decimal, Int | Int, Decimal -> `Order (Int,Decimal)
-      | Text, Blob | Blob, Text -> `Order (Text,Blob)
-      | Int, Datetime | Datetime, Int -> `Order (Int,Datetime)
-      | Text, Datetime | Datetime, Text -> `Order (Datetime,Text)
-      | _ -> `No
+  let order_kind x y =  
+    match x, y with
+    | x, y when equal_kind x y -> `Equal
+    | StringLiteral a, StringLiteral b -> 
+      `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
+
+    | StringLiteral a, Union { ctors = b; is_closed  } | Union { ctors = b; is_closed  }, StringLiteral a when Enum_kind.Ctors.mem a b 
+      -> `Order (StringLiteral a, Union { ctors = (Enum_kind.Ctors.add a b); is_closed })
+
+    | StringLiteral a, Union { ctors = b; is_closed = false  }  | Union { ctors = b; is_closed = false  }, StringLiteral a -> 
+      `StringLiteralUnion (Union { ctors = (Enum_kind.Ctors.add a b); is_closed = false; })
+
+    | StringLiteral _  as x , Text -> `Order (x, Text)
+    | Text, (StringLiteral _ as x) -> `Order (x, Text)
+
+    | Text, (Union _ as x) -> `Order (x, Text)
+    | Union { ctors = a; _ } as x1, (Union { ctors = b ;_ } as x2)  when Enum_kind.Ctors.subset b a -> `Order (x2, x1)
+
+    | StringLiteral x, Datetime | Datetime, StringLiteral x -> `Order (Datetime, StringLiteral x)
+    | StringLiteral x, Blob | Blob, StringLiteral x -> `Order (Blob, StringLiteral x)
+    | Any, t | t, Any -> `Order (t, t)
+    | Int, Float | Float, Int -> `Order (Int, Float)
+    | Decimal, Int | Int, Decimal -> `Order (Int, Decimal)
+    | Text, Blob | Blob, Text -> `Order (Text, Blob)
+    | Int, Datetime | Datetime, Int -> `Order (Int, Datetime)
+    | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
+    | _ -> `No
+    
 
   let order_nullability x y =
     match x,y with
@@ -89,19 +129,30 @@ struct
   let common_type_ order x y =
     match order_nullability x.nullability y.nullability, order_kind x.t y.t with
     | _, `No -> None
-    | `Equal nullability, `Order pair -> Some {t = order pair; nullability}
+    | `Equal nullability, `Order pair -> `CommonType pair |> order |> Option.map (fun t -> { t = t; nullability })
     | `Equal nullability, `Equal -> Some { x with nullability }
     | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t) (* FIXME need nullability order? *)
-    | (`Nullable_Strict|`Strict_Nullable), `Order pair -> Some (nullable @@ order pair)
+    | (`Nullable_Strict|`Strict_Nullable), `Order pair -> `CommonType pair |> order |> Option.map nullable
+    | `Equal nullability, `StringLiteralUnion t -> `StringLiteralUnion t |> order |> Option.map (fun t -> { t = t; nullability })
+    | (`Nullable_Strict | `Strict_Nullable), `StringLiteralUnion t -> `StringLiteralUnion t |> order |> Option.map nullable
 
   let common_type_l_ order = function
   | [] -> None
   | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> common_type_ order prev t) (Some t) ts
 
-  let subtype = common_type_ fst
-  let supertype = common_type_ snd
-  let common_subtype = common_type_l_ fst
-  let common_supertype = common_type_l_ snd
+  let get_subtype = function 
+  | `CommonType t -> Some (fst t)
+  | `StringLiteralUnion t -> Some t
+
+  let get_supertype = function 
+  | `CommonType t -> Some (snd t)
+  | `StringLiteralUnion t -> Some t
+
+  let subtype = common_type_ get_subtype
+  let supertype = common_type_ get_supertype
+  let common_subtype = common_type_l_ get_subtype
+
+  let common_supertype = common_type_l_ get_supertype
 
   let common_type = subtype
 
@@ -365,7 +416,7 @@ and var =
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
-and tuple_list_kind = Insertion of schema | Where_in of Type.t list
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
 
@@ -392,10 +443,11 @@ type limit_t = [ `Limit | `Offset ]
 type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
-}
+} [@@deriving show]
+type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 and limit = param list * bool
 and nested = source * (source * Schema.Join.typ * join_condition) list
-and source = [ `Select of select_full | `Table of table_name | `Nested of nested ] * table_name option (* alias *)
+and source = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ] * source_alias option (* alias *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -412,6 +464,12 @@ and select_complete = {
   limit : limit option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
+and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
+and row_values = {
+  row_constructor_list: row_constructor_list;
+  row_order: order;
+  row_limit: limit option;
+}
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and expr =
@@ -428,7 +486,7 @@ and expr =
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
-  | OptionBoolChoices of { choice: expr; pos: (pos * pos) } 
+  | OptionBoolChoices of { choice: expr; pos: (pos * pos) }
 and column =
   | All
   | AllOf of table_name
