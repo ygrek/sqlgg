@@ -344,7 +344,7 @@ and assign_types env expr =
             (String.concat ", " @@ List.map show types)
         in
         if !debug then eprintfn "func %s" (show_func ());
-        let types_to_arg each_arg = List.map (Fun.const each_arg) types in
+        let types_to_arg each_arg = List.map (const each_arg) types in
         let func =
           match kind with
           | Multi (ret,each_arg) -> F (ret, types_to_arg each_arg)

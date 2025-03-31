@@ -76,6 +76,7 @@ module type Enum = sig
 end
 
 type statement = S.stmt * string
+type 'a io_future = 'a
 type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
