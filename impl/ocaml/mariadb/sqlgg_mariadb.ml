@@ -217,12 +217,12 @@ struct
 module IO = IO
 
 type statement = M.Stmt.t
+type 'a io_future = 'a
 type 'a connection = M.t
 type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
 type result = M.Res.t
-type execute_response = { affected_rows: int64; insert_id: int64 }
-type maybe_insert_response = { affected_rows: int64; insert_id: int64 option }
+type execute_response = { affected_rows: int64; insert_id: int64 option }
 
 module Types = Types
 

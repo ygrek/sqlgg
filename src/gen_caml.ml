@@ -464,7 +464,7 @@ let make_sql l =
         let label = resolve_tuple_label id in
         let schema = make_schema_of_tuple_types label types in
         let empty = schema 
-          |> List.map (Fun.const "NULL") 
+          |> List.map (const "NULL") 
           |> String.join ", " 
           |> sprintf {|"SELECT %s WHERE FALSE"|} in
         let not_empty = gen_tuple_substitution ~is_row:true label schema in
