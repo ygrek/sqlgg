@@ -120,6 +120,7 @@ module Make_(T : Types) = struct
 
 type statement = P.stmt
 type 'a connection = Mysql.dbd
+type 'a io_future = 'a
 type params = statement * string array * int ref
 type row = string option array
 type result = P.stmt_result
