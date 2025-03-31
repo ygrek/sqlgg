@@ -153,7 +153,7 @@ module type M_io = sig
   include FNS
     with type params := params
     with type result := result
-    with type 'a io_future := 'a IO.future
+    with type 'a io_future = 'a IO.future
     with type 'a connection := 'a connection
     with type statement := statement
     with type row := row
