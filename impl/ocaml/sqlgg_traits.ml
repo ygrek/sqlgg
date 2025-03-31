@@ -70,6 +70,7 @@ module type M = sig
 
   type statement
   type -'a connection
+  type 'a io_future
   type params
   type row
   type result
@@ -136,7 +137,7 @@ module type M = sig
   include FNS
     with type params := params
     with type result := result
-    with type 'a io_future := 'a
+    with type 'a io_future := 'a io_future
     with type 'a connection := 'a connection
     with type statement := statement
     with type row := row
