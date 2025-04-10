@@ -12,6 +12,10 @@
   </in>
   <out/>
  </stmt>
+ <stmt name="insert_registration_feedbacks_2" sql="INSERT INTO `registration_feedbacks`&#x0A;SET&#x0A;  `user_message` = DEFAULT" category="DML" kind="insert" target="registration_feedbacks" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
  <table name="registration_feedbacks">
   <schema>
    <value name="id" type="Int"/>

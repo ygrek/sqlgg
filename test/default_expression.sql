@@ -9,3 +9,7 @@ INSERT INTO `registration_feedbacks`
 SET
   `user_message` = @user_message,
   `grant_types` = @grant_types { None { DEFAULT } | Some { @grant_types } };
+
+INSERT INTO `registration_feedbacks`
+SET
+  `user_message` = DEFAULT;
