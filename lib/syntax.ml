@@ -127,8 +127,24 @@ let rec is_grouping = function
   (* grouping function of zero or single parameter or function on grouping result *)
   (Type.is_grouping kind && List.length parameters <= 1) || List.exists is_grouping parameters
 
+let rec is_windowing = function
+| Value _
+| Param _
+| Column _
+| SelectExpr _
+| Inparam _
+| InTupleList _
+| OptionBoolChoices _
+| Inserted _ -> false
+| Choices (_, l) -> List.exists (fun (_, e) -> Option.map_default is_windowing false e ) l
+| InChoice (_, _, e) -> is_windowing e
+| Fun { is_over_clause; _ } -> is_over_clause
+
 let exists_grouping columns =
   List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
+
+let exists_windowing columns =
+  List.exists (function Expr (e,_) -> is_windowing e | All | AllOf _ -> false) columns  
 
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
@@ -541,7 +557,7 @@ and eval_select env { columns; from; where; group; having; } =
   let env = { env with query_has_grouping = List.length group > 0 } in
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
-    else if group = [] && exists_grouping columns then `One
+    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
     else `Nat
   in
   let final_schema = infer_schema env columns in
