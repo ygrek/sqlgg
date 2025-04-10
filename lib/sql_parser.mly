@@ -386,7 +386,9 @@ column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
-default_value: e=single_literal_value | e=datetime_value { e } (* sub expr ? *)
+default_value: e=single_literal_value 
+             | e=datetime_value { e } (* sub expr ? *)
+             | LPAREN e=expr RPAREN { e }
 
 set_column: name=attr_name EQUAL e=expr { name,e }
 

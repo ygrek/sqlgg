@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_registration_feedbacks" sql="CREATE TABLE IF NOT EXISTS registration_feedbacks (&#x0A;  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,&#x0A;  `user_message` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT(''),&#x0A;  PRIMARY KEY (`id`)&#x0A;) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" category="DDL" kind="create" target="registration_feedbacks" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <table name="registration_feedbacks">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="user_message" type="Text"/>
+  </schema>
+ </table>
+</sqlgg>
