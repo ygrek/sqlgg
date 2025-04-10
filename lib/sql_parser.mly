@@ -391,7 +391,7 @@ default_value: e=single_literal_value
              | LPAREN e=expr RPAREN { e }
 
 set_column: name=attr_name EQUAL e=expr { name,e }
-           | name=attr_name EQUAL DEFAULT { name, Value (depends Any) }
+          | name=attr_name EQUAL DEFAULT { name, Value (depends Any) }
 
 anyall: ANY | ALL | SOME { }
 
