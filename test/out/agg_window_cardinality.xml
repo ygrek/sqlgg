@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="this_cardinality_one" sql="SELECT SUM(running_total) as total_sum&#x0A;FROM (&#x0A;    SELECT sum(evt) OVER (PARTITION BY id ORDER BY dt) as running_total&#x0A;    FROM (&#x0A;        VALUES &#x0A;            row(1, 1, 1), &#x0A;            row(1, 1, 1), &#x0A;            row(1, 2, -1), &#x0A;            row(1, 2, 1), &#x0A;            row(1, 3, -1), &#x0A;            row(1, 4, -1)&#x0A;    ) as t(id, dt, evt)&#x0A;) as subquery" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="total_sum" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="this_cardinality_n" sql="SELECT SUM(evt) OVER (PARTITION BY id ORDER BY dt) as running_total&#x0A;FROM (&#x0A;    VALUES &#x0A;        row(1, 1, 1), &#x0A;        row(1, 1, 1), &#x0A;        row(1, 2, -1), &#x0A;        row(1, 2, 1), &#x0A;        row(1, 3, -1), &#x0A;        row(1, 4, -1)&#x0A;) AS t(id, dt, evt)" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="running_total" type="Int"/>
+  </out>
+ </stmt>
+</sqlgg>
