@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_categories" sql="CREATE TABLE categories (&#x0A;    id INT PRIMARY KEY AUTO_INCREMENT,&#x0A;    name VARCHAR(100) NOT NULL&#x0A;)" category="DDL" kind="create" target="categories" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="create_products" sql="CREATE TABLE products (&#x0A;    id INT PRIMARY KEY AUTO_INCREMENT,&#x0A;    name VARCHAR(100) NOT NULL,&#x0A;    price DECIMAL(10, 2) NOT NULL,&#x0A;    category_id INT,&#x0A;    FOREIGN KEY (category_id) REFERENCES categories(id)&#x0A;)" category="DDL" kind="create" target="products" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="test2" sql="WITH x AS (SELECT &#x0A;    1 as y, &#x0A;    4 + @five as y1&#x0A;FROM ( &#x0A;        SELECT 1 AS id, 'l' AS creator_name&#x0A;        UNION ALL&#x0A;        SELECT 2, 'k'&#x0A;) AS x &#x0A;WHERE {TODO dynamic choice})&#x0A;SELECT 1 + @test - @test2 + @test5 + x.y1 as y2&#x0A;FROM x" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="five" type="Int"/>
+   <value name="test" type="Int"/>
+   <value name="test2" type="Int"/>
+   <value name="test5" type="Int"/>
+  </in>
+  <out>
+   <value name="y2" type="Int"/>
+  </out>
+ </stmt>
+ <stmt name="reuseme" sql="WITH inner_cte AS (&#x0A;        SELECT id, name, category_id &#x0A;        FROM products &#x0A;        WHERE price &gt; 100&#x0A;    )&#x0A;SELECT inner_cte.*, c.name AS category_name&#x0A;FROM inner_cte&#x0A;JOIN categories c ON inner_cte.category_id = c.id" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="name" type="Text"/>
+   <value name="category_id" type="Int" nullable="true"/>
+   <value name="category_name" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="reuse_reusable" sql="WITH outer_cte AS (WITH inner_cte AS (&#x0A;        SELECT id, name, category_id &#x0A;        FROM products &#x0A;        WHERE price &gt; 100&#x0A;    )&#x0A;SELECT inner_cte.*, c.name AS category_name&#x0A;FROM inner_cte&#x0A;JOIN categories c ON inner_cte.category_id = c.id)&#x0A;SELECT * FROM outer_cte" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="name" type="Text"/>
+   <value name="category_id" type="Int" nullable="true"/>
+   <value name="category_name" type="Text"/>
+  </out>
+ </stmt>
+ <table name="products">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="name" type="Text"/>
+   <value name="price" type="Decimal"/>
+   <value name="category_id" type="Int" nullable="true"/>
+  </schema>
+ </table>
+ <table name="categories">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="name" type="Text"/>
+  </schema>
+ </table>
+</sqlgg>

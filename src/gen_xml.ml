@@ -58,7 +58,7 @@ let value ?(inparam=false) v =
   Node ("value", attrs, [])
 
 let tuplelist_value_of_param = function
-  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionBoolChoice _ -> None
+  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionBoolChoice _ | SharedVarsGroup _ -> None
   | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ label = Some name; _ }, kind) ->
     let schema = match kind with 
@@ -98,6 +98,7 @@ let rec params_only l =
       | Sql.Single p -> [p]
       | OptionBoolChoice (_, v, _) -> params_only v
       | SingleIn _ -> []
+      | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars
       | Choice (_,choices) ->
         choices

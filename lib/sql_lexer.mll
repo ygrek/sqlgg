@@ -266,8 +266,11 @@ let cmnt = "--" | "//" | "#"
 (* extract separate statements *)
 rule ruleStatement = parse
   | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
-  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Prop (n,v) }
-  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Prop ("name",name) }
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n,v)] }
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" wsp* ("only-reuse" as include_) [^'\n']* '\n' { `Props [("name", name); ("include", include_)] }
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" wsp* ("reuse-and-execute" as include_) [^'\n']* '\n' { `Props [("name", name); ("include", include_)] }
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" wsp* ("only-executable" as include_) [^'\n']* '\n' { `Props [("name", name); ("include", include_)] }
+  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Props [("name", name); ("include", "only-executable")] }
   | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
   | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
   | "$" (ident? as tag) "$" {
@@ -317,6 +320,7 @@ ruleMain = parse
 
   | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
+  | '&'       (ident as ref_name) { SHARED_QUERY_REF { ref_name; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }

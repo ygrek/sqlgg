@@ -209,7 +209,7 @@ let make_variant_name i name ~is_poly =
 let vname n = make_variant_name 0 (Some n)
 
 let match_arg_pattern = function
-  | Sql.Single _ | SingleIn _ | Choice _
+  | Sql.Single _ | SingleIn _ | Choice _ | SharedVarsGroup _
   | OptionBoolChoice _
   | ChoiceIn { param = { label = None; _ }; _ }
   | TupleList _ -> "_"
@@ -240,6 +240,7 @@ let rec set_param index param =
 let rec set_var index var =
   match var with
   | Single p -> set_param index p
+  | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars
   | SingleIn _ | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
     output "begin match %s with" (make_param_name index name);
@@ -283,6 +284,7 @@ let rec eval_count_params vars =
     let classify_var = function
       | Single _ | TupleList _ -> `Static true
       | SingleIn _ -> `Static false
+      | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
       | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
       | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
       | Choice (name, c) -> `Choice (name, c)
@@ -296,6 +298,9 @@ let rec eval_count_params vars =
         | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
         | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
         | `No ->  group_vars (static, choices, bool_choices, choices_in) xs
+        | `SharedVarsGroup vars -> 
+          let static', choices', bool_choices', choices_in' = group_vars ([], [], [], []) vars in
+          group_vars (static' @ static, choices' @ choices, bool_choices' @ bool_choices, choices_in' @ choices_in) xs
     in
     group_vars ([], [], [], []) vars
   in
@@ -354,6 +359,7 @@ let rec exclude_in_vars l =
     (function
       | SingleIn _ -> None
       | Single _ as v -> Some v
+      | SharedVarsGroup (vars, p) -> Some (SharedVarsGroup (exclude_in_vars vars, p))
       | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
@@ -562,6 +568,7 @@ let generate_enum_modules stmts =
   let rec vars_to_enums vars = List.concat_map (function
     | Single { typ; _ }
     | SingleIn { typ; _ } -> typ |> get_enum |> option_list
+    | SharedVarsGroup (vars, _) -> vars_to_enums vars
     | OptionBoolChoice (_, vars, _)
     | ChoiceIn { vars; _ } -> vars_to_enums vars
     | Choice (_, ctor_list) -> 
