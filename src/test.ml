@@ -892,9 +892,9 @@ let test_add_with_window_function = [
   tt {| SELECT MAX(NULL) OVER() |} [attr' ~nullability:(Nullable) "" Any;] [];
 
   (* Same but with PARTITION BY and ORDER BY *)
-  tt {| SELECT SUM(1) OVER(PARTITION BY 'a') |} [attr' "" Int;] [];
-  tt {| SELECT SUM(1) OVER(ORDER BY 1) |} [attr' "" Int;] [];
-  tt {| SELECT SUM(1) OVER(PARTITION BY 'a' ORDER BY 1) |} [attr' "" Int;] [];
+  tt {| SELECT SUM(1) OVER(PARTITION BY COALESCE(NULL, 'a')) |} [attr' "" Int;] [];
+  tt {| SELECT SUM(1) OVER(ORDER BY 1 + 1) |} [attr' "" Int;] [];
+  tt {| SELECT SUM(1) OVER(PARTITION BY CONCAT('a') ORDER BY 1 - 0) |} [attr' "" Int;] [];
 
   tt {| SELECT 1 + (SELECT COUNT(1) OVER() WHERE FALSE) |} [attr' ~nullability:(Nullable) "" Int;] [];
 

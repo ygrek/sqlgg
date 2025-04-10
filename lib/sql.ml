@@ -498,6 +498,10 @@ type columns = column list [@@deriving show]
 
 let expr_to_string = show_expr
 
+let make_partition_by = List.iter (function
+  | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
+  | _ -> ())
+
 type assignments = (col_name * expr) list
 
 type insert_action =
