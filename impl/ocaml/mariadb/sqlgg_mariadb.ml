@@ -217,7 +217,6 @@ struct
 module IO = IO
 
 type statement = M.Stmt.t
-type 'a io_future = 'a
 type 'a connection = M.t
 type params = statement * M.Field.value array * int ref
 type row = M.Field.t array
