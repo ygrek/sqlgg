@@ -490,8 +490,8 @@ window_function:
   | NTH_VALUE LPAREN e=expr COMMA INTEGER RPAREN { e }
   | either(LAG,LEAD) LPAREN e=expr pair(COMMA, pair(MINUS?,INTEGER))? RPAREN { e }
 
-window_spec: LPAREN e=partition? order? frame? RPAREN (* TODO order parameters? *) { e }
-partition: PARTITION BY expr { } (* TODO check no params *)
+window_spec: LPAREN e=partition? o=order? frame? RPAREN (* TODO order parameters? *) { (Option.may (fun o -> make_partition_by (List.map fst o )) o); e }
+partition: PARTITION BY e=expr_list { make_partition_by e} (* TODO check no params *)
 
 frame: either(ROWS,RANGE) either(frame_border, frame_between) { }
 
