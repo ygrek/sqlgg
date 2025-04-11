@@ -390,8 +390,11 @@ default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
-set_column: name=attr_name EQUAL e=expr { name,e }
-          | name=attr_name EQUAL DEFAULT { name, Value (depends Any) }
+set_column: name=attr_name EQUAL e=set_column_expr { name,e }
+
+set_column_expr:
+  | e=expr { e }
+  | DEFAULT { Value (depends Any) }
 
 anyall: ANY | ALL | SOME { }
 
