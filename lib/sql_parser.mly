@@ -433,7 +433,6 @@ expr:
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
     | v=interval_unit { v }
-    | DEFAULT { Value (depends Any) }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
@@ -515,7 +514,7 @@ in_or_not_in: IN { `In } | NOT IN { `NotIn }
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
-choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
+choice_body: c1=LCURLY e=set_column_expr c2=RCURLY { (c1,Some e,c2) }
 choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
