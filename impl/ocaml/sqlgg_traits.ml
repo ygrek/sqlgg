@@ -70,7 +70,6 @@ module type M = sig
 
   type statement
   type -'a connection
-  type 'a io_future
   type params
   type row
   type result
