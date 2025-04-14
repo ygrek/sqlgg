@@ -317,6 +317,7 @@ ruleMain = parse
 
   | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
+  | "@?"      (ident as str) { PARAM_WITH_DEFAULT { label = Some str; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }

@@ -27,7 +27,7 @@
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
-%token <Sql.param_id> PARAM
+%token <Sql.param_id> PARAM PARAM_WITH_DEFAULT
 %token <int> LCURLY RCURLY
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
@@ -396,6 +396,8 @@ set_column:
 set_column_expr:
   | e=expr { RegularExpr e }
   | DEFAULT { AssignDefault }
+  | p=PARAM_WITH_DEFAULT t=preceded(DOUBLECOLON, manual_type)? 
+    { ParamWithDefault (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
 
 anyall: ANY | ALL | SOME { }
 

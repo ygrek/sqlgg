@@ -190,13 +190,13 @@ let resolve_column_assignments ~env l =
     let check_if_default_is_present () = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname in
     match expr with
     | RegularExpr (Choices (n,l)) ->
-      RegularExpr (Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)) (* FIXME hack, should propagate properly *)
+      `Resolved (Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)) (* FIXME hack, should propagate properly *)
     | RegularExpr (OptionBoolChoices ch) ->
-      RegularExpr (OptionBoolChoices { ch with choice = (equality typ) ch.choice })  (* FIXME hack, should propagate properly *)
-    | RegularExpr expr -> RegularExpr (equality typ expr)
-    | AssignDefault -> check_if_default_is_present(); RegularExpr (Value typ)
-    | ParamWithDefault p -> check_if_default_is_present(); ParamWithDefault p
-    | ChoicesWithDefault((n,l)) -> ChoicesWithDefault (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)
+      `Resolved (OptionBoolChoices { ch with choice = (equality typ) ch.choice })  (* FIXME hack, should propagate properly *)
+    | RegularExpr expr -> `Resolved (equality typ expr)
+    | AssignDefault -> check_if_default_is_present(); `Resolved (Value typ)
+    | ParamWithDefault p -> check_if_default_is_present(); `ParamWithDefault (Value typ, p)
+    | ChoicesWithDefault((n,l)) -> `ChoicesWithDefault (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)
   end
 
 let get_columns_schema ~env l =
@@ -456,12 +456,16 @@ and resolve_types env expr =
 
 and resolve_types_of_assigns env expr =
   let expr = match expr with
-    | RegularExpr e -> resolve_columns env e
-    | ParamWithDefault p -> ResParam { param = p; with_default = true; }
-    | ChoicesWithDefault (n, l) ->
+    | `Resolved e -> resolve_columns env e
+    | `ChoicesWithDefault (n, l) ->
       let l = List.map (fun (n,e) -> n, Option.map (resolve_columns env) e) l in
       ResChoices { param_id = n; choices = l; with_default = true; }
-    | AssignDefault -> failwith "AssignDefault should be resolved as value"  
+    | `ParamWithDefault (e, p) -> 
+      ResFun { 
+        kind = (F (Var 0, [Var 0; Var 0])); 
+        parameters = [resolve_columns env e; ResParam {  param = p; with_default = true; }]; 
+        is_over_clause = false 
+      }  
   in
   try
     assign_types env expr
