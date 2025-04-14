@@ -477,9 +477,9 @@ and 'expr choices = (param_id * 'expr option) list
 and fun_ = { kind: Type.func; parameters: expr list; is_over_clause: bool; }
 and expr =
   | Value of Type.t (** literal value *)
-  | Param of param
+  | Param of param expr_with_default
   | Inparam of param
-  | Choices of param_id * expr choices
+  | Choices of (param_id * expr choices) expr_with_default
   | InChoice of param_id * [`In | `NotIn] * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
@@ -490,6 +490,8 @@ and expr =
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
   | OptionBoolChoices of { choice: expr; pos: (pos * pos) }
+and 'a expr_with_default = { expr: 'a; with_default: bool; } [@@deriving show]
+and choices_expr = { param_id: param_id; choices: expr choices; } [@@deriving show]
 and column =
   | All
   | AllOf of table_name

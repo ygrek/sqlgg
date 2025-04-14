@@ -33,20 +33,24 @@ end
 
 type enum_ctor_value_data = { ctor_name: string; pos: pos; } [@@deriving show]
 
+type res_param = { param: param; with_default : bool; } [@@deriving show]
+
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
   | ResValue of Type.t (** literal value *)
-  | ResParam of param
+  | ResParam of res_param
   | ResSelect of Type.t * vars
   | ResInTupleList of param_id * res_in_tuple_list
   | ResInparam of param
-  | ResChoices of param_id * res_expr choices
+  | ResChoices of res_choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
 
-and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
+and res_choices = { param_id: param_id; choices: res_expr choices; with_default : bool; } [@@deriving show]
+
+and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]
   
 and res_in_tuple_list = 
   ResTyped of Type.t list | Res of res_expr list
@@ -90,7 +94,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
-    | ResParam p -> Single p::acc
+    | ResParam { param; _ } -> Single param::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
@@ -99,7 +103,7 @@ let rec get_params_of_res_expr (e:res_expr) =
     | ResInTupleList _ 
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
-    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
+    | ResChoices { param_id; choices; _} -> Choice (param_id, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) choices) :: acc
   in
   loop [] e |> List.rev
 
@@ -245,7 +249,7 @@ let rec resolve_columns env expr =
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
-    | Param x -> ResParam x
+    | Param x -> ResParam { param = x; with_default = false; }
     | InTupleList (exprs, param_id) -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
@@ -263,7 +267,7 @@ let rec resolve_columns env expr =
       ResInTupleList (param_id, Res res_exprs)
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
-    | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
+    | Choices (param_id,l) -> ResChoices { param_id; choices= List.map (fun (n,e) -> n, Option.map each e) l; with_default = false; }
     | Fun { kind; parameters; is_over_clause } ->
       ResFun { kind; parameters = List.map each parameters; is_over_clause }  
     | SelectExpr (select, usage) ->
@@ -309,7 +313,7 @@ and assign_types env expr =
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
-    | ResParam p -> e, `Ok p.typ
+    | ResParam p -> e, `Ok p.param.typ
     | ResInparam p -> e, `Ok p.typ
     | ResSelect (t, _) -> e, `Ok t
     | ResOptionBoolChoice choice ->
@@ -331,14 +335,14 @@ and assign_types env expr =
       | ResTyped _ -> assert false
       )
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
-    | ResChoices (n,l) ->
+    | ResChoices { param_id; choices; with_default } ->
       let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
       let t =
         match Type.common_subtype @@ List.map get_or_failwith @@ List.filter_map identity t with
         | None -> `Error "no common subtype for all choice branches"
         | Some t -> `Ok t
       in
-      ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
+      ResChoices {param_id; choices=List.map2 (fun (n,_) e -> n,e) choices e; with_default}, t
     | ResFun { kind; parameters; is_over_clause}  ->
         let open Type in
         let (params,types) = parameters |> List.map typeof |> List.split in
@@ -426,7 +430,7 @@ and assign_types env expr =
         in
         let assign inferred x =
           match x with
-          | ResParam { id; typ; } when is_any typ -> ResParam (new_param id inferred)
+          | ResParam { param={ id; typ; }; with_default } when is_any typ -> ResParam { param=(new_param id inferred); with_default }
           | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
           | x -> x
         in
@@ -489,9 +493,9 @@ and get_params_of_assignments_l env l =
   flat_map (function
   | RegularExpr expr -> get_params env expr
   | AssignDefault -> []
-  | ParamWithDefault p -> begin match get_params env (Param p) with 
-    | _ -> fa
-    end
+  | ParamWithDefault p -> 
+    let expr, _ = (Param p) |> resolve_types env in 
+    fst |> get_params_of_res_expr 
   | ChoicesWithDefault (n, l) -> get_params env (Choices (n, l))
  ) l
 
