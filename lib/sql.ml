@@ -410,6 +410,7 @@ type ctor =
 | Verbatim of string * string
 and var =
 | Single of param
+| SingleWithDefault of param
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
@@ -505,7 +506,6 @@ type assignment_expr =
   | ParamWithDefault of param
   | ChoicesWithDefault of param_id * expr choices
   [@@deriving show {with_path=false}]
-
 
 type assignments = (col_name * assignment_expr) list [@@deriving show]
 
