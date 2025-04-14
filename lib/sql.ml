@@ -498,7 +498,12 @@ type columns = column list [@@deriving show]
 
 let expr_to_string = show_expr
 
-type assignments = (col_name * expr) list
+type assignment = {
+  col_name: col_name;
+  expr_with_default: [`Expr of expr | `Default | `WithDefault of expr];
+} [@@deriving show]
+
+type assignments = assignment list [@@deriving show]
 
 type insert_action =
 {

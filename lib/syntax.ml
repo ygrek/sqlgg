@@ -499,6 +499,14 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
 
+and set_params_of_assigns env ss =
+  let regular, with_default = List.fold_left (fun (regular, with_default) { expr_with_default; col_name } -> match expr_with_default with
+    | `Expr expr -> ((col_name, expr) :: regular, with_default)
+    | `Default -> (regular, with_default)
+    | `WithDefault expr -> (regular, expr :: with_default)
+  ) ([], []) ss in 
+  
+
 and params_of_order order final_schema env =
   List.concat @@
   List.map

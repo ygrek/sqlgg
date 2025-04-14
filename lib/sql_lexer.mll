@@ -319,6 +319,8 @@ ruleMain = parse
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
+  | "With_default" { WITH_DEFAULT }
+
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
   | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }
   (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)

@@ -43,7 +43,7 @@
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
-       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
+       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET WITH_DEFAULT
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -390,11 +390,10 @@ default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
-set_column: name=attr_name EQUAL e=set_column_expr { name,e }
-
-set_column_expr:
-  | e=expr { e }
-  | DEFAULT { Value (depends Any) }
+set_column: 
+  | col_name=attr_name EQUAL e=expr { { col_name; expr_with_default =`Expr e  } }
+  | col_name=attr_name EQUAL DEFAULT { { col_name; expr_with_default =`Default  } }
+  | col_name=attr_name EQUAL WITH_DEFAULT LCURLY e=expr RCURLY { { col_name; expr_with_default =`WithDefault e  } }
 
 anyall: ANY | ALL | SOME { }
 
@@ -514,7 +513,7 @@ in_or_not_in: IN { `In } | NOT IN { `NotIn }
 case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
 like: LIKE | LIKE_OP { }
 
-choice_body: c1=LCURLY e=set_column_expr c2=RCURLY { (c1,Some e,c2) }
+choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
 choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
