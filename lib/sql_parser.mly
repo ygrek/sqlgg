@@ -43,7 +43,7 @@
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
-       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET WITH_DEFAULT
+       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -391,11 +391,11 @@ default_value: e=single_literal_value
              | LPAREN e=expr RPAREN { e }
 
 set_column: 
-  | col_name=attr_name EQUAL e=expr { { col_name; expr_with_default =`Expr e  } }
-  | col_name=attr_name EQUAL DEFAULT { { col_name; expr_with_default =`Default  } }
-  | col_name=attr_name EQUAL expr_with_default=set_column_with_default { { col_name; expr_with_default;  } }
+  | name=attr_name EQUAL e=set_column_expr { name, e }
 
-set_column_with_default: WITH_DEFAULT LCURLY e=expr RCURLY { `WithDefault (e, ($startofs, $endofs)) }
+set_column_expr:
+  | e=expr { RegularExpr e }
+  | DEFAULT { AssignDefault }
 
 anyall: ANY | ALL | SOME { }
 
@@ -408,8 +408,8 @@ distinct_from: DISTINCT FROM { }
 
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
 
-insert_expr: e=expr { `Expr e }
-           | DEFAULT { `Default }
+insert_expr: e=expr { RegularExpr e }
+           | DEFAULT { AssignDefault }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)

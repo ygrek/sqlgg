@@ -112,7 +112,7 @@ let get_statements ch =
           | true -> Error.log "Output schema contains column of type Unit, which is not allowed"; next ()
           | false ->
           (* FIXME iterate choice *)
-          match List.filter_map (function (i,Single p) when Type.is_unit p.typ -> Some (Gen.show_param_name p i) | _ -> None) @@ List.mapi (fun i p -> i,p)  stmt.vars with
+          match List.filter_map (function (i,Single { var_data=p; _ }) when Type.is_unit p.typ -> Some (Gen.show_param_name p i) | _ -> None) @@ List.mapi (fun i p -> i,p)  stmt.vars with
           | _::_ as l -> Error.log "Input parameter(s) of type Unit not allowed : %s" (String.concat " " l); next ()
           | [] ->
             stmt

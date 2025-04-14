@@ -94,7 +94,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
-    | ResParam { param; _ } -> Single param::acc
+    | ResParam { param; with_default } -> Single { var_data = param; with_default }::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
@@ -103,7 +103,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     | ResInTupleList _ 
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
-    | ResChoices { param_id; choices; _} -> Choice (param_id, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) choices) :: acc
+    | ResChoices { param_id; choices; with_default} -> 
+      Choice { var_data = (param_id, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) choices); with_default } :: acc
   in
   loop [] e |> List.rev
 
@@ -535,7 +536,7 @@ and params_of_order order final_schema env =
        let p2 =
          match direction with
          | None | Some `Fixed -> []
-         | Some (`Param p) -> [Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")])]
+         | Some (`Param p) -> [Choice { var_data = (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")]); with_default = false } ]
        in
        p1 @ p2)
     order
@@ -686,7 +687,7 @@ and eval_compound ~env result =
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
   let p3 = params_of_order order final_schema env in
-  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single p) p, x | None -> [],false in
+  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun var_data -> Single { var_data; with_default = false }) p, x | None -> [],false in
   (* Schema.check_unique schema; *)
   let cardinality =
     if limit1 && cardinality = `Nat then `Zero_one
@@ -830,7 +831,7 @@ let rec eval (stmt:Sql.stmt) =
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
     let env = { empty_env with schema = update_schema_with_aliases [] r } in
     let p3 = params_of_order o [] { env with tables = [(f, s)] } in
-    [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
+    [], params @ p3 @ (List.map (fun var_data -> Single { var_data; with_default = false }) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
     let params = update_tables ~env:empty_env sources ss w in
@@ -866,25 +867,26 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ; }
+  | Single { var_data={ id; typ; }; _}
   | SingleIn { id; typ; _ } -> remember id.label typ
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionBoolChoice (p, l, _) ->
     check_choice_name p;
     List.iter traverse l
-  | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | Choice { var_data=(p,l); _ } -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
   let rec map = function
-  | Single { id; typ; } ->
+  | Single { var_data={ id; typ; }; with_default } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    Single (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+    Single { var_data = (new_param id (Type.undepend typ Strict)); with_default } (* if no other clues - input parameters are strict *)
   | SingleIn { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
-  | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
+  | Choice { var_data=(p, l); with_default } -> 
+    Choice { var_data=(p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l); with_default }
   | TupleList _ as x -> x
   in
   List.iter traverse l;
@@ -934,7 +936,8 @@ let complete_sql kind sql =
       let pos_end = pos_start + String.length attr_ref in
       (* autoincrement is special - nullable on insert, strict otherwise *)
       let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
-      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ) in
+      (* TODO: inherit with_default *)
+      let param = Single { var_data = (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ); with_default = false } in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

@@ -86,7 +86,7 @@ let substitute_vars s vars subst_param =
   let rec loop acc i parami vars =
     match vars with
     | [] -> acc, i
-    | Sql.Single param :: tl ->
+    | Sql.Single { var_data=param; _ } :: tl ->
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
@@ -116,7 +116,7 @@ let substitute_vars s vars subst_param =
         acc
       in
       loop acc i2 parami tl
-    | Choice (name,ctors) :: tl ->
+    | Choice { var_data=(name,ctors); _ } :: tl ->
       let dyn = ctors |> List.map begin function
         | Sql.Simple (ctor,args) ->
           let (c1,c2) = ctor.pos in
@@ -155,23 +155,6 @@ let substitute_vars s vars subst_param =
     | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
-      let pieces =
-        let (acc, last) = loop [] c1 0 vars in
-        let s = 
-          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
-          let args = Some(vars) in
-          {ctor; args; sql; is_poly=false} in
-        let n = 
-          let sql = Static " TRUE " in
-          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
-          let args = None in
-          {ctor; args; sql=[sql]; is_poly=false} in
-        [s; n]
-      in
-      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
-      loop acc f2 parami tl
-    | SetWithDefault (var, (i1, i2)) :: tl ->  
       let pieces =
         let (acc, last) = loop [] c1 0 vars in
         let s = 
@@ -260,8 +243,9 @@ let rec find_param_ids l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p | SingleIn p -> [ p.id ]
-      | Choice (id,_) -> [ id ]
+      | Sql.Single p -> [ p.var_data.id ]
+      | SingleIn p -> [p.id]
+      | Choice { var_data=(id,_); _ } -> [ id ]
       | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | TupleList (id, _) -> [ id ])
@@ -276,7 +260,7 @@ let rec params_only l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p -> [p]
+      | Sql.Single { var_data; _ } -> [var_data]
       | SingleIn _ -> []
       | ChoiceIn { vars; _ } -> params_only vars
       | OptionBoolChoice _

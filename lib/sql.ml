@@ -409,13 +409,14 @@ type ctor =
 | Simple of param_id * var list option
 | Verbatim of string * string
 and var =
-| Single of param
+| Single of param var_with_default
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
-| Choice of param_id * ctor list
+| Choice of (param_id * ctor list) var_with_default
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
+and 'a var_with_default = { var_data: 'a; with_default: bool; } [@@deriving show]
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
