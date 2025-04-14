@@ -393,7 +393,9 @@ default_value: e=single_literal_value
 set_column: 
   | col_name=attr_name EQUAL e=expr { { col_name; expr_with_default =`Expr e  } }
   | col_name=attr_name EQUAL DEFAULT { { col_name; expr_with_default =`Default  } }
-  | col_name=attr_name EQUAL WITH_DEFAULT LCURLY e=expr RCURLY { { col_name; expr_with_default =`WithDefault e  } }
+  | col_name=attr_name EQUAL expr_with_default=set_column_with_default { { col_name; expr_with_default;  } }
+
+set_column_with_default: WITH_DEFAULT LCURLY e=expr RCURLY { `WithDefault (e, ($startofs, $endofs)) }
 
 anyall: ANY | ALL | SOME { }
 

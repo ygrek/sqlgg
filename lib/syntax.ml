@@ -170,7 +170,7 @@ let resolve_column ~env {cname;tname} =
   | Some result -> result
 
 let resolve_column_assignments ~env l =
-  let open Schema.Source in 
+  let open Schema.Source in
   let open Attr in
   let all = all_tbl_columns (List.map (fun (a, b) -> a, (List.map (fun attr -> {sources=[a]; attr}) b)) env.tables) in
   l |> List.map begin fun (col,expr) ->
@@ -181,12 +181,16 @@ let resolve_column_assignments ~env l =
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
     let equality typ expr = Fun { kind = (F (Var 0, [Var 0; Var 0])); parameters = [Value typ; expr]; is_over_clause = false } in
+    let check_if_default_is_present () = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname in
     match expr with
-    | Choices (n,l) ->
-      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
-    | OptionBoolChoices ch ->
-      OptionBoolChoices { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
-    | _ -> equality typ expr
+    | RegularExpr (Choices (n,l)) ->
+      RegularExpr (Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)) (* FIXME hack, should propagate properly *)
+    | RegularExpr (OptionBoolChoices ch) ->
+      RegularExpr (OptionBoolChoices { ch with choice = (equality typ) ch.choice })  (* FIXME hack, should propagate properly *)
+    | RegularExpr expr -> RegularExpr (equality typ expr)
+    | AssignDefault -> check_if_default_is_present(); RegularExpr (Value typ)
+    | ParamWithDefault p -> check_if_default_is_present(); ParamWithDefault p
+    | ChoicesWithDefault((n,l)) -> ChoicesWithDefault (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)
   end
 
 let get_columns_schema ~env l =
@@ -443,6 +447,16 @@ and resolve_types env expr =
       eprintfn "%s" (show_res_expr expr);
       raise exn
 
+      and resolve_types_2 env expr =
+        let expr = expr |> resolve_columns env in
+        try
+          assign_types env expr
+        with
+          exn ->
+            eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+            eprintfn "%s" (show_res_expr expr);
+            raise exn
+
 and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let resolve1 = function
@@ -460,6 +474,8 @@ and infer_schema env columns =
   flat_map resolve1 columns
 
 and get_params env e = e |> resolve_types env |> fst |> get_params_of_res_expr
+
+and get_params_2 env e = e |> resolve_types env |> fst |> get_params_of_res_expr
 
 (*
 let _ =
@@ -479,6 +495,8 @@ and get_params_opt env = function
   | None -> []
 
 and get_params_l env l = flat_map (get_params env) l
+
+and get_params_l_2 env l = flat_map (get_params env) l
 
 and do_join (env,params) ((schema1,params1,_tables),join_type,join_cond) =
   let schema = Schema.Join.join join_type join_cond env.schema schema1 in
@@ -500,14 +518,28 @@ and params_of_assigns env ss =
   get_params_l env exprs
 
 and set_params_of_assigns env ss =
+  let exprs = resolve_column_assignments ~env ss in
+  get_params_l env exprs  
+
+(* and set_params_of_assigns env ss =
   let regular, with_default = List.fold_left (fun (regular, with_default) { expr_with_default; col_name } -> match expr_with_default with
     | `Expr expr -> ((col_name, expr) :: regular, with_default)
     | `Default -> (regular, with_default)
-    | `WithDefault expr -> (regular, (col_name, expr) :: with_default)
+    | `WithDefault (expr, _) -> (regular, (col_name, expr) :: with_default)
   ) ([], []) ss in
   let regular = params_of_assigns env regular in
   let with_default_vars = params_of_assigns env with_default in
-  regular @ List.map (fun var -> SetWithDefault var) with_default_vars
+  let _ = try
+    List.map2 (fun (_, expr) var -> 
+      match expr, var with
+      | Param p, Single _ -> 1
+      | Choices _, Choice _ -> 2
+      | e, _ -> fail  "With_default syntax supports only params or choices, gives : %s" (show_expr e)
+    ) with_default with_default_vars 
+  with Invalid_argument _ -> fail "With_default syntax supports only params or choices" in 
+  failwith "Not implemented"
+  
+  regular @ List.map (fun var -> SetWithDefault var) with_default_vars *)
 
 
 and params_of_order order final_schema env =
@@ -681,10 +713,10 @@ let update_tables ~env sources ss w =
   let schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources in
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
-  let result = get_columns_schema ~env:{ env with tables } (List.map fst ss) in
+  let result = get_columns_schema ~env:{ env with tables } (List.map (fun { col_name; _ } -> col_name) ss) in
   let env = { empty_env with 
     tables; schema; insert_schema=Schema.Source.from_schema result; } in
-  let p1 = params_of_assigns env ss in
+  let p1 = set_params_of_assigns env ss in
   let p2 = get_params_opt { env with set_tyvar_strict = true } w in
   p0 @ p1 @ p2
 
@@ -752,14 +784,14 @@ let rec eval (stmt:Sql.stmt) =
       in
       params_of_assigns env (List.concat assigns), None
     in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let params2 = set_params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Insert { target=table; action=`Param (names, param_id); on_duplicate; } ->
     let expect = values_or_all table names in
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; insert_schema = expect; } in
     let params = [ TupleList (param_id, Insertion expect) ] in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let params2 = set_params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None, table)
   | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
     let expect = values_or_all table names in
@@ -773,18 +805,18 @@ let rec eval (stmt:Sql.stmt) =
     ignore (Schema.compound
       ((List.map (fun attr -> {sources=[]; attr;})) expect)
       (List.map (fun {attr; _} -> {sources=[]; attr}) schema)); (* test equal types once more (not really needed) *)
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let params2 = set_params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
-    let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
+    let expect = values_or_all table (Option.map (List.map (function {col_name={cname; tname=None}; _} -> cname | _ -> assert false)) ss) in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
       insert_schema = expect;} in
     let (params,inferred) = match ss with
     | None -> [], Some (Assign, Tables.get_schema table)
-    | Some ss -> params_of_assigns env ss, None
+    | Some ss -> set_params_of_assigns env ss, None
     in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let params2 = set_params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in

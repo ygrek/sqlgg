@@ -171,6 +171,23 @@ let substitute_vars s vars subst_param =
       in
       let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
       loop acc f2 parami tl
+    | SetWithDefault (var, (i1, i2)) :: tl ->  
+      let pieces =
+        let (acc, last) = loop [] c1 0 vars in
+        let s = 
+          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) in
+          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let args = Some(vars) in
+          {ctor; args; sql; is_poly=false} in
+        let n = 
+          let sql = Static " TRUE " in
+          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let args = None in
+          {ctor; args; sql=[sql]; is_poly=false} in
+        [s; n]
+      in
+      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
+      loop acc f2 parami tl
   in
   let (acc,last) = loop [] 0 0 vars in
   let acc = List.rev (Static (String.slice ~first:last s) :: acc) in

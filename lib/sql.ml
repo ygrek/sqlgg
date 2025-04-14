@@ -416,7 +416,7 @@ and var =
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
-| SetWithDefault of var
+| SetWithDefault of var * pos
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -499,18 +499,21 @@ type columns = column list [@@deriving show]
 
 let expr_to_string = show_expr
 
-type assignment = {
-  col_name: col_name;
-  expr_with_default: [`Expr of expr | `Default | `WithDefault of expr];
-} [@@deriving show]
+type assignment_expr = 
+  | RegularExpr of expr 
+  | AssignDefault 
+  | ParamWithDefault of param
+  | ChoicesWithDefault of param_id * expr choices
+  [@@deriving show {with_path=false}]
 
-type assignments = assignment list [@@deriving show]
+
+type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type insert_action =
 {
   target : table_name;
   action : [ `Set of assignments option
-           | `Values of (string list option * [ `Expr of expr | `Default ] list list option) (* column names * list of value tuples *)
+           | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
