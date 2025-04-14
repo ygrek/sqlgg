@@ -336,7 +336,7 @@ and assign_types env expr =
       )
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
     | ResChoices { param_id; choices; with_default } ->
-      let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
+      let (e,t) = List.split @@ List.map (fun (_, e) -> option_split @@ Option.map typeof e) choices in
       let t =
         match Type.common_subtype @@ List.map get_or_failwith @@ List.filter_map identity t with
         | None -> `Error "no common subtype for all choice branches"
@@ -442,8 +442,26 @@ and assign_types env expr =
   in
   typeof expr
 
+
 and resolve_types env expr =
   let expr = expr |> resolve_columns env in
+  try
+    assign_types env expr
+  with
+    exn ->
+      eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+      eprintfn "%s" (show_res_expr expr);
+      raise exn
+
+and resolve_types_of_assigns env expr =
+  let expr = match expr with
+    | RegularExpr e -> resolve_columns env e
+    | ParamWithDefault p -> ResParam { param = p; with_default = true; }
+    | ChoicesWithDefault (n, l) ->
+      let l = List.map (fun (n,e) -> n, Option.map (resolve_columns env) e) l in
+      ResChoices { param_id = n; choices = l; with_default = true; }
+    | AssignDefault -> failwith "AssignDefault should be resolved as value"  
+  in
   try
     assign_types env expr
   with
@@ -489,16 +507,6 @@ and get_params_opt env = function
 
 and get_params_l env l = flat_map (get_params env) l
 
-and get_params_of_assignments_l env l = 
-  flat_map (function
-  | RegularExpr expr -> get_params env expr
-  | AssignDefault -> []
-  | ParamWithDefault p -> 
-    let expr, _ = (Param p) |> resolve_types env in 
-    fst |> get_params_of_res_expr 
-  | ChoicesWithDefault (n, l) -> get_params env (Choices (n, l))
- ) l
-
 and do_join (env,params) ((schema1,params1,_tables),join_type,join_cond) =
   let schema = Schema.Join.join join_type join_cond env.schema schema1 in
   let env = { env with schema } in
@@ -516,28 +524,7 @@ and join env ((schema,p0,ts0),joins) =
 
 and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
-  get_params_of_assignments_l env exprs
-
-(* and set_params_of_assigns env ss =
-  let regular, with_default = List.fold_left (fun (regular, with_default) { expr_with_default; col_name } -> match expr_with_default with
-    | `Expr expr -> ((col_name, expr) :: regular, with_default)
-    | `Default -> (regular, with_default)
-    | `WithDefault (expr, _) -> (regular, (col_name, expr) :: with_default)
-  ) ([], []) ss in
-  let regular = params_of_assigns env regular in
-  let with_default_vars = params_of_assigns env with_default in
-  let _ = try
-    List.map2 (fun (_, expr) var -> 
-      match expr, var with
-      | Param p, Single _ -> 1
-      | Choices _, Choice _ -> 2
-      | e, _ -> fail  "With_default syntax supports only params or choices, gives : %s" (show_expr e)
-    ) with_default with_default_vars 
-  with Invalid_argument _ -> fail "With_default syntax supports only params or choices" in 
-  failwith "Not implemented"
-  
-  regular @ List.map (fun var -> SetWithDefault var) with_default_vars *)
-
+  flat_map (fun e -> e |> resolve_types_of_assigns env |> fst |> get_params_of_res_expr) exprs
 
 and params_of_order order final_schema env =
   List.concat @@
@@ -555,7 +542,7 @@ and params_of_order order final_schema env =
 
 and ensure_res_expr = function
   | Value x -> ResValue x
-  | Param x -> ResParam x
+  | Param param -> ResParam { param; with_default = false; }
   | Inparam x -> ResInparam x
   | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
@@ -775,8 +762,6 @@ let rec eval (stmt:Sql.stmt) =
         List.map begin fun tuple ->
           (* pair up columns with inserted values *)
           List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple
-          (* resolve DEFAULTs *)
-          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun { kind = Type.identity; parameters = [Column col]; is_over_clause = false})
         end
       in
       params_of_assigns env (List.concat assigns), None
@@ -883,7 +868,6 @@ let unify_params l =
   let rec traverse = function
   | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
-  | SetWithDefault var -> traverse var
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionBoolChoice (p, l, _) ->
     check_choice_name p;
@@ -898,7 +882,6 @@ let unify_params l =
   | SingleIn { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
-  | SetWithDefault var -> SetWithDefault (map var)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)

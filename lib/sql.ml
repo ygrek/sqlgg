@@ -410,14 +410,12 @@ type ctor =
 | Verbatim of string * string
 and var =
 | Single of param
-| SingleWithDefault of param
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
-| SetWithDefault of var * pos
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 type vars = var list [@@deriving show]
@@ -477,9 +475,9 @@ and 'expr choices = (param_id * 'expr option) list
 and fun_ = { kind: Type.func; parameters: expr list; is_over_clause: bool; }
 and expr =
   | Value of Type.t (** literal value *)
-  | Param of param expr_with_default
+  | Param of param
   | Inparam of param
-  | Choices of (param_id * expr choices) expr_with_default
+  | Choices of param_id * expr choices
   | InChoice of param_id * [`In | `NotIn] * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
@@ -490,8 +488,6 @@ and expr =
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
   | OptionBoolChoices of { choice: expr; pos: (pos * pos) }
-and 'a expr_with_default = { expr: 'a; with_default: bool; } [@@deriving show]
-and choices_expr = { param_id: param_id; choices: expr choices; } [@@deriving show]
 and column =
   | All
   | AllOf of table_name
