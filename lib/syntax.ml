@@ -503,9 +503,12 @@ and set_params_of_assigns env ss =
   let regular, with_default = List.fold_left (fun (regular, with_default) { expr_with_default; col_name } -> match expr_with_default with
     | `Expr expr -> ((col_name, expr) :: regular, with_default)
     | `Default -> (regular, with_default)
-    | `WithDefault expr -> (regular, expr :: with_default)
-  ) ([], []) ss in 
-  
+    | `WithDefault expr -> (regular, (col_name, expr) :: with_default)
+  ) ([], []) ss in
+  let regular = params_of_assigns env regular in
+  let with_default_vars = params_of_assigns env with_default in
+  regular @ List.map (fun var -> SetWithDefault var) with_default_vars
+
 
 and params_of_order order final_schema env =
   List.concat @@
@@ -851,6 +854,7 @@ let unify_params l =
   let rec traverse = function
   | Single { id; typ; }
   | SingleIn { id; typ; _ } -> remember id.label typ
+  | SetWithDefault var -> traverse var
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionBoolChoice (p, l, _) ->
     check_choice_name p;
@@ -865,6 +869,7 @@ let unify_params l =
   | SingleIn { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+  | SetWithDefault var -> SetWithDefault (map var)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
