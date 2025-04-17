@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_registration_feedbacks" sql="CREATE TABLE IF NOT EXISTS registration_feedbacks (&#x0A;  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,&#x0A;  `user_message` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,&#x0A;  `user_message_2` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,&#x0A;  PRIMARY KEY (`id`)&#x0A;) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" category="DDL" kind="create" target="registration_feedbacks" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="SELECT * FROM registration_feedbacks WHERE&#x0A;  id = @id AND&#x0A;  {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="id" type="Int"/>
+   <value name="search" type="Text"/>
+   <value name="search2" type="Text"/>
+   <value name="a" type="Text"/>
+   <value name="b" type="Text"/>
+  </in>
+  <out>
+   <value name="id" type="Int"/>
+   <value name="user_message" type="Text"/>
+   <value name="user_message_2" type="Text"/>
+  </out>
+ </stmt>
+ <table name="registration_feedbacks">
+  <schema>
+   <value name="id" type="Int"/>
+   <value name="user_message" type="Text"/>
+   <value name="user_message_2" type="Text"/>
+  </schema>
+ </table>
+</sqlgg>

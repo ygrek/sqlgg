@@ -207,23 +207,40 @@ let make_variant_name i name ~is_poly =
   | Some n -> String.capitalize_ascii n
 
 let vname n = make_variant_name 0 (Some n)
-
-let match_arg_pattern = function
-  | Sql.Single _ | SingleIn _ | Choice _
-  | OptionBoolChoice _
-  | ChoiceIn { param = { label = None; _ }; _ }
-  | TupleList _ -> "_"
-  | ChoiceIn { param = { label = Some s; _ }; _ } -> s
-
+  
 let match_variant_pattern i name args ~is_poly =
-  sprintf "%s%s"
-    (make_variant_name i name ~is_poly)
-    (match args with
-     | Some [] | None -> ""
-     | Some l ->
-     match List.map match_arg_pattern l with
-     | l when List.for_all ((=) "_") l -> " _"
-     | l -> sprintf " (%s)" (String.concat ", " l))
+  let variant_name = make_variant_name i name ~is_poly in
+  match args with
+  | None | Some [] -> variant_name
+  | Some arg_list ->
+    let (_, _, all_wildcard), patterns =
+      List.fold_left_map (fun (seen_wildcards, seen_names, all_wc) arg ->
+        let make_wildcard_param label = 
+          if List.mem label seen_wildcards
+            then ((seen_wildcards, seen_names, all_wc), None)
+            else ((label :: seen_wildcards, seen_names, all_wc), Some "_") in
+        match arg with
+        | Sql.Single param | SingleIn param -> make_wildcard_param param.id.label
+        | TupleList (param_id, _) -> make_wildcard_param param_id.label
+        | Choice ({ label = None; _ }, _)
+        | OptionBoolChoice ({ label = None; _ }, _, _)
+        | ChoiceIn { param = { label = None; _ }; _ } ->
+            ((seen_wildcards, seen_names, all_wc), Some "_")
+        | Choice ({ label = Some s; _ }, _)
+        | OptionBoolChoice ({ label = Some s; _ }, _, _)
+        | ChoiceIn { param = { label = Some s; _ }; _ } ->
+            if List.mem s seen_names
+            then ((seen_wildcards, seen_names, false), None)
+            else ((seen_wildcards, s :: seen_names, false), Some s)
+      ) ([], [], true) arg_list
+    in
+    let patterns = List.filter_map identity patterns in
+    if patterns = [] then
+      variant_name
+    else if all_wildcard then
+      variant_name ^ " _"
+    else
+      variant_name ^ " (" ^ String.concat ", " patterns ^ ")"
 
 let rec set_param index param =
   let nullable = is_param_nullable param in
@@ -295,7 +312,6 @@ let rec eval_count_params vars =
         | `BoolChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
         | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
         | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
-        | `No ->  group_vars (static, choices, bool_choices, choices_in) xs
     in
     group_vars ([], [], [], []) vars
   in
@@ -316,9 +332,10 @@ let rec eval_count_params vars =
   let bool_choices = match bool_choices with
   | [] -> ""
   | _ -> bool_choices |> List.mapi begin fun i ((param_id, vars)) ->
-    sprintf " + (match %s with %s -> 1 | %s -> 0)"
+    sprintf " + (match %s with %s -> %s | %s -> 0)"
       (make_param_name i param_id)
       (match_variant_pattern i (Some "Some") (Some vars) ~is_poly:false)
+      (eval_count_params vars)
       (match_variant_pattern i (Some "None") None ~is_poly:false)
   end |> String.concat "" in
   let choices =
