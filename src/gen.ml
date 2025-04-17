@@ -158,7 +158,7 @@ let substitute_vars s vars subst_param =
       let pieces =
         let (acc, last) = loop [] c1 0 vars in
         let s = 
-          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)in
+          let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) @ [Static " ) "] in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
