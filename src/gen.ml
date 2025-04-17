@@ -156,9 +156,9 @@ let substitute_vars s vars subst_param =
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc, last) = loop [] c1 0 vars in
+        let (acc, last) = loop [] (c1 - c2) 0 vars in
         let s = 
-          let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
+          let sql = List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc) in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
