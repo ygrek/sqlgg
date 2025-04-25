@@ -83,7 +83,7 @@ and sql_dynamic_ctor = {
 }
 
 let substitute_vars s vars subst_param =
-  let rec loop acc i parami vars =
+  let rec loop s acc i parami vars =
     match vars with
     | [] -> acc, i
     | Sql.Single param :: tl ->
@@ -99,23 +99,23 @@ let substitute_vars s vars subst_param =
           acc,
           parami + 1
       in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     | SingleIn param :: tl ->
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
       let acc = SubstIn param :: Static (String.slice ~first:i ~last:i1 s) :: acc in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     | ChoiceIn { param = name; kind; vars } :: tl ->
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
       let acc =
-        DynamicIn (name, kind, List.rev @@ fst @@ loop [] i1 0 vars) ::
+        DynamicIn (name, kind, List.rev @@ fst @@ loop s [] i1 0 vars) ::
         Static (String.slice ~first:i ~last:i1 s) ::
         acc
       in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     | Choice (name,ctors) :: tl ->
       let dyn = ctors |> List.map begin function
         | Sql.Simple (ctor,args) ->
@@ -126,7 +126,7 @@ let substitute_vars s vars subst_param =
             match args with
             | None -> [Static ""]
             | Some l ->
-              let (acc,last) = loop [] c1 0 l in
+              let (acc,last) = loop s [] c1 0 l in
               List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
           in
           { ctor; sql; args; is_poly=true }
@@ -138,26 +138,26 @@ let substitute_vars s vars subst_param =
       assert (i2 > i1);
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
       assert (i1 > i);
       let acc = SubstTuple (id, ValueRows x) :: Static (String.slice ~first:i ~last:x.values_start_pos s) :: acc in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     | TupleList (id, kind) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
-      loop acc i2 parami tl
+      loop s acc i2 parami tl
     (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
     | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc, last) = loop [] c1 0 vars in
-        let s = 
+        let (acc, last) = loop s [] c1 0 vars in
+        let s_choice = 
           let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
           let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
@@ -167,19 +167,28 @@ let substitute_vars s vars subst_param =
           let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
-        [s; n]
+        [s_choice; n]
       in
       let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
-      loop acc f2 parami tl
+       loop s acc f2 parami tl
+    | SharedVarsGroup (shared_vars, id) :: tl ->
+        let (i1,i2) = id.pos in
+        assert (i2 > i1);
+        assert (i1 > i);
+        let shared_sql, (_: Sql.select_full) = Shared_queries.get id.ref_name in
+        let raw_processed = loop_and_squash shared_sql shared_vars in
+        let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
+        loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl
+  and loop_and_squash sql vars =
+    let acc, last = loop sql [] 0 0 vars in
+    let acc = List.rev (Static (String.slice ~first:last sql) :: acc) in
+    squash [] acc
+  and squash acc = function
+    | [] -> List.rev acc
+    | Static s1 :: Static s2 :: tl -> squash acc (Static (s1 ^ s2) :: tl)
+    | x::xs -> squash (x::acc) xs
   in
-  let (acc,last) = loop [] 0 0 vars in
-  let acc = List.rev (Static (String.slice ~first:last s) :: acc) in
-  let rec squash acc = function
-  | [] -> List.rev acc
-  | Static s1 :: Static s2 :: tl -> squash acc (Static (s1 ^ s2) :: tl)
-  | x::xs -> squash (x::acc) xs
-  in
-  squash [] acc
+  loop_and_squash s vars
 
 
 let subst_named index p = "@" ^ (show_param_name p index)
@@ -247,6 +256,7 @@ let rec find_param_ids l =
       | Choice (id,_) -> [ id ]
       | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
+      | SharedVarsGroup (vars, _) -> find_param_ids vars
       | TupleList (id, _) -> [ id ])
     l
 
@@ -261,6 +271,7 @@ let rec params_only l =
     (function
       | Sql.Single p -> [p]
       | SingleIn _ -> []
+      | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars
       | OptionBoolChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"

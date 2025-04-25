@@ -28,6 +28,7 @@
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
+%token <Sql.shared_query_ref_id> SHARED_QUERY_REF
 %token <int> LCURLY RCURLY
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
@@ -97,11 +98,16 @@ if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
-cte_item: cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
-          {
-            let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
-            { cte_name; cols; stmt }
-          }
+cte_item: | cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
+            {
+              let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
+              { cte_name; cols; stmt = CteInline stmt }
+            }
+          | cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS shared_query_ref_id=SHARED_QUERY_REF
+            {
+              let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
+              { cte_name; cols; stmt = CteSharedQuery shared_query_ref_id; }
+            }
 cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive }}
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
