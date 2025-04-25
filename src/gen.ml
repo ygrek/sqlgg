@@ -86,10 +86,25 @@ let substitute_vars s vars subst_param =
   let rec loop s acc i parami vars =
     match vars with
     | [] -> acc, i
-    | Sql.Single param :: tl ->
+    | Sql.Single { var_data=param; _ } :: tl ->
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
+      let pieces =
+        let (acc, last) = loop s [] i1 0 vars in
+        let s_choice = 
+          let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:i2 s) :: acc)  @ [Static " ) "]in
+          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let args = Some(vars) in
+          {ctor; args; sql; is_poly=false} in
+        let n = 
+          let sql = Static " DEFAULT " in
+          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let args = None in
+          {ctor; args; sql=[sql]; is_poly=false} in
+        [s_choice; n]
+      in
+      let acc = Dynamic (param.id, pieces) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       let acc, parami =
         match subst_param with
         | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
@@ -116,7 +131,7 @@ let substitute_vars s vars subst_param =
         acc
       in
       loop s acc i2 parami tl
-    | Choice (name,ctors) :: tl ->
+    | Choice { var_data=(name,ctors); _ } :: tl ->
       let dyn = ctors |> List.map begin function
         | Sql.Simple (ctor,args) ->
           let (c1,c2) = ctor.pos in
@@ -252,8 +267,9 @@ let rec find_param_ids l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p | SingleIn p -> [ p.id ]
-      | Choice (id,_) -> [ id ]
+      | Sql.Single p -> [ p.var_data.id ]
+      | SingleIn p -> [p.id]
+      | Choice { var_data=(id,_); _ } -> [ id ]
       | OptionBoolChoice (id, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | SharedVarsGroup (vars, _) -> find_param_ids vars
@@ -269,7 +285,7 @@ let rec params_only l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p -> [p]
+      | Sql.Single { var_data; _ } -> [var_data]
       | SingleIn _ -> []
       | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars

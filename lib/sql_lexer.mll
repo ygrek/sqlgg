@@ -341,6 +341,7 @@ ruleMain = parse
 
   | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
+  | "@?" (ident as str) { PARAM_WITH_DEFAULT { label = Some str; pos = pos lexbuf } }
   | '&' (ident as ref_name) { SHARED_QUERY_REF { ref_name; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 

@@ -220,14 +220,14 @@ let match_variant_pattern i name args ~is_poly =
             then ((seen_wildcards, seen_names, all_wc), None)
             else ((label :: seen_wildcards, seen_names, all_wc), Some "_") in
         match arg with
-        | Sql.Single param | SingleIn param -> make_wildcard_param param.id.label
+        | Sql.Single { var_data=param; _ } | SingleIn param -> make_wildcard_param param.id.label
         | TupleList (param_id, _) -> make_wildcard_param param_id.label
         | SharedVarsGroup _
-        | Choice ({ label = None; _ }, _)
+        | Choice { var_data = ({ label = None; _ }, _); _ }
         | OptionBoolChoice ({ label = None; _ }, _, _)
         | ChoiceIn { param = { label = None; _ }; _ } ->
             ((seen_wildcards, seen_names, all_wc), Some "_")
-        | Choice ({ label = Some s; _ }, _)
+        | Choice { var_data = ({ label = Some s; _ }, _); _ }
         | OptionBoolChoice ({ label = Some s; _ }, _, _)
         | ChoiceIn { param = { label = Some s; _ }; _ } ->
             if List.mem s seen_names
@@ -257,7 +257,7 @@ let rec set_param index param =
   
 let rec set_var index var =
   match var with
-  | Single p -> set_param index p
+  | Single { var_data; _ } -> set_param index var_data
   | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars
   | SingleIn _ | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
@@ -281,7 +281,7 @@ let rec set_var index var =
       dec_indent ()
     end;
     output "end;"
-  | Choice (name, ctors) ->
+  | Choice { var_data=(name, ctors); _ } ->
     output "begin match %s with" (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
       match ctor with
@@ -305,7 +305,7 @@ let rec eval_count_params vars =
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
       | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
       | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
-      | Choice (name, c) -> `Choice (name, c)
+      | Choice { var_data=(name, c); _ } -> `Choice (name, c)
     in
     let rec group_vars (static, choices, bool_choices, choices_in) = function
       | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in)
@@ -381,8 +381,8 @@ let rec exclude_in_vars l =
       | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
-      | Choice (param_id, ctors) ->
-        Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
+      | Choice { var_data=(param_id, ctors); with_default } ->
+        Some (Choice { var_data=(param_id, List.map exclude_in_vars_in_constructors ctors); with_default; }))
     l
 
 and exclude_in_vars_in_constructors = function
@@ -584,12 +584,12 @@ let generate_enum_modules stmts =
   let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in
 
   let rec vars_to_enums vars = List.concat_map (function
-    | Single { typ; _ }
+    | Single { var_data={ typ; _ }; _ }
     | SingleIn { typ; _ } -> typ |> get_enum |> option_list
     | SharedVarsGroup (vars, _)
     | OptionBoolChoice (_, vars, _)
     | ChoiceIn { vars; _ } -> vars_to_enums vars
-    | Choice (_, ctor_list) -> 
+    | Choice { var_data=(_, ctor_list) ; _ } ->
       List.concat_map ( function
         | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
         | Verbatim _ -> []

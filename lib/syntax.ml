@@ -33,20 +33,24 @@ end
 
 type enum_ctor_value_data = { ctor_name: string; pos: pos; } [@@deriving show]
 
+type res_param = { param: param; with_default : bool; } [@@deriving show]
+
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
   | ResValue of Type.t (** literal value *)
-  | ResParam of param
+  | ResParam of res_param
   | ResSelect of Type.t * vars
   | ResInTupleList of param_id * res_in_tuple_list
   | ResInparam of param
-  | ResChoices of param_id * res_expr choices
+  | ResChoices of res_choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
   [@@deriving show]
 
-and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
+and res_choices = { param_id: param_id; choices: res_expr choices; with_default : bool; } [@@deriving show]
+
+and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]
   
 and res_in_tuple_list = 
   ResTyped of Type.t list | Res of res_expr list
@@ -90,7 +94,7 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
-    | ResParam p -> Single p::acc
+    | ResParam { param; with_default } -> Single { var_data = param; with_default }::acc
     | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
       OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
@@ -99,7 +103,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     | ResInTupleList _ 
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
-    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
+    | ResChoices { param_id; choices; with_default} -> 
+      Choice { var_data = (param_id, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) choices); with_default } :: acc
   in
   loop [] e |> List.rev
 
@@ -186,7 +191,7 @@ let resolve_column ~env {cname;tname} =
   | Some result -> result
 
 let resolve_column_assignments ~env l =
-  let open Schema.Source in 
+  let open Schema.Source in
   let open Attr in
   let all = all_tbl_columns (List.map (fun (a, b) -> a, (List.map (fun attr -> {sources=[a]; attr}) b)) env.tables) in
   l |> List.map begin fun (col,expr) ->
@@ -197,12 +202,16 @@ let resolve_column_assignments ~env l =
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
     let equality typ expr = Fun { kind = (F (Var 0, [Var 0; Var 0])); parameters = [Value typ; expr]; is_over_clause = false } in
+    let check_if_default_is_present () = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname in
     match expr with
-    | Choices (n,l) ->
-      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
-    | OptionBoolChoices ch ->
-      OptionBoolChoices { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
-    | _ -> equality typ expr
+    | RegularExpr (Choices (n,l)) ->
+      `Resolved (Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)) (* FIXME hack, should propagate properly *)
+    | RegularExpr (OptionBoolChoices ch) ->
+      `Resolved (OptionBoolChoices { ch with choice = (equality typ) ch.choice })  (* FIXME hack, should propagate properly *)
+    | RegularExpr expr -> `Resolved (equality typ expr)
+    | AssignDefault -> check_if_default_is_present(); `Resolved (Value typ)
+    | ParamWithDefault p -> check_if_default_is_present(); `ParamWithDefault (Value typ, p)
+    | ChoicesWithDefault((n,l)) -> `ChoicesWithDefault (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)
   end
 
 let get_columns_schema ~env l =
@@ -256,7 +265,7 @@ let rec resolve_columns env expr =
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
-    | Param x -> ResParam x
+    | Param x -> ResParam { param = x; with_default = false; }
     | InTupleList (exprs, param_id) -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
@@ -274,7 +283,7 @@ let rec resolve_columns env expr =
       ResInTupleList (param_id, Res res_exprs)
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
-    | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
+    | Choices (param_id,l) -> ResChoices { param_id; choices= List.map (fun (n,e) -> n, Option.map each e) l; with_default = false; }
     | Fun { kind; parameters; is_over_clause } ->
       ResFun { kind; parameters = List.map each parameters; is_over_clause }  
     | SelectExpr (select, usage) ->
@@ -320,7 +329,7 @@ and assign_types env expr =
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
-    | ResParam p -> e, `Ok p.typ
+    | ResParam p -> e, `Ok p.param.typ
     | ResInparam p -> e, `Ok p.typ
     | ResSelect (t, _) -> e, `Ok t
     | ResOptionBoolChoice choice ->
@@ -342,14 +351,14 @@ and assign_types env expr =
       | ResTyped _ -> assert false
       )
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
-    | ResChoices (n,l) ->
-      let (e,t) = List.split @@ List.map (fun (_,e) -> option_split @@ Option.map typeof e) l in
+    | ResChoices { param_id; choices; with_default } ->
+      let (e,t) = List.split @@ List.map (fun (_, e) -> option_split @@ Option.map typeof e) choices in
       let t =
         match Type.common_subtype @@ List.map get_or_failwith @@ List.filter_map identity t with
         | None -> `Error "no common subtype for all choice branches"
         | Some t -> `Ok t
       in
-      ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
+      ResChoices {param_id; choices=List.map2 (fun (n,_) e -> n,e) choices e; with_default}, t
     | ResFun { kind; parameters; is_over_clause}  ->
         let open Type in
         let (params,types) = parameters |> List.map typeof |> List.split in
@@ -437,7 +446,7 @@ and assign_types env expr =
         in
         let assign inferred x =
           match x with
-          | ResParam { id; typ; } when is_any typ -> ResParam (new_param id inferred)
+          | ResParam { param={ id; typ; }; with_default } when is_any typ -> ResParam { param=(new_param id inferred); with_default }
           | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
           | x -> x
         in
@@ -451,6 +460,27 @@ and assign_types env expr =
 
 and resolve_types env expr =
   let expr = expr |> resolve_columns env in
+  try
+    assign_types env expr
+  with
+    exn ->
+      eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+      eprintfn "%s" (show_res_expr expr);
+      raise exn
+
+and resolve_types_of_assigns env expr =
+  let expr = match expr with
+    | `Resolved e -> resolve_columns env e
+    | `ChoicesWithDefault (n, l) ->
+      let l = List.map (fun (n,e) -> n, Option.map (resolve_columns env) e) l in
+      ResChoices { param_id = n; choices = l; with_default = true; }
+    | `ParamWithDefault (e, p) -> 
+      ResFun { 
+        kind = (F (Var 0, [Var 0; Var 0])); 
+        parameters = [resolve_columns env e; ResParam {  param = p; with_default = true; }]; 
+        is_over_clause = false 
+      }  
+  in
   try
     assign_types env expr
   with
@@ -513,7 +543,7 @@ and join env ((schema,p0,ts0),joins) =
 
 and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
-  get_params_l env exprs
+  flat_map (fun e -> e |> resolve_types_of_assigns env |> fst |> get_params_of_res_expr) exprs
 
 and params_of_order order final_schema env =
   List.concat @@
@@ -524,14 +554,14 @@ and params_of_order order final_schema env =
        let p2 =
          match direction with
          | None | Some `Fixed -> []
-         | Some (`Param p) -> [Choice (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")])]
+         | Some (`Param p) -> [Choice { var_data = (p,[Verbatim ("ASC","ASC");Verbatim ("DESC","DESC")]); with_default = false } ]
        in
        p1 @ p2)
     order
 
 and ensure_res_expr = function
   | Value x -> ResValue x
-  | Param x -> ResParam x
+  | Param param -> ResParam { param; with_default = false; }
   | Inparam x -> ResInparam x
   | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
@@ -682,7 +712,7 @@ and eval_compound ~env result =
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
   let p3 = params_of_order order final_schema env in
-  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single p) p, x | None -> [],false in
+  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun var_data -> Single { var_data; with_default = false }) p, x | None -> [],false in
   (* Schema.check_unique schema; *)
   let cardinality =
     if limit1 && cardinality = `Nat then `Zero_one
@@ -693,7 +723,7 @@ let update_tables ~env sources ss w =
   let schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources in
   let p0 = List.flatten @@ List.map (fun (_,p,_) -> p) sources in
   let tables = List.flatten @@ List.map (fun (_,_,ts) -> ts) sources in (* TODO assert equal duplicates if not unique *)
-  let result = get_columns_schema ~env:{ env with tables } (List.map fst ss) in
+  let result = get_columns_schema ~env:{ env with tables } (List.map (fun (col_name, _ ) -> col_name) ss) in
   let env = { empty_env with 
     tables; schema; insert_schema=Schema.Source.from_schema result; } in
   let p1 = params_of_assigns env ss in
@@ -758,8 +788,6 @@ let rec eval (stmt:Sql.stmt) =
         List.map begin fun tuple ->
           (* pair up columns with inserted values *)
           List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple
-          (* resolve DEFAULTs *)
-          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun { kind = Type.identity; parameters = [Column col]; is_over_clause = false})
         end
       in
       params_of_assigns env (List.concat assigns), None
@@ -788,7 +816,7 @@ let rec eval (stmt:Sql.stmt) =
     let params2 = params_of_assigns env (Option.default [] on_duplicate) in
     [], params @ params2, Insert (None,table)
   | Insert { target=table; action=`Set ss; on_duplicate; } ->
-    let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
+    let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None}, _) -> cname | _ -> assert false)) ss) in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
       insert_schema = expect;} in
@@ -828,7 +856,7 @@ let rec eval (stmt:Sql.stmt) =
     let params = update_tables ~env:empty_env [r,[],[(f, s)]] ss w in
     let env = { empty_env with schema = update_schema_with_aliases [] r } in
     let p3 = params_of_order o [] { env with tables = [(f, s)] } in
-    [], params @ p3 @ (List.map (fun p -> Single p) lim), Update (Some table)
+    [], params @ p3 @ (List.map (fun var_data -> Single { var_data; with_default = false }) lim), Update (Some table)
   | UpdateMulti (tables,ss,w) ->
     let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
     let params = update_tables ~env:empty_env sources ss w in
@@ -864,27 +892,28 @@ let unify_params l =
     | None -> fail "incompatible types for parameter %S : %s and %s" name (Type.show t) (Type.show t')
   in
   let rec traverse = function
-  | Single { id; typ; }
+  | Single { var_data={ id; typ; }; _}
   | SingleIn { id; typ; _ } -> remember id.label typ
   | SharedVarsGroup (vars, _)
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionBoolChoice (p, l, _) ->
     check_choice_name p;
     List.iter traverse l
-  | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | Choice { var_data=(p,l); _ } -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
   let rec map = function
-  | Single { id; typ; } ->
+  | Single { var_data={ id; typ; }; with_default } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    Single (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
+    Single { var_data = (new_param id (Type.undepend typ Strict)); with_default } (* if no other clues - input parameters are strict *)
   | SingleIn { id; typ; } ->
     let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | SharedVarsGroup (vars, pos) -> SharedVarsGroup (List.map map vars, pos)
   | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
-  | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
+  | Choice { var_data=(p, l); with_default } -> 
+    Choice { var_data=(p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l); with_default }
   | TupleList _ as x -> x
   in
   List.iter traverse l;
@@ -934,7 +963,8 @@ let complete_sql kind sql =
       let pos_end = pos_start + String.length attr_ref in
       (* autoincrement is special - nullable on insert, strict otherwise *)
       let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
-      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ) in
+      (* TODO: inherit with_default *)
+      let param = Single { var_data = (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ); with_default = false } in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

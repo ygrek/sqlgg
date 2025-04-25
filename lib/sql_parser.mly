@@ -27,7 +27,7 @@
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
 %token <float> FLOAT
-%token <Sql.param_id> PARAM
+%token <Sql.param_id> PARAM PARAM_WITH_DEFAULT
 %token <Sql.shared_query_ref_id> SHARED_QUERY_REF
 %token <int> LCURLY RCURLY
 %token LPAREN RPAREN COMMA EOF DOT NULL
@@ -396,7 +396,14 @@ default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
-set_column: name=attr_name EQUAL e=expr { name,e }
+set_column: 
+  | name=attr_name EQUAL e=set_column_expr { name, e }
+
+set_column_expr:
+  | e=expr { RegularExpr e }
+  | DEFAULT { AssignDefault }
+  | p=PARAM_WITH_DEFAULT t=preceded(DOUBLECOLON, manual_type)? 
+    { ParamWithDefault (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
 
 anyall: ANY | ALL | SOME { }
 
@@ -409,8 +416,8 @@ distinct_from: DISTINCT FROM { }
 
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
 
-insert_expr: e=expr { `Expr e }
-           | DEFAULT { `Default }
+insert_expr: e=expr { RegularExpr e }
+           | DEFAULT { AssignDefault }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)

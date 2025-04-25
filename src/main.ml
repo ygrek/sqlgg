@@ -53,7 +53,7 @@ let get_statement_error stmt sql =
     Some UnitOutputColumn
   ) else 
     let unit_params = List.filter_map 
-      (function (i, Single p) when Type.is_unit p.typ -> Some (Gen.show_param_name p i) | _ -> None) 
+      (function (i, Single { var_data=p; _ }) when Type.is_unit p.typ -> Some (Gen.show_param_name p i) | _ -> None) 
       (List.mapi (fun i p -> i, p) stmt.vars) 
     in
     match unit_params with

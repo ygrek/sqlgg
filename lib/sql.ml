@@ -410,14 +410,15 @@ type ctor =
 | Simple of param_id * var list option
 | Verbatim of string * string
 and var =
-| Single of param
+| Single of param var_with_default
 | SingleIn of param
 | ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
-| Choice of param_id * ctor list
+| Choice of (param_id * ctor list) var_with_default
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionBoolChoice of param_id * var list * (pos * pos)
 | SharedVarsGroup of vars * shared_query_ref_id
+and 'a var_with_default = { var_data: 'a; with_default: bool; } [@@deriving show]
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
@@ -505,13 +506,20 @@ let make_partition_by = List.iter (function
   | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
   | _ -> ())
 
-type assignments = (col_name * expr) list
+type assignment_expr = 
+  | RegularExpr of expr 
+  | AssignDefault 
+  | ParamWithDefault of param
+  | ChoicesWithDefault of param_id * expr choices
+  [@@deriving show {with_path=false}]
+
+type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type insert_action =
 {
   target : table_name;
   action : [ `Set of assignments option
-           | `Values of (string list option * [ `Expr of expr | `Default ] list list option) (* column names * list of value tuples *)
+           | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;

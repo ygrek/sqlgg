@@ -95,12 +95,12 @@ let rec params_only l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p -> [p]
+      | Sql.Single { var_data; _ } -> [var_data]
       | OptionBoolChoice (_, v, _) -> params_only v
       | SingleIn _ -> []
       | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars
-      | Choice (_,choices) ->
+      | Choice { var_data=(_,choices); _ } ->
         choices
         |> List.map (function Sql.Verbatim _ | Simple (_,None) -> [] | Simple (_name,Some vars) -> params_only vars) (* TODO prefix names *)
         |> List.concat
