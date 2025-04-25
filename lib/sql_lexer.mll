@@ -266,8 +266,14 @@ let cmnt = "--" | "//" | "#"
 (* extract separate statements *)
 rule ruleStatement = parse
   | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
-  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Prop (n,v) }
-  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Prop ("name",name) }
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n,v)] }
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as v) '\n' 
+    { 
+      let props = rulePropList [] (Lexing.from_string v) in
+      let all_props = ("name", name) :: props in
+      `Props all_props
+    }
+  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Props [("name", name); ] }
   | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
   | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
   | "$" (ident? as tag) "$" {
@@ -278,8 +284,26 @@ rule ruleStatement = parse
   | ';' { `Semicolon }
   | [^ ';'] as c { `Char c }
   | eof { `Eof }
+(* Parse a list of key:value properties *)
 and
+rulePropList acc = parse
+  | wsp* (ident+ as prop) wsp* ':' wsp* ([^',' '\n']+ as value) wsp* 
+    { 
+      let new_acc = (String.trim prop, String.trim value) :: acc in
+      rulePropListNext new_acc lexbuf
+    }
+  | wsp* '\n' { List.rev acc }
+  | wsp* eof { List.rev acc }
+  | _ { error lexbuf "rulePropList" }
+(* Parse continuation after comma *)
+and
+rulePropListNext acc = parse  
+  | ',' { rulePropList acc lexbuf }
+  | wsp* '\n' { List.rev acc }
+  | wsp* eof { List.rev acc }
+  | _ { error lexbuf "rulePropListNext" }
 (* extract tail of the input *)
+and
 ruleTail acc = parse
   | eof { acc }
   | _* as str { ruleTail (acc ^ str) lexbuf }
@@ -317,6 +341,7 @@ ruleMain = parse
 
   | "?" { QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
+  | '&' (ident as ref_name) { SHARED_QUERY_REF { ref_name; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }

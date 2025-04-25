@@ -26,3 +26,20 @@ Issue183 is fixed:
 
   $ sed -n '49p' output.ml | grep -o "match search with Some (_, _, xs, xss)"
   match search with Some (_, _, xs, xss)
+
+Support reusable queries as CTE:
+  $ cat reusabe_queries_as_ctes.sql | sqlgg -gen caml - > output.ml
+
+Compare test2 (with &abcd substitution) and test3 (without substitution):
+  $ sed -n '125,139p' output.ml > test2_part.tmp
+  $ sed -n '156,170p' output.ml > test3_part.tmp
+  $ diff test2_part.tmp test3_part.tmp
+  $ echo $?
+  0
+
+Compare SQL queries in test2 (with &abcd substitution) and test3 (without substitution) # 2:
+  $ sed -n '140,150p' output.ml > test2_sql.tmp
+  $ sed -n '171,181p' output.ml > test3_sql.tmp
+  $ diff test2_sql.tmp test3_sql.tmp
+  $ echo $?
+  0

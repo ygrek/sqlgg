@@ -1,2 +1,4 @@
 (cram
- (deps %{bin:sqlgg} registration_feedbacks.sql))
+ (deps
+  %{bin:sqlgg}
+  (glob_files *.sql)))
