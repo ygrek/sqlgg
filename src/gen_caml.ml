@@ -257,18 +257,8 @@ let rec set_param index param =
   
 let rec set_var index var =
   match var with
-  | Single { var_data; with_default = true; } -> 
-    output "begin match %s with" (make_param_name index var_data.id);
-    [(Some "None", []); (Some "Some", [Single { var_data; with_default = false }])] |> List.iteri begin fun i (label, vars) ->
-      output "| %s%s -> %s"
-      (make_variant_name i label ~is_poly:false)
-      (match vars with [] -> "" | l -> " (" ^String.concat "," (names_of_vars l) ^ ")")
-      (match vars with [] -> "()" | _ -> "");
-      inc_indent ();
-      List.iter (set_var index) vars;
-      dec_indent ()
-    end;
-    output "end;"
+  | Single { var_data; with_default = true; } ->
+    set_var index (OptionBoolChoice(var_data.id, [Single { var_data; with_default = false; }], ((0, 0), (0 ,0))))
   | Single { var_data; with_default = false; } ->  
     set_param index var_data
   | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars

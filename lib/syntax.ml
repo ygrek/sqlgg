@@ -202,15 +202,15 @@ let resolve_column_assignments ~env l =
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
     let equality typ expr = Fun { kind = (F (Var 0, [Var 0; Var 0])); parameters = [Value typ; expr]; is_over_clause = false } in
-    let check_if_default_is_present () = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname in
+    let with_default assign = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname else assign in
     match expr with
     | RegularExpr (Choices (n,l)) ->
       `Resolved (Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)) (* FIXME hack, should propagate properly *)
     | RegularExpr (OptionBoolChoices ch) ->
       `Resolved (OptionBoolChoices { ch with choice = (equality typ) ch.choice })  (* FIXME hack, should propagate properly *)
     | RegularExpr expr -> `Resolved (equality typ expr)
-    | AssignDefault -> check_if_default_is_present(); `Resolved (Value typ)
-    | ParamWithDefault p -> check_if_default_is_present(); `ParamWithDefault (Value typ, p)
+    | AssignDefault -> with_default @@ `Resolved (Value typ)
+    | ParamWithDefault p -> with_default @@ `ParamWithDefault (Value typ, p)
     | ChoicesWithDefault((n,l)) -> `ChoicesWithDefault (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l)
   end
 
