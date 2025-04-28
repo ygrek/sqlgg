@@ -132,7 +132,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(insert_expr))? ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=on_duplicate?
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
@@ -404,6 +404,7 @@ set_column_expr:
   | DEFAULT { AssignDefault }
   | p=PARAM_WITH_DEFAULT t=preceded(DOUBLECOLON, manual_type)? 
     { ParamWithDefault (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
+  | p=PARAM_WITH_DEFAULT LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in ChoicesWithDefault ({ label; pos = (p1,c2+1)},l) }
 
 anyall: ANY | ALL | SOME { }
 
@@ -415,9 +416,6 @@ attr_name: cname=IDENT { { cname; tname=None} }
 distinct_from: DISTINCT FROM { }
 
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
-
-insert_expr: e=expr { RegularExpr e }
-           | DEFAULT { AssignDefault }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)

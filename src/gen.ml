@@ -101,15 +101,13 @@ let substitute_vars s vars subst_param =
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let some, parami = match subst_param with
-          | None -> [], parami
-          | Some subst ->
-            let parami = parami + 1 in
-            let pieces = [Static (subst parami param)] in
-            pieces, parami
-      in
-      let acc = make_option_dynamic 
-        ~some ~none:[Static " DEFAULT "] param.id :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let some, parami = Option.map_default (fun subst -> 
+        let parami = parami + 1 in
+        let pieces = [Static (subst parami param)] in
+          pieces, parami
+      ) ([], parami) subst_param in
+      let dyn = make_option_dynamic ~some ~none:[Static " DEFAULT "] param.id in
+      let acc = dyn :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
     | Sql.Single { var_data=param; _ } :: tl ->
       let (i1,i2) = param.id.pos in
@@ -159,12 +157,13 @@ let substitute_vars s vars subst_param =
           { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
         end
       in
-      let dyn = if with_default then
-        {ctor = { label=Some("Test"); pos=(0, 0); }; args = None; sql = [Static " DEFAULT "]; is_poly = true} :: dyn else dyn in
+      let dynamic = if with_default then
+        make_option_dynamic ~args:vars ~some:[Dynamic (name, dyn)] ~none:[Static " TRUE "] name
+      else Dynamic (name, dyn) in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let acc = dynamic :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
       let (i1,i2) = id.pos in

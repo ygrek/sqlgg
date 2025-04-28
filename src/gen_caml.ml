@@ -284,6 +284,8 @@ let rec set_var index var =
       dec_indent ()
     end;
     output "end;"
+  | Choice { var_data=(name, ctors); with_default = true } ->
+      set_var index (OptionBoolChoice(name, [Choice { var_data=(name, ctors); with_default = false }], ((0, 0), (0 ,0))))
   | Choice { var_data=(name, ctors); _ } ->
     output "begin match %s with" (make_param_name index name);
     ctors |> List.iteri begin fun i ctor ->
@@ -309,6 +311,8 @@ let rec eval_count_params vars =
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
       | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
       | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
+      | Choice { var_data=(name, c); with_default = true; } -> 
+        `BoolChoice (name, [Choice { var_data=(name, c); with_default = false; }])
       | Choice { var_data=(name, c); _ } -> `Choice (name, c)
     in
     let rec group_vars (static, choices, bool_choices, choices_in) = function
