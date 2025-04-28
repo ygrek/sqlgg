@@ -137,7 +137,7 @@ let substitute_vars s vars subst_param =
         acc
       in
       loop s acc i2 parami tl
-    | Choice { var_data=(name,ctors); _ } :: tl ->
+    | Choice { var_data=(name,ctors); with_default } :: tl ->
       let dyn = ctors |> List.map begin function
         | Sql.Simple (ctor,args) ->
           let (c1,c2) = ctor.pos in
@@ -155,6 +155,8 @@ let substitute_vars s vars subst_param =
           { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
         end
       in
+      let dyn = if with_default then
+        {ctor = { label=Some("None"); pos=(0, 0); }; args = None; sql = [Static " DEFAULT "]; is_poly = true} :: dyn else dyn in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
