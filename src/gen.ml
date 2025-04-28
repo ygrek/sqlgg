@@ -82,6 +82,17 @@ and sql_dynamic_ctor = {
   is_poly: bool;
 }
 
+let make_option_dynamic ?args ~some ~none param_id =
+  let pieces =
+    let s_choice = 
+      let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+      {ctor; args; sql = some; is_poly=false} in
+    let n = 
+      let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+      {ctor; args = None; sql = none; is_poly=false} in
+    [s_choice; n] in
+  Dynamic (param_id, pieces) 
+
 let substitute_vars s vars subst_param =
   let rec loop s acc i parami vars =
     match vars with
@@ -90,22 +101,15 @@ let substitute_vars s vars subst_param =
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let pieces, parami =
-        let s_choice, parami = 
-          let sql, parami = match subst_param with
-            | None -> [], parami
-            | Some subst -> [Static (subst parami param)], parami + 1 in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
-          let args = None in
-        {ctor; args; sql; is_poly=false}, parami in
-          let n = 
-            let sql = Static " DEFAULT "  in
-            let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
-            let args = None in
-            {ctor; args; sql = [sql]; is_poly=false} in
-        [s_choice; n], parami
+      let some, parami = match subst_param with
+          | None -> [], parami
+          | Some subst ->
+            let parami = parami + 1 in
+            let pieces = [Static (subst parami param)] in
+            pieces, parami
       in
-      let acc = Dynamic (param.id, pieces) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      let acc = make_option_dynamic 
+        ~some ~none:[Static " DEFAULT "] param.id :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
     | Sql.Single { var_data=param; _ } :: tl ->
       let (i1,i2) = param.id.pos in
@@ -156,7 +160,7 @@ let substitute_vars s vars subst_param =
         end
       in
       let dyn = if with_default then
-        {ctor = { label=Some("None"); pos=(0, 0); }; args = None; sql = [Static " DEFAULT "]; is_poly = true} :: dyn else dyn in
+        {ctor = { label=Some("Test"); pos=(0, 0); }; args = None; sql = [Static " DEFAULT "]; is_poly = true} :: dyn else dyn in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
@@ -178,22 +182,12 @@ let substitute_vars s vars subst_param =
     | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
-      let pieces =
+      let dynamic = 
         let (acc, last) = loop s [] c1 0 vars in
-        let s_choice = 
-          let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
-          let args = Some(vars) in
-          {ctor; args; sql; is_poly=false} in
-        let n = 
-          let sql = Static " TRUE " in
-          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
-          let args = None in
-          {ctor; args; sql=[sql]; is_poly=false} in
-        [s_choice; n]
-      in
-      let acc = Dynamic (name, pieces) :: Static (String.slice ~first:i ~last:f1 s) :: acc in
-       loop s acc f2 parami tl
+        let some = [Static " ( "] @ List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc) @ [Static " ) "] in
+        make_option_dynamic ~args:vars ~some ~none:[Static " TRUE "] name in
+      let acc = dynamic :: Static (String.slice ~first:i ~last:f1 s) :: acc in
+      loop s acc f2 parami tl
     | SharedVarsGroup (shared_vars, id) :: tl ->
         let (i1,i2) = id.pos in
         assert (i2 > i1);
