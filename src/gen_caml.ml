@@ -300,6 +300,7 @@ let rec set_var index var =
 let rec eval_count_params vars =
   let (static, choices, bool_choices, choices_in) =
     let classify_var = function
+      | Single { with_default = true; var_data } -> `BoolChoice (var_data.id, [Single { with_default = false; var_data }])
       | Single _ | TupleList _ -> `Static true
       | SingleIn _ -> `Static false
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars

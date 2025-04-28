@@ -86,25 +86,31 @@ let substitute_vars s vars subst_param =
   let rec loop s acc i parami vars =
     match vars with
     | [] -> acc, i
+    | Sql.Single { var_data=param; with_default = true} :: tl ->
+      let (i1,i2) = param.id.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
+      let pieces, parami =
+        let s_choice, parami = 
+          let sql, parami = match subst_param with
+            | None -> [], parami
+            | Some subst -> [Static (subst parami param)], parami + 1 in
+          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let args = None in
+        {ctor; args; sql; is_poly=false}, parami in
+          let n = 
+            let sql = Static " DEFAULT "  in
+            let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+            let args = None in
+            {ctor; args; sql = [sql]; is_poly=false} in
+        [s_choice; n], parami
+      in
+      let acc = Dynamic (param.id, pieces) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      loop s acc i2 parami tl
     | Sql.Single { var_data=param; _ } :: tl ->
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
       assert (i1 > i);
-      let pieces =
-        let (acc, last) = loop s [] i1 0 vars in
-        let s_choice = 
-          let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:i2 s) :: acc)  @ [Static " ) "]in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
-          let args = Some(vars) in
-          {ctor; args; sql; is_poly=false} in
-        let n = 
-          let sql = Static " DEFAULT " in
-          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
-          let args = None in
-          {ctor; args; sql=[sql]; is_poly=false} in
-        [s_choice; n]
-      in
-      let acc = Dynamic (param.id, pieces) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       let acc, parami =
         match subst_param with
         | None -> Static (String.slice ~first:i ~last:i2 s) :: acc, parami
