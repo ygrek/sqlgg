@@ -43,7 +43,7 @@
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
-       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
+       CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
@@ -132,7 +132,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(insert_expr))? ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=on_duplicate?
               {
                 Insert { target; action=`Values (names, values); on_duplicate=ss; }
               }
@@ -396,7 +396,13 @@ default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
-set_column: name=attr_name EQUAL e=expr { name,e }
+set_column: 
+  | name=attr_name EQUAL e=set_column_expr { name, e }
+
+set_column_expr:
+  | e=expr { RegularExpr e }
+  | LCURLY e=expr RCURLY TWO_QSTN { (WithDefaultParam (e, (($startofs, $endofs), ($startofs + 1, $endofs - 3)))) }
+  | DEFAULT { AssignDefault }
 
 anyall: ANY | ALL | SOME { }
 
@@ -408,9 +414,6 @@ attr_name: cname=IDENT { { cname; tname=None} }
 distinct_from: DISTINCT FROM { }
 
 like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
-
-insert_expr: e=expr { `Expr e }
-           | DEFAULT { `Default }
 
 expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)
@@ -449,7 +452,7 @@ expr:
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
-    | LCURLY e=expr RCURLY QSTN { OptionBoolChoices ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2))}) }
+    | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
