@@ -43,3 +43,36 @@ Compare SQL queries in test2 (with &abcd substitution) and test3 (without substi
   $ diff test2_sql.tmp test3_sql.tmp
   $ echo $?
   0
+
+Implement set default feature:
+
+  $ cat set_default_syntax.sql | sqlgg -params unnamed -gen caml - > output.ml
+
+  $ sed -n '17,38p' output.ml
+    let insert_registration_feedbacks_1 db ~user_message ~grant_types =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match user_message with Some _ -> 1 | None -> 0) + (match grant_types with Some (grant_types) -> 0 + (match grant_types with `A -> 0 | `B -> 0) | None -> 0)) in
+        begin match user_message with
+        | None -> ()
+        | Some (user_message) ->
+          T.set_param_Text p user_message;
+        end;
+        begin match grant_types with
+        | None -> ()
+        | Some (grant_types) ->
+          begin match grant_types with
+          | `A -> ()
+          | `B -> ()
+          end;
+        end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO `registration_feedbacks`\n\
+  SET\n\
+    `user_message` = " ^ (match user_message with Some _ -> " ( " ^ " CONCAT(" ^ "?" ^ ", '22222') " ^ " ) " | None -> " DEFAULT ") ^ ",\n\
+    `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> "'2'" | `B -> "'2'") ^ " " ^ " ) " | None -> " DEFAULT ")) set_params
+
+Implement set default feature, no way to set DEFAULT for fields without DEFAULT:
+
+  $ cat set_default_syntax_fail.sql | sqlgg -params unnamed -gen caml - 2>&1 | grep "Column test doesn't have default value"
+  Fatal error: exception Failure("Column test doesn't have default value")

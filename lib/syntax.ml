@@ -43,7 +43,7 @@ type res_expr =
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * [`In | `NotIn] * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
-  | ResOptionBoolChoice of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos) }
+  | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos); kind: Sql.option_actions_kind }
   [@@deriving show]
 
 and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
@@ -91,8 +91,8 @@ let rec get_params_of_res_expr (e:res_expr) =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
     | ResParam p -> Single p::acc
-    | ResOptionBoolChoice { choice_id; res_choice; pos} -> 
-      OptionBoolChoice (choice_id, get_params_of_res_expr res_choice, pos) :: acc
+    | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
+      OptionActionChoice (choice_id, get_params_of_res_expr res_choice, pos, kind) :: acc
     | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun { parameters; _ } -> List.fold_left loop acc parameters
@@ -115,7 +115,7 @@ let rec is_grouping = function
 | SelectExpr _
 | Inparam _
 | InTupleList _
-| OptionBoolChoices _
+| OptionActions _
 | Inserted _ -> false
 | Choices (p,l) ->
   begin match list_same @@ List.map (fun (_,expr) -> Option.map_default is_grouping false expr) l with
@@ -134,7 +134,7 @@ let rec is_windowing = function
 | SelectExpr _
 | Inparam _
 | InTupleList _
-| OptionBoolChoices _
+| OptionActions _
 | Inserted _ -> false
 | Choices (_, l) -> List.exists (fun (_, e) -> Option.map_default is_windowing false e ) l
 | InChoice (_, _, e) -> is_windowing e
@@ -197,12 +197,15 @@ let resolve_column_assignments ~env l =
     if !debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
     (* add equality on param and column type *)
     let equality typ expr = Fun { kind = (F (Var 0, [Var 0; Var 0])); parameters = [Value typ; expr]; is_over_clause = false } in
+    let with_default assign = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname else assign in
     match expr with
-    | Choices (n,l) ->
+    | RegularExpr (Choices (n,l)) ->
       Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
-    | OptionBoolChoices ch ->
-      OptionBoolChoices { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
-    | _ -> equality typ expr
+    | RegularExpr (OptionActions ch) ->
+      OptionActions { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
+    | RegularExpr expr -> equality typ expr
+    | WithDefaultParam (e, pos) -> with_default @@ OptionActions { choice = equality typ e; pos; kind = SetDefault }
+    | AssignDefault -> with_default @@ (Value typ)
   end
 
 let get_columns_schema ~env l =
@@ -225,13 +228,13 @@ let rec bool_choice_id = function
   | Column _
   | Inserted _
   | SelectExpr _
-  | OptionBoolChoices _
-  | Choices _
+  | OptionActions _
   | Value _ -> None
   | Inparam p
   | Param p -> Some p.id
   | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
-  | InTupleList (_, p) -> Some p
+  | Choices (p, _)
+  | InTupleList (_, p)
   | InChoice(p, _, _) -> Some p
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
@@ -246,13 +249,13 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x
     | Column col -> ResValue (resolve_column ~env col).attr.domain
-    | OptionBoolChoices { choice; pos } ->
+    | OptionActions { choice; pos; kind } ->
       let choice_id = match bool_choice_id choice with
       | Some choice_id -> choice_id
       | None -> 
         fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
       in
-      ResOptionBoolChoice { res_choice = each choice; choice_id; pos }
+      ResOptionActions { res_choice = each choice; choice_id; pos; kind }
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
@@ -268,7 +271,7 @@ let rec resolve_columns env expr =
         | ResInparam _
         | ResChoices _
         | ResInTupleList _
-        | ResOptionBoolChoice _
+        | ResOptionActions _
         | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
       ResInTupleList (param_id, Res res_exprs)
@@ -293,7 +296,7 @@ let rec resolve_columns env expr =
               | None -> None
               | Some _ -> Option.map_default with_count None e
             ) (Some domain) chs
-          | OptionBoolChoices { choice; _ } -> with_count choice  
+          | OptionActions { choice; _ } -> with_count choice  
           | Fun { is_over_clause = true; _ }
           | Value _| Param _| Inparam _ | InChoice (_, _, _)
           | Column _| Inserted _| InTupleList (_, _) -> None
@@ -323,14 +326,14 @@ and assign_types env expr =
     | ResParam p -> e, `Ok p.typ
     | ResInparam p -> e, `Ok p.typ
     | ResSelect (t, _) -> e, `Ok t
-    | ResOptionBoolChoice choice ->
+    | ResOptionActions choice ->
       let (res_choice, t) = typeof choice.res_choice in
       let t =
         match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
         | None -> `Error "no common subtype for all choice branches"
         | Some t -> `Ok t
       in
-      ResOptionBoolChoice { choice with res_choice }, t
+      ResOptionActions { choice with res_choice }, t
     | ResInTupleList (param_id, kind) -> 
       (match kind with 
       | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
@@ -511,6 +514,7 @@ and join env ((schema,p0,ts0),joins) =
   let env = { env with tables = env.tables @ all_tables; schema; } in
   List.fold_left do_join (env, p0) joins
 
+
 and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
@@ -541,7 +545,7 @@ and ensure_res_expr = function
   | Fun { kind; parameters; is_over_clause } ->
      ResFun { kind; parameters = List.map ensure_res_expr parameters; is_over_clause } (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
-  | OptionBoolChoices _ -> failwith  "BoolChoice is used in WHERE expr only"
+  | OptionActions _ -> failwith  "BoolChoice is used in WHERE expr only"
 
 and eval_nested env nested =
   (* nested selects generate new fresh schema in scope, cannot refer to outer schema,
@@ -758,8 +762,6 @@ let rec eval (stmt:Sql.stmt) =
         List.map begin fun tuple ->
           (* pair up columns with inserted values *)
           List.combine (List.map (fun a -> {cname=a.name; tname=None}) expect) tuple
-          (* resolve DEFAULTs *)
-          |> List.map (function (col,`Expr e) -> col, e | (col,`Default) -> col, Fun { kind = Type.identity; parameters = [Column col]; is_over_clause = false})
         end
       in
       params_of_assigns env (List.concat assigns), None
@@ -844,10 +846,10 @@ let unify_params l =
   if !debug then l |> List.iter (fun p -> eprintfn "var %s" (show_var p));
   let h = Hashtbl.create 10 in
   let h_choices = Hashtbl.create 10 in
-  let check_choice_name p =
+  let check_choice_name ~sharing_disabled p =
     match p.label with
     | None -> () (* unique *)
-    | Some n when Hashtbl.mem h_choices n -> failed ~at:p.pos "sharing choices not implemented"
+    | Some n when sharing_disabled && Hashtbl.mem h_choices n -> failed ~at:p.pos "sharing choices not implemented"
     | Some n -> Hashtbl.add h_choices n ()
   in
   let remember name t =
@@ -868,10 +870,8 @@ let unify_params l =
   | SingleIn { id; typ; _ } -> remember id.label typ
   | SharedVarsGroup (vars, _)
   | ChoiceIn { vars; _ } -> List.iter traverse vars
-  | OptionBoolChoice (p, l, _) ->
-    check_choice_name p;
-    List.iter traverse l
-  | Choice (p,l) -> check_choice_name p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | OptionActionChoice (_, l, _, _) -> List.iter traverse l
+  | Choice (p,l) -> check_choice_name ~sharing_disabled:true p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
   let rec map = function
@@ -883,7 +883,7 @@ let unify_params l =
     SingleIn (new_param id (Type.undepend typ Strict)) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | SharedVarsGroup (vars, pos) -> SharedVarsGroup (List.map map vars, pos)
-  | OptionBoolChoice (p, l, pos) -> OptionBoolChoice (p, (List.map map l), pos)
+  | OptionActionChoice (p, l, pos, kind) -> OptionActionChoice (p, (List.map map l), pos, kind)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in

@@ -405,6 +405,7 @@ type param_id = { label : string option; pos : pos; } [@@deriving show]
 type shared_query_ref_id = { ref_name : string; pos : pos } [@@deriving show]
 type param = { id : param_id; typ : Type.t; } [@@deriving show]
 let new_param id typ = { id; typ; }
+type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
 type params = param list [@@deriving show]
 type ctor =
 | Simple of param_id * var list option
@@ -416,7 +417,7 @@ and var =
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
-| OptionBoolChoice of param_id * var list * (pos * pos)
+| OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
 and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
@@ -490,7 +491,7 @@ and expr =
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
-  | OptionBoolChoices of { choice: expr; pos: (pos * pos) }
+  | OptionActions of { choice: expr; pos: (pos * pos); kind: option_actions_kind }
 and column =
   | All
   | AllOf of table_name
@@ -505,13 +506,19 @@ let make_partition_by = List.iter (function
   | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
   | _ -> ())
 
-type assignments = (col_name * expr) list
+type assignment_expr = 
+  | RegularExpr of expr 
+  | AssignDefault
+  | WithDefaultParam of expr * (pos * pos)
+  [@@deriving show {with_path=false}]
+
+type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type insert_action =
 {
   target : table_name;
   action : [ `Set of assignments option
-           | `Values of (string list option * [ `Expr of expr | `Default ] list list option) (* column names * list of value tuples *)
+           | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;

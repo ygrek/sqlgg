@@ -224,11 +224,11 @@ let match_variant_pattern i name args ~is_poly =
         | TupleList (param_id, _) -> make_wildcard_param param_id.label
         | SharedVarsGroup _
         | Choice ({ label = None; _ }, _)
-        | OptionBoolChoice ({ label = None; _ }, _, _)
+        | OptionActionChoice ({ label = None; _ }, _, _, _)
         | ChoiceIn { param = { label = None; _ }; _ } ->
             ((seen_wildcards, seen_names, all_wc), Some "_")
         | Choice ({ label = Some s; _ }, _)
-        | OptionBoolChoice ({ label = Some s; _ }, _, _)
+        | OptionActionChoice ({ label = Some s; _ }, _, _, _)
         | ChoiceIn { param = { label = Some s; _ }; _ } ->
             if List.mem s seen_names
             then ((seen_wildcards, seen_names, false), None)
@@ -269,7 +269,7 @@ let rec set_var index var =
     output "()";
     dec_indent ();
     output "end;"
-  | OptionBoolChoice(name, vars, _) -> 
+  | OptionActionChoice(name, vars, _, _) -> 
     output "begin match %s with" (make_param_name index name);
     [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
       output "| %s%s -> %s"
@@ -303,7 +303,7 @@ let rec eval_count_params vars =
       | Single _ | TupleList _ -> `Static true
       | SingleIn _ -> `Static false
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
-      | OptionBoolChoice (param_id, vars, _) -> `BoolChoice (param_id, vars)
+      | OptionActionChoice (param_id, vars, _, _) -> `OptionActionChoice (param_id, vars)
       | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
       | Choice (name, c) -> `Choice (name, c)
     in
@@ -312,7 +312,7 @@ let rec eval_count_params vars =
       | x::xs ->
         match classify_var x with
         | `Static v -> group_vars (v::static, choices, bool_choices, choices_in) xs
-        | `BoolChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
+        | `OptionActionChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
         | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
         | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
         | `SharedVarsGroup vars -> 
@@ -378,7 +378,7 @@ let rec exclude_in_vars l =
       | SingleIn _ -> None
       | Single _ as v -> Some v
       | SharedVarsGroup (vars, p) -> Some (SharedVarsGroup (exclude_in_vars vars, p))
-      | OptionBoolChoice (p, v, pos) -> Some (OptionBoolChoice (p, exclude_in_vars v, pos))
+      | OptionActionChoice (p, v, pos, kind) -> Some (OptionActionChoice (p, exclude_in_vars v, pos, kind))
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
@@ -587,7 +587,7 @@ let generate_enum_modules stmts =
     | Single { typ; _ }
     | SingleIn { typ; _ } -> typ |> get_enum |> option_list
     | SharedVarsGroup (vars, _)
-    | OptionBoolChoice (_, vars, _)
+    | OptionActionChoice (_, vars, _, _)
     | ChoiceIn { vars; _ } -> vars_to_enums vars
     | Choice (_, ctor_list) -> 
       List.concat_map ( function

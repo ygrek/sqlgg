@@ -339,7 +339,8 @@ ruleMain = parse
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
 
-  | "?" { QSTN }
+  | "?"   { QSTN }
+  | "??"  { TWO_QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
   | '&' (ident as ref_name) { SHARED_QUERY_REF { ref_name; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }

@@ -152,7 +152,7 @@ let substitute_vars s vars subst_param =
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
     (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
-    | OptionBoolChoice (name, vars, ((f1, f2), (c1, c2))) :: tl ->
+    | OptionActionChoice (name, vars, ((f1, f2), (c1, c2)), kind) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
@@ -163,7 +163,7 @@ let substitute_vars s vars subst_param =
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
         let n = 
-          let sql = Static " TRUE " in
+          let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT ") in
           let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
@@ -254,7 +254,7 @@ let rec find_param_ids l =
     (function
       | Sql.Single p | SingleIn p -> [ p.id ]
       | Choice (id,_) -> [ id ]
-      | OptionBoolChoice (id, _, _) -> [id]
+      | OptionActionChoice (id, _, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | SharedVarsGroup (vars, _) -> find_param_ids vars
       | TupleList (id, _) -> [ id ])
@@ -273,7 +273,7 @@ let rec params_only l =
       | SingleIn _ -> []
       | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars
-      | OptionBoolChoice _
+      | OptionActionChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
       | TupleList _ -> [])
     l
