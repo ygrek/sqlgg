@@ -447,9 +447,9 @@ expr:
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
-    | LPAREN names=commas(expr) RPAREN in_or_not_in p=param
+    | LPAREN names=commas(expr) RPAREN k=in_or_not_in p=param
       {
-        InTupleList(names, p)
+        InTupleList({exprs = names; param_id = p; kind = k; pos = ($startofs, $endofs) })
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }

@@ -139,6 +139,15 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
+    | TupleList (id, Where_in (types, in_not_in, (j1, j2))) :: tl ->
+      let (i1,i2) = id.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
+      assert (j2 > j1);
+      assert (j1 > i); 
+      let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in (types, in_not_in, (j1, j2)))] in
+      let acc =  DynamicIn (id, in_not_in, sub) :: acc @ [Static (String.slice ~first:i ~last:j1 s)] in
+      loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);

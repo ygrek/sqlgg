@@ -38,10 +38,10 @@ type res_expr =
   | ResValue of Type.t (** literal value *)
   | ResParam of param
   | ResSelect of Type.t * vars
-  | ResInTupleList of param_id * res_in_tuple_list
+  | ResInTupleList of { param_id: param_id; res_in_tuple_list: res_in_tuple_list; kind: in_or_not_in; pos: pos }
   | ResInparam of param
   | ResChoices of param_id * res_expr choices
-  | ResInChoice of param_id * [`In | `NotIn] * res_expr
+  | ResInChoice of param_id * in_or_not_in * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos); kind: Sql.option_actions_kind }
   [@@deriving show]
@@ -93,10 +93,10 @@ let rec get_params_of_res_expr (e:res_expr) =
     | ResParam p -> Single p::acc
     | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
       OptionActionChoice (choice_id, get_params_of_res_expr res_choice, pos, kind) :: acc
-    | ResInTupleList (param_id, ResTyped types) -> TupleList (param_id, Where_in types) :: acc
+    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in (types, kind, pos)) :: acc
     | ResInparam p -> SingleIn p::acc
     | ResFun { parameters; _ } -> List.fold_left loop acc parameters
-    | ResInTupleList _ 
+    | ResInTupleList _
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
     | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
@@ -234,7 +234,7 @@ let rec bool_choice_id = function
   | Param p -> Some p.id
   | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
   | Choices (p, _)
-  | InTupleList (_, p)
+  | InTupleList { param_id = p; _ }
   | InChoice(p, _, _) -> Some p
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
@@ -260,7 +260,7 @@ let rec resolve_columns env expr =
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
     | Param x -> ResParam x
-    | InTupleList (exprs, param_id) -> 
+    | InTupleList { exprs; param_id; kind; pos } -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
         match res_expr with 
@@ -274,7 +274,7 @@ let rec resolve_columns env expr =
         | ResOptionActions _
         | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
-      ResInTupleList (param_id, Res res_exprs)
+      ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind; pos }
     | Inparam x -> ResInparam x
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
@@ -298,8 +298,8 @@ let rec resolve_columns env expr =
             ) (Some domain) chs
           | OptionActions { choice; _ } -> with_count choice  
           | Fun { is_over_clause = true; _ }
-          | Value _| Param _| Inparam _ | InChoice (_, _, _)
-          | Column _| Inserted _| InTupleList (_, _) -> None
+          | Value _| Param _| Inparam _ | InChoice _
+          | Column _| Inserted _| InTupleList _ -> None
         in
         let default_null = Type.make_nullable domain in
         (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
@@ -334,14 +334,15 @@ and assign_types env expr =
         | Some t -> `Ok t
       in
       ResOptionActions { choice with res_choice }, t
-    | ResInTupleList (param_id, kind) -> 
-      (match kind with 
-      | Res res_exprs -> ResInTupleList (param_id, ResTyped (List.map (fun expr ->
-         let typ = expr |> typeof |> snd |> get_or_failwith in 
-         if Type.is_any typ then 
-            fail "If you need to have a field as parameter in the left part you should specify a type"
-         else typ
-        ) res_exprs)), `Ok (Type.strict Bool) 
+    | ResInTupleList { param_id; res_in_tuple_list; kind; pos } -> 
+      (match res_in_tuple_list with 
+      | Res res_exprs -> ResInTupleList { param_id; 
+        res_in_tuple_list = ResTyped (List.map (fun expr ->
+          let typ = expr |> typeof |> snd |> get_or_failwith in 
+          if Type.is_any typ then 
+              fail "If you need to have a field as parameter in the left part you should specify a type"
+          else typ
+        ) res_exprs); kind; pos }, `Ok (Type.strict Bool) 
       | ResTyped _ -> assert false
       )
     | ResInChoice (n, k, e) -> let e, t = typeof e in ResInChoice (n, k, e), t
@@ -537,7 +538,7 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
-  | InTupleList (_, p) -> failed ~at:p.pos "ensure_res_expr InTupleList TBD"
+  | InTupleList { param_id; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Inserted _ -> failwith "Not a simple expression"

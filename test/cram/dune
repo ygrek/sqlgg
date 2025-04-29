@@ -1,4 +1,5 @@
 (cram
  (deps
   %{bin:sqlgg}
-  (glob_files *.sql)))
+  (glob_files *.sql)
+  (glob_files *.compare.ml)))

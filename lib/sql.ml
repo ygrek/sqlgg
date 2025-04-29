@@ -407,19 +407,20 @@ type param = { id : param_id; typ : Type.t; } [@@deriving show]
 let new_param id typ = { id; typ; }
 type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
 type params = param list [@@deriving show]
+type in_or_not_in = [`In | `NotIn] [@@deriving show]
 type ctor =
 | Simple of param_id * var list option
 | Verbatim of string * string
 and var =
 | Single of param
 | SingleIn of param
-| ChoiceIn of { param: param_id; kind : [`In | `NotIn]; vars: var list }
+| ChoiceIn of { param: param_id; kind : in_or_not_in; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = Insertion of schema | Where_in of Type.t list | ValueRows of { types: Type.t list; values_start_pos: int; }
+and tuple_list_kind = Insertion of schema | Where_in of Type.t list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
 
@@ -482,12 +483,12 @@ and expr =
   | Param of param
   | Inparam of param
   | Choices of param_id * expr choices
-  | InChoice of param_id * [`In | `NotIn] * expr
+  | InChoice of param_id * in_or_not_in * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
-  | InTupleList of expr list * param_id
+  | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos }
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
