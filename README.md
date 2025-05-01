@@ -11,6 +11,11 @@ Install with `opam install sqlgg`
 sqlgg is sql query parser and code generator.
 See homepage for detailed description and rationale.
 
+Documentation
+-----------
+
+Primary documentation with features list is available in [doc.md](./doc.md).
+
 Development
 -----------
 
