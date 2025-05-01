@@ -221,12 +221,13 @@ let match_variant_pattern i name args ~is_poly =
             else ((label :: seen_wildcards, seen_names, all_wc), Some "_") in
         match arg with
         | Sql.Single param | SingleIn param -> make_wildcard_param param.id.label
-        | TupleList (param_id, _) -> make_wildcard_param param_id.label
         | SharedVarsGroup _
         | Choice ({ label = None; _ }, _)
+        | TupleList ({ label = None; _ }, _) 
         | OptionActionChoice ({ label = None; _ }, _, _, _)
         | ChoiceIn { param = { label = None; _ }; _ } ->
-            ((seen_wildcards, seen_names, all_wc), Some "_")
+          ((seen_wildcards, seen_names, all_wc), Some "_")
+        | TupleList ({ label = Some s; _ }, _) 
         | Choice ({ label = Some s; _ }, _)
         | OptionActionChoice ({ label = Some s; _ }, _, _, _)
         | ChoiceIn { param = { label = Some s; _ }; _ } ->
@@ -259,6 +260,7 @@ let rec set_var index var =
   match var with
   | Single p -> set_param index p
   | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars
+  | TupleList (p, Where_in _) -> set_var index (ChoiceIn { param = p; vars = []; kind = `In })
   | SingleIn _ | TupleList _ -> ()
   | ChoiceIn { param = name; vars; _ } ->
     output "begin match %s with" (make_param_name index name);
@@ -300,11 +302,12 @@ let rec set_var index var =
 let rec eval_count_params vars =
   let (static, choices, bool_choices, choices_in) =
     let classify_var = function
-      | Single _ | TupleList _ -> `Static true
+      | ChoiceIn { param; vars; _ } -> `WhereIn (param, vars)
+      | TupleList (p, Where_in _) -> `WhereIn (p, [])
       | SingleIn _ -> `Static false
+      | Single _ | TupleList _ -> `Static true
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
       | OptionActionChoice (param_id, vars, _, _) -> `OptionActionChoice (param_id, vars)
-      | ChoiceIn { param; vars; _ } -> `ChoiceIn (param, vars)
       | Choice (name, c) -> `Choice (name, c)
     in
     let rec group_vars (static, choices, bool_choices, choices_in) = function
@@ -313,7 +316,7 @@ let rec eval_count_params vars =
         match classify_var x with
         | `Static v -> group_vars (v::static, choices, bool_choices, choices_in) xs
         | `OptionActionChoice v -> group_vars (static, choices, v::bool_choices, choices_in) xs
-        | `ChoiceIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
+        | `WhereIn v -> group_vars (static, choices, bool_choices, v::choices_in) xs
         | `Choice v -> group_vars (static, v::choices, bool_choices, choices_in) xs
         | `SharedVarsGroup vars -> 
           let static', choices', bool_choices', choices_in' = group_vars ([], [], [], []) vars in
@@ -355,7 +358,7 @@ let rec eval_count_params vars =
         | Verbatim (n,_) -> 
           sprintf "%s -> 0" (vname n ~is_poly:true)
         | Simple (param,args) -> 
-          sprintf "%s -> %s" (match_variant_pattern i param.label args ~is_poly:true) 
+          sprintf "%s -> %s" (match_variant_pattern i param.label args ~is_poly:true)
             (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
@@ -379,6 +382,7 @@ let rec exclude_in_vars l =
       | Single _ as v -> Some v
       | SharedVarsGroup (vars, p) -> Some (SharedVarsGroup (exclude_in_vars vars, p))
       | OptionActionChoice (p, v, pos, kind) -> Some (OptionActionChoice (p, exclude_in_vars v, pos, kind))
+      | TupleList (_, Where_in _) as v -> Some v
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
@@ -475,7 +479,7 @@ let make_sql l =
       let label = resolve_tuple_label id in
       Buffer.add_string b (gen_tuple_substitution ~is_row:false label schema);
       loop true tl
-    | SubstTuple (id, Where_in types) :: tl ->
+    | SubstTuple (id, Where_in (types, _, _)) :: tl ->
       if app then bprintf b " ^ ";
       let label = resolve_tuple_label id in
       let schema = make_schema_of_tuple_types label types in
@@ -594,7 +598,7 @@ let generate_enum_modules stmts =
         | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
         | Verbatim _ -> []
       ) ctor_list
-    | TupleList (_, ( Where_in types | ValueRows { types; _ } )) -> 
+    | TupleList (_, ( Where_in (types, _, _) | ValueRows { types; _ } )) -> 
       List.concat_map (fun typ -> typ |> get_enum |> option_list) types
     | TupleList (_, Insertion schema) -> schemas_to_enums schema
   ) vars in
