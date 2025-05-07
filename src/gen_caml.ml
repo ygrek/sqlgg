@@ -143,17 +143,46 @@ module L = struct
   | { t = Union _; _ }
   | { t = Any; _ } as t -> type_name t
 
+  let as_runtime_repr_name = function
+  | { t = Blob; _ }
+  | { t = Text; _ }
+  | { t = Any; _ }
+  | { t = Union _; _ }
+  | { t = StringLiteral _; _ } -> "string"
+  | { t = Unit _; _ } -> "unit"
+  | { t = Int; _ } -> "int64"
+  | { t = Float; _ } -> "float"
+  | { t = Bool; _ } -> "bool"
+  | { t = Datetime; _ }
+  | { t = Decimal; _ } -> "float"
+
   let as_api_type = as_lang_type
 end
 
 let get_column index attr =
-  let rec print_column attr = match attr with
-  | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
-    sprintf "(%s.get_column%s" (get_enum_name ctors)
-  | { domain={ t = Union _; _ }; _ } as c -> print_column { c with domain = { c.domain with t = Text } }
-  | _ -> sprintf "(T.get_column_%s%s" (L.as_lang_type attr.domain) in 
-  let column = print_column attr (if is_attr_nullable attr then "_nullable" else "") in 
-  sprintf "%s stmt %u)" column index
+  let nullable_suffix = if is_attr_nullable attr then "_nullable" else "" in
+  let format_t_get_column type_name =
+    sprintf "(T.get_column_%s%s stmt %u)" type_name nullable_suffix index
+  in
+  let rec format_column_expr attr =
+    match attr with
+    | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
+      sprintf "(%s.get_column%s stmt %u)" (get_enum_name ctors) nullable_suffix index
+    | { domain={ t = Union _; _ }; _ } as c ->
+      format_column_expr { c with domain = { c.domain with t = Text } }
+    | _ ->
+      match Sql.Meta.find_opt attr.meta "module" with
+      | None ->
+        let lang_type_name = L.as_lang_type attr.domain in
+        format_t_get_column lang_type_name
+      | Some m ->
+        let runtime_repr_name = L.as_runtime_repr_name attr.domain in
+        let inner_get_column_expr = format_t_get_column runtime_repr_name in
+        let get_column = "get_column" in
+        let get_column_name = get_column |> Sql.Meta.find_opt attr.meta |> Option.default get_column in
+        sprintf "(%s.%s%s %s)" m get_column_name nullable_suffix inner_get_column_expr
+  in
+  format_column_expr attr
 
 module T = Translate(L)
 
@@ -442,7 +471,7 @@ let gen_tuple_substitution ~is_row label schema =
 
 let make_schema_of_tuple_types label =
   List.mapi (fun idx domain -> {
-    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta = Meta.empty()
   })   
 
 let make_sql l =

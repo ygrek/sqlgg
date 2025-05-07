@@ -98,6 +98,8 @@ module Conv = struct
   let text = "Text", function TEXT s | BLOB s -> s | x -> raise (Type_mismatch x)
   let float = "Float", function FLOAT x -> x | x -> raise (Type_mismatch x)
   let decimal = "Decimal", function INT i -> Int64.to_float i | FLOAT x -> x | x -> raise (Type_mismatch x)
+
+  let datetime = "Datetime", fun x -> Float.to_string @@ snd float x
 end
 
 let get_column_ty (name,conv) =
@@ -117,6 +119,12 @@ let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
 let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty Conv.decimal
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.float
+
+let get_column_bool, get_column_regular_bool_nullable = (get_column_Bool, get_column_Bool_nullable)
+let get_column_int64, get_column_int64_nullable = (get_column_Int, get_column_Int_nullable)
+let get_column_float, get_column_float_nullable = (get_column_Float, get_column_Float_nullable)
+let get_column_decimal, get_column_decimal_nullable = (get_column_Decimal, get_column_Decimal_nullable)
+let get_column_datetime, get_column_datetime_nullable = get_column_ty Conv.datetime
 
 module Make_enum (E: Enum) = struct 
 

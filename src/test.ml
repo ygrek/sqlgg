@@ -15,10 +15,20 @@ let cmp_params p1 p2 =
     _ -> false
 
 let parse sql =
-  match Main.parse_one (sql,[]) with
-  | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
-  | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
-  | Some stmt -> stmt
+  let lexbuf = Lexing.from_string sql in
+  let tokens = Enum.from (fun () ->
+    match Sql_lexer.ruleStatement lexbuf with
+    | `Eof -> `Semicolon
+    | #Main.token as x -> x)
+  in
+  match Main.extract_statement' tokens with
+  | None -> raise Enum.No_more_elements 
+  | Some (buffer, _) ->
+      match Main.parse_one (buffer,[]) with
+      | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
+      | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
+      | Some stmt -> stmt
+
 
 let do_test sql ?kind schema params =
   let stmt = parse sql in
@@ -36,10 +46,10 @@ let tt sql ?kind schema params =
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
-let attr ?(extra=[]) n d = make_attribute n (Some d) (Constraints.of_list extra)
-let attr' ?(extra=[]) ?(nullability=Type.Strict) name kind =
+let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
+let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =
   let domain: Type.t = { t = kind; nullability; } in
-  {name;domain;extra=Constraints.of_list extra }
+  {name;domain;extra=Constraints.of_list extra; meta = Meta.of_list meta; }
 
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
 let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
@@ -143,7 +153,7 @@ let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name ->
     if String.ends_with name ~suffix:"?" then
-      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; }
+      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty() }
     else
       attr name Int)
   in
@@ -199,7 +209,7 @@ let test_left_join = [
   tt "CREATE TABLE users (id INT NOT NULL, user_id INT NOT NULL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT NULL, FOREIGN KEY (account_type_id) REFERENCES account_types(type_id))" [][];
   tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
   [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
-  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);}] [];
+  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty()}] [];
 ]
 
 let test_coalesce = [
@@ -908,7 +918,144 @@ let test_add_with_window_function = [
 
   (* Non window, non agregate can't be  used *)
   wrong "SELECT IF(TRUE, 1, 2) OVER() WHERE FALSE" ;
-]    
+]
+
+let test_meta_propagation = [
+  tt {|
+    CREATE TABLE table_37 (
+      -- [sqlgg] module=HelloWorld
+      col_1 INT PRIMARY KEY,
+      col_2 INT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE table_38 (
+      -- [sqlgg] module=FooBar
+      col_3 INT PRIMARY KEY,
+      col_4 TEXT NOT NULL
+    )
+  |} [] [];
+
+  tt "SELECT col_1, col_2 FROM table_37" [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "col_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
+  tt "SELECT col_1 + 1 as col_1_with_plus_1, col_2 FROM table_37" [
+    attr' ~meta:[] "col_1_with_plus_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
+  tt "SELECT col_1, col_2, col_3, col_4 FROM table_37 LEFT JOIN table_38 ON table_37.col_1 = table_38.col_3" [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "col_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "FooBar"] ~nullability:(Nullable) "col_3" Int;
+    attr' ~extra:[NotNull;] ~nullability:(Nullable) "col_4" Text;
+  ] [];
+
+  tt {|
+    SELECT 
+      subquery.col_1 as from_subquery_col_1,
+      subquery.col_2 as from_subquery_col_2
+    FROM 
+      (SELECT col_1, col_2 FROM table_37) as subquery
+  |} [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "from_subquery_col_1" Int;
+    attr' ~extra:[NotNull;] "from_subquery_col_2" Int;
+  ] [];
+
+  tt {|
+    SELECT 
+      outer_query.nested_col_1 as multi_level_col_1
+    FROM 
+      (
+        SELECT 
+          inner_query.col_1 as nested_col_1
+        FROM 
+          (SELECT col_1 FROM table_37) as inner_query
+      ) as outer_query
+  |} [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "multi_level_col_1" Int;
+  ] [];
+
+  tt {|
+    SELECT 
+      union_result.col_val as union_col_1
+    FROM 
+      (
+        SELECT col_1 as col_val FROM table_37
+        UNION
+        SELECT col_1 as col_val FROM table_37
+      ) as union_result
+  |} [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "union_col_1" Int;
+  ] [];
+
+  tt {|
+    WITH data_cte AS (
+      SELECT col_1, col_2 FROM table_37
+    )
+    SELECT col_1, col_2 FROM data_cte
+  |} [
+    attr' ~meta:["module", "HelloWorld"] ~extra:[PrimaryKey;] "col_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
+  tt "SELECT MAX(col_1) as col_1_max, col_2 FROM table_37" [
+    attr' ~extra:[] ~nullability:Nullable ~meta:["module", "HelloWorld"] "col_1_max" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
+  tt {|
+    SELECT 
+      (SELECT col_1 FROM table_37 LIMIT 1) as subquery_col_1,
+      col_2 
+    FROM table_37
+  |} [
+    attr' ~meta:["module", "HelloWorld"] ~nullability:Nullable "subquery_col_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
+  tt {|
+    SELECT (SELECT MAX(col_1) FROM table_37) as col_plus_max
+    FROM table_37
+  |} [
+    attr' ~meta:["module", "HelloWorld"] ~nullability:Nullable "col_plus_max" Int;
+  ] [];
+
+  tt {|
+    SELECT 
+      (
+        SELECT MAX(
+          (
+            SELECT col_1 as col_val 
+            FROM table_37 
+            WHERE col_1 > (SELECT MIN(col_1) FROM table_37)
+            LIMIT 1
+          )
+        )
+      ) as deeply_nested_query
+    FROM table_37
+  |} [
+    attr' ~meta:["module", "HelloWorld"] ~nullability:Nullable "deeply_nested_query" Int;
+  ] [];
+
+  tt {|
+    SELECT 
+      (
+        SELECT MAX(x.col_val) 
+        FROM (
+          SELECT col_1 as col_val 
+          FROM table_37 
+          WHERE col_1 > (SELECT MIN(col_1) FROM table_37)
+        ) as x
+      ) as deeply_nested_query
+    FROM table_37
+  |} [
+    attr' ~meta:["module", "HelloWorld"] ~nullability:Nullable "deeply_nested_query" Int;
+  ] [];
+]
 
 let run () =
   Gen.params_mode := Some Named;
@@ -938,6 +1085,7 @@ let run () =
     "test_enum_as_variant" >::: test_enum_as_variant;
     "test_enum_literal" >:: test_enum_literal;
     "test_add_with_window_function" >::: test_add_with_window_function;
+    "test_meta_propagation" >::: test_meta_propagation;
   ]
   in
   let test_suite = "main" >::: tests in

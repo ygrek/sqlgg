@@ -36,13 +36,36 @@ module type Types = sig
   type field
   type value
   module type Value = Value with type field = field and type value = value
-  module Bool : Value
-  module Int : Value
-  module Float : Value
-  module Text : Value
-  module Blob : Value
-  module Datetime : Value
-  module Decimal : Value
+  module Bool : sig 
+    include Value 
+    val get_bool : field -> bool
+  end
+  module Int : sig 
+    include Value
+    val get_int64 : field -> int64
+  end
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Float : sig
+    include Value
+    val get_float : field -> float
+  end
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Text : sig 
+    include Value
+    val get_string : field -> string
+  end
+  module Blob : sig
+    include Value
+    val get_string : field -> string
+  end
+  module Datetime : sig 
+    include Value
+    val get_string : field -> string
+  end
+  module Decimal : sig 
+    include Value
+    val get_float : field -> float
+  end
   module Any : Value
   module Make_enum : functor (E : Enum) -> Value with type t = E.t
 end
@@ -88,103 +111,124 @@ struct
     in
     ksprintf failwith "expected %s %s, but found %s" expected (M.Field.name field) found
 
-  module Int = Make(struct
-    type t = int64
-    let of_field field =
-      match M.Field.value field with
-      | `Int x -> Int64.of_int x
-      | `String x -> Int64.of_string x
-      | value -> convfail "int" field value
-    let to_value x = `Int (Int64.to_int x)
-    let to_literal = Int64.to_string
-  end)
+  module Int = struct
+    include Make(struct
+      type t = int64
+      let of_field field =
+        match M.Field.value field with
+        | `Int x -> Int64.of_int x
+        | `String x -> Int64.of_string x
+        | value -> convfail "int" field value
+      let to_value x = `Int (Int64.to_int x)
+      let to_literal = Int64.to_string
+    end) 
+    let get_int64 = of_field
+  end
 
-  module Bool = Make(struct
-    type t = bool
-    let of_field field = Int.of_field field <> 0L
-    let to_value = function true -> `Int 1 | false -> `Int 0
-    let to_literal = string_of_bool
-  end)
+  module Bool = struct 
+    include Make(struct
+      type t = bool
+      let of_field field = Int.of_field field <> 0L
+      let to_value = function true -> `Int 1 | false -> `Int 0
+      let to_literal = string_of_bool
+    end)
+    let get_bool = of_field
+  end
 
-  module Float = Make(struct
-    type t = float
-    let of_field field =
-      match M.Field.value field with
-      | `Int x -> float_of_int x
-      | `Float x -> x
-      | `String x -> float_of_string x
-      | value -> convfail "float" field value
-    let to_value x = `Float x
-    let to_literal = string_of_float
-  end)
+  module Float = struct 
+    include Make(struct
+      type t = float
+      let of_field field =
+        match M.Field.value field with
+        | `Int x -> float_of_int x
+        | `Float x -> x
+        | `String x -> float_of_string x
+        | value -> convfail "float" field value
+      let to_value x = `Float x
+      let to_literal = string_of_float
+    end)
+    let get_float = of_field
+  
+  end
 
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
 
-  module Text = Make(struct
-    type t = string
-    let of_field field =
-      match M.Field.value field with
-      | `String x -> x
-      | `Bytes x -> Bytes.to_string x
-      | value -> convfail "string" field value
-    let to_value x = `String x
+  module Text = struct 
+    include Make(struct
+      type t = string
+      let of_field field =
+        match M.Field.value field with
+        | `String x -> x
+        | `Bytes x -> Bytes.to_string x
+        | value -> convfail "string" field value
+      let to_value x = `String x
 
-    (* cf. https://dev.mysql.com/doc/refman/5.7/en/string-literals.html *)
-    let to_literal s =
-      let b = Buffer.create (String.length s + String.length s / 4) in
-      Buffer.add_string b "'";
-      for i = 0 to String.length s - 1 do
-        match String.unsafe_get s i with
-        | '\\' -> Buffer.add_string b "\\\\"
-        | '\000' -> Buffer.add_string b "\\0"
-        | '\'' -> Buffer.add_string b "\\'"
-        | c -> Buffer.add_char b c
-      done;
-      Buffer.add_string b "'";
-      Buffer.contents b
-  end)
+      (* cf. https://dev.mysql.com/doc/refman/5.7/en/string-literals.html *)
+      let to_literal s =
+        let b = Buffer.create (String.length s + String.length s / 4) in
+        Buffer.add_string b "'";
+        for i = 0 to String.length s - 1 do
+          match String.unsafe_get s i with
+          | '\\' -> Buffer.add_string b "\\\\"
+          | '\000' -> Buffer.add_string b "\\0"
+          | '\'' -> Buffer.add_string b "\\'"
+          | c -> Buffer.add_char b c
+        done;
+        Buffer.add_string b "'";
+        Buffer.contents b
+    end) 
+    let get_string = of_field
+  end
 
-  module Blob = Make(struct
-    (* https://dev.mysql.com/doc/refman/5.7/en/hexadecimal-literals.html
-       "Hexadecimal literal values are written using X'val' or 0xval notation,
-       where val contains hexadecimal digits (0..9, A..F)."
-      "By default, a hexadecimal literal is a binary string, where each pair of
-       hexadecimal digits represents a character" *)
-    type t = string
+  module Blob = struct 
+    include Make(struct
+      (* https://dev.mysql.com/doc/refman/5.7/en/hexadecimal-literals.html
+        "Hexadecimal literal values are written using X'val' or 0xval notation,
+        where val contains hexadecimal digits (0..9, A..F)."
+        "By default, a hexadecimal literal is a binary string, where each pair of
+        hexadecimal digits represents a character" *)
+      type t = string
 
-    let of_field = Text.of_field
-    let to_value x = `Bytes (Bytes.of_string x)
+      let of_field = Text.of_field
+      let to_value x = `Bytes (Bytes.of_string x)
 
-    let to_hex = [| '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' |]
+      let to_hex = [| '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9'; 'A'; 'B'; 'C'; 'D'; 'E'; 'F' |]
 
-    let to_literal s =
-      let b = Buffer.create (3 + String.length s * 2) in
-      Buffer.add_string b "x'";
-      for i = 0 to String.length s - 1 do
-        let c = Char.code (String.unsafe_get s i) in
-        Buffer.add_char b (Array.unsafe_get to_hex (c lsr 4));
-        Buffer.add_char b (Array.unsafe_get to_hex (c land 0x0F));
-      done;
-      Buffer.add_string b "'";
-      Buffer.contents b
-  end)
+      let to_literal s =
+        let b = Buffer.create (3 + String.length s * 2) in
+        Buffer.add_string b "x'";
+        for i = 0 to String.length s - 1 do
+          let c = Char.code (String.unsafe_get s i) in
+          Buffer.add_char b (Array.unsafe_get to_hex (c lsr 4));
+          Buffer.add_char b (Array.unsafe_get to_hex (c land 0x0F));
+        done;
+        Buffer.add_string b "'";
+        Buffer.contents b
+    end)
+    let get_string = of_field
+  end
 
-  module Datetime = Make(struct
-    type t = M.Time.t
-    let of_field = M.Field.time
-    let to_value x = `Time x
-    let to_literal t =
-      sprintf
-        "'%04d-%02d-%02d %02d:%02d:%02d.%06d'"
-        (M.Time.year t)
-        (M.Time.month t)
-        (M.Time.day t)
-        (M.Time.hour t)
-        (M.Time.minute t)
-        (M.Time.second t)
-        (M.Time.microsecond t)
-  end)
+  module Datetime = struct 
+
+    include Make(struct
+      type t = M.Time.t
+      let of_field = M.Field.time
+      let to_value x = `Time x
+      let to_literal t =
+        sprintf
+          "'%04d-%02d-%02d %02d:%02d:%02d.%06d'"
+          (M.Time.year t)
+          (M.Time.month t)
+          (M.Time.day t)
+          (M.Time.hour t)
+          (M.Time.minute t)
+          (M.Time.second t)
+          (M.Time.microsecond t)
+    end)
+
+    let get_string f = f |> of_field |> to_literal
+  end
 
   module Any = Make(struct
     type t = M.Field.value
@@ -260,6 +304,13 @@ let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_field
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_field
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_field
+
+let get_column_bool, get_column_regular_bool_nullable = get_column_ty "Bool" Bool.get_bool
+let get_column_int64, get_column_int64_nullable = get_column_ty "Int" Int.get_int64
+let get_column_float, get_column_float_nullable = get_column_ty "Float" Float.get_float
+let get_column_decimal, get_column_decimal_nullable = get_column_ty "Decimal" Decimal.get_float
+let get_column_datetime, get_column_datetime_nullable = get_column_ty "Datetime" Datetime.get_string
+
 
 let bind_param data (_, params, index) = assert (!index < Array.length params); params.(!index) <- data; incr index
 
