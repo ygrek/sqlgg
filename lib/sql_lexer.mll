@@ -255,6 +255,7 @@ let ident str = IDENT (String.lowercase_ascii str)
 let as_literal ch s =
   let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in
   sprintf "%c%s%c" ch s ch
+
 }
 
 let digit = ['0'-'9']

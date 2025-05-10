@@ -150,6 +150,8 @@ let get_statements ch =
     let b = Buffer.create 1024 in
     let props = ref Props.empty in
     let answer () = Buffer.contents b, !props in
+
+    let internal_props = ref Props.empty in
     
     let rec loop smth =
       match Enum.get tokens with
@@ -157,18 +159,24 @@ let get_statements ch =
       | Some x ->
         match x with
         | `Comment s -> ignore s; loop smth (* do not include comments (option?) *)
-        | `Char c -> Buffer.add_char b c; loop true
+        | `Char c -> 
+          if List.length !internal_props > 0 then (
+            Hashtbl.add Parser_state.stmt_metadata (Buffer.length b) !internal_props;
+            internal_props := Props.empty;
+          );
+          Buffer.add_char b c; loop true
         | `Space _ when smth = false -> loop smth (* drop leading whitespaces *)
         | `Token s | `Space s -> Buffer.add_string b s; loop true
+        | `Props p when smth -> internal_props := Props.set_all p !internal_props; loop smth
         | `Props p -> props := Props.set_all p !props; loop smth
         | `Semicolon -> Some (answer ())
     in
-    try loop false 
+    Hashtbl.reset Parser_state.stmt_metadata;
+    try loop false
     with e -> 
       Error.log "lexer failed (%s)" (Printexc.to_string e); 
       None
   in
-
   let rec next () =
     match extract_statement tokens with
     | None -> raise Enum.No_more_elements
