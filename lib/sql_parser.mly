@@ -18,9 +18,6 @@
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
-  let maybe f = function None -> [] | Some x -> [f x]
-  let option_to_list = maybe Prelude.identity
-
   let poly ret parameters = Fun { kind = (F (Typ ret, List.map (fun _ -> Var 0) parameters)); parameters; is_over_clause = false }
 %}
 
@@ -474,16 +471,14 @@ expr:
     | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun { kind = (F (Typ (strict Bool), [Typ (depends Any)])); parameters = [SelectExpr (select,`Exists)]; is_over_clause = false } }
-    | CASE e1=expr? branches=nonempty_list(case_branch) e2=preceded(ELSE,expr)? END (* FIXME typing *)
+    | CASE initial_expr=expr? branches_list=nonempty_list(case_branch) else_expr=preceded(ELSE,expr)? END
       {
-        let t_args =
-          match e1 with
-          | None -> (List.flatten @@ List.map (fun _ -> [Typ (depends Bool); Var 1]) branches)
-          | Some _ -> [Var 0] @ (List.flatten @@ List.map (fun _ -> [Var 0; Var 1]) branches)
-        in
-        let t_args = t_args @ maybe (fun _ -> Var 1) e2 in
-        let v_args = option_to_list e1 @ List.flatten branches @ option_to_list e2 in
-        Fun { kind = (F (Var 1, t_args)); parameters = v_args; is_over_clause = false }
+        let case_record = {
+          Sql.case = initial_expr; 
+          Sql.branches = branches_list;
+          Sql.else_ = else_expr;
+        } in
+        Sql.Case case_record
       }
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun { kind = (F (Var 0, [Typ (depends Bool);Var 0;Var 0])); parameters = [e1;e2;e3]; is_over_clause = false } }
     | e=window_function OVER window_spec { e }
@@ -519,7 +514,8 @@ frame_border:
   | expr FOLLOWING { }
 
 in_or_not_in: IN { `In } | NOT IN { `NotIn }
-case_branch: WHEN e1=expr THEN e2=expr { [e1;e2] }
+case_branch: WHEN w=expr THEN t=expr
+             { { Sql.when_ = w; Sql.then_ = t } }
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
