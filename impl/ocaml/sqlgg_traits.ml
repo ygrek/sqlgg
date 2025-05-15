@@ -113,7 +113,7 @@ module type M = sig
   val get_column_Datetime_nullable : row -> int -> Datetime.t option
 
   val get_column_bool : row -> int -> bool
-  val get_column_regular_bool_nullable : row -> int -> bool option
+  val get_column_bool_nullable : row -> int -> bool option
   
   val get_column_int64 : row -> int -> int64
   val get_column_int64_nullable : row -> int -> int64 option
@@ -126,6 +126,9 @@ module type M = sig
   
   val get_column_datetime : row -> int -> string
   val get_column_datetime_nullable : row -> int -> string option
+
+  val get_column_string : row -> int -> string
+  val get_column_string_nullable : row -> int -> string option
 
   val start_params : statement -> int -> params
 
