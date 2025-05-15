@@ -84,8 +84,8 @@ let test = Type.[
   tt "insert or replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
   tt "replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
  tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
-    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" (StringLiteral "qqq")]
-    [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" (StringLiteral "qqq")];
+    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" Text]
+    [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" Text];
    wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)
@@ -1057,6 +1057,94 @@ let test_meta_propagation = [
   ] [];
 ]
 
+let test_case_enum = [
+  tt "CREATE TABLE test37 (id INT NOT NULL, status enum('A','B','C') NOT NULL)" [][];
+  tt "CREATE TABLE test38 (id INT PRIMARY KEY)" [][];
+
+  (* not exhausted (C not matched) then null *)
+  tt "SELECT CASE status WHEN 'A' THEN 1 WHEN 'B' THEN 2 END `value` FROM test37" 
+    [attr' ~nullability:(Nullable) "value" Int;] [];
+
+  (* not exhausted, else branch is presented then not null *)
+  tt "SELECT CASE status WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 0 END `value` FROM test37" 
+    [attr' "value" Int;] [];
+
+  (* exhausted, else isn't needed *)
+  tt "SELECT CASE status WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 0 END `value` FROM test37" 
+    [attr' "value" Int;] [];
+
+  (* not exhausted, else branch isn't presented then null *)
+  tt "SELECT CASE WHEN 1 > 10 THEN 'High' END `value`" 
+    [attr' "value" ~nullability:(Nullable) (StringLiteral "High");][];  
+
+  (* not exhausted, else branch isn't presented, 'High' and 'Low' literals make Union *)
+  tt "SELECT CASE WHEN 1 > 10 THEN 'High' WHEN FALSE THEN 'Low' END `value`" 
+    [attr' "value" ~nullability:(Nullable) 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["High"; "Low"]); is_closed = false }));][]; 
+      
+  (* exhausted (else is presented), Int <: Float *)
+  tt "SELECT CASE WHEN TRUE THEN 1 ELSE 0.2 END `value`" 
+    [attr' "value" Float;][];
+
+  (* nullable since no rows possible inisde THEN *)
+  tt {| SELECT CASE WHEN FALSE THEN (SELECT id FROM test37 WHERE FALSE ) ELSE 1 END `value`|} 
+    [attr' ~nullability:(Nullable) "value" Int;][];
+
+  tt {| 
+    SELECT CASE WHEN FALSE THEN (SELECT id FROM test37 WHERE FALSE ) ELSE 1 END `value`
+  |} 
+    [attr' ~nullability:(Nullable) "value" Int;][];
+
+  (* If COUNT is presented at least in a one branch then the NO ROWS case isn't possible *)
+  tt {|
+    SELECT
+    (SELECT
+         CASE
+             WHEN TRUE
+             THEN 42-0
+             WHEN TRUE
+             THEN 2-1
+             ELSE COUNT(1)
+         END
+     FROM test38
+     WHERE FALSE
+    ) AS value
+  |} [attr' "value" Int;][];
+
+  (* If COUNT is presented at least in a one branch then the NO ROWS case isn't possible, 
+    but if at least on NULL is presented then NULLABLE
+  *)
+  tt {|
+    SELECT
+    (SELECT
+         CASE
+             WHEN TRUE
+             THEN NULL
+             WHEN TRUE
+             THEN 2-1
+             ELSE COUNT(1)
+         END
+     FROM test38
+     WHERE FALSE
+    ) AS value
+  |} [attr' ~nullability:(Nullable) "value" Int;][];
+
+   tt {|
+    SELECT
+    (SELECT
+         CASE
+             WHEN TRUE
+             THEN MAX(NULL)
+             WHEN TRUE
+             THEN 2-1
+             ELSE COUNT(1)
+         END
+     FROM test38
+     WHERE FALSE
+    ) AS value
+  |} [attr' ~nullability:(Nullable) "value" Int;][];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -1086,6 +1174,7 @@ let run () =
     "test_enum_literal" >:: test_enum_literal;
     "test_add_with_window_function" >::: test_add_with_window_function;
     "test_meta_propagation" >::: test_meta_propagation;
+    "test_case_enum" >::: test_case_enum;
   ]
   in
   let test_suite = "main" >::: tests in

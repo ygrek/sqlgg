@@ -22,6 +22,8 @@ struct
     let make ctors =  Ctors.of_list ctors
   end
 
+  type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}]
+
   type kind =
     | Unit of [`Interval]
     | Int
@@ -31,7 +33,7 @@ struct
     | Bool
     | Datetime
     | Decimal
-    | Union of { ctors: Enum_kind.t; is_closed: bool }
+    | Union of union
     | StringLiteral of string
     | Any (* FIXME - Top and Bottom ? *)
     [@@deriving eq, show{with_path=false}]
@@ -505,6 +507,12 @@ and row_values = {
 and order = (expr * direction option) list
 and 'expr choices = (param_id * 'expr option) list
 and fun_ = { kind: Type.func; parameters: expr list; is_over_clause: bool; }
+and case_branch = { when_: expr; then_: expr }
+and case = {  
+  case: expr option;
+  branches: case_branch list;
+  else_: expr option;
+} [@@deriving show]
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param
@@ -520,6 +528,7 @@ and expr =
       to use it during the substitution and to not depend on the magic numbers there.
    *) 
   | OptionActions of { choice: expr; pos: (pos * pos); kind: option_actions_kind }
+  | Case of case
 and column =
   | All
   | AllOf of table_name

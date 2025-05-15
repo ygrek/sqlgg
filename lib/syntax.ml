@@ -20,6 +20,7 @@ type env = {
   (* it is used to apply non-null comparison semantics inside WHERE expressions *)
   set_tyvar_strict: bool;
   query_has_grouping: bool;
+  is_order_by: bool;
 }
 
 (* Merge global tables with ctes during resolving sources in SELECT .. FROM sources, JOIN *)
@@ -44,7 +45,10 @@ type res_expr =
   | ResInChoice of param_id * in_or_not_in * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (pos * pos); kind: Sql.option_actions_kind }
+  | ResCase of { case: res_expr option; branches: case_branch list; else_: res_expr option }
   [@@deriving show]
+
+and case_branch = { when_: res_expr; then_: res_expr; } [@@deriving show]
 
 and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
   
@@ -55,6 +59,7 @@ let empty_env = { query_has_grouping = false;
   insert_schema = []; 
   set_tyvar_strict = false; 
   ctes = [];
+  is_order_by = false;
 }
 
 let flat_map f l = List.flatten (List.map f l)
@@ -90,6 +95,10 @@ let rec get_params_of_res_expr (e:res_expr) =
   let rec loop acc e =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
+    | ResCase { case; branches; else_ } ->
+      let acc = match case with Some e -> loop acc e | None -> acc in
+      let acc = List.fold_left (fun acc { when_; then_ } -> loop (loop acc when_) then_) acc branches in
+      Option.map_default (loop acc) acc else_
     | ResParam p -> Single p::acc
     | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
       OptionActionChoice (choice_id, get_params_of_res_expr res_choice, pos, kind) :: acc
@@ -122,6 +131,11 @@ let rec is_grouping = function
   | None -> failed ~at:p.pos "inconsistent grouping in choice branches"
   | Some v -> v
   end
+| Case { case; branches; else_ } ->
+  List.exists is_grouping 
+    (option_list case @ 
+     List.flatten (List.map (fun { Sql.when_; then_ } -> [when_; then_]) branches) @ 
+     option_list else_)
 | InChoice (_, _, e) -> is_grouping e
 | Fun { kind ; parameters; _ } ->
   (* grouping function of zero or single parameter or function on grouping result *)
@@ -138,6 +152,9 @@ let rec is_windowing = function
 | Inserted _ -> false
 | Choices (_, l) -> List.exists (fun (_, e) -> Option.map_default is_windowing false e ) l
 | InChoice (_, _, e) -> is_windowing e
+| Case { case; branches; else_ } ->
+  List.exists is_windowing 
+  (option_list case @ List.flatten (List.map (fun { Sql.when_; then_ } -> [when_; then_]) branches) @ option_list else_)
 | Fun { is_over_clause; _ } -> is_over_clause
 
 let exists_grouping columns =
@@ -236,6 +253,12 @@ let rec bool_choice_id = function
   | Choices (p, _)
   | InTupleList { param_id = p; _ }
   | InChoice(p, _, _) -> Some p
+  | Case { case; branches; else_ } ->
+    List.find_map bool_choice_id 
+    (option_list case @ 
+     List.flatten (List.map (fun { Sql.when_; then_ } -> [when_; then_]) branches) @ 
+     option_list else_)
+    
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
@@ -264,6 +287,7 @@ let rec resolve_columns env expr =
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
         match res_expr with 
+        | ResCase _
         | ResValue _
         | ResParam _
         | ResSelect _
@@ -280,6 +304,11 @@ let rec resolve_columns env expr =
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun { kind; parameters; is_over_clause } ->
       ResFun { kind; parameters = List.map each parameters; is_over_clause }  
+    | Case { case; branches; else_ } ->
+      let case = Option.map each case in
+      let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each when_; then_ = each then_ }) branches in
+      let else_ = Option.map each else_ in
+      ResCase { case; branches; else_ }  
     | SelectExpr (select, usage) ->
       let (schema,p,_) = eval_select_full env select in
       let schema = Schema.Source.from_schema schema in
@@ -288,18 +317,22 @@ let rec resolve_columns env expr =
       | [ {domain; _} ], `AsValue -> 
         (* This function should be raised? *)
         let rec with_count = function 
-          | Fun { kind = Agg Count; is_over_clause = false; _ }
-          | SelectExpr (_, _) -> Some domain
-          | Fun { parameters; is_over_clause = false; _ } -> List.find_map with_count parameters
-          | Choices (_, chs) ->
-            List.fold_left (fun acc (_, e) -> match acc with
-              | None -> None
-              | Some _ -> Option.map_default with_count None e
-            ) (Some domain) chs
-          | OptionActions { choice; _ } -> with_count choice  
-          | Fun { is_over_clause = true; _ }
-          | Value _| Param _| Inparam _ | InChoice _
-          | Column _| Inserted _| InTupleList _ -> None
+            | Case { case = _; branches; else_ } ->
+              let then_exprs = List.map (fun b -> b.Sql.then_) branches in
+              let all_results_exprs = then_exprs @ (option_list else_) in 
+              List.find_map with_count all_results_exprs
+            | Fun { kind = Agg Count; is_over_clause = false; _ }
+            | SelectExpr (_, _) -> Some domain
+            | Fun { parameters; is_over_clause = false; _ } -> List.find_map with_count parameters
+            | Choices (_, chs) ->
+              List.fold_left (fun acc (_, e) -> match acc with
+                | None -> None
+                | Some _ -> Option.map_default with_count None e
+              ) (Some domain) chs
+            | OptionActions { choice; _ } -> with_count choice  
+            | Fun { is_over_clause = true; _ }
+            | Value _| Param _| Inparam _ | InChoice _
+            | Column _| Inserted _| InTupleList _ -> None
         in
         let default_null = Type.make_nullable domain in
         (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
@@ -320,6 +353,13 @@ let rec resolve_columns env expr =
 and assign_types env expr =
   let { set_tyvar_strict; _ } = env in
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
+  let assign_params inferred x =
+    let open Type in
+    match x with
+    | ResParam { id; typ; } when is_any typ -> ResParam (new_param id inferred)
+    | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
+    | x -> x
+  in
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
@@ -330,7 +370,7 @@ and assign_types env expr =
       let (res_choice, t) = typeof choice.res_choice in
       let t =
         match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
-        | None -> `Error "no common subtype for all choice branches"
+        | None -> `Error "no common subtype for ResOptionActions"
         | Some t -> `Ok t
       in
       ResOptionActions { choice with res_choice }, t
@@ -353,7 +393,39 @@ and assign_types env expr =
         | None -> `Error "no common subtype for all choice branches"
         | Some t -> `Ok t
       in
-      ResChoices (n, List.map2 (fun (n,_) e -> n,e) l e), t
+      (* We can order by different columns with the different types *)
+      let assign_any e = if env.is_order_by then e else assign_params (get_or_failwith t) e in
+      ResChoices (n, List.map2 (fun (n,_) e -> n, (Option.map assign_any e)) l e), t
+    | ResCase { case; branches; else_ } ->
+      let (case_e, case_t) = option_split @@ Option.map typeof case in
+      let (else_, else_t) = option_split @@ Option.map typeof else_ in
+      let (whens_e, whens_t) = List.split @@ List.map (fun { when_; _ } -> typeof when_) branches in
+      let (thens_e, thens_t) = List.split @@ List.map (fun { then_; _} -> typeof then_) branches in
+      let whens_t =
+        let types = List.map get_or_failwith @@ whens_t in
+        match Type.common_supertype @@ Option.map_default get_or_failwith (Type.depends Bool) case_t :: types with
+        | None -> failwith "no common supertype for all case when branches"
+        | Some t -> t
+      in
+      let thens_t =
+        let types = List.map get_or_failwith @@ thens_t in
+        let is_exhausted = match whens_t.t with
+          | Union { ctors; _ } -> 
+            (* Since we have string literals, we can check if the enums are already exhausted or if a default case is required *)
+            let values = Type.Enum_kind.Ctors.of_list @@ List.filter_map (function ResValue { t = StringLiteral v; _ } -> Some v | _ -> None) whens_e in
+            Type.Enum_kind.Ctors.compare values ctors = 0
+          | Unit _ | Int | Text | Blob | Float | Datetime | Decimal | Any | StringLiteral _ | Bool -> false in
+        let exhaust_checked = if is_exhausted then types else List.map Type.make_nullable types in  
+        match Type.common_supertype @@ Option.map_default (fun else_t -> types @ [get_or_failwith else_t]) exhaust_checked else_t with
+        | None -> failwith "no common supertype for all case then branches"
+        | Some t -> t
+      in
+      let thens_e = List.map (assign_params thens_t) thens_e in
+      let whens_e = List.map (assign_params whens_t) whens_e in
+      let else_ = Option.map (assign_params thens_t) else_ in
+      let case = Option.map (assign_params whens_t) case_e in
+      let branches = List.map2 (fun when_ then_ -> { when_; then_ }) whens_e thens_e in
+      ResCase { case = case; branches; else_ = else_ }, `Ok thens_t
     | ResFun { kind; parameters; is_over_clause}  ->
         let open Type in
         let (params,types) = parameters |> List.map typeof |> List.split in
@@ -439,13 +511,7 @@ and assign_types env expr =
             let nullable = common_nullability args in
             undepend ret nullable, args
         in
-        let assign inferred x =
-          match x with
-          | ResParam { id; typ; } when is_any typ -> ResParam (new_param id inferred)
-          | ResInparam { id; typ; } when is_any typ -> ResInparam (new_param id inferred)
-          | x -> x
-        in
-        ResFun { kind = func; parameters = (List.map2 assign inferred_params params); is_over_clause }, `Ok ret
+        ResFun { kind = func; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
   and typeof expr =
     let r = typeof_ expr in
     if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
@@ -475,6 +541,7 @@ and infer_schema env columns =
     | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) -> 
       let (env,_) = eval_nested env from in
       propagate_meta ~env e
+    | Case _
     | Value _ 
     (* TODO: implement for custom props *) 
     | Param _ | Inparam _ | Choices _| InChoice _
@@ -540,11 +607,10 @@ and params_of_assigns env ss =
   get_params_l env exprs
 
 and params_of_order order final_schema env =
-  List.concat @@
-  List.map
+  List.concat_map
     (fun (order, direction) ->
        let env = { env with schema = update_schema_with_aliases env.schema final_schema ;  } in
-       let p1 = get_params_l env [ order ] in
+       let p1 = get_params_l { env with is_order_by = true } [ order ] in
        let p2 =
          match direction with
          | None | Some `Fixed -> []
@@ -557,6 +623,13 @@ and ensure_res_expr = function
   | Value x -> ResValue x
   | Param x -> ResParam x
   | Inparam x -> ResInparam x
+  | Case { case; branches; else_ }-> 
+    let res_case = Option.map ensure_res_expr case in
+    let res_branches = List.map (fun { Sql.when_; then_ } -> 
+      { when_ = ensure_res_expr when_; then_ = ensure_res_expr then_ }
+    ) branches in
+    let res_else = Option.map ensure_res_expr else_ in
+    ResCase { case = res_case; branches = res_branches; else_ = res_else }
   | InTupleList { param_id; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
