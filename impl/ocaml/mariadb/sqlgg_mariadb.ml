@@ -305,11 +305,12 @@ let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" De
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_field
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_field
 
-let get_column_bool, get_column_regular_bool_nullable = get_column_ty "Bool" Bool.get_bool
-let get_column_int64, get_column_int64_nullable = get_column_ty "Int" Int.get_int64
-let get_column_float, get_column_float_nullable = get_column_ty "Float" Float.get_float
-let get_column_decimal, get_column_decimal_nullable = get_column_ty "Decimal" Decimal.get_float
-let get_column_datetime, get_column_datetime_nullable = get_column_ty "Datetime" Datetime.get_string
+let get_column_bool, get_column_bool_nullable = get_column_ty "bool" Bool.get_bool
+let get_column_int64, get_column_int64_nullable = get_column_ty "int64" Int.get_int64
+let get_column_float, get_column_float_nullable = get_column_ty "float" Float.get_float
+let get_column_decimal, get_column_decimal_nullable = get_column_ty "float" Decimal.get_float
+let get_column_datetime, get_column_datetime_nullable = get_column_ty "string" Datetime.get_string
+let get_column_string, get_column_string_nullable = get_column_ty "string" Text.get_string
 
 
 let bind_param data (_, params, index) = assert (!index < Array.length params); params.(!index) <- data; incr index
