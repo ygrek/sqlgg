@@ -137,6 +137,36 @@ module Include = struct
     with Failure _ -> None
 end
 
+let extract_statement' tokens = 
+    let b = Buffer.create 1024 in
+    let props = ref Props.empty in
+    let answer () = Buffer.contents b, !props in
+
+    let internal_props = ref Props.empty in
+    
+    let rec loop smth =
+      match Enum.get tokens with
+      | None -> if smth then Some (answer ()) else None
+      | Some x ->
+        match x with
+        | `Comment s -> ignore s; loop smth (* do not include comments (option?) *)
+        | `Char c -> 
+          if List.length !internal_props > 0 then (
+            Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
+            internal_props := Props.empty;
+          );
+          Buffer.add_char b c; loop true
+        | `Space _ when smth = false -> loop smth (* drop leading whitespaces *)
+        | `Token s | `Space s -> Buffer.add_string b s; loop true
+        | `Props p when smth -> internal_props := Props.set_all p !internal_props; loop smth
+        | `Props p -> props := Props.set_all p !props; loop smth
+        | `Semicolon -> Some (answer ())
+    in
+    Hashtbl.reset Parser_state.Stmt_metadata.stmt_metadata;
+    try loop false
+    with e -> 
+      Error.log "lexer failed (%s)" (Printexc.to_string e); 
+      None
 
 let get_statements ch =
   let lexbuf = Lexing.from_channel ch in
@@ -146,31 +176,8 @@ let get_statements ch =
     | `Eof -> raise Enum.No_more_elements
     | #token as x -> x)
   in
-  let extract_statement tokens =
-    let b = Buffer.create 1024 in
-    let props = ref Props.empty in
-    let answer () = Buffer.contents b, !props in
-    
-    let rec loop smth =
-      match Enum.get tokens with
-      | None -> if smth then Some (answer ()) else None
-      | Some x ->
-        match x with
-        | `Comment s -> ignore s; loop smth (* do not include comments (option?) *)
-        | `Char c -> Buffer.add_char b c; loop true
-        | `Space _ when smth = false -> loop smth (* drop leading whitespaces *)
-        | `Token s | `Space s -> Buffer.add_string b s; loop true
-        | `Props p -> props := Props.set_all p !props; loop smth
-        | `Semicolon -> Some (answer ())
-    in
-    try loop false 
-    with e -> 
-      Error.log "lexer failed (%s)" (Printexc.to_string e); 
-      None
-  in
-
   let rec next () =
-    match extract_statement tokens with
+    match extract_statement' tokens with
     | None -> raise Enum.No_more_elements
     | Some (buffer, props) ->
       let include_ = match Props.get props "include" with

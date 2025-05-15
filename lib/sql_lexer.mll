@@ -266,7 +266,7 @@ let cmnt = "--" | "//" | "#"
 (* extract separate statements *)
 rule ruleStatement = parse
   | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
-  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n,v)] }
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n, String.trim v)] }
   | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as v) '\n' 
     { 
       let props = rulePropList [] (Lexing.from_string v) in

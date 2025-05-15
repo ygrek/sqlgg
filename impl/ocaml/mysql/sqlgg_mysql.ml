@@ -24,14 +24,39 @@ module type Value = sig
   val to_literal : t -> string
 end
 
+module type Int = sig 
+  include Value
+  val get_int64 : string -> int64
+end
+
 module type Types = sig
-  module Bool : Value
-  module Int : Value
-  module Float : Value
-  module Text : Value
-  module Blob : Value
-  module Datetime : Value
-  module Decimal : Value
+  module Bool : sig 
+    include Value 
+    val get_bool : string -> bool
+  end
+  module Int : Int
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Float : sig
+    include Value
+    val get_float : string -> float
+  end
+  (* you probably want better type, e.g. (int*int) or Z.t *)
+  module Text : sig 
+    include Value
+    val get_string : string -> string
+  end
+  module Blob : sig
+    include Value
+    val get_string : string -> string
+  end
+  module Datetime : sig 
+    include Value
+    val get_string : string -> string
+  end
+  module Decimal : sig 
+    include Value
+    val get_float : string -> float
+  end
   module Any : Value
 end
 
@@ -41,8 +66,14 @@ module Default_types = struct
     let of_string s = s <> "0"
     let to_string x = if x then "1" else "0"
     let to_literal = string_of_bool
+    let get_bool = of_string
   end
-  module Int = struct include Int64 let to_literal = to_string end
+  module Int = struct 
+    include Int64 
+    let to_literal = to_string
+
+    let get_int64 = of_string
+  end
   module Text = struct
     type t = string
     let of_string s = s
@@ -61,6 +92,7 @@ module Default_types = struct
       done;
       Buffer.add_string b "'";
       Buffer.contents b
+      let get_string = of_string
   end
 
   module Blob = struct
@@ -86,12 +118,15 @@ module Default_types = struct
       done;
       Buffer.add_string b "'";
       Buffer.contents b
+
+    let get_string = of_string
   end
   module Float = struct
     type t = float
     let of_string = float_of_string
     let to_string = string_of_float
     let to_literal = string_of_float
+    let get_float = of_string
   end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
@@ -167,6 +202,13 @@ let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_string
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_string
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_string
+
+let get_column_bool, get_column_regular_bool_nullable = get_column_ty "Bool" Bool.get_bool
+let get_column_int64, get_column_int64_nullable = get_column_ty "Int" Int.get_int64
+let get_column_float, get_column_float_nullable = get_column_ty "Float" Float.get_float
+let get_column_decimal, get_column_decimal_nullable = get_column_ty "Decimal" Decimal.get_float
+let get_column_datetime, get_column_datetime_nullable = get_column_ty "Datetime" Datetime.get_string
+
 
 let bind_param data (_,params,index) =
   match data with
@@ -253,7 +295,7 @@ let () =
   ignore (M.Oops "OK")
 
 (* compatibility *)
-module Make(Number : Value) = struct
+module Make(Number : Int) = struct
   (* ref http://gallium.inria.fr/blog/overriding-submodules/ *)
   module Types_ = struct
     include (Default_types : module type of Default_types with module Int := Default_types.Int)

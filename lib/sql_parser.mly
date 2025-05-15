@@ -352,8 +352,10 @@ drop_behavior: CASCADE | RESTRICT { }
 
 column_def: name=IDENT t=sql_type? extra=column_def_extra*
   {
+    let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
+    let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
     let extra = Constraints.of_list @@ List.filter_map identity extra in
-    make_attribute name t extra
+    make_attribute name t extra ~meta
   }
 
 column_def1: c=column_def { `Attr c }

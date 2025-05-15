@@ -285,7 +285,7 @@ let rec resolve_columns env expr =
       let schema = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain;_} ], `AsValue -> 
+      | [ {domain; _} ], `AsValue -> 
         (* This function should be raised? *)
         let rec with_count = function 
           | Fun { kind = Agg Count; is_over_clause = false; _ }
@@ -465,6 +465,22 @@ and resolve_types env expr =
 
 and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
+  let rec propagate_meta ~env = function
+    | Column col -> 
+      let result = resolve_column ~env col in 
+      result.attr.meta
+    (* aggregated columns, ie: max, min *)
+    | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
+    (* Or for subselect which always requests only one column, TODO: consider CTE in subselect, perhaps a rare occurrence *)
+    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) -> 
+      let (env,_) = eval_nested env from in
+      propagate_meta ~env e
+    | Value _ 
+    (* TODO: implement for custom props *) 
+    | Param _ | Inparam _ | Choices _| InChoice _
+    | Fun _ | SelectExpr _ | Inserted _ | InTupleList _
+    | OptionActions _ -> Meta.empty ()
+  in
   let resolve1 = function
     | All -> env.schema
     | AllOf t -> schema_of ~env t
@@ -472,7 +488,10 @@ and infer_schema env columns =
       let col =
         match e with
         | Column col -> resolve_column ~env col
-        | _ -> { attr = unnamed_attribute (resolve_types env e |> snd |> get_or_failwith); sources = [] }
+        | e -> { 
+          attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
+          sources = [] 
+        }
       in
       let col = Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name in
       [ col ]
@@ -598,8 +617,8 @@ and resolve_source env (x, alias) =
     let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list tbl_alias; i.Schema.Source.Attr.sources] }) s in
     let s, tables = resolve_schema_with_alias s in
     s, p, tables
-  | `Nested s ->
-    let (env,p) = eval_nested env (Some s) in
+  | `Nested from ->
+    let (env,p) = eval_nested env (Some from) in
     let s = infer_schema env [All] in
     if alias <> None then failwith "No alias allowed on nested tables";
     s, p, env.tables

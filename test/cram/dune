@@ -2,4 +2,5 @@
  (deps
   %{bin:sqlgg}
   (glob_files *.sql)
-  (glob_files *.compare.ml)))
+  (glob_files *.compare.ml)
+  sqlgg_test.sh))
