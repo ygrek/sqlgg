@@ -63,7 +63,10 @@ let tuplelist_value_of_param = function
   | TupleList ({ label = Some name; _ }, kind) ->
     let schema = match kind with 
     | Insertion schema -> schema 
-    | Where_in (types, _, _) | ValueRows { types; _ } -> Gen_caml.make_schema_of_tuple_types name types
+    | ValueRows { types; _ } -> 
+      let types = List.map (fun t -> t, Sql.Meta.empty()) types in
+      Gen_caml.make_schema_of_tuple_types name types
+    | Where_in (types, _, _) -> Gen_caml.make_schema_of_tuple_types name types
     in
     let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in
@@ -84,7 +87,7 @@ let start () = ref [], ref []
 let get_sql_string stmt =
   let rec map i = function
   | Static s -> s
-  | SubstIn param -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
+  | SubstIn (param, _) -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
   | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> "{TODO dynamic choice}"
@@ -95,7 +98,7 @@ let rec params_only l =
   List.concat @@
   List.map
     (function
-      | Sql.Single p -> [p]
+      | Sql.Single (p, _) -> [p]
       | OptionActionChoice (_, v, _, _) -> params_only v
       | SingleIn _ -> []
       | SharedVarsGroup (vars, _)

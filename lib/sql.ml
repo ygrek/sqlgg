@@ -238,20 +238,22 @@ module Meta = struct
       ) t;
       Format.fprintf fmt "}"
     end
+
+  let equal = StringMap.equal String.equal
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
   [@@deriving show {with_path=false}]
 
-  let make_attribute name kind extra ~meta =
-    if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-    let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
-      then Strict else Nullable } in
-    {name;domain;extra;meta=Meta.of_list meta}
+let make_attribute name kind extra ~meta =
+  if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
+  let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
+    then Strict else Nullable } in
+  {name;domain;extra;meta=Meta.of_list meta}
 
-    let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta}
+let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta}
 
-    let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta }
+let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta }
 
 module Schema =
 struct
@@ -441,15 +443,15 @@ type ctor =
 | Simple of param_id * var list option
 | Verbatim of string * string
 and var =
-| Single of param
-| SingleIn of param
+| Single of param * Meta.t
+| SingleIn of param * Meta.t
 | ChoiceIn of { param: param_id; kind : in_or_not_in; vars: var list }
 | Choice of param_id * ctor list
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = Insertion of schema | Where_in of Type.t list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
+and tuple_list_kind = Insertion of schema | Where_in of (Type.t * Meta.t) list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
 

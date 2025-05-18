@@ -4,12 +4,16 @@
 - [📘 Documentation `sqlgg`](#-documentation-sqlgg)
   - [🧭 Contents](#-contents)
   - [🆕 Feature Review](#-feature-review)
+    - [Column-level Customization for Query Parameters](#column-level-customization-for-query-parameters)
+      - [🔹 Supported Parameter Forms](#-supported-parameter-forms)
+      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt)
+      - [🔹 Module Requirements](#-module-requirements)
     - [Column-level Customization for `SELECT` (currently) Queries](#column-level-customization-for-select-currently-queries)
       - [🔹 Supported Annotations](#-supported-annotations)
       - [🔹 Example](#-example)
-      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt)
+      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt-1)
       - [🧠 Semantics](#-semantics)
-      - [🔹 Module Requirements](#-module-requirements)
+      - [🔹 Module Requirements](#-module-requirements-1)
       - [🔹 OCaml Implementation Example](#-ocaml-implementation-example)
     - [Support for DEFAULT Values](#support-for-default-values)
       - [🔹 Example](#-example-1)
@@ -36,6 +40,103 @@
 ## 🆕 Feature Review
 
 > Features are listed from latest to earliest, with detailed descriptions and examples.
+
+### Column-level Customization for Query Parameters
+
+*Added: May 2025*
+
+Extends the existing column-level customization to query parameters (`@param`), using the same `[sqlgg]` annotations from table definitions. Now custom modules are consistently applied to both input parameters and output columns.
+
+#### 🔹 Supported Parameter Forms
+
+| Form                  | Example                      |
+| --------------------- | ---------------------------- |
+| `col = @param`        | `WHERE id = @id`             |
+| `col IN @param`       | `WHERE name IN @names`       |
+| `(cols...) IN @param` | `WHERE (id, type) IN @pairs` |
+
+> **Note:** Column metadata propagation applies in any SQL clause (SELECT, WHERE, HAVING, JOIN, etc.), not just in WHERE. The customization works whenever a column reference appears in the expression, as metadata is propagated from the column definition to the parameter.
+
+```sql
+CREATE TABLE example (
+  -- [sqlgg] module=ExampleId  
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  -- [sqlgg] module=Name
+  name VARCHAR(255) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE example2 (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  -- [sqlgg] module=Name2
+  name_2 VARCHAR(255) NOT NULL
+);
+
+-- @complex_query
+SELECT example2.id, name_2 
+FROM example
+JOIN example2 ON example.id = example2.id
+WHERE name IN @name AND example2.name_2 IN @name_2 AND example.id = @id;
+```
+
+#### 🔹 Generated OCaml (Excerpt)
+
+```
+let complex_query db ~name ~name_2 ~id callback =
+  let invoke_callback stmt =
+    callback
+      ~id:(T.get_column_Int stmt 0)
+      ~name_2:(Name2.get_column (T.get_column_string stmt 1))
+  in
+  let set_params stmt =
+    let p = T.start_params stmt (1 + (match name with [] -> 0 | _ :: _ -> 0) + (match name_2 with [] -> 0 | _ :: _ -> 0)) in
+    (* ... params handling ... *)
+    T.set_param_int64 p (ExampleId.set_param id);
+    T.finish_params p
+  in
+  T.select db 
+    ("SELECT example2.id, name_2 FROM example JOIN example2 ON example.id = example2.id WHERE ... ") 
+    set_params invoke_callback
+```
+
+#### 🔹 Module Requirements
+
+```ocaml
+module ExampleId = struct
+  (* ... *)
+  (* Transforms domain type to SQL int64 type *)
+  let set_param (x : custom_id_type) : int64 = 
+    (* Convert from domain type to SQL type *)
+    Int64.of_int (CustomId.to_int x)
+end
+
+module Name = struct
+  (* ... *)
+  (* Transforms domain type to SQL string type *)
+  let set_param (x : user_name_type) : string = Fun.id (* for example *)
+end
+```
+
+To use this feature, you must ensure that the specified module implements:
+
+1. For standard cases (when only `module=ModuleName` is specified):
+   * `ModuleName.set_param` - For converting domain types to SQL types
+
+2. For custom function names (when both `module=ModuleName` and `set_param=custom_name` are specified):
+   * `ModuleName.custom_name` - Custom function for parameter conversion
+  
+All together:
+
+| Direction    | Function     | Type Signature            | Example            |
+| ------------ | ------------ | ------------------------- | ------------------ |
+| SQL → Domain | `get_column` | `sql_type -> domain_type` | `int64 -> user_id` |
+| Domain → SQL | `set_param`  | `domain_type -> sql_type` | `user_id -> int64` |
+
+> **Note:** Column-based customization for parameters in `INSERT` and `UPDATE` statements (e.g., for the right side of `SET column = @param`) is not yet supported and will be enhanced in future releases.
+
+→ [PR #198](https://github.com/ygrek/sqlgg/pull/198)
+
+---
 
 ### Column-level Customization for `SELECT` (currently) Queries
 

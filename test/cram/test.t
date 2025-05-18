@@ -86,3 +86,8 @@ Implement type mappings, fst part, no insert, no update, no params, only select:
   $ /bin/sh ./sqlgg_test.sh type_mappings.sql type_mappings.compare.ml  
   $ echo $?
   0
+
+Implement type mappings, snd part, comparison op, IN, IN with tuples:
+  $ /bin/sh ./sqlgg_test.sh type_mappings_params.sql type_mappings_params.compare.ml  
+  $ echo $?
+  0

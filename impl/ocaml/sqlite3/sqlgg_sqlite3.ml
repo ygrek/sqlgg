@@ -20,8 +20,16 @@ module M = struct
 module S = Sqlite3
 
 module Types = struct
-  module Bool = struct type t = bool let to_literal = string_of_bool end
-  module Int = struct include Int64 let to_literal = to_string end
+  module Bool = struct 
+    type t = bool 
+    let to_literal = string_of_bool
+    let bool_to_literal = to_literal
+  end
+  module Int = struct 
+    include Int64 
+    let to_literal = to_string
+    let int64_to_literal = to_literal
+  end
   module Text = struct
     type t = string
 
@@ -41,6 +49,8 @@ module Types = struct
       done;
       Buffer.add_string b "'";
       Buffer.contents b
+    
+    let string_to_literal = to_literal
   end
   module Blob = struct
     (* "BLOB literals are string literals containing hexadecimal data and preceded
@@ -60,7 +70,11 @@ module Types = struct
       Buffer.add_string b "'";
       Buffer.contents b
   end
-  module Float = struct type t = float let to_literal = string_of_float end
+  module Float = struct 
+    type t = float 
+    let to_literal = string_of_float
+    let float_to_literal = to_literal
+  end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
   module Datetime = Float (* ? *)
@@ -159,6 +173,13 @@ let set_param_Int stmt v = bind_param (S.Data.INT v) stmt
 let set_param_Float stmt v = bind_param (S.Data.FLOAT v) stmt
 let set_param_Decimal = set_param_Float
 let set_param_Datetime = set_param_Float
+
+let set_param_bool = set_param_Bool
+let set_param_int64 = set_param_Int
+let set_param_float = set_param_Float
+let set_param_decimal = set_param_Float
+let set_param_string = set_param_Text
+let set_param_datetime = set_param_Float
 
 let no_params _ = ()
 
