@@ -27,23 +27,32 @@ end
 module type Int = sig 
   include Value
   val get_int64 : string -> int64
+  val set_int64: int64 -> string
+
+  val int64_to_literal : int64 -> string
 end
 
 module type Types = sig
   module Bool : sig 
     include Value 
     val get_bool : string -> bool
+    val set_bool: bool -> string
+    val bool_to_literal : bool -> string
   end
   module Int : Int
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Float : sig
     include Value
     val get_float : string -> float
+    val set_float: float -> string
+    val float_to_literal : float -> string
   end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Text : sig 
     include Value
     val get_string : string -> string
+    val set_string: string -> string
+    val string_to_literal : string -> string
   end
   module Blob : sig
     include Value
@@ -52,10 +61,14 @@ module type Types = sig
   module Datetime : sig 
     include Value
     val get_string : string -> string
+    val set_float: float -> string
+    val float_to_literal : float -> string
   end
   module Decimal : sig 
     include Value
     val get_float : string -> float
+    val set_float: float -> string
+    val float_to_literal : float -> string
   end
   module Any : Value
 end
@@ -67,12 +80,16 @@ module Default_types = struct
     let to_string x = if x then "1" else "0"
     let to_literal = string_of_bool
     let get_bool = of_string
+    let set_bool = to_string
+    let bool_to_literal = to_literal
   end
   module Int = struct 
     include Int64 
     let to_literal = to_string
 
     let get_int64 = of_string
+    let set_int64 = to_string
+    let int64_to_literal = to_literal
   end
   module Text = struct
     type t = string
@@ -92,7 +109,9 @@ module Default_types = struct
       done;
       Buffer.add_string b "'";
       Buffer.contents b
-      let get_string = of_string
+    let get_string = of_string
+    let set_string = to_string
+    let string_to_literal = to_literal
   end
 
   module Blob = struct
@@ -127,10 +146,16 @@ module Default_types = struct
     let to_string = string_of_float
     let to_literal = string_of_float
     let get_float = of_string
+    let set_float = to_string
+    let float_to_literal = to_literal
   end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Decimal = Float
-  module Datetime = Text
+  module Datetime = struct 
+    include Text
+    let set_float x = Text.set_string (Float.to_string x)
+    let float_to_literal x = Text.to_literal (Float.to_literal x)
+  end
   module Any = Text
 end
 
@@ -228,6 +253,15 @@ let set_param_Int = set_param_ty Int.to_string
 let set_param_Float = set_param_ty Float.to_string
 let set_param_Decimal = set_param_ty Decimal.to_string
 let set_param_Datetime = set_param_ty Datetime.to_string
+
+let set_param_string = set_param_ty Text.set_string
+let set_param_bool = set_param_ty Bool.set_bool
+let set_param_int64 = set_param_ty Int.set_int64
+let set_param_float = set_param_ty Float.set_float
+let set_param_decimal = set_param_ty Decimal.set_float
+let set_param_datetime = set_param_ty Datetime.set_float
+
+(* enum support *)
 
 module Make_enum (E: Enum) = struct 
 

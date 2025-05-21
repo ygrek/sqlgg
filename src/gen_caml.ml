@@ -156,6 +156,7 @@ module L = struct
   | { t = Datetime; _ }
   | { t = Decimal; _ } -> "float"
 
+
   let as_api_type = as_lang_type
 end
 
@@ -249,7 +250,7 @@ let match_variant_pattern i name args ~is_poly =
             then ((seen_wildcards, seen_names, all_wc), None)
             else ((label :: seen_wildcards, seen_names, all_wc), Some "_") in
         match arg with
-        | Sql.Single param | SingleIn param -> make_wildcard_param param.id.label
+        | Sql.Single (param, _) | SingleIn (param, _) -> make_wildcard_param param.id.label
         | SharedVarsGroup _
         | Choice ({ label = None; _ }, _)
         | TupleList ({ label = None; _ }, _) 
@@ -273,21 +274,32 @@ let match_variant_pattern i name args ~is_poly =
     else
       variant_name ^ " (" ^ String.concat ", " patterns ^ ")"
 
-let rec set_param index param =
+let rec set_param ~meta index param =
   let nullable = is_param_nullable param in
   let pname = show_param_name param index in
   let ptype = show_param_type param in
-  let set_param_nullable = output "begin match %s with None -> T.set_param_null p | Some v -> %s p v end;" pname in
+  let set_param_nullable v r = output "begin match %s with None -> T.set_param_null p | Some %s -> %s end;" pname v r in
   match param with
-  | { typ = { t=Union _; _}; _ } as c when not !Sqlgg_config.enum_as_poly_variant -> set_param index { c with typ = { c.typ with t = Text } }
-  | { typ = { t=Union {ctors; _}; _}; _ } when nullable -> set_param_nullable @@ (get_enum_name ctors) ^ ".set_param" 
+  | { typ = { t=Union _; _}; _ } as c when not !Sqlgg_config.enum_as_poly_variant -> set_param ~meta index { c with typ = { c.typ with t = Text } }
+  | { typ = { t=Union {ctors; _}; _}; _ } when nullable -> set_param_nullable "v" @@ (get_enum_name ctors) ^ ".set_param p v"
   | { typ = { t=Union {ctors; _}; _ }; _ } -> output "%s.set_param p %s;" (get_enum_name ctors) pname
-  | param' when nullable -> set_param_nullable @@ sprintf "T.set_param_%s" (show_param_type param') 
-  | _ -> output "T.set_param_%s p %s;" ptype pname
+  | param' ->
+    let module_ = Sql.Meta.find_opt meta "module" in
+    match module_ with
+    | None -> if nullable then set_param_nullable "v" @@ sprintf "T.set_param_%s %s" (show_param_type param') "p v"
+      else output "T.set_param_%s p %s;" ptype pname
+    | Some m ->
+      let set_param = "set_param" in
+      let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
+      let runtime_repr_name = L.as_runtime_repr_name param'.typ in
+      if nullable then
+         set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s v" m set_param_name)
+      else
+        output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
   
 let rec set_var index var =
   match var with
-  | Single p -> set_param index p
+  | Single (p, meta) -> set_param ~meta index p
   | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars
   | TupleList (p, Where_in _) -> set_var index (ChoiceIn { param = p; vars = []; kind = `In })
   | SingleIn _ | TupleList _ -> ()
@@ -428,16 +440,22 @@ let output_params_binder index vars =
   | vars -> output_params_binder index vars
 
 
-let make_to_literal =
+let make_to_literal meta typ =
   let rec go domain = match domain with 
     | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
     | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
-    | t -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t) in go
+    | t -> match Sql.Meta.find_opt meta "module" with
+      | None -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t)
+      | Some m -> 
+        let set_param = "set_param" in
+        let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
+        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (Sql.Type.type_name t) (L.as_runtime_repr_name t) m set_param_name
+  in go typ
 
-let gen_in_substitution var =
+let gen_in_substitution meta var =
   if Option.is_none var.id.label then failwith "empty label in IN param";
   sprintf {code| "(" ^ String.concat ", " (List.map %s %s) ^ ")"|code}
-    (make_to_literal var.typ)
+    (make_to_literal meta var.typ)
     (Option.get var.id.label)
 
 let gen_tuple_printer ~is_row _label schema =
@@ -450,10 +468,10 @@ let gen_tuple_printer ~is_row _label schema =
     (String.concat " " @@
      List.mapi
      (fun idx attr ->
-        let { name; domain; _ } = attr in
+        let { name; domain; meta; _ } = attr in
         (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
         sprintf {|Buffer.add_string _sqlgg_b (%s);|}
-          (let to_literal = sprintf "%s %s" (make_to_literal domain) in
+          (let to_literal = sprintf "%s %s" (make_to_literal meta domain) in
            if is_attr_nullable attr then 
            (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
            else to_literal name))
@@ -470,8 +488,8 @@ let gen_tuple_substitution ~is_row label schema =
     label 
 
 let make_schema_of_tuple_types label =
-  List.mapi (fun idx domain -> {
-    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta = Meta.empty()
+  List.mapi (fun idx (domain, meta) -> {
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta
   })   
 
 let make_sql l =
@@ -483,9 +501,9 @@ let make_sql l =
       if app then bprintf b " ^ ";
       Buffer.add_string b (quote s);
       loop true tl
-    | SubstIn param :: tl ->
+    | SubstIn (param, m) :: tl ->
       if app then bprintf b " ^ ";
-      Buffer.add_string b (gen_in_substitution param);
+      Buffer.add_string b (gen_in_substitution m param);
       loop true tl
     | DynamicIn (name, in_or_not_in, sqls) :: tl ->
       if app then bprintf b " ^ ";
@@ -519,6 +537,8 @@ let make_sql l =
     | SubstTuple (id, ValueRows { types; _ }) :: tl ->
         if app then bprintf b " ^ ";
         let label = resolve_tuple_label id in
+        (* TODO: Implement meta for ValueRows *)
+        let types = List.map (fun typ -> typ, Meta.empty()) types in
         let schema = make_schema_of_tuple_types label types in
         let empty = schema 
           |> List.map (const "NULL") 
@@ -617,8 +637,8 @@ let generate_enum_modules stmts =
   let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in
 
   let rec vars_to_enums vars = List.concat_map (function
-    | Single { typ; _ }
-    | SingleIn { typ; _ } -> typ |> get_enum |> option_list
+    | Single ({ typ; _ }, _)
+    | SingleIn ({ typ; _ }, _) -> typ |> get_enum |> option_list
     | SharedVarsGroup (vars, _)
     | OptionActionChoice (_, vars, _, _)
     | ChoiceIn { vars; _ } -> vars_to_enums vars
@@ -627,8 +647,10 @@ let generate_enum_modules stmts =
         | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
         | Verbatim _ -> []
       ) ctor_list
-    | TupleList (_, ( Where_in (types, _, _) | ValueRows { types; _ } )) -> 
+    | TupleList (_,  ValueRows { types; _ }) -> 
       List.concat_map (fun typ -> typ |> get_enum |> option_list) types
+    | TupleList (_, Where_in (types, _, _)) ->
+      List.concat_map (fun (typ, _) -> typ |> get_enum |> option_list) types
     | TupleList (_, Insertion schema) -> schemas_to_enums schema
   ) vars in
 

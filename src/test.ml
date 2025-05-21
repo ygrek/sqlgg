@@ -6,11 +6,11 @@ open Sql
 (* open Sql.Type *)
 open Stmt
 
+let cmp_param p1 p2 = p1.id.label = p2.id.label && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos
+
 let cmp_params p1 p2 =
   try
-    List.for_all2 (fun p1 p2 ->
-      p1.id.label = p2.id.label && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos)
-    p1 p2
+    List.for_all2 cmp_param p1 p2
   with
     _ -> false
 
@@ -30,11 +30,12 @@ let parse sql =
       | Some stmt -> stmt
 
 
-let do_test sql ?kind schema params =
+let do_test ?kind sql schema params =
   let stmt = parse sql in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
-  (List.map (function Single p -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false) stmt.vars);
+  (List.map (function Single (p, _) -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false) stmt.vars);
+
   match kind with
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
   | None -> ()
@@ -1145,6 +1146,241 @@ let test_case_enum = [
   |} [attr' ~nullability:(Nullable) "value" Int;][];
 ]
 
+let test_type_mapping_params _ = 
+  do_test {| 
+    CREATE TABLE test39 (
+      -- [sqlgg] module=HelloWorld
+      id INT PRIMARY KEY,
+      txt TEXT NOT NULL
+    )
+  |} [] [];
+
+  let assert_params_with_meta stmt meta = 
+    let meta = List.map (fun (p, m) -> (p, Meta.of_list m)) meta in
+    assert_equal 
+      ~msg:"params with meta" 
+      ~cmp:(fun p1 p2 ->
+        try
+          List.for_all2 
+            (fun (p1, m1) (p2, m2) -> cmp_param p1 p2 && Meta.equal m1 m2) 
+            p1 
+            p2
+        with _ -> false)
+      ~printer:[%derive.show: (Sql.param * Sql.Meta.t) list]
+      meta
+      (List.map 
+        (
+          function
+          | Single (p, m) -> (p, m) 
+          | SingleIn (p, m) -> (p, m) 
+          | ChoiceIn { vars = [ SingleIn (p, m) ]; _ } -> (p, m)
+          | ChoiceIn _
+          | SharedVarsGroup _ | OptionActionChoice _ 
+          | Choice _   | TupleList _ -> assert false
+          ) 
+        stmt.Gen.vars) in
+
+  let stmt = parse {|SELECT id FROM test39 WHERE id = @id|} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
+    stmt.schema;
+  assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"])];
+
+  (* test in subqery *)
+  let stmt = parse {|SELECT id FROM test39 WHERE txt = (SELECT txt FROM test39 WHERE id = @id)|} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
+    stmt.schema;
+  assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"])];
+
+  let stmt = parse {|SELECT id FROM test39 WHERE txt = (SELECT txt FROM test39 WHERE id = @id OR (txt = @txt OR TRUE) )|} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [
+      attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
+    ] 
+    stmt.schema;
+  assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"]); (named "txt" Text, [])];
+
+  do_test {| 
+    CREATE TABLE test40 (
+      -- [sqlgg] module=Txt_module_name
+      txt2 TEXT NOT NULL
+    )
+  |} [] [];
+
+  let stmt = parse {|
+    SELECT id, txt2
+    FROM test39
+    JOIN test40 ON test39.txt = test40.txt2
+    WHERE id = @id OR (txt2 = @txt2 OR TRUE)
+  |} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [
+      attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
+      attr' ~extra:[NotNull] ~meta:["module", "Txt_module_name"] "txt2" Text;
+    ] 
+    stmt.schema;
+  assert_params_with_meta stmt [
+    (named "id" Int, ["module", "HelloWorld"]); 
+    (named "txt2" Text, ["module", "Txt_module_name"])
+  ];
+
+  let stmt = parse {|
+    SELECT id, txt2
+    FROM test39
+    JOIN test40 ON test39.txt = test40.txt2 AND test40.txt2 = @txt2
+  |} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [
+      attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
+      attr' ~extra:[NotNull] ~meta:["module", "Txt_module_name"] "txt2" Text;
+    ] 
+    stmt.schema;
+  assert_params_with_meta stmt [
+    (named "txt2" Text, ["module", "Txt_module_name"])
+  ];
+
+  let stmt = parse {|
+    SELECT txt2
+    FROM test40
+    WHERE txt2 IN @txt2
+  |} in
+  assert_params_with_meta stmt [
+    (named "txt2" Text, ["module", "Txt_module_name"])
+  ];
+  
+  let stmt = parse {|
+    SELECT id, txt2
+    FROM test39
+    JOIN test40 ON (test39.txt, test40.txt2) IN @txt2
+  |} in
+
+  assert_equal 
+    ~msg:"params with meta" 
+    ~cmp:(fun p1 p2 -> match List.hd p1, List.hd p2 with
+      | TupleList ({ label; _ }, Where_in (l1, _, _)), TupleList ({ label = label2; _ }, Where_in (l2, _, _)) -> 
+        label = label2 && l1 = l2
+      | _ -> false
+    )
+    ~printer:show_vars
+    stmt.vars 
+    [
+      TupleList ({ label = Some "txt2"; pos = (0, 0) }, Where_in ([
+        Type.strict Text, Meta.empty ();
+        Type.strict Text, Meta.of_list ["module", "Txt_module_name"];
+      ], `In, (0, 0)));
+    ];
+  let stmt = parse {|
+    SELECT id = @id as booo
+    FROM test39
+    LIMIT 1
+  |} in
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [
+      attr' "booo" Bool;
+    ] 
+    stmt.schema;
+
+  (* not only in WHERE expr *)
+  assert_params_with_meta stmt [
+    (named "id" Int, ["module", "HelloWorld"])
+  ];
+
+  do_test {|
+    CREATE TABLE test41 (
+      -- [sqlgg] module=Module1
+      col_1 INT PRIMARY KEY,
+      
+      -- [sqlgg] module=Module2  
+      col_2 CHAR(36) NOT NULL,
+      
+      -- [sqlgg] module=Module3
+      col_3 DECIMAL(10,2) NOT NULL,
+      
+      -- [sqlgg] module=Module4
+      col_4 ENUM('status_1', 'status_2', 'status_3', 'status_4') NOT NULL,
+      col_5 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  |} [] [];
+
+  do_test {|
+    CREATE TABLE test42 (
+      -- [sqlgg] module=Module2
+      col_2 CHAR(36) PRIMARY KEY,
+      
+      -- [sqlgg] module=Module5
+      col_6 VARCHAR(255) NOT NULL UNIQUE,
+      
+      -- [sqlgg] module=Module3
+      col_7 DECIMAL(10,2) NOT NULL DEFAULT 0.0,
+      
+      -- [sqlgg] module=Module6
+      col_8 ENUM('status_a', 'status_b', 'status_c') NOT NULL,
+      
+      col_9 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  |} [] [];
+
+  let stmt = parse {|
+    WITH 
+      subquery_1 AS (
+        SELECT 
+          col_2, 
+          SUM(col_3) as computed_1,
+          COUNT(*) as computed_2
+        FROM test41
+        WHERE col_5 > @param_1 AND col_3 > @param_2
+        GROUP BY col_2
+        HAVING SUM(col_3) > @param_3
+      )
+    SELECT 
+      t2.col_2 as a, 
+      t2.col_6 as b, 
+      t2.col_8 as c,
+      sq.computed_1 as d,
+      sq.computed_2 as e
+    FROM test42 t2
+    JOIN subquery_1 sq ON t2.col_2 = sq.col_2
+    WHERE t2.col_8 = @param_4
+    ORDER BY sq.computed_1 DESC
+    LIMIT @param_5
+  |} in 
+  assert_equal 
+    ~msg:"schema" 
+    ~printer:Sql.Schema.to_string 
+    [
+      attr' ~extra:[PrimaryKey] ~meta:["module", "Module2"] "a" Text;
+      attr' ~extra:[NotNull; Unique] ~meta:["module", "Module5"] "b" Text;
+      attr' ~extra:[NotNull] ~meta:["module", "Module6"] "c" 
+        (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["status_a"; "status_b"; "status_c"]); is_closed = true }));
+      attr' ~extra:[] ~meta:["module", "Module3"] "d" Decimal;
+      attr' "e" Int;
+    ] 
+    stmt.schema;
+
+  assert_params_with_meta stmt [
+    (named "param_1" Datetime, []);
+    (named "param_2" Decimal, ["module", "Module3"]);
+    (named "param_3" Decimal, []);
+    (named "param_4" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["status_a"; "status_b"; "status_c"]); is_closed = true })), 
+      ["module", "Module6"]);
+    (named "param_5" Int, []);
+  ]
+  
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -1175,6 +1411,7 @@ let run () =
     "test_add_with_window_function" >::: test_add_with_window_function;
     "test_meta_propagation" >::: test_meta_propagation;
     "test_case_enum" >::: test_case_enum;
+    "test_type_mapping_params" >:: test_type_mapping_params;
   ]
   in
   let test_suite = "main" >::: tests in

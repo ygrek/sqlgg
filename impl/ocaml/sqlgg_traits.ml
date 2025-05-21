@@ -77,13 +77,31 @@ module type M = sig
 
   (** datatypes *)
   module Types : sig
-    module Bool : Value
-    module Int : Value
-    module Float : Value
-    module Text : Value
+    module Bool : sig
+      include Value
+      val bool_to_literal : bool -> string
+    end
+    module Int : sig 
+      include Value
+      val int64_to_literal : int64 -> string
+    end
+    module Float : sig
+      include Value
+      val float_to_literal : float -> string
+    end
+    module Text : sig
+      include Value
+      val string_to_literal : string -> string
+    end
     module Blob : Value
-    module Decimal : Value
-    module Datetime : Value
+    module Decimal : sig
+      include Value
+      val float_to_literal : float -> string
+    end
+    module Datetime : sig 
+      include Value
+      val float_to_literal : float -> string
+    end
     module Any : Value
   end
 
@@ -142,6 +160,13 @@ module type M = sig
   val set_param_Float : params -> Float.t -> unit
   val set_param_Decimal : params -> Decimal.t -> unit
   val set_param_Datetime : params -> Datetime.t -> unit
+
+  val set_param_bool : params -> bool -> unit
+  val set_param_int64 : params -> int64 -> unit
+  val set_param_float : params -> float -> unit
+  val set_param_decimal : params -> float -> unit
+  val set_param_string : params -> string -> unit
+  val set_param_datetime : params -> float -> unit
 
   module Make_enum: functor (E : Enum) -> sig
     (* The type itself is not exposed to provide a user a polymorphic type without aliases. *)
