@@ -240,6 +240,15 @@ module Meta = struct
     end
 
   let equal = StringMap.equal String.equal
+
+  let merge_right t1 t2 =
+    StringMap.merge (fun _ v1 v2 ->
+      match v1, v2 with
+      | Some v, None -> Some v
+      | Some _, Some v2 -> Some v2
+      | None, Some v -> Some v
+      | None, None -> None
+    ) t1 t2
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
@@ -517,15 +526,15 @@ and case = {
 } [@@deriving show]
 and expr =
   | Value of Type.t (** literal value *)
-  | Param of param
-  | Inparam of param
+  | Param of param * Meta.t
+  | Inparam of param * Meta.t
   | Choices of param_id * expr choices
   | InChoice of param_id * in_or_not_in * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
   | Inserted of string (** inserted value *)
-  | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos }
+  | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos;}
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *) 

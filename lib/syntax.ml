@@ -203,12 +203,24 @@ let resolve_column ~env {cname;tname} =
   | None -> find (Option.map_default (schema_of ~env) env.schema tname) cname
   | Some result -> result
 
+let set_param_meta ~env col e = 
+  let m' = (resolve_column ~env col).attr.meta in
+  let rec aux = function 
+  | Param (p, m) -> Param (p, Meta.merge_right m' m)  
+  | Inparam (p, m) -> Inparam (p, Meta.merge_right m' m)
+  | OptionActions { choice; pos; kind } -> 
+    OptionActions { choice = aux choice; pos; kind }
+  | e -> e 
+  in
+  aux e
+
 let resolve_column_assignments ~env l =
   let open Schema.Source in 
   let open Attr in
   let all = all_tbl_columns (List.map (fun (a, b) -> a, (List.map (fun attr -> {sources=[a]; attr}) b)) env.tables) in
+  let env = { env with schema = all } in
   l |> List.map begin fun (col,expr) ->
-    let attr = resolve_column ~env:{ env with schema = all } col in
+    let attr = resolve_column ~env col in
     (* autoincrement is special - nullable on insert, strict otherwise *)
     let typ = if Constraints.mem Autoincrement attr.attr.extra then 
       Sql.Type.nullable attr.attr.domain.t else attr.attr.domain in
@@ -221,8 +233,8 @@ let resolve_column_assignments ~env l =
       Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
     | RegularExpr (OptionActions ch) ->
       OptionActions { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
-    | RegularExpr expr -> equality typ expr
-    | WithDefaultParam (e, pos) -> with_default @@ OptionActions { choice = equality typ e; pos; kind = SetDefault }
+    | RegularExpr expr -> equality typ (set_param_meta ~env col expr)
+    | WithDefaultParam (e, pos) -> with_default @@ OptionActions { choice = equality typ (set_param_meta ~env col e); pos; kind = SetDefault }
     | AssignDefault -> with_default @@ (Value typ)
   end
 
@@ -248,8 +260,8 @@ let rec bool_choice_id = function
   | SelectExpr _
   | OptionActions _
   | Value _ -> None
-  | Inparam p
-  | Param p -> Some p.id
+  | Inparam (p, _)
+  | Param (p, _) -> Some p.id
   | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
   | Choices (p, _)
   | InTupleList { param_id = p; _ }
@@ -259,6 +271,40 @@ let rec bool_choice_id = function
     (option_list case @ 
      List.flatten (List.map (fun { Sql.when_; then_ } -> [when_; then_]) branches) @ 
      option_list else_)
+
+let extract_meta_from_col ~env expr = 
+  let rec aux = function 
+    (* col_name = @param *)
+    | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison; _ } as fn)
+    (* col_name IN @param *)
+    | Fun ({ parameters = ([Column a; (Inparam _) as b]); _ } as fn) -> 
+      Fun { fn with parameters = [Column a; set_param_meta ~env a b] }
+    | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison; _ } as fn)
+    (* col_name IN @param *)
+    | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
+      Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
+    (* (col_name, ..., any_expr, col_name2) IN @param *)
+    | InTupleList ({ exprs;_ } as in_tuple_list) -> 
+      InTupleList { in_tuple_list with exprs = List.map aux exprs }
+    | Fun ({ parameters; _ } as fn) -> 
+      Fun { fn with parameters = List.map aux parameters }
+    | Case { case; branches; else_ } ->
+      let case = Option.map aux case in
+      let branches = List.map (fun { Sql.when_; then_ } -> 
+        { Sql.when_ = aux when_; then_ = aux then_ }
+      ) branches in
+      let else_ = Option.map aux else_ in
+      Case { case; branches; else_ }
+    | OptionActions ({ choice; _ } as o) -> 
+      OptionActions { o with choice = aux choice; } 
+    | InChoice (n, k, e) -> 
+      InChoice (n, k, aux e)
+    | Choices (n,l) -> 
+      Choices (n, List.map (fun (n,e) -> n, Option.map aux e) l)
+    | (Value _ | Param _ | Inparam _
+      | SelectExpr (_, _) | Column _ | Inserted _) as e -> e
+  in
+  aux expr
     
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
@@ -269,52 +315,7 @@ let rec resolve_columns env expr =
     eprintf "schema: "; Sql.Schema.print (Schema.Source.from_schema env.schema);
     Tables.print stderr env.tables;
   end;
-  let get_meta_of_schema_expr ~env expr =
-    let rec extract_parameter_id = function 
-      | Param p -> Some p.id
-      | Inparam p -> Some p.id
-      | Choices (p, _) -> Some p
-      | InChoice (p, _, _) -> Some p
-      | OptionActions { choice; _ } -> extract_parameter_id choice
-      | Fun _ | SelectExpr _ 
-      | Inserted _ | InTupleList _
-      | Value _ | Column _ | Case _ -> None
-    in
-    let hashtable = Hashtbl.create 10 in
-    let in_tuple_list_hashtable = Hashtbl.create 5 in
-    let extract_meta_from_col expr = 
-      let set_param col expr = expr |> extract_parameter_id |> Option.may @@ fun pid -> 
-        Option.may (fun l -> Hashtbl.add hashtable l (resolve_column ~env col).attr.meta ) pid.label
-      in
-      let rec aux = function 
-      (* col_name = @param *)
-      | Sql.Fun { parameters = ([Column a; b] | [b; Column a]); kind = Comparison; _ }
-      (* col_name IN @param *)
-      | Fun { parameters = ([Column a; (Inparam _) as b] | [(Inparam _) as b; Column a]); _ } -> set_param a b
-      (* (col_name, ..., any_expr, col_name2) IN @param *)
-      | InTupleList { exprs; param_id; _ } -> 
-        let meta_list = List.map (function
-          | Column col -> (resolve_column ~env col).attr.meta 
-          | _ -> Meta.empty()
-        ) exprs in
-        Option.may(fun k -> Hashtbl.add in_tuple_list_hashtable k meta_list) param_id.label;
-        List.iter aux exprs
-      | Fun { parameters; _ } -> List.iter aux parameters
-      | Case { case; branches; else_ } ->
-        Option.may aux case;
-        List.iter (fun { Sql.when_; then_ } -> aux when_; aux then_) branches;
-        Option.may aux else_
-      | OptionActions { choice; _ } -> aux choice
-      | InChoice (_, _, e) -> aux e
-      | Choices (_, l) -> List.iter (fun (_, e) -> Option.may aux e) l
-      | Value _ | Param _ | Inparam _
-      | SelectExpr (_, _) | Column _ | Inserted _ -> () in
-    aux expr in
-    extract_meta_from_col expr;
-    hashtable, in_tuple_list_hashtable
-  in
-  let hashtable, in_tuple_list_hashtable = get_meta_of_schema_expr ~env expr in
-  let get_meta_pid x = Option.default (Meta.empty()) @@ Stdlib.Option.bind x.id.label (Hashtbl.find_opt hashtable) in
+  let expr = extract_meta_from_col ~env expr in
   let rec each e =
     match e with
     | Value x -> ResValue x
@@ -329,7 +330,7 @@ let rec resolve_columns env expr =
     | Inserted name ->
       let attr = try Schema.find env.insert_schema name with Schema.Error (_,s) -> fail "for inserted values : %s" s in
       ResValue attr.domain
-    | Param x -> ResParam (x, get_meta_pid x)
+    | Param (x, m) -> ResParam (x, m)
     | InTupleList { exprs; param_id; kind; pos } -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
@@ -345,11 +346,13 @@ let rec resolve_columns env expr =
         | ResOptionActions _
         | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
-      let meta_list = Option.default (List.init (List.length exprs) (fun _ -> Meta.empty())) 
-        @@ Stdlib.Option.bind param_id.label (Hashtbl.find_opt in_tuple_list_hashtable) in
-      let res_exprs = List.combine res_exprs meta_list in
+      let res_exprs = List.map2 (fun e re ->
+        match e with
+        | Column col -> re, (resolve_column ~env col).attr.meta 
+        | _ -> re, Meta.empty ()
+      ) exprs res_exprs in
       ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind; pos }
-    | Inparam x -> ResInparam (x, get_meta_pid x)
+    | Inparam (x, m) -> ResInparam (x, m)
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
     | Fun { kind; parameters; is_over_clause } ->
@@ -671,8 +674,8 @@ and params_of_order order final_schema env =
 
 and ensure_res_expr = function
   | Value x -> ResValue x
-  | Param x -> ResParam (x, Meta.empty ())
-  | Inparam x -> ResInparam (x, Meta.empty ())
+  | Param (x, m) -> ResParam (x, m)
+  | Inparam (x, m) -> ResInparam (x, m)
   | Case { case; branches; else_ }-> 
     let res_case = Option.map ensure_res_expr case in
     let res_branches = List.map (fun { Sql.when_; then_ } -> 
