@@ -122,6 +122,7 @@ let update_user_profile db ~name ~email ~user_id =
 
 Uses the same `set_param` functions as for query parameters - no additional implementation needed.
 
+→ See [Column-level Customization for Query Parameters](#column-level-customization-for-query-parameters) for module implementation details
 
 → [PR #199](https://github.com/ygrek/sqlgg/pull/199/files)
 
