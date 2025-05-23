@@ -28,7 +28,30 @@ let parse sql =
       | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
       | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
       | Some stmt -> stmt
-
+let assert_params_with_meta stmt meta = 
+    let meta = List.map (fun (p, m) -> (p, Meta.of_list m)) meta in
+    assert_equal 
+      ~msg:"params with meta" 
+      ~cmp:(fun p1 p2 ->
+        try
+          List.for_all2 
+            (fun (p1, m1) (p2, m2) -> cmp_param p1 p2 && Meta.equal m1 m2) 
+            p1 
+            p2
+        with _ -> false)
+      ~printer:[%derive.show: (Sql.param * Sql.Meta.t) list]
+      meta
+      (List.map 
+        (
+          function
+          | Single (p, m) -> (p, m) 
+          | SingleIn (p, m) -> (p, m) 
+          | ChoiceIn { vars = [ SingleIn (p, m) ]; _ } -> (p, m)
+          | ChoiceIn _
+          | SharedVarsGroup _ | OptionActionChoice _ 
+          | Choice _   | TupleList _ -> assert false
+          ) 
+        stmt.Gen.vars)
 
 let do_test ?kind sql schema params =
   let stmt = parse sql in
@@ -1155,31 +1178,6 @@ let test_type_mapping_params _ =
     )
   |} [] [];
 
-  let assert_params_with_meta stmt meta = 
-    let meta = List.map (fun (p, m) -> (p, Meta.of_list m)) meta in
-    assert_equal 
-      ~msg:"params with meta" 
-      ~cmp:(fun p1 p2 ->
-        try
-          List.for_all2 
-            (fun (p1, m1) (p2, m2) -> cmp_param p1 p2 && Meta.equal m1 m2) 
-            p1 
-            p2
-        with _ -> false)
-      ~printer:[%derive.show: (Sql.param * Sql.Meta.t) list]
-      meta
-      (List.map 
-        (
-          function
-          | Single (p, m) -> (p, m) 
-          | SingleIn (p, m) -> (p, m) 
-          | ChoiceIn { vars = [ SingleIn (p, m) ]; _ } -> (p, m)
-          | ChoiceIn _
-          | SharedVarsGroup _ | OptionActionChoice _ 
-          | Choice _   | TupleList _ -> assert false
-          ) 
-        stmt.Gen.vars) in
-
   let stmt = parse {|SELECT id FROM test39 WHERE id = @id|} in
   assert_equal 
     ~msg:"schema" 
@@ -1379,6 +1377,187 @@ let test_type_mapping_params _ =
       ["module", "Module6"]);
     (named "param_5" Int, []);
   ]
+
+let test_meta_insert_update _ = 
+  do_test {| 
+    CREATE TABLE test43 (
+      -- [sqlgg] module=Test43Id
+      id INT PRIMARY KEY,
+      -- [sqlgg] module=ImportantTxt
+      txt TEXT NOT NULL,
+      -- [sqlgg] module=Test43Status
+      status ENUM('active', 'inactive') NOT NULL DEFAULT 'inactive'
+    )
+  |} [] [];
+
+  let stmt = parse {|
+    INSERT INTO test43 (id, txt, status) 
+    VALUES (@param_1, @param_2, @param_3)
+  |} in
+
+  assert_params_with_meta stmt [
+    (named "param_1" Int, ["module", "Test43Id"]);
+    (named "param_2" Text, ["module", "ImportantTxt"]);
+    (named "param_3" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "inactive"]); is_closed = true })), ["module", "Test43Status"]);
+  ];
+
+  let stmt = parse {|
+    UPDATE test43 
+    SET txt = @param_1, status = @param_2 
+    WHERE id = @param_3
+  |} in
+
+  assert_params_with_meta stmt [
+    (named "param_1" Text, ["module", "ImportantTxt"]);
+    (named "param_2" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "inactive"]); is_closed = true })), ["module", "Test43Status"]);
+    (named "param_3" Int, ["module", "Test43Id"]);
+  ];
+
+  let stmt = parse {|
+    INSERT INTO test43 (id, txt, status)
+    SELECT id, txt, status
+    FROM test43 
+    WHERE id = @param_1
+  |} in
+
+  assert_params_with_meta stmt [
+    (named "param_1" Int, ["module", "Test43Id"]);
+  ];
+
+  do_test {| 
+    CREATE TABLE test44 (
+      -- [sqlgg] module=Module1
+      col_1 INT PRIMARY KEY,
+      -- [sqlgg] module=Module2
+      col_2 VARCHAR(255) NOT NULL UNIQUE,
+      -- [sqlgg] module=Module3
+      col_3 ENUM('admin', 'user', 'moderator') NOT NULL DEFAULT 'user',
+      -- [sqlgg] module=Module4
+      col_4 DECIMAL(10,2) DEFAULT 0.0,
+      col_5 TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  |} [] [];
+
+  do_test {| 
+    CREATE TABLE test45 (
+      -- [sqlgg] module=Module1
+      col_1 INT NOT NULL,
+      -- [sqlgg] module=Module5
+      col_2 ENUM('read', 'write', 'delete') NOT NULL,
+      -- [sqlgg] module=Module4
+      col_3 DECIMAL(10,2) NOT NULL DEFAULT 0.0,
+      FOREIGN KEY (col_1) REFERENCES test44(col_1)
+    )
+  |} [] [];
+
+  let stmt = parse {|
+    INSERT INTO test44 (col_1, col_2, col_3, col_4, col_5) 
+    VALUES (@param1, @param2, @param3, @param4, @param5)
+  |} in
+  assert_params_with_meta stmt [
+    (named "param1" Int, ["module", "Module1"]);
+    (named "param2" Text, ["module", "Module2"]);
+    (named "param3" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named_nullable "param4" Decimal, ["module", "Module4"]);
+    (named_nullable "param5" Datetime, []);
+  ];
+
+  let stmt = parse {|
+    UPDATE test44 t44
+    JOIN test45 t45 ON t44.col_1 = t45.col_1
+    SET t44.col_4 = t44.col_4 + t45.col_3 + @param1,
+        t44.col_3 = @param2,
+        t45.col_2 = @param3
+    WHERE t44.col_1 = @param4
+  |} in
+  assert_params_with_meta stmt [
+    (named_nullable "param1" Decimal, []);
+    (named "param2" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named "param3" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["read"; "write"; "delete"]); is_closed = true })), 
+      ["module", "Module5"]);
+    (named "param4" Int, ["module", "Module1"]);
+  ];
+
+  let stmt = parse {|
+    INSERT INTO test44 (col_1, col_2, col_3) VALUES
+    (@param1, @param2, @param3),
+    (@param4, @param5, @param6),
+    (@param7, @param8, @param9)
+  |} in
+  assert_params_with_meta stmt [
+    (named "param1" Int, ["module", "Module1"]);
+    (named "param2" Text, ["module", "Module2"]);
+    (named "param3" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named "param4" Int, ["module", "Module1"]);
+    (named "param5" Text, ["module", "Module2"]);
+    (named "param6" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named "param7" Int, ["module", "Module1"]);
+    (named "param8" Text, ["module", "Module2"]);
+    (named "param9" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+  ];
+
+  let stmt = parse {|
+    INSERT INTO test44 (col_1, col_2, col_3, col_4)
+    VALUES (@param1, @param2, @param3, @param4)
+    ON DUPLICATE KEY UPDATE
+      col_2 = @param5,
+      col_3 = @param6,
+      col_4 = col_4 + @param7
+  |} in
+  assert_params_with_meta stmt [
+    (named "param1" Int, ["module", "Module1"]);
+    (named "param2" Text, ["module", "Module2"]);
+    (named "param3" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named_nullable "param4" Decimal, ["module", "Module4"]);
+    (named "param5" Text, ["module", "Module2"]);
+    (named "param6" 
+      (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
+      ["module", "Module3"]);
+    (named_nullable "param7" Decimal, []);
+  ];
+
+  let stmt = parse {|
+    UPDATE test44 
+    SET col_4 = (
+      SELECT MAX(col_3) 
+      FROM test45 
+      WHERE col_1 = @param1
+    )
+    WHERE col_1 = @param2 AND col_2 = @param3
+  |} in
+  assert_params_with_meta stmt [
+    (named "param1" Int, ["module", "Module1"]);
+    (named "param2" Int, ["module", "Module1"]);
+    (named "param3" Text, ["module", "Module2"]);
+  ];
+
+  let stmt = parse {|
+    UPDATE test44 
+    SET col_4 = col_4 + @param1,
+        col_2 = CONCAT(@param2, col_2)
+    WHERE col_1 = @param3
+  |} in
+  assert_params_with_meta stmt [
+    (named_nullable "param1" Decimal, []);  (* no meta from col_4 *)
+    (named "param2" Text, []);  (* no meta from от col_2 *)
+    (named "param3" Int, ["module", "Module1"]);
+  ]
+
   
 
 let run () =
@@ -1412,6 +1591,7 @@ let run () =
     "test_meta_propagation" >::: test_meta_propagation;
     "test_case_enum" >::: test_case_enum;
     "test_type_mapping_params" >:: test_type_mapping_params;
+    "test_meta_insert_update" >:: test_meta_insert_update;
   ]
   in
   let test_suite = "main" >::: tests in

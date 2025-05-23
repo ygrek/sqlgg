@@ -443,15 +443,15 @@ expr:
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | e1=expr k=in_or_not_in p=param
       {
-        let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any)) ] in
+        let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any), Meta.empty()) ] in
         InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
       }
-    | LPAREN names=commas(expr) RPAREN k=in_or_not_in p=param
+    | LPAREN exprs=commas(expr) RPAREN k=in_or_not_in p=param
       {
-        InTupleList({exprs = names; param_id = p; kind = k; pos = ($startofs, $endofs) })
+        InTupleList({exprs; param_id = p; kind = k; pos = ($startofs, $endofs); })
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t))  }
+    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t), Meta.empty())  }
     | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN

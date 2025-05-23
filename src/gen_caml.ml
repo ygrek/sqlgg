@@ -293,7 +293,7 @@ let rec set_param ~meta index param =
       let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
       let runtime_repr_name = L.as_runtime_repr_name param'.typ in
       if nullable then
-         set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s v" m set_param_name)
+         set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
       else
         output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
   

@@ -4,16 +4,20 @@
 - [📘 Documentation `sqlgg`](#-documentation-sqlgg)
   - [🧭 Contents](#-contents)
   - [🆕 Feature Review](#-feature-review)
-    - [Column-level Customization for Query Parameters](#column-level-customization-for-query-parameters)
-      - [🔹 Supported Parameter Forms](#-supported-parameter-forms)
+    - [Column-level Customization for INSERT/UPDATE Operations](#column-level-customization-for-insertupdate-operations)
+      - [🔹 Example Schema and Queries](#-example-schema-and-queries)
       - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt)
       - [🔹 Module Requirements](#-module-requirements)
+    - [Column-level Customization for Query Parameters](#column-level-customization-for-query-parameters)
+      - [🔹 Supported Parameter Forms](#-supported-parameter-forms)
+      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt-1)
+      - [🔹 Module Requirements](#-module-requirements-1)
     - [Column-level Customization for `SELECT` (currently) Queries](#column-level-customization-for-select-currently-queries)
       - [🔹 Supported Annotations](#-supported-annotations)
       - [🔹 Example](#-example)
-      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt-1)
+      - [🔹 Generated OCaml (Excerpt)](#-generated-ocaml-excerpt-2)
       - [🧠 Semantics](#-semantics)
-      - [🔹 Module Requirements](#-module-requirements-1)
+      - [🔹 Module Requirements](#-module-requirements-2)
       - [🔹 OCaml Implementation Example](#-ocaml-implementation-example)
     - [Support for DEFAULT Values](#support-for-default-values)
       - [🔹 Example](#-example-1)
@@ -40,6 +44,88 @@
 ## 🆕 Feature Review
 
 > Features are listed from latest to earliest, with detailed descriptions and examples.
+
+### Column-level Customization for INSERT/UPDATE Operations
+
+*Added: May 2025*
+
+Extends column-level customization to `INSERT` and `UPDATE` statements using the same custom modules as query parameters.
+
+
+#### 🔹 Example Schema and Queries
+
+```sql
+CREATE TABLE users (
+  -- [sqlgg] module=UserId
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  -- [sqlgg] module=UserName
+  name VARCHAR(255) NOT NULL,
+  -- [sqlgg] module=UserEmail
+  email VARCHAR(255) UNIQUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- @create_user
+INSERT INTO users (name, email) 
+VALUES (@name, @email);
+
+-- @update_user_email
+UPDATE users 
+SET email = @new_email 
+WHERE id = @user_id;
+
+-- @update_user_profile
+UPDATE users 
+SET name = @name, email = @email 
+WHERE id = @user_id;
+```
+
+#### 🔹 Generated OCaml (Excerpt)
+
+```
+let create_user db ~name ~email =
+  let set_params stmt =
+    let p = T.start_params stmt 2 in
+    T.set_param_Text p (UserName.set_param name);
+    T.set_param_Text p (UserEmail.set_param email);
+    T.finish_params p
+  in
+  T.execute db 
+    "INSERT INTO users (name, email) VALUES (?, ?)" 
+    set_params
+
+let update_user_email db ~new_email ~user_id =
+  let set_params stmt =
+    let p = T.start_params stmt 2 in
+    T.set_param_Text p (UserEmail.set_param new_email);
+    T.set_param_Int p (UserId.set_param user_id);
+    T.finish_params p
+  in
+  T.execute db 
+    "UPDATE users SET email = ? WHERE id = ?" 
+    set_params
+
+let update_user_profile db ~name ~email ~user_id =
+  let set_params stmt =
+    let p = T.start_params stmt 3 in
+    T.set_param_Text p (UserName.set_param name);
+    T.set_param_Text p (UserEmail.set_param email);
+    T.set_param_Int p (UserId.set_param user_id);
+    T.finish_params p
+  in
+  T.execute db 
+    "UPDATE users SET name = ?, email = ? WHERE id = ?" 
+    set_params
+```
+
+#### 🔹 Module Requirements
+
+Uses the same `set_param` functions as for query parameters - no additional implementation needed.
+
+
+→ [PR #199](https://github.com/ygrek/sqlgg/pull/199/files)
+
+---
 
 ### Column-level Customization for Query Parameters
 
