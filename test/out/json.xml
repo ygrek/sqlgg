@@ -1,28 +1,37 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="select_0" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b')" category="DQL" kind="select" cardinality="1">
+ <stmt name="create_test" sql="create table test ( foo JSON )" category="DDL" kind="create" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b')" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="select_1" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','$.c')" category="DQL" kind="select" cardinality="1">
+ <stmt name="select_2" sql="SELECT JSON_REMOVE('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','$.c')" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="select_2" sql="SELECT JSON_ARRAY('a','b','c')" category="DQL" kind="select" cardinality="1">
+ <stmt name="select_3" sql="SELECT JSON_ARRAY('a','b','c')" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
- <stmt name="select_3" sql="SELECT JSON_SET('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','foo')" category="DQL" kind="select" cardinality="1">
+ <stmt name="select_4" sql="SELECT JSON_SET('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','foo')" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
   </out>
  </stmt>
+ <table name="test">
+  <schema>
+   <value name="foo" type="Text" nullable="true"/>
+  </schema>
+ </table>
 </sqlgg>

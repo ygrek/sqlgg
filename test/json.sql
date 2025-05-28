@@ -1,5 +1,7 @@
 -- -- https://dev.mysql.com/doc/refman/5.7/en/json-function-reference.html
 
+create table test ( foo JSON );
+
 SELECT JSON_REMOVE('{"a":1,"b":2,"c":3}','$.b');
 --> '{"a":1,"c":3}'
 
