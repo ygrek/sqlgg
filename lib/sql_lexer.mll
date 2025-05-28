@@ -103,10 +103,6 @@ let keywords =
    "into",INTO;
    "is", IS;
    "join",JOIN;
-   "json_array", JSON_ARRAY;
-   "json_set", JSON_SET;
-   "json_remove", JSON_REMOVE;
-   "json_object", JSON_OBJECT;
    "straight_join",STRAIGHT_JOIN;
    "key",KEY;
    "lag", LAG;
