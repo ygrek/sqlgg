@@ -41,7 +41,7 @@
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
-       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET
+       SHARED EXCLUSIVE NONE JSON_ARRAY JSON_REMOVE JSON_SET JSON_OBJECT
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
        SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
@@ -460,7 +460,8 @@ expr:
     | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
-    | JSON_ARRAY LPAREN l=expr_list RPAREN { Fun { kind = (Function.lookup "json_array" (List.length l)); parameters = l; is_over_clause = false } }
+    | JSON_ARRAY LPAREN l=optional_expr_list RPAREN { Fun { kind = (Function.lookup "json_array" (List.length l)); parameters = l; is_over_clause = false } }
+    | JSON_OBJECT LPAREN l=optional_expr_list RPAREN { Fun { kind = (Function.lookup "json_object" (List.length l)); parameters = l; is_over_clause = false } }
     | JSON_REMOVE LPAREN j=expr COMMA fs=expr_list RPAREN { Fun { kind = (Function.lookup "json_remove" (List.length fs + 1)); parameters = fs @ [j]; is_over_clause = false } }
     | JSON_SET LPAREN j=expr COMMA k=expr COMMA v=expr RPAREN { Fun { kind = (Function.lookup "json_set" 3); parameters = [j;k;v]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
@@ -545,6 +546,7 @@ single_literal_value:
     | MINUS FLOAT { Value (strict Float) }
 
 expr_list: l=commas(expr) { l }
+optional_expr_list: l=separated_list(COMMA,expr) { l }
 func_params: DISTINCT? l=expr_list { l }
            | ASTERISK { [] }
            | (* *) { [] }

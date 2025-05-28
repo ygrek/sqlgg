@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <sqlgg>
- <stmt name="create_test" sql="create table test ( foo JSON )" category="DDL" kind="create" target="test" cardinality="0">
+ <stmt name="create_test" sql="create table test ( foo JSON DEFAULT (JSON_OBJECT()) )" category="DDL" kind="create" target="test" cardinality="0">
   <in/>
   <out/>
  </stmt>
@@ -24,6 +24,18 @@
   </out>
  </stmt>
  <stmt name="select_4" sql="SELECT JSON_SET('{&quot;a&quot;:1,&quot;b&quot;:2,&quot;c&quot;:3}','$.b','foo')" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="select_5" sql="SELECT JSON_ARRAY()" category="DQL" kind="select" cardinality="1">
+  <in/>
+  <out>
+   <value name="_0" type="Text"/>
+  </out>
+ </stmt>
+ <stmt name="select_6" sql="SELECT JSON_OBJECT()" category="DQL" kind="select" cardinality="1">
   <in/>
   <out>
    <value name="_0" type="Text"/>
