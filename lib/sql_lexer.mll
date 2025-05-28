@@ -103,9 +103,6 @@ let keywords =
    "into",INTO;
    "is", IS;
    "join",JOIN;
-   "json_array", JSON_ARRAY;
-   "json_set", JSON_SET;
-   "json_remove", JSON_REMOVE;
    "straight_join",STRAIGHT_JOIN;
    "key",KEY;
    "lag", LAG;
@@ -221,7 +218,7 @@ let keywords =
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
-  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext"];
+  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext";"json"];
   all T_TEXT ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime"];
   all T_UUID ["uuid"]; (* http://www.postgresql.org/docs/9.4/static/datatype-uuid.html *)
@@ -425,4 +422,3 @@ ruleCommentMulti acc = parse
     | Ident -> token
 
 }
-
