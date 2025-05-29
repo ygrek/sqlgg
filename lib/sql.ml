@@ -464,7 +464,7 @@ and tuple_list_kind = Insertion of schema | Where_in of (Type.t * Meta.t) list *
 [@@deriving show]
 and vars = var list [@@deriving show]
 
-type alter_pos = [ `After of string | `Default | `First ]
+type alter_pos = [ `After of string | `Default | `First ] [@@deriving show {with_path=false}]
 type alter_action = [
   | `Add of attr * alter_pos
   | `RenameTable of table_name
@@ -472,7 +472,7 @@ type alter_action = [
   | `RenameIndex of string * string
   | `Drop of string
   | `Change of string * attr * alter_pos
-  | `None ]
+  | `None ] [@@deriving show {with_path=false}]
 
 type select_result = (schema * param list)
 
@@ -491,7 +491,8 @@ type col_name = {
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 and limit = param list * bool
 and nested = source * (source * Schema.Join.typ * join_condition) list [@@deriving show]
-and source = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ] * source_alias option (* alias *)
+and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
+and source = source_kind * source_alias option (* alias *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -570,7 +571,7 @@ type insert_action =
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_duplicate : assignments option;
-}
+} [@@deriving show {with_path=false}]
 
 type stmt =
 | Create of table_name * [ `Schema of schema | `Select of select_full ]
@@ -586,7 +587,7 @@ type stmt =
 | UpdateMulti of nested list * assignments * expr option
 | Select of select_full
 | CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
-
+[@@deriving show {with_path=false}]
 (*
 open Schema
 

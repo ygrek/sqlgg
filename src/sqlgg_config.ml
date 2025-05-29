@@ -18,3 +18,10 @@ let gen_header : [ `Full | `Without_timestamp | `Static ] option ref = ref (Some
 let include_category : [ `All | `None | `Only of Stmt.category list | `Except of Stmt.category list ] ref = ref `All
 
 let enum_as_poly_variant = ref false
+
+let dialect = ref Dialect.MySQL
+let set_dialect d = dialect := d
+
+let allow_unknown_dialect = ref false
+
+let set_allow_unknown_dialect () = allow_unknown_dialect := true

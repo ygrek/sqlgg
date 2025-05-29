@@ -85,6 +85,15 @@ let usage_msg =
 
 let show_version () = print_endline Sqlgg_config.version
 
+let set_dialect d =
+  let d = match d with
+  | "mysql" -> Dialect.MySQL
+  | "sqlite" -> Dialect.SQLite
+  | "postgresql" -> Dialect.PostgreSQL
+  | "tidb" -> Dialect.TiDB
+  | _ -> failwith (sprintf "Unknown dialect: %s" d) in 
+  Sqlgg_config.set_dialect d
+
 let main () =
   let l = ref [] in
   let work s = l := each_input s :: !l in
@@ -104,6 +113,8 @@ let main () =
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
+    "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set dialect (default: mysql)";
+    "-allow-unknown-dialect", Arg.Unit Sqlgg_config.set_allow_unknown_dialect, "true (default: mysql)";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
