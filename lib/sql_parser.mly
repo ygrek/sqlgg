@@ -9,6 +9,8 @@
   open Sql.Constraint
   open ExtLib
 
+  module Dialect_feature = Parser_state.Dialect_feature
+
   (* preserve order *)
   let make_limit l =
     let param = function
@@ -95,6 +97,7 @@ if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
 assign: name=IDENT EQUAL e=expr { name, e }
 
+
 cte_item: | cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
             {
               let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any))) names in
@@ -113,6 +116,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               }
          | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(select_stmt)
               {
+                Dialect_feature.set_create_table_as_select ($startofs, $endofs);
                 Create (name,`Select select)
               }
          | ALTER TABLE name=table_name actions=commas(alter_action)
@@ -241,7 +245,7 @@ right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
 straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
-cond(join): j=join JOIN src=source c=join_cond { src, j, c }
+cond(join): j=join JOIN src=source c=join_cond { Dialect_feature.set_join_source src ($startofs, $endofs); src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
 join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
@@ -580,7 +584,7 @@ text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
-collate: COLLATE IDENT { }
+collate: COLLATE c=IDENT { Dialect_feature.set_collation c ($startofs, $endofs) }
 
 sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER RPAREN UNSIGNED?

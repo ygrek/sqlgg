@@ -11,3 +11,20 @@ module Stmt_metadata = struct
   let find_all k = Hashtbl.find_all stmt_metadata k
   let reset () = Hashtbl.reset stmt_metadata
 end
+
+module Dialect_feature = struct
+
+  let state = ref []
+
+  let add_feature feature = state := feature :: !state
+
+  let set_collation value pos = add_feature @@ Dialect.get_collation value pos
+  let set_join_source e pos = add_feature @@ Dialect.get_join_source e pos
+  let set_create_table_as_select pos = add_feature @@ Dialect.get_create_table_as_select pos
+  
+  let reset () = state := []
+end
+
+let next_statement () =
+  Hashtbl.reset Stmt_metadata.stmt_metadata;
+  Dialect_feature.reset ()
