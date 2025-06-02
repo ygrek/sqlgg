@@ -6,6 +6,18 @@ type feature =
   | CreateTableAsSelect
 [@@deriving show { with_path = false }]
 
+let feature_to_string = function
+  | Collation -> "collation"
+  | JoinOnSubquery -> "join_on_subquery"
+  | CreateTableAsSelect -> "create_table_as_select"
+
+let feature_of_string s =
+  match String.lowercase_ascii s with
+  | "collation" -> Collation
+  | "join_on_subquery" -> JoinOnSubquery
+  | "create_table_as_select" -> CreateTableAsSelect
+  | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
+
 type support_state = {
   supported : t list;
   unsupported : t list; 

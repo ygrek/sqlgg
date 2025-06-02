@@ -1090,10 +1090,12 @@ let complete_sql kind sql =
   | _ -> (sql,[])
 
 let parse sql =
-  let (schema,p1,kind) = eval @@ Parser.parse_stmt sql in
+  let open Parser in
+  let { statement; dialect_features } = parse_stmt sql in
+  let (schema,p1,kind) = eval statement in
   let (sql,p2) = complete_sql kind sql in
-  (sql, schema, unify_params (p1 @ p2), kind)
+  (sql, schema, unify_params (p1 @ p2), kind, dialect_features)
   
-let eval_select select_full  = 
+let eval_select select_full =
   let (schema, p1, kind) = eval @@ Select select_full in
   (schema, unify_params p1, kind)

@@ -92,7 +92,21 @@ let set_dialect d =
   | "postgresql" -> Dialect.PostgreSQL
   | "tidb" -> Dialect.TiDB
   | _ -> failwith (sprintf "Unknown dialect: %s" d) in 
-  Sqlgg_config.set_dialect d
+  Sqlgg_config.set_dialect d;
+  match !Gen.params_mode with
+  | Some _ -> () (* if manually set via -params, keep user's choice *)
+  | None -> Gen.params_mode := match d with
+      | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Gen.Unnamed  (* ? syntax *)
+      | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
+
+let set_no_check = 
+  let open Dialect in
+  function
+  | "all" -> Sqlgg_config.set_no_check_features [Collation; JoinOnSubquery; CreateTableAsSelect]
+  | feature_str -> 
+    let features = String.nsplit feature_str "," in
+    let features = List.map Dialect.feature_of_string features in
+    Sqlgg_config.set_no_check_features features
 
 let main () =
   let l = ref [] in
@@ -103,7 +117,7 @@ let main () =
     "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
     "-gen", Arg.String set_out, "cxx|caml|caml_io|java|xml|csharp|none Set output language (default: none)";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-    "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: none)";
+    "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
     "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> set debug level";
     "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
       "do not put version header in generated output";
@@ -113,8 +127,8 @@ let main () =
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
-    "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set dialect (default: mysql)";
-    "-allow-unknown-dialect", Arg.Unit Sqlgg_config.set_allow_unknown_dialect, "true (default: mysql)";
+    "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set SQL dialect - will only allow this dialect's features in SQL queries";
+    "-no-check", Arg.String set_no_check, "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select) - do not enforce dialect feature checks";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     "-test", Arg.Unit Test.run, " Run unit tests";
   ]
