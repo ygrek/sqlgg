@@ -22,6 +22,6 @@ let enum_as_poly_variant = ref false
 let dialect = ref Dialect.MySQL
 let set_dialect d = dialect := d
 
-let allow_unknown_dialect = ref false
+let no_check_features: Dialect.feature list ref = ref []
 
-let set_allow_unknown_dialect () = allow_unknown_dialect := true
+let set_no_check_features l = no_check_features := l
