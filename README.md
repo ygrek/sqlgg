@@ -14,7 +14,8 @@ See homepage for detailed description and rationale.
 Documentation
 -----------
 
-Primary documentation with features list is available in [doc.md](./doc.md).
+Documentation with a list of features is available [doc.md](./doc.md). 
+More advanced documentation is [here](./doc/index.md), but it is a work in progress and not completely ready.
 
 Development
 -----------
