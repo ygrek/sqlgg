@@ -13,4 +13,4 @@ let log format = ksprintf logs format
   path(lineno) : warning _____: string
 *)
 
-let warn format = ksprintf (fun s -> prerr_endline @@ Printf.sprintf "Warning: %s" s) format
+let warn format = ksprintf (eprintf "Warning: %s") format

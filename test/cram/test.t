@@ -114,7 +114,16 @@ Test SQLite dialect with unsupported MySQL collations (should fail):
   [1]
 
 Test SQLite dialect with unsupported custom collations (should warn):
-  $ sqlgg -gen caml -dialect=sqlite -allow-unknown-dialect - <<'EOF' 2>&1 | grep -i "warning"
+  $ sqlgg -gen caml -dialect=sqlite -no-check=collation - <<'EOF' 2>&1 | grep -i "warning"
+  > CREATE TABLE test_mysql_utf8 (
+  >     name TEXT COLLATE amazing_Collation_xxx,  -- For example custom by sqlite3_create_collation
+  >     surname TEXT
+  > );
+  > EOF
+  Warning: Assuming custom collation implementation for SQLite
+
+Test SQLite dialect with unsupported custom collations, skip by all flag (should warn):
+  $ sqlgg -gen caml -dialect=sqlite -no-check=all - <<'EOF' 2>&1 | grep -i "warning"
   > CREATE TABLE test_mysql_utf8 (
   >     name TEXT COLLATE amazing_Collation_xxx,  -- For example custom by sqlite3_create_collation
   >     surname TEXT

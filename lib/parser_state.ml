@@ -24,7 +24,3 @@ module Dialect_feature = struct
   
   let reset () = state := []
 end
-
-let next_statement () =
-  Hashtbl.reset Stmt_metadata.stmt_metadata;
-  Dialect_feature.reset ()
