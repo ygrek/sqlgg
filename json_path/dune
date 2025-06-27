@@ -1,0 +1,17 @@
+(menhir
+ (modules json_path_parser))
+
+(ocamllex json_path_lexer)
+
+(library
+ (name sqlgg_json_path)
+ (public_name sqlgg.json_path)
+ (modules
+  (:standard \ test_json_path))
+ (preprocess
+  (pps ppx_deriving.std)))
+
+(test
+ (name test_json_path)
+ (modules test_json_path)
+ (libraries sqlgg_json_path oUnit))
