@@ -44,6 +44,9 @@ let as_lang_type t =
   | Datetime -> "Timestamp"
   | StringLiteral _ -> "String"
   | Union _
+  | Json
+  | One_or_all 
+  | Json_path
   | Unit _ -> assert false
 
 let as_api_type = String.capitalize_ascii $ as_lang_type
