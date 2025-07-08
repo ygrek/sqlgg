@@ -86,7 +86,7 @@ let test = Type.[
      [attr' ~nullability:(Nullable) "str" Text]
      [param Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
-     [attr' "x" Text; attr' ~nullability:(Nullable) "z" Int]
+     [attr' ~nullability:(Nullable) "x" Text; attr' ~nullability:(Nullable) "z" Int]
      [param_nullable Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [  attr' ~nullability:(Nullable) "name" Text;
@@ -1558,6 +1558,42 @@ let test_meta_insert_update _ =
     (named "param3" Int, ["module", "Module1"]);
   ]
 
+let test_multi_functions = [
+  tt "CREATE TABLE test_multi (id INT, txt1 TEXT, txt2 TEXT NULL, txt3 TEXT NOT NULL)" [] [];
+  
+  tt "SELECT CONCAT(txt1, txt2) as result FROM test_multi" 
+    [attr' ~nullability:(Nullable) "result" Text] [];
+    
+  tt "SELECT CONCAT('hello', 'world') as result" 
+    [attr' "result" Text] [];
+    
+  tt "SELECT CONCAT('hello', txt2) as result FROM test_multi" 
+    [attr' ~nullability:(Nullable) "result" Text] [];
+    
+  tt "SELECT CONCAT(txt1, @param) as result FROM test_multi" 
+    [attr' ~nullability:(Nullable) "result" Text] 
+    [named "param" Text];
+
+  tt "SELECT CONCAT(txt3, @param) as result FROM test_multi" 
+    [attr' "result" Text]
+    [named "param" Text];
+    
+  tt "SELECT STRFTIME('%Y-%m-%d', txt1) as result FROM test_multi"
+    [attr' ~nullability:(Nullable) "result" Text] [];
+    
+  tt "SELECT CONCAT_WS(',', txt1, txt2, 'static') as result FROM test_multi"
+    [attr' ~nullability:(Nullable) "result" Text] [];
+    
+  tt "SELECT CONCAT(txt1, CONCAT_WS('-', txt2, 'suffix')) as result FROM test_multi"
+    [attr' ~nullability:(Nullable) "result" Text] [];
+    
+  tt "SELECT id FROM test_multi WHERE CONCAT(txt1, txt2) = @search"
+    [attr' ~nullability:(Nullable) "id" Int]
+    [named "search" Text];
+    
+  tt "SELECT CONCAT('prefix:', (SELECT txt1 FROM test_multi LIMIT 1)) as result"
+    [attr' ~nullability:(Nullable) "result" Text] [];
+]
   
 
 let run () =
@@ -1592,6 +1628,7 @@ let run () =
     "test_case_enum" >::: test_case_enum;
     "test_type_mapping_params" >:: test_type_mapping_params;
     "test_meta_insert_update" >:: test_meta_insert_update;
+    "test_multi_functions" >::: test_multi_functions;
   ]
   in
   let test_suite = "main" >::: tests in
