@@ -680,7 +680,7 @@ let () =
   "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
   ["least";"greatest";] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
-  ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ text) (Typ text);
+  ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ (depends Text)) (Typ (depends Text));
   "date" |> monomorphic datetime [datetime];
   "time" |> monomorphic text [datetime];
   "julianday" |> multi ~ret:(Typ float) (Typ text);

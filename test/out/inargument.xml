@@ -40,7 +40,7 @@
  <stmt name="find_with_bar" sql="SELECT * FROM foo&#x0A;WHERE CONCAT(foo, @suffix) IN @@foos_with_suffix" category="DQL" kind="select" cardinality="n">
   <in>
    <value name="suffix" type="Text"/>
-   <value name="foos_with_suffix" type="set(Text)"/>
+   <value name="foos_with_suffix" type="set(Text)" nullable="true"/>
   </in>
   <out>
    <value name="id" type="Int"/>

@@ -27,7 +27,7 @@
  <stmt name="calc_total" sql="SELECT CONCAT(name,' ',surname) AS fullname, SUM(amount) as total FROM person JOIN money ON src = id GROUP BY id" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="fullname" type="Text"/>
+   <value name="fullname" type="Text" nullable="true"/>
    <value name="total" type="Int" nullable="true"/>
   </out>
  </stmt>

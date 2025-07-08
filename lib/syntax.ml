@@ -490,43 +490,50 @@ and assign_types env expr =
         in
         if !debug then eprintfn "func %s" (show_func ());
         let types_to_arg each_arg = List.map (const each_arg) types in
-        let func =
-          match kind with
-          | Multi (ret,each_arg) -> F (ret, types_to_arg each_arg)
-          | x -> x
-        in
         let convert_args ret args = 
           let typevar = Hashtbl.create 10 in
-          List.iter2 begin fun arg typ ->
+          let resolved_typs = Hashtbl.create 10 in
+
+          List.iteri (fun idx arg ->
+            let typ = List.nth types idx in
             match arg with
-            | Typ arg ->
-              begin match common_type arg typ with
-              | None -> fail "types %s and %s do not match in %s" (show arg) (show typ) (show_func ())
-              | Some _ -> ()
-              end
+            | Typ arg_ty ->
+                begin match common_type arg_ty typ with
+                | Some unified -> Hashtbl.add resolved_typs idx unified
+                | None -> fail "types %s and %s do not match in %s" (show arg_ty) (show typ) (show_func ())
+                end
             | Var i ->
-              let var =
-                match Hashtbl.find typevar i with
-                | exception Not_found -> typ
-                | t -> t
-              in
-              match common_type var typ with
-              | Some t ->
-                if !debug then Type.(eprintfn "common_type %s %s = %s" (show var) (show typ) (show t));
-                Hashtbl.replace typevar i t
-              | None -> fail "types %s and %s for %s do not match in %s" (show var) (show typ) (string_of_tyvar arg) (show_func ());
-          end args types;
-          if !debug then typevar |> Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ));
-          let convert = function Typ t -> t | Var i -> Hashtbl.find typevar i in
-          let args = List.map convert args in
-          args, convert ret in
+                let var = Hashtbl.find_default typevar i typ in
+                begin match common_type var typ with
+                | Some t ->
+                    if !debug then Type.(eprintfn "common_type %s %s = %s" (show var) (show typ) (show t));
+                    Hashtbl.replace typevar i t
+                | None ->
+                    fail "types %s and %s for %s do not match in %s"
+                      (show var) (show typ) (string_of_tyvar arg) (show_func ())
+                end
+          ) args;
+
+          if !debug then
+            Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ)) typevar;
+
+          let resolve_arg idx = function
+            | Typ t -> Hashtbl.find_default resolved_typs idx t
+            | Var i -> Hashtbl.find typevar i
+          in
+          let args = List.mapi resolve_arg args in
+          let ret = match ret with
+            | Typ t -> t
+            | Var i -> Hashtbl.find typevar i
+          in
+          args, ret in
 
         (* With GROUP BY, the query returns no rows if no groups exist. With OVER clause, the query returns no rows if the outer query filter eliminates all rows.
            In both cases, if we're in a context that expects a value (like a subquery), the result should be nullable. *)
         let consider_agg_nullability typ = if (env.query_has_grouping || is_over_clause) && is_strict typ then typ else make_nullable typ in
 
-        let (ret,inferred_params) = match func, types with
-        | Multi _, _ -> assert false (* rewritten into F above *)
+        let rec infer_fn func types = match func, types with
+        | Multi (ret, each_arg), t -> infer_fn (F (ret, types_to_arg each_arg)) t
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
         | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
         | Agg Self, [typ] -> consider_agg_nullability typ, types
@@ -564,7 +571,8 @@ and assign_types env expr =
             let nullable = common_nullability args in
             undepend ret nullable, args
         in
-        ResFun { kind = func; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
+        let (ret,inferred_params) = infer_fn kind types in
+        ResFun { kind; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
   and typeof expr =
     let r = typeof_ expr in
     if !debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
