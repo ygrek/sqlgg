@@ -35,6 +35,9 @@ struct
     | Decimal
     | Union of union
     | StringLiteral of string
+    | Json_path
+    | One_or_all
+    | Json
     | Any (* FIXME - Top and Bottom ? *)
     [@@deriving eq, show{with_path=false}]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
@@ -76,6 +79,8 @@ struct
 
   let is_unit = function { t = Unit _; _ } -> true | _ -> false
 
+  let is_one_or_all s = List.mem (String.lowercase_ascii s) ["one"; "all"]
+
   (** @return (subtype, supertype) *)
   let order_kind x y =  
     match x, y with
@@ -103,6 +108,42 @@ struct
     | Text, Blob | Blob, Text -> `Order (Text, Blob)
     | Int, Datetime | Datetime, Int -> `Order (Int, Datetime)
     | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
+
+    (*  JSON literal validation:
+       sqlgg can statically validate JSON string literals at compile time:
+       
+       Valid JSON literals are accepted:
+       '{"valid": "example"}' -> StringLiteral is subtype of Json
+       '["array", "example"]' -> StringLiteral is subtype of Json
+       '"simple string"'      -> StringLiteral is subtype of Json
+       
+       Invalid JSON literals are rejected:
+       '{NOTVALID|}' -> No subtype relation, compile error
+       '{missing: quotes}' -> No subtype relation, compile error
+       
+       However, sqlgg cannot validate JSON strings constructed dynamically:
+       CONCAT('{"key": "', user_input, '"}') -> Text type, no validation
+       CONCAT('{"key": "', column_name, '"}') -> Text type, no validation (column value unknown)
+       JSON_EXTRACT(dynamic_column, '$.path') -> Json type, runtime validation
+       
+       This static validation helps catch JSON syntax errors early in development
+       while still allowing dynamic JSON construction when needed. 
+    *)
+
+    | Json, StringLiteral x | StringLiteral x, Json -> 
+      begin match Yojson.Basic.from_string x with
+        | _ -> `Order (StringLiteral x, Json)
+        | exception Yojson.Json_error _ -> `No
+      end
+    | Text, Json | Json, Text -> `Order (Json, Text)
+
+    | (Json_path, StringLiteral x | StringLiteral x, Json_path) 
+        when Sqlgg_json_path.Json_path.is_valid x -> `Order (StringLiteral x, Json_path)
+    | Json_path, Text | Text, Json_path -> `Order (Json_path, Text)
+
+    | (One_or_all, StringLiteral x | StringLiteral x, One_or_all) when is_one_or_all x -> `Order (StringLiteral x, One_or_all)
+    | Json, One_or_all | One_or_all, Json -> `Order (One_or_all, Text)
+
     | _ -> `No
     
 
@@ -169,11 +210,21 @@ struct
 
   type func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
-  | Multi of tyvar * tyvar (* 'a -> ... -> 'a -> 'b *)
   | Coalesce of tyvar * tyvar
   | Comparison
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
+  | Multi of { 
+    ret: tyvar; 
+    fixed_args: tyvar list; 
+    repeating_pattern: tyvar list 
+  }
+  (* repeating_pattern is needed for functions with fixed initial args + optional repeating pattern
+     Example: JSON_ARRAY_APPEND(json_doc, path, val[, path, val] ...)
+     - return_type: what function returns
+     - fixed_args: required initial arguments [json_doc, path, val] 
+     - repeating_pattern: list of types that repeat [path_type, val_type]
+     Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
 
   let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
   let fixed ret args = monomorphic (depends ret) (List.map depends args)
@@ -188,14 +239,22 @@ struct
   | Agg Count -> fprintf pp "|'a| -> int"
   | Ret ret -> fprintf pp "_ -> %s" (show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  | Multi (ret, each_arg) | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
   | Comparison -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
+  | Multi { ret; fixed_args; repeating_pattern } ->
+      let fixed_str = match fixed_args with
+        | [] -> ""
+        | args -> String.concat " -> " (List.map string_of_tyvar args) ^ " -> "
+      in
+      let repeating_str = String.concat ", " (List.map string_of_tyvar repeating_pattern) in
+      fprintf pp "%s[%s]* -> %s" fixed_str repeating_str (string_of_tyvar ret)
+
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Agg _ -> true
-  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison -> false
+  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison  -> false
 end
 
 module Constraint =
@@ -611,6 +670,7 @@ val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
 val add_multi: Type.func -> string -> unit
 val sponge : Type.func
+val add_fixed_then_pairs : ret:Type.tyvar -> fixed_args:Type.tyvar list -> repeating_pattern:Type.tyvar list -> string -> unit
 
 end = struct
 
@@ -628,7 +688,10 @@ let exclude narg name = add_ (Some narg) None name
 let add_multi typ name = add_ None (Some typ) name
 let add narg typ name = add_ (Some narg) (Some typ) name
 
-let sponge = let open Type in let any = depends Any in Multi (Typ any, Typ any)
+let sponge = 
+  let open Type in 
+  let any = depends Any in 
+  Multi { ret = Typ any; fixed_args = []; repeating_pattern = [Typ any] }
 
 let lookup name narg =
   let name = String.lowercase_ascii name in
@@ -650,8 +713,14 @@ let lookup_agg name narg = match lookup name narg with
   | _ -> fail "Function %s is not an aggregate function" name
 
 let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
-let multi_polymorphic name = add_multi Type.(Multi (Var 0, Var 0)) name
-let multi ~ret args name = add_multi Type.(Multi (ret, args)) name
+let multi_polymorphic name = 
+  add_multi (Multi { ret = Var 0; fixed_args = []; repeating_pattern = [Var 0] }) name
+
+let multi ~ret args name = 
+  add_multi (Multi { ret; fixed_args = []; repeating_pattern = [args] }) name
+
+let add_fixed_then_pairs ~ret ~fixed_args ~repeating_pattern name = 
+  add_multi (Multi { ret; fixed_args; repeating_pattern }) name
 
 end
 
@@ -662,6 +731,8 @@ let () =
   let int = strict Int in
   let float = strict Float in
   let text = strict Text in
+  let json = strict Json in
+  let json_path = strict Json_path in
   let datetime = strict Datetime in
   let bool = strict Bool in
   "count" |> add 0 (Agg Count); (* count( * ) - asterisk is treated as no parameters in parser *)
@@ -702,13 +773,93 @@ let () =
   "is_uuid" |> monomorphic bool [text];
   ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
   "date_format" |> monomorphic text [datetime; text];
-  "json_remove" |> multi ~ret:(Typ text) (Typ text);
-  "json_array" |> multi ~ret:(Typ text) (Typ text);
-  "json_object" |> multi ~ret:(Typ text) (Typ text);
-  "json_contains" |> multi ~ret:(Typ bool) (Typ text);
-  "json_unquote" |> monomorphic text [text];
-  "json_array_append" |> multi ~ret:(Typ text) (Typ text);
-  "json_search" |> multi ~ret:(Typ text) (Typ text);
-  "json_set" |> add 3 (F (Typ text, [Typ text; Typ text; Var 0]));
   "makedate" |> monomorphic datetime [int; int];
+  (* 
+     Any is used instead of Var because MySQL JSON functions have unique semantics:
+   
+   1. ACCEPT ANY DATA TYPE: MySQL JSON functions accept values of any type
+      and automatically serialize them to JSON according to built-in rules
+   
+   2. PRESERVE TYPES IN JSON: each type is serialized differently:
+      - Numbers → JSON numbers (123 → 123)
+      - Strings → JSON strings ("text" → "text")  
+      - Booleans → JSON booleans (true → true)
+      - NULL → JSON null
+      - JSON-like strings remain STRINGS: '{"a":1}' → "{\"a\":1}" (not parsed!)
+   
+   3. ONLY RESULTS OF JSON FUNCTIONS become JSON objects:
+      JSON_SET(data, '$.obj', JSON_OBJECT('key', 'value'))  -- JSON object
+      JSON_SET(data, '$.str', '{"key": "value"}')           -- string!
+   
+   4. CRITICAL: different values in a single call can have DIFFERENT types
+      
+      Example of valid MySQL query:
+      JSON_SET(
+        data, 
+        '$.user.name',    'Alice',              -- Text
+        '$.user.age',     25,                   -- Int
+        '$.user.active',  true,                 -- Bool
+        '$.user.score',   99.5,                 -- Float
+        '$.user.meta',    JSON_OBJECT('x', 1)   -- Json
+      )
+   
+   WHY NOT Var 0:
+   If we used ~repeating_pattern:[Typ json_path; Var 0], then:
+   - First value 'Alice' (Text) → Var 0 becomes Text
+   - Second value 25 (Int) → requires Text, but gets Int → TYPE ERROR
+   - Valid MySQL query would be rejected!
+   
+   WHY NOT fresh Var for each cycle:
+   Consider this example:
+   JSON_ARRAY_APPEND(
+     data, 
+     '$[0].items',     123,           -- Int
+     '$[1].props',     "hello",       -- Text  
+     '$[2].flags',     true,          -- Bool
+     '$[3].meta',      null,          -- Null
+     '$[4].nested',    JSON_OBJECT('x', 'y')  -- Json
+   )
+   
+   With fresh Var this would be:
+   json -> json_path -> 'a -> json_path -> 'b -> json_path -> 'c -> json_path -> 'd -> json_path -> 'e -> json
+   
+  This is essentially an existential type: json -> (json_path -> ∃a. a)* -> json
+   
+   But this complicates implementation for the same effect as Any:
+   - Fresh Var can be any type = Any
+   - In our type system: | Any, t | t, Any -> `Order (t, t)
+   - Any already correctly handles unification with any types
+   
+   Applied to: JSON_SET, JSON_ARRAY_APPEND, JSON_OBJECT, JSON_ARRAY, etc.
+  *)
+  "json_array_append" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[Typ (depends Json); Typ json_path; Typ (depends Any)]
+    ~repeating_pattern:[Typ json_path; Typ (depends Any)];
+  "json_search" |> monomorphic ((nullable Json)) [json; strict One_or_all; text];
+  "json_search" |> add_fixed_then_pairs
+    ~ret:(Typ (nullable Json))
+    ~fixed_args:[Typ json; Typ (strict One_or_all); Typ text; Typ text]
+    ~repeating_pattern:[Typ json_path];
+  "json_remove" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[Typ (depends Json); Typ (depends Json_path)]
+    ~repeating_pattern:[Typ (depends Json_path)];   
+  "json_set" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[(Typ (depends Json)); Typ (depends Json_path); Typ (depends Any)]
+    ~repeating_pattern:[Typ (depends Json_path); Typ (depends Any)];
+  "json_array" |> multi ~ret:(Typ json) (Typ (depends Any));
+  "json_object" |> add 0 (F (Typ json, []));
+  "json_object" |> add_fixed_then_pairs
+    ~ret:(Typ json)
+    ~fixed_args:[Typ text; Typ (depends Any)]
+    ~repeating_pattern:[Typ text; Typ (depends Any)]; 
+  "json_contains" |> add 2 (F (Typ (nullable Bool), [Typ json; Typ json]));
+  "json_contains" |> add 3 (F (Typ (nullable Bool), [Typ json; Typ json; Typ json_path]));
+  "json_unquote" |> monomorphic (depends Text) [depends (Json)];
+  "json_extract" |> add_fixed_then_pairs
+    ~ret:(Typ (nullable Json))
+    ~fixed_args:[Typ json; Typ json_path]
+    ~repeating_pattern:[Typ json_path];
   ()

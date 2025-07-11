@@ -12,6 +12,7 @@ build: [
 ]
 depends: [
   "ocaml" {>= "4.13.0"}
+  "yojson" {>= "1.6.0"}
   "dune" {>= "2.7"}
   "menhir" {>= "20180523"}
   "mybuild" {> "3"}
