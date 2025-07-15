@@ -14,20 +14,9 @@
 *)
 
 open Printf
+open Sqlgg_trait_types
 
 module P = Mysql.Prepared
-
-type json = [ `Null
-  | `String of string
-  | `Float of float
-  | `Int of int
-  | `Bool of bool
-  | `List of json list
-  | `Assoc of (string * json) list 
-]
-
-type json_path = Sqlgg_json_path.Ast.t
-type one_or_all = [ `One | `All ]
 
 module type Value = sig
   type t
@@ -196,11 +185,21 @@ module Default_types = struct
   module Json = struct
     type t = json
 
-    let of_string s = Yojson.Basic.from_string s
+    let of_string s = convert_json @@ Yojson.Safe.from_string s
 
-    let to_string j = Yojson.Basic.to_string j
+    let to_string (x: t) = match x with
+     | `Bool x -> Bool.to_string x
+     | `Int x -> Int.to_string (Int64.of_int x)
+     | `Intlit x ->  Int.to_string (Int64.of_string x)
+     | `Float x -> Float.to_string x
+     | #t  -> Yojson.Safe.to_string (x :> Yojson.Safe.t)
 
-    let to_literal j = Text.to_literal (to_string j)
+    let to_literal (x: t) = match x with
+     | `Bool x -> Bool.to_literal x
+     | `Int x -> Int.to_literal (Int64.of_int x)
+     | `Intlit x ->  Int.to_string (Int64.of_string x)
+     | `Float x -> Float.to_literal x
+     | #t -> Text.to_literal @@ Yojson.Safe.to_string (x :> Yojson.Safe.t)
 
     let get_string = of_string
     let set_string = to_string

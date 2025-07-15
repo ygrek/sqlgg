@@ -395,21 +395,21 @@ Test Json functions and ocaml compiles:
   Running all tests...
   
   [TEST 1] Testing JSON parameter with nested structure
-  [MOCK SELECT_ONE] Connection: test_connection
+  [MOCK SELECT_ONE] Connection type: [> `RO ]
   [SQL] SELECT JSON_SEARCH('{\"users\":[{\"id\":1,\"settings\":{\"themes\":[\"dark\"]}}]}', 'one', 'dark')
   [MOCK] Returning one row
   [MOCK] get_column_Json_nullable[0] = Some "$.users[0].settings.themes[0]"
   [TEST 1] Result: completed
   
   [TEST 2] Testing JSON path parameter with combinators
-  [MOCK SELECT_ONE] Connection: test_connection
+  [MOCK SELECT_ONE] Connection type: [> `RO ]
   [SQL] SELECT JSON_ARRAY_APPEND('["a", ["b", "c"], "d"]', '$.data[*].users[last].settings', 1)
   [MOCK] Returning one row
   [MOCK] get_column_Json[0] = {"theme":"dark","language":"en"}
   [TEST 2] Result: completed
   
   [TEST 3] Testing SELECT with JSON path extraction
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT JSON_EXTRACT(col1, '$.name') FROM table1 WHERE id = 1
   [MOCK] Returning 2 rows
     Row 0: col0=1 col1=Alice col2=Alice Johnson 
@@ -421,7 +421,7 @@ Test Json functions and ocaml compiles:
   [TEST 3] Result: completed
   
   [TEST 4] Testing SELECT with nested JSON path
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT JSON_UNQUOTE(JSON_EXTRACT(col1, '$.user.email')) FROM table1 WHERE id = 2
   [MOCK] Returning 1 rows
     Row 0: col0=2 col1=user@example.com 
@@ -430,13 +430,13 @@ Test Json functions and ocaml compiles:
   [TEST 4] Result: completed
   
   [TEST 5] Testing SELECT ONE with JSON path
-  [MOCK EXECUTE] Connection: test_connection
+  [MOCK EXECUTE] Connection type: [> `WR ]
   [SQL] UPDATE table1 SET col1 = JSON_SET(col1, '$.last_login', NOW()) WHERE id = 3
   [MOCK] Execute result: affected_rows=1, insert_id=5
   [TEST 5] Result: completed
   
   [TEST 6] Testing simple SELECT with callback
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT JSON_CONTAINS(col1, '"value"') FROM table1 WHERE id = 4
   [MOCK] Returning 1 rows
     Row 0: col0=4 col1=active 
@@ -445,7 +445,7 @@ Test Json functions and ocaml compiles:
   [TEST 6] Result: completed
   
   [TEST 7] Testing SELECT with JSON path filter
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT id, name FROM table2 WHERE JSON_EXTRACT(col1, '$.metadata.category') = '\"electronics\"'
   [MOCK] Returning 2 rows
     Row 0: col0=101 col1=Laptop 
@@ -459,7 +459,7 @@ Test Json functions and ocaml compiles:
   [TEST 7] Result: completed
   
   [TEST 8] Testing complex SELECT with multiple JSON paths
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT 
   id,
   JSON_EXTRACT(col1, '$.profile.name') as user_name,
@@ -475,7 +475,7 @@ Test Json functions and ocaml compiles:
   [TEST 8] Result: completed
   
   [TEST 9] Testing UPDATE with JSON path conditions
-  [MOCK EXECUTE] Connection: test_connection
+  [MOCK EXECUTE] Connection type: [> `WR ]
   [SQL] UPDATE table2 
   SET col2 = JSON_SET(col2, '$.timestamps.last_update', NOW())
   WHERE JSON_EXTRACT(col1, '$.user.role') = '\"admin\"'
@@ -483,7 +483,7 @@ Test Json functions and ocaml compiles:
   [TEST 9] Result: affected_rows=3, insert_id=42
   
   [TEST 10] Testing search with text parameter
-  [MOCK SELECT] Connection: test_connection
+  [MOCK SELECT] Connection type: [> `RO ]
   [SQL] SELECT JSON_SEARCH(col1, 'one', 'admin') FROM table1 WHERE id = 5
   [MOCK] Returning 1 rows
     Row 0: col0="$.test[0]" 
