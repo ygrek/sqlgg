@@ -13,6 +13,8 @@
   For more information, please refer to <http://unlicense.org/>
 *)
 
+open Sqlgg_trait_types
+
 module type Value = sig
   type t
 
@@ -27,18 +29,6 @@ module type Enum = sig
 
   val proj: t -> string
 end
-
-type json = [ `Null
-  | `String of string
-  | `Float of float
-  | `Int of int
-  | `Bool of bool
-  | `List of json list
-  | `Assoc of (string * json) list 
-]
-
-type json_path = Sqlgg_json_path.Ast.t
-type one_or_all = [ `One | `All ]
 
 module type FNS = sig
   (* all types intended for subsitution *)

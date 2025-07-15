@@ -14,22 +14,10 @@
 *)
 
 open Printf
-
+open Sqlgg_trait_types
 module M = struct
 
 module S = Sqlite3
-
-type json = [ `Null
-  | `String of string
-  | `Float of float
-  | `Int of int
-  | `Bool of bool
-  | `List of json list
-  | `Assoc of (string * json) list 
-]
-
-type json_path = Sqlgg_json_path.Ast.t
-type one_or_all = [ `One | `All ]
 
 module Types = struct
   module Bool = struct 
@@ -92,11 +80,14 @@ module Types = struct
   module Datetime = Float (* ? *)
   
   module Json = struct
-    type t = Yojson.Basic.t
+    type t = json
 
-    let to_literal j = 
-      Text.to_literal (Yojson.Basic.to_string j)
-
+    let to_literal (x: t) = match x with
+     | `Bool x -> Bool.to_literal x
+     | `Intlit x -> Int.to_literal (Int64.of_string x)
+     | `Int x -> Int.to_literal (Int64.of_int x)
+     | `Float x -> Float.to_literal x
+     | #t -> Yojson.Safe.to_string (x :> Yojson.Safe.t)
     let json_to_literal = to_literal
   end
 
@@ -158,7 +149,7 @@ module Conv = struct
   let datetime = "Datetime", fun x -> Float.to_string @@ snd float x
 
   let json = "Json", function
-    | TEXT s -> Yojson.Basic.from_string s
+    | TEXT s -> s |> Yojson.Safe.from_string |> convert_json
     | x -> raise (Type_mismatch x)
 
   let json_path = "Json_path", function
@@ -238,7 +229,12 @@ let set_param_Int stmt v = bind_param (S.Data.INT v) stmt
 let set_param_Float stmt v = bind_param (S.Data.FLOAT v) stmt
 let set_param_Decimal = set_param_Float
 let set_param_Datetime = set_param_Float
-let set_param_Json stmt v = bind_param (S.Data.TEXT (Yojson.Basic.to_string v)) stmt
+let set_param_Json stmt (v: json) = match v with
+  | `Bool x -> set_param_Bool stmt x
+  | `Int x -> set_param_Int stmt (Int64.of_int x)
+  | `Intlit x -> set_param_Int stmt (Int64.of_string x)
+  | `Float x -> set_param_Float stmt x
+  | #json -> set_param_Text stmt @@ Yojson.Safe.to_string (v :> Yojson.Safe.t)
 let set_param_Json_path stmt v = bind_param (S.Data.TEXT (Sqlgg_json_path.Json_path.string_of_json_path v)) stmt
 let set_param_One_or_all stmt v = bind_param (S.Data.TEXT (match v with `One -> "one" | `All -> "all")) stmt
 
