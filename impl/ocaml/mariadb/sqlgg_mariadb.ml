@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_trait_types
 
 module type Value = sig
   type t
@@ -31,18 +32,6 @@ module type Enum = sig
 
   val proj: t -> string
 end
-
-type json = [ `Null
-  | `String of string
-  | `Float of float
-  | `Int of int
-  | `Bool of bool
-  | `List of json list
-  | `Assoc of (string * json) list 
-]
-
-type json_path = Sqlgg_json_path.Ast.t
-type one_or_all = [ `One | `All ]
 
 module type Types = sig
   type field
@@ -123,7 +112,7 @@ module Default_types(M : Mariadb.Nonblocking.S) : Types with
   type Float.t = float and
   type Decimal.t = float and
   type Datetime.t = M.Time.t and
-  type Json.t = Yojson.Basic.t and
+  type Json.t = json and
   type Json_path.t = json_path and
   type One_or_all.t = one_or_all and
   type Any.t = M.Field.value =
@@ -288,16 +277,21 @@ struct
 
   module Json = struct
     include Make (struct
-      type t = Yojson.Basic.t
+      type t = Sqlgg_trait_types.json
 
       let handle_with_json v = function
-        | `String x -> Yojson.Basic.from_string x
-        | `Json x -> Yojson.Basic.from_string x
+        | `String x -> Yojson.Safe.from_string x
+        | `Json x -> Yojson.Safe.from_string x
         | #M.Field.value as value -> convfail "json" v value
 
-      let of_field field = handle_with_json field (M.Field.value field )
-      let to_value x = `String (Yojson.Basic.to_string x)
-      let to_literal x = Text.to_literal (Yojson.Basic.to_string x)
+      let to_literal (x: t) = Yojson.Safe.to_string (x :> Yojson.Safe.t)
+      let of_field field = convert_json @@ handle_with_json field (M.Field.value field )
+      let to_value (x: json) = match x with
+        | `Bool x -> Bool.to_value x
+        | `Int x -> Int.to_value (Int64.of_int x)
+        | `Intlit x -> Int.to_value (Int64.of_string x)
+        | `Float x -> Float.to_value x
+        | #json -> `Json (Yojson.Safe.to_string (x :> Yojson.Safe.t))
     end)
 
     let get_json = of_field
