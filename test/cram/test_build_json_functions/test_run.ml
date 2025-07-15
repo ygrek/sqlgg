@@ -212,7 +212,7 @@ end
 module Test = M(Print_ocaml_impl)
 
 let () = 
-  let con = "test_connection" in
+  let con = () in
   
   printf "Starting JSON Path Tests with Inline Mock Implementation\n";
   printf "%s\n" (String.make 60 '=');

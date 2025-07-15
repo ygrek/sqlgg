@@ -131,11 +131,12 @@ struct
     *)
 
     | Json, StringLiteral x | StringLiteral x, Json -> 
-      begin match Yojson.Basic.from_string x with
+      begin match Yojson.Safe.from_string x with
         | _ -> `Order (StringLiteral x, Json)
         | exception Yojson.Json_error _ -> `No
       end
     | Text, Json | Json, Text -> `Order (Json, Text)
+    | Blob, Json | Json, Blob -> `Order (Json, Blob)
 
     | (Json_path, StringLiteral x | StringLiteral x, Json_path) 
         when Sqlgg_json_path.Json_path.is_valid x -> `Order (StringLiteral x, Json_path)
