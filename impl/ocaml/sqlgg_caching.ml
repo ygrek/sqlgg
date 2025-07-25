@@ -1,11 +1,6 @@
 open Printf
 
-module type MUTEX = sig
-  type t
-  val create : unit -> t
-  val with_lock : t -> (unit -> 'a) -> 'a
-end
-
+(* IO_MUTEX only needed for async/concurrent scenarios *)
 module type IO_MUTEX = sig
   type 'a io
   type t
@@ -27,9 +22,8 @@ module type CACHEABLE = sig
   val exec_select_maybe : statement -> (statement -> result) -> (row -> 'a) -> 'a option
 end
 
-(* ===== CACHING FUNCTOR ===== *)
 
-module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
+module Make_cached(Base : CACHEABLE) = struct
   include Base
   
   type cache_stats = { hits: int; misses: int; evictions: int }
@@ -39,7 +33,6 @@ module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
     mutable hits: int;
     mutable misses: int;
     max_size: int;
-    mutex: M.t;
   }
   
   let create_cache max_size = {
@@ -47,10 +40,7 @@ module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
     hits = 0;
     misses = 0;
     max_size;
-    mutex = M.create ();
   }
-  
-  let with_cache_lock cache f = M.with_lock cache.mutex f
   
   let rec take n lst =
     if n <= 0 then []
@@ -59,26 +49,24 @@ module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
     | x :: xs -> x :: take (n - 1) xs
   
   let get_statement cache conn sql =
-    with_cache_lock cache (fun () ->
-      match Hashtbl.find_opt cache.statements sql with
-      | Some stmt ->
-          cache.hits <- cache.hits + 1;
-          stmt
-      | None ->
-          cache.misses <- cache.misses + 1;
-          
-          (* Simple eviction when full *)
-          if Hashtbl.length cache.statements >= cache.max_size then (
-            let entries = Hashtbl.to_seq cache.statements |> List.of_seq in
-            let to_remove = take (List.length entries / 2) entries in
-            List.iter (fun (_, stmt) -> Base.close stmt) to_remove;
-            List.iter (fun (sql, _) -> Hashtbl.remove cache.statements sql) to_remove
-          );
-          
-          let stmt = Base.prepare conn sql in
-          Hashtbl.add cache.statements sql stmt;
-          stmt
-    )
+    match Hashtbl.find_opt cache.statements sql with
+    | Some stmt ->
+        cache.hits <- cache.hits + 1;
+        stmt
+    | None ->
+        cache.misses <- cache.misses + 1;
+        
+        (* Simple eviction when full *)
+        if Hashtbl.length cache.statements >= cache.max_size then (
+          let entries = Hashtbl.to_seq cache.statements |> List.of_seq in
+          let to_remove = take (List.length entries / 2) entries in
+          List.iter (fun (_, stmt) -> Base.close stmt) to_remove;
+          List.iter (fun (sql, _) -> Hashtbl.remove cache.statements sql) to_remove
+        );
+        
+        let stmt = Base.prepare conn sql in
+        Hashtbl.add cache.statements sql stmt;
+        stmt
   
   type 'a cached_connection = {
     base: 'a Base.connection;
@@ -92,19 +80,16 @@ module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
   
   let stats cached_conn =
     match cached_conn.cache with
-    | Some cache -> 
-        with_cache_lock cache (fun () ->
-          { hits = cache.hits; misses = cache.misses; evictions = 0 })
+    | Some cache -> { hits = cache.hits; misses = cache.misses; evictions = 0 }
     | None -> { hits = 0; misses = 0; evictions = 0 }
   
   let clear cached_conn =
     match cached_conn.cache with
     | Some cache -> 
-        with_cache_lock cache (fun () ->
-          Hashtbl.iter (fun _ stmt -> Base.close stmt) cache.statements;
-          Hashtbl.clear cache.statements;
-          cache.hits <- 0;
-          cache.misses <- 0)
+        Hashtbl.iter (fun _ stmt -> Base.close stmt) cache.statements;
+        Hashtbl.clear cache.statements;
+        cache.hits <- 0;
+        cache.misses <- 0
     | None -> ()
   
   (* Cached SELECT operations *)
@@ -137,7 +122,6 @@ module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
     Base.execute cached_conn.base sql set_params
 end
 
-(* ===== IO VERSION ===== *)
 
 module type IO_CACHEABLE = sig
   include Sqlgg_traits.M_io
