@@ -227,3 +227,11 @@ module type M_io_default_types = sig
     with type row := row
     with type execute_response := execute_response
 end
+
+module type M_cached = sig
+  include M
+  
+  type cache_stats = { hits: int; misses: int; evictions: int }
+  val get_cache_stats : unit -> cache_stats
+  val clear_cache : unit -> unit
+end
