@@ -1,117 +1,232 @@
-module Cache_key = struct
-  type t = {
-    sql: string;
-    params: string array;
-  }
-  
-  let compare_array cmp a1 a2 =
-    let len1 = Array.length a1 in
-    let len2 = Array.length a2 in
-    if len1 <> len2 then compare len1 len2
-    else
-      let rec loop i =
-        if i >= len1 then 0
-        else
-          let c = cmp a1.(i) a2.(i) in
-          if c <> 0 then c else loop (i + 1)
-      in
-      loop 0
-  
-  let compare t1 t2 =
-    let sql_cmp = String.compare t1.sql t2.sql in
-    if sql_cmp <> 0 then sql_cmp
-    else compare_array String.compare t1.params t2.params
-  
-  let hash t =
-    let sql_hash = Hashtbl.hash t.sql in
-    let params_hash = Hashtbl.hash (Array.to_list t.params) in
-    Hashtbl.hash (sql_hash, params_hash)
-  
-  let make sql params = { sql; params }
+open Printf
+
+module type MUTEX = sig
+  type t
+  val create : unit -> t
+  val with_lock : t -> (unit -> 'a) -> 'a
 end
 
-(* LRU cache *)
-module LRU_cache = struct
-  module CacheMap = Map.Make(Cache_key)
+module type IO_MUTEX = sig
+  type 'a io
+  type t
+  val create : unit -> t
+  val with_lock : t -> (unit -> 'a io) -> 'a io
+end
+
+module type CACHEABLE = sig
+  include Sqlgg_traits.M
   
-  type 'a entry = {
-    value: 'a;
-    timestamp: float;
-    access_count: int;
-  }
+  (* Functions for working with prepared statements *)
+  val prepare : 'a connection -> string -> statement
+  val close : statement -> unit
+  val with_statement : 'a connection -> string -> (statement -> 'b) -> 'b
   
-  type 'a t = {
-    data: 'a entry CacheMap.t;
+  (* Direct statement execution - bypasses standard API *)
+  val exec_select : statement -> (statement -> result) -> (row -> unit) -> unit
+  val exec_select_one : statement -> (statement -> result) -> (row -> 'a) -> 'a
+  val exec_select_maybe : statement -> (statement -> result) -> (row -> 'a) -> 'a option
+end
+
+(* ===== CACHING FUNCTOR ===== *)
+
+module Make_cached(M : MUTEX)(Base : CACHEABLE) = struct
+  include Base
+  
+  type cache_stats = { hits: int; misses: int; evictions: int }
+  
+  type stmt_cache = {
+    statements: (string, Base.statement) Hashtbl.t;
+    mutable hits: int;
+    mutable misses: int;
     max_size: int;
-    access_order: (Cache_key.t * float) list;
+    mutex: M.t;
   }
   
-  let create max_size = {
-    data = CacheMap.empty;
+  let create_cache max_size = {
+    statements = Hashtbl.create max_size;
+    hits = 0;
+    misses = 0;
     max_size;
-    access_order = [];
+    mutex = M.create ();
   }
   
-  let get cache key =
-    match CacheMap.find_opt key cache.data with
-    | None -> None, cache
-    | Some entry ->
-        let new_entry = { 
-          entry with 
-          timestamp = Unix.time ();
-          access_count = entry.access_count + 1 
-        } in
-        let new_data = CacheMap.add key new_entry cache.data in
-        let new_order = (key, new_entry.timestamp) :: 
-          List.filter (fun (k, _) -> Cache_key.compare k key <> 0) cache.access_order in
-        Some entry.value, { cache with data = new_data; access_order = new_order }
+  let with_cache_lock cache f = M.with_lock cache.mutex f
   
-  let evict_oldest cache =
-    match List.rev cache.access_order with
-    | [] -> cache
-    | (oldest_key, _) :: rest ->
-        let new_data = CacheMap.remove oldest_key cache.data in
-        { cache with data = new_data; access_order = List.rev rest }
+  let rec take n lst =
+    if n <= 0 then []
+    else match lst with
+    | [] -> []
+    | x :: xs -> x :: take (n - 1) xs
   
-  let put cache key value =
-    let entry = {
-      value;
-      timestamp = Unix.time ();
-      access_count = 1;
-    } in
-    let new_data = CacheMap.add key entry cache.data in
-    let new_order = (key, entry.timestamp) :: cache.access_order in
-    let cache' = { cache with data = new_data; access_order = new_order } in
-    if CacheMap.cardinal cache'.data > cache.max_size then
-      evict_oldest cache'
-    else
-      cache'
+  let get_statement cache conn sql =
+    with_cache_lock cache (fun () ->
+      match Hashtbl.find_opt cache.statements sql with
+      | Some stmt ->
+          cache.hits <- cache.hits + 1;
+          stmt
+      | None ->
+          cache.misses <- cache.misses + 1;
+          
+          (* Simple eviction when full *)
+          if Hashtbl.length cache.statements >= cache.max_size then (
+            let entries = Hashtbl.to_seq cache.statements |> List.of_seq in
+            let to_remove = take (List.length entries / 2) entries in
+            List.iter (fun (_, stmt) -> Base.close stmt) to_remove;
+            List.iter (fun (sql, _) -> Hashtbl.remove cache.statements sql) to_remove
+          );
+          
+          let stmt = Base.prepare conn sql in
+          Hashtbl.add cache.statements sql stmt;
+          stmt
+    )
   
-  let clear cache = { cache with data = CacheMap.empty; access_order = [] }
+  type 'a cached_connection = {
+    base: 'a Base.connection;
+    cache: stmt_cache option;
+  }
+  
+  let wrap ?(enabled=true) ?(size=100) base_conn = {
+    base = base_conn;
+    cache = if enabled then Some (create_cache size) else None;
+  }
+  
+  let stats cached_conn =
+    match cached_conn.cache with
+    | Some cache -> 
+        with_cache_lock cache (fun () ->
+          { hits = cache.hits; misses = cache.misses; evictions = 0 })
+    | None -> { hits = 0; misses = 0; evictions = 0 }
+  
+  let clear cached_conn =
+    match cached_conn.cache with
+    | Some cache -> 
+        with_cache_lock cache (fun () ->
+          Hashtbl.iter (fun _ stmt -> Base.close stmt) cache.statements;
+          Hashtbl.clear cache.statements;
+          cache.hits <- 0;
+          cache.misses <- 0)
+    | None -> ()
+  
+  (* Cached SELECT operations *)
+  let select cached_conn sql set_params callback =
+    match cached_conn.cache with
+    | Some cache ->
+        let stmt = get_statement cache cached_conn.base sql in
+        Base.exec_select stmt set_params callback
+    | None ->
+        Base.select cached_conn.base sql set_params callback
+  
+  let select_one cached_conn sql set_params convert =
+    match cached_conn.cache with
+    | Some cache ->
+        let stmt = get_statement cache cached_conn.base sql in
+        Base.exec_select_one stmt set_params convert
+    | None ->
+        Base.select_one cached_conn.base sql set_params convert
+  
+  let select_one_maybe cached_conn sql set_params convert =
+    match cached_conn.cache with
+    | Some cache ->
+        let stmt = get_statement cache cached_conn.base sql in
+        Base.exec_select_maybe stmt set_params convert
+    | None ->
+        Base.select_one_maybe cached_conn.base sql set_params convert
+  
+  (* execute is never cached *)
+  let execute cached_conn sql set_params =
+    Base.execute cached_conn.base sql set_params
 end
 
-(* Cache configuration *)
-module Cache_config = struct
-  type t = {
-    max_entries: int;
-    ttl_seconds: float;
-    enable_select_cache: bool;
-    enable_execute_cache: bool;
-  }
+(* ===== IO VERSION ===== *)
+
+module type IO_CACHEABLE = sig
+  include Sqlgg_traits.M_io
   
-  let default = {
-    max_entries = 1000;
-    ttl_seconds = 300.0;
-    enable_select_cache = true;
-    enable_execute_cache = false;
-  }
-  
-  let disabled = {
-    max_entries = 0;
-    ttl_seconds = 0.0;
-    enable_select_cache = false;
-    enable_execute_cache = false;
-  }
+  val prepare : 'a connection -> string -> statement IO.future
+  val close : statement -> unit IO.future
+  val exec_select : statement -> (statement -> result IO.future) -> (row -> unit) -> unit IO.future
+  val exec_select_one : statement -> (statement -> result IO.future) -> (row -> 'a) -> 'a IO.future
+  val exec_select_maybe : statement -> (statement -> result IO.future) -> (row -> 'a) -> 'a option IO.future
 end
 
-
+module Make_cached_io
+  (IO0 : Sqlgg_io.M)
+  (M : IO_MUTEX with type 'a io = 'a IO0.future)
+  (Base : IO_CACHEABLE with module IO = IO0) = struct
+  
+  include Base
+  
+  type cache_stats = { hits: int; misses: int; evictions: int }
+  
+  type stmt_cache = {
+    statements: (string, Base.statement) Hashtbl.t;
+    mutable hits: int;
+    mutable misses: int;
+    max_size: int;
+    mutex: M.t;
+  }
+  
+  let create_cache max_size = {
+    statements = Hashtbl.create max_size;
+    hits = 0;
+    misses = 0;
+    max_size;
+    mutex = M.create ();
+  }
+  
+  let with_cache_lock cache f = M.with_lock cache.mutex f
+  
+  let get_statement cache conn sql =
+    with_cache_lock cache (fun () ->
+      match Hashtbl.find_opt cache.statements sql with
+      | Some stmt ->
+          cache.hits <- cache.hits + 1;
+          Base.IO.return stmt
+      | None ->
+          cache.misses <- cache.misses + 1;
+          let open Base.IO in
+          Base.prepare conn sql >>= fun stmt ->
+          Hashtbl.add cache.statements sql stmt;
+          return stmt
+    )
+  
+  type 'a cached_connection = {
+    base: 'a Base.connection;
+    cache: stmt_cache option;
+  }
+  
+  let wrap ?(enabled=true) ?(size=100) base_conn = {
+    base = base_conn;
+    cache = if enabled then Some (create_cache size) else None;
+  }
+  
+  let select cached_conn sql set_params callback =
+    match cached_conn.cache with
+    | Some cache ->
+        let open Base.IO in
+        get_statement cache cached_conn.base sql >>= fun stmt ->
+        Base.exec_select stmt set_params callback
+    | None ->
+        Base.select cached_conn.base sql set_params callback
+  
+  let select_one cached_conn sql set_params convert =
+    match cached_conn.cache with
+    | Some cache ->
+        let open Base.IO in
+        get_statement cache cached_conn.base sql >>= fun stmt ->
+        Base.exec_select_one stmt set_params convert
+    | None ->
+        Base.select_one cached_conn.base sql set_params convert
+  
+  let select_one_maybe cached_conn sql set_params convert =
+    match cached_conn.cache with
+    | Some cache ->
+        let open Base.IO in
+        get_statement cache cached_conn.base sql >>= fun stmt ->
+        Base.exec_select_maybe stmt set_params convert
+    | None ->
+        Base.select_one_maybe cached_conn.base sql set_params convert
+  
+  let execute cached_conn sql set_params =
+    Base.execute cached_conn.base sql set_params
+end
