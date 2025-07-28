@@ -122,7 +122,7 @@ module type Enum = sig
   val proj: t -> string
 end
 
-type statement = S.stmt * string
+type statement = S.stmt * string * S.db
 type 'a connection = S.db
 type params = statement * int * int ref
 type row = statement
@@ -167,11 +167,11 @@ module Conv = struct
 end
 
 let get_column_ty (name,conv) =
-  begin fun (stmt,sql) index ->
+  begin fun (stmt,sql,_) index ->
     try conv (S.column stmt index)
     with exn -> raise (Oops (sprintf "get_column_%s %u for %s : %s" name index sql (Printexc.to_string exn)))
   end,
-  begin fun (stmt,sql) index ->
+  begin fun (stmt,sql,_) index ->
     try match S.column stmt index with S.Data.NULL -> None | x -> Some (conv x)
     with exn -> raise (Oops (sprintf "get_column_%s_nullable %u for %s : %s" name index sql (Printexc.to_string exn)))
   end
@@ -199,13 +199,9 @@ let get_column_one_or_all, get_column_one_or_all_nullable = (get_column_One_or_a
 
 
 module Make_enum (E: Enum) = struct 
-
   include E
-
   let get_column, get_column_nullable = failwith "sqlite does not support enums"
-
   let set_param = failwith "sqlite does not support enums"
-
   let to_literal = failwith "sqlite does not support enums"
 end
 
@@ -213,7 +209,7 @@ let test_ok sql rc =
   if rc <> S.Rc.OK then
     raise (Oops (sprintf "test_ok %s for %s" (S.Rc.to_string rc) sql))
 
-let bind_param d ((stmt,sql),nr_params,index) =
+let bind_param d ((stmt,sql,_),nr_params,index) =
   assert (!index < nr_params);
   let rc = S.bind stmt (!index+1) d in
   incr index;
@@ -258,52 +254,84 @@ let try_finally final f x =
     final ();
     r
 
-let with_sql db sql f =
+let close_stmt (stmt, sql, _) = test_ok sql (S.finalize stmt)
+
+let prepare db (sql: string) = 
   let stmt = S.prepare db sql in
+  (stmt, sql, db)
+
+let with_stmt db sql f =
+  let full_stmt = prepare db sql in
   try_finally
-    (fun () -> test_ok sql (S.finalize stmt))
-    f (stmt,sql)
+    (fun () -> close_stmt full_stmt)
+    f full_stmt
+
+(* Fixed function signatures to match Cached_m interface *)
+let select_with_stmt full_stmt set_params callback =
+  let (stmt, _, _) = full_stmt in
+  set_params full_stmt;
+  while S.Rc.ROW = S.step stmt do
+    callback full_stmt
+  done
+
+let execute_with_stmt full_stmt set_params =
+  let (stmt, sql, db) = full_stmt in
+  set_params full_stmt;
+  let rc = S.step stmt in
+  if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
+  let insert_id =
+    match S.last_insert_rowid db with
+    | 0L -> None
+    | x -> Some x
+  in
+  { affected_rows = Int64.of_int (S.changes db); insert_id }
+
+let select_one_maybe_with_stmt full_stmt set_params convert =
+  let (stmt, _, _) = full_stmt in
+  set_params full_stmt;
+  if S.Rc.ROW = S.step stmt then
+    Some (convert full_stmt)
+  else
+    None
+
+let select_one_with_stmt full_stmt set_params convert =
+  let (stmt, sql, _) = full_stmt in
+  set_params full_stmt;
+  if S.Rc.ROW = S.step stmt then
+    convert full_stmt
+  else
+    raise (Oops (sprintf "no row but one expected : %s" sql))
 
 let select db sql set_params callback =
-  with_sql db sql (fun stmt ->
-    set_params stmt;
-    while S.Rc.ROW = S.step (fst stmt) do
-      callback stmt
-    done)
+  with_stmt db sql (fun stmt ->
+    select_with_stmt stmt set_params callback)
 
 let execute db sql set_params =
-  with_sql db sql (fun stmt ->
-    set_params stmt;
-    let rc = S.step (fst stmt) in
-    if rc <> S.Rc.DONE then raise (Oops (sprintf "execute : %s" sql));
-    let insert_id =
-      match S.last_insert_rowid db with
-      | 0L -> None
-      | x -> Some x
-    in
-    { affected_rows = Int64.of_int (S.changes db); insert_id; }
-  )
+  with_stmt db sql (fun stmt ->
+    execute_with_stmt stmt set_params)
 
 let select_one_maybe db sql set_params convert =
-  with_sql db sql (fun stmt ->
-    set_params stmt;
-    if S.Rc.ROW = S.step (fst stmt) then
-      Some (convert stmt)
-    else
-      None)
+  with_stmt db sql (fun stmt ->
+    select_one_maybe_with_stmt stmt set_params convert)
 
 let select_one db sql set_params convert =
-  with_sql db sql (fun stmt ->
-    set_params stmt;
-    if S.Rc.ROW = S.step (fst stmt) then
-      convert stmt
-    else
-      raise (Oops (sprintf "no row but one expected : %s" sql)))
+  with_stmt db sql (fun stmt ->
+    select_one_with_stmt stmt set_params convert)
 
 end
 
 let () =
   (* checking signature match *)
-  let module S = (M:Sqlgg_traits.M) in ignore (S.Oops "ok")
+  let module S = (M:Sqlgg_traits.M) in
+  let module Cache_config = struct 
+    let max_cache_size = 500
+    let ttl_seconds = None
+  end in
+  let module C = Sqlgg_stmt_cache.Make (Cache_config) (struct
+    include M
+    module IO = Sqlgg_io.Blocking
+  end) in
+  ignore (S.Oops "ok");
+  ignore (C.Oops "ok")
 
 include M

@@ -18,6 +18,13 @@ module type M = sig
   val return : 'a -> 'a future
   val (>>=) : 'a future -> ('a -> 'b future) -> 'b future
   val bracket : 'a future -> ('a -> unit future) -> ('a -> 'b future) -> 'b future
+  val catch : (unit -> 'a future) -> (exn -> 'a future) -> 'a future
+  val try_bind : (unit -> 'a future) -> ('a -> 'b future) -> (exn -> 'b future) -> 'b future
+  val async : (unit -> unit future) -> unit
+
+  module List : sig
+    val iter_s : ('a -> unit future) -> 'a list -> unit future
+  end
 end
 
 module Blocking : M with type 'a future = 'a = struct
@@ -33,4 +40,22 @@ module Blocking : M with type 'a future = 'a = struct
     dtor x;
     r
 
+  let catch f h =
+    try f () with exn -> h exn
+
+  let try_bind f succ_handler exc_handler =
+    try
+      let x = f () in
+      succ_handler x
+    with exn -> exc_handler exn
+
+  let async f = ignore (f ())
+
+  module List = struct
+    let rec iter_s f = function
+      | [] -> return ()
+      | x :: xs ->
+          f x >>= fun () ->
+          iter_s f xs 
+  end
 end

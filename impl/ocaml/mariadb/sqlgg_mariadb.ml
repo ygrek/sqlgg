@@ -482,17 +482,17 @@ let no_params stmt =
   M.Stmt.execute stmt [||] >>=
   check
 
+let close_stmt stmt = let open IO in M.Stmt.close stmt >>= fun _ -> return ()
+
 let with_stmt db sql f =
   let open IO in
-  let close stmt = M.Stmt.close stmt >>= fun _ -> return () in
   M.prepare db sql >>=
   check >>=
-  fun stmt -> bracket (return stmt) close f
+  fun stmt -> bracket (return stmt) close_stmt f
 
 let row_array = (module M.Row.Array : M.Row.S with type t = M.Field.t array)
 
-let select db sql set_params callback =
-  with_stmt db sql @@ fun stmt ->
+let select_with_stmt stmt set_params callback =
   let open IO in
   let rec loop r =
     M.Res.fetch row_array r >>=
@@ -504,8 +504,23 @@ let select db sql set_params callback =
   set_params stmt >>=
   loop
 
-let execute db sql set_params =
-  with_stmt db sql @@ fun stmt ->
+let select_one_maybe_with_stmt stmt set_params convert =
+  let open IO in
+  set_params stmt >>=
+  M.Res.fetch row_array >>=
+  check >>= function
+  | Some row -> return (Some (convert row))
+  | None -> return None
+
+let select_one_with_stmt stmt set_params convert =
+  let open IO in
+  set_params stmt >>=
+  M.Res.fetch row_array >>=
+  check >>= function
+  | Some row -> IO.return (convert row)
+  | None -> oops "no row but one expected"
+
+let execute_with_stmt stmt set_params =
   let open IO in
   set_params stmt >>=
   fun res -> 
@@ -516,30 +531,40 @@ let execute db sql set_params =
     in
     return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id }
 
+let select db sql set_params callback =
+  with_stmt db sql (fun stmt -> select_with_stmt stmt set_params callback)
+
 let select_one_maybe db sql set_params convert =
-  with_stmt db sql @@ fun stmt ->
-  let open IO in
-  set_params stmt >>=
-  M.Res.fetch row_array >>=
-  check >>= function
-  | Some row -> return (Some (convert row))
-  | None -> return None
+  with_stmt db sql (fun stmt -> select_one_maybe_with_stmt stmt set_params convert)
 
 let select_one db sql set_params convert =
-  with_stmt db sql @@ fun stmt ->
-  let open IO in
-  set_params stmt >>=
-  M.Res.fetch row_array >>=
-  check >>= function
-  | Some row -> IO.return (convert row)
-  | None -> oops "no row but one expected : %s" sql
+  with_stmt db sql (fun stmt -> select_one_with_stmt stmt set_params convert)
 
+let execute db sql set_params =
+  with_stmt db sql (fun stmt -> execute_with_stmt stmt set_params)
+
+let prepare db sql =
+  let open IO in
+  M.prepare db sql >>=
+  check
 end
 
 module Default(IO : Sqlgg_io.M)(M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
   Make(IO)(M)(Default_types(M))
 
+module Default_cached
+  (Config : Sqlgg_stmt_cache.Cache_config)
+  (IO : Sqlgg_io.M)
+  (M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
+  Sqlgg_stmt_cache.Make(Config)(Make(IO)(M)(Default_types(M)))
+
 let () =
   (* checking signature match *)
-  let module Default_blocking : Sqlgg_traits.M = Default(Sqlgg_io.Blocking)(struct include Mariadb.Blocking type 'a future = 'a end) in
-  ignore (Default_blocking.Oops "ok")
+  let module Default_blocking : Sqlgg_stmt_cache.Cached_m = Default(Sqlgg_io.Blocking)(struct include Mariadb.Blocking type 'a future = 'a end) in
+  let module Cache_config = struct 
+    let max_cache_size = 500
+    let ttl_seconds = None
+  end in
+  let module Default_blocking_cached = Sqlgg_stmt_cache.Make(Cache_config)(Default_blocking) in
+  ignore (Default_blocking.Oops "ok");
+  ignore (Default_blocking_cached.Oops "ok")
