@@ -563,6 +563,8 @@ type assignment_expr =
 
 type assignments = (col_name * assignment_expr) list [@@deriving show]
 
+type conflict_clause = On_duplicate | On_conflict of col_name list [@@deriving show]
+
 type insert_action =
 {
   target : table_name;
@@ -570,7 +572,7 @@ type insert_action =
            | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
-  on_duplicate : assignments option;
+  on_conflict_clause : (conflict_clause * assignments) option;
 } [@@deriving show {with_path=false}]
 
 type stmt =

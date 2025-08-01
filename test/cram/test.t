@@ -263,3 +263,37 @@ Test TiDB dialect with CREATE TABLE AS SELECT (should fail):
   Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at CREATE TABLE summary AS SELECT id, name FROM users
   Errors encountered, no code generated
   [1]
+
+Test MySQL dialect with ON DUPLICATE KEY UPDATE (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON DUPLICATE KEY UPDATE name = VALUES(name);
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON DUPLICATE KEY UPDATE (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON DUPLICATE KEY UPDATE name = VALUES(name);
+  > EOF
+  Feature OnDuplicateKey is not supported for dialect SQLite (supported by: MySQL, TiDB) at ON DUPLICATE KEY UPDATE name = VALUES(name)
+  Errors encountered, no code generated
+  [1]
+
+Test SQLite dialect with ON CONFLICT (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ON CONFLICT (should fail):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  Feature OnConflict is not supported for dialect MySQL (supported by: SQLite, PostgreSQL) at ON CONFLICT(id) DO UPDATE SET name = excluded.name
+  Errors encountered, no code generated
+  [1]
