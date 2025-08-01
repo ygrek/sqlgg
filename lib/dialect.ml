@@ -4,18 +4,24 @@ type feature =
   | Collation
   | JoinOnSubquery
   | CreateTableAsSelect
+  | OnDuplicateKey
+  | OnConflict
 [@@deriving show { with_path = false }]
 
 let feature_to_string = function
   | Collation -> "collation"
   | JoinOnSubquery -> "join_on_subquery"
   | CreateTableAsSelect -> "create_table_as_select"
+  | OnDuplicateKey -> "on_duplicate_key"
+  | OnConflict -> "on_conflict"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
   | "collation" -> Collation
   | "join_on_subquery" -> JoinOnSubquery
   | "create_table_as_select" -> CreateTableAsSelect
+  | "on_duplicate_key" -> OnDuplicateKey
+  | "on_conflict" -> OnConflict
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -86,3 +92,7 @@ let get_create_table_as_select pos = {
   feature = CreateTableAsSelect; pos;
   state = make_only_state (all_except [TiDB])
 }
+
+let get_on_duplicate_key pos = only OnDuplicateKey [MySQL; TiDB] pos
+
+let get_on_conflict pos = only OnConflict [SQLite; PostgreSQL] pos

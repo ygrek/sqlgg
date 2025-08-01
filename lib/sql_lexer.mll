@@ -133,6 +133,7 @@ let keywords =
    "of", OF;
    "offset",OFFSET;
    "on",ON;
+   "do",DO;
    "or",OR;
    "order",ORDER;
    "over",OVER;
