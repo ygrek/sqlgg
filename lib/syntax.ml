@@ -869,6 +869,29 @@ let annotate_select select types =
   in
   { select with select = { select1 with columns = loop [] select1.columns types }, compound }
 
+let resolve_on_conflict_clause ~env tn' = Option.map_default (function
+  | On_conflict attrs, values -> 
+    let ss = List.map (function 
+      (*
+        The SET and WHERE clauses in ON CONFLICT DO UPDATE have access 
+        to the existing row using the table's name (or an alias),
+        and to rows proposed for insertion using the special excluded table.
+        From our perspective, it is the same as accessing the table into which we write.
+      *)
+     | col, RegularExpr (Column { cname ; tname = Some { tn = "excluded"; db }; }) -> 
+      col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
+     | e -> e
+    ) values in
+    List.iter (fun col -> 
+      let resolved = resolve_column ~env col in
+      if  (Constraints.disjoint (Constraints.of_list [Unique; PrimaryKey]) resolved.attr.extra ) then
+        fail "Schema Error: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint column: %s"
+        (show_col_name col)
+    ) attrs;
+    ss
+  | On_duplicate, values -> values
+) []
+
 let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
@@ -900,7 +923,7 @@ let rec eval (stmt:Sql.stmt) =
   | CreateIndex (name,table,cols) ->
       Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
       [],[],CreateIndex name
-  | Insert { target=table; action=`Values (names, values); on_duplicate; } ->
+  | Insert { target=table; action=`Values (names, values); on_conflict_clause; } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
@@ -920,16 +943,18 @@ let rec eval (stmt:Sql.stmt) =
       in
       params_of_assigns env (List.concat assigns), None
     in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
+    let params2 = params_of_assigns env conflict_assigns in
     [], params @ params2, Insert (inferred,table)
-  | Insert { target=table; action=`Param (names, param_id); on_duplicate; } ->
+  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; } ->
     let expect = values_or_all table names in
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; insert_schema = expect; } in
     let params = [ TupleList (param_id, Insertion expect) ] in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
+    let params2 = params_of_assigns env conflict_assigns in
     [], params @ params2, Insert (None, table)
-  | Insert { target=table; action=`Select (names, select); on_duplicate; } ->
+  | Insert { target=table; action=`Select (names, select); on_conflict_clause; } ->
     let expect = values_or_all table names in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
@@ -941,9 +966,10 @@ let rec eval (stmt:Sql.stmt) =
     ignore (Schema.compound
       ((List.map (fun attr -> {sources=[]; attr;})) expect)
       (List.map (fun {attr; _} -> {sources=[]; attr}) schema)); (* test equal types once more (not really needed) *)
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
+    let params2 = params_of_assigns env conflict_assigns in
     [], params @ params2, Insert (None,table)
-  | Insert { target=table; action=`Set ss; on_duplicate; } ->
+  | Insert { target=table; action=`Set ss; on_conflict_clause; } ->
     let expect = values_or_all table (Option.map (List.map (function ({cname; tname=None},_) -> cname | _ -> assert false)) ss) in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
@@ -952,7 +978,8 @@ let rec eval (stmt:Sql.stmt) =
     | None -> [], Some (Assign, Tables.get_schema table)
     | Some ss -> params_of_assigns env ss, None
     in
-    let params2 = params_of_assigns env (Option.default [] on_duplicate) in
+    let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
+    let params2 = params_of_assigns env conflict_assigns in
     [], params @ params2, Insert (inferred,table)
   | Delete (table, where) ->
     let t = Tables.get table in
