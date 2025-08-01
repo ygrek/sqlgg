@@ -1711,6 +1711,38 @@ let test_json_and_fixed_then_pairs_fn_kind  = [
       ] [];
 ]
 
+let test_on_conflict_do_update = [
+  tt {|
+    CREATE TABLE table_20250801 (
+      col_1 INTEGER PRIMARY KEY,
+      col_2 TEXT NOT NULL,
+      col_3 INTEGER
+    )
+  |} [] [];
+  tt {|
+    INSERT INTO table_20250801 (col_1, col_2, col_3)
+    VALUES (1, 'value_1', 30)
+    ON CONFLICT(col_1) DO UPDATE SET
+      col_2 = excluded.col_2,
+      col_3 = col_3
+  |} [] [];
+  (* Schema Error: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint column *)
+  wrong {|
+    INSERT INTO table_20250801 (col_1, col_2, col_3)
+    VALUES (1, 'value_1', 30)
+    ON CONFLICT(col_3) DO UPDATE SET
+      col_2 = excluded.col_2,
+      col_3 = col_3
+  |};
+  (* Schema Error: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint column *)
+  wrong {|
+    INSERT INTO table_20250801 (col_1, col_2, col_3)
+    VALUES (1, 'value_1', 30)
+    ON CONFLICT(col_1, col_3) DO UPDATE SET
+      col_2 = excluded.col_2,
+      col_3 = col_3
+  |};
+]
 
 let run () =
   Gen.params_mode := Some Named;
@@ -1746,6 +1778,7 @@ let run () =
     "test_meta_insert_update" >:: test_meta_insert_update;
     "test_multi_functions" >::: test_multi_functions;
     "test_json_and_fixed_then_pairs_fn_kind" >::: test_json_and_fixed_then_pairs_fn_kind;
+    "test_on_conflict_do_update" >::: test_on_conflict_do_update;
   ]
   in
   let test_suite = "main" >::: tests in

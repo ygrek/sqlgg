@@ -35,7 +35,7 @@
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET STRAIGHT_JOIN JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
-       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT TEMPORARY IF EXISTS
+       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
@@ -133,21 +133,21 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=conflict_clause?
               {
-                Insert { target; action=`Values (names, values); on_duplicate=ss; }
+                Insert { target; action=`Values (names, values); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=conflict_clause?
               {
-                Insert { target; action=`Param (names, p); on_duplicate=ss; }
+                Insert { target; action=`Param (names, p); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=on_duplicate?
+         | insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=conflict_clause?
               {
-                Insert { target; action=`Select (names, select); on_duplicate=ss; }
+                Insert { target; action=`Select (names, select); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name SET set=commas(set_column)? ss=on_duplicate?
+         | insert_cmd target=table_name SET set=commas(set_column)? ss=conflict_clause?
               {
-                Insert { target; action=`Set set; on_duplicate=ss; }
+                Insert { target; action=`Set set; on_conflict_clause=ss; }
               }
          | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
@@ -279,7 +279,12 @@ source: src=source1 alias=maybe_as_with_detupled? {
 insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
-on_duplicate: ON DUPLICATE KEY UPDATE ss=commas(set_column) { ss }
+
+conflict_clause: 
+  | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
+    { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate, ss }
+  | ON CONFLICT LPAREN attrs=nonempty_list(attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
+    { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict attrs, ss }
 
 select_type: DISTINCT | ALL { }
 
