@@ -892,8 +892,9 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
         composite_primary_key;
         composite_unique
       ]) resolved.attr.extra ) then
-        fail "Schema Error: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint column: %s"
-        (show_col_name col)
+        fail "Schema Error: ON CONFLICT clause (%s) does not match the PRIMARY KEY or UNIQUE constraint for column: %s"
+          (names |> String.concat ", ")
+          (show_col_name col)
     ) attrs;
     ss
   | On_duplicate, values -> values
