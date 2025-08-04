@@ -200,11 +200,23 @@ end
 
 module Constraint =
 struct
+  module StringSet = struct
+    include Set.Make(String)
+    let show s = [%derive.show: string list] (elements s)
+    let pp fmt s = Format.fprintf fmt "%s" (show s)
+  end
+
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
     [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault
+  type composite = | CompositePrimary of StringSet.t | CompositeUnique of StringSet.t
     [@@deriving show{with_path=false}, ord]
+
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault | Composite of composite
+    [@@deriving show{with_path=false}, ord]
+
+  let make_composite_primary cols = Composite (CompositePrimary (StringSet.of_list cols))
+  let make_composite_unique cols = Composite (CompositeUnique (StringSet.of_list cols))
 end
 
 module Constraints = struct
@@ -575,10 +587,10 @@ type insert_action =
   on_conflict_clause : (conflict_clause * assignments) option;
 } [@@deriving show {with_path=false}]
 
-type constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
+type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
 
 type stmt =
-| Create of table_name * [ `Schema of schema * constraints list | `Select of select_full ]
+| Create of table_name * [ `Schema of schema * table_constraints list | `Select of select_full ]
 | Drop of table_name
 | Alter of table_name * alter_action list
 | Rename of (table_name * table_name) list
