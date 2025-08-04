@@ -283,7 +283,7 @@ conflict_algo: CONFLICT_ALGO | REPLACE { }
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
     { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate, ss }
-  | ON CONFLICT LPAREN attrs=nonempty_list(attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
+  | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
     { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict attrs, ss }
 
 select_type: DISTINCT | ALL { }
