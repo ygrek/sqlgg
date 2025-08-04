@@ -892,13 +892,46 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
   | On_duplicate, values -> values
 ) []
 
+let resolve_schema_with_constraints attrs constraints =
+  let constraints_table : (string, Constraints.t) Hashtbl.t = Hashtbl.create (List.length attrs) in
+  List.iter (fun attr ->
+    Hashtbl.replace constraints_table attr.name attr.extra
+  ) attrs;
+  List.iter (fun constr ->
+    match constr with
+    | `Ignore -> ()
+    | `Primary [] -> fail "Schema Error: PRIMARY KEY must have at least one column"
+    | `Unique [] -> fail "Schema Error: UNIQUE constraint must have at least one column"
+    | `Primary [ col_name ] -> begin
+      match Hashtbl.find_opt constraints_table col_name with
+      | None -> fail "Schema Error: no such column: %s" col_name
+      | Some constraints ->
+        let new_constraints = Constraints.add PrimaryKey constraints in
+        Hashtbl.replace constraints_table col_name new_constraints
+      end
+    | `Unique [ col_name ] -> begin
+      match Hashtbl.find_opt constraints_table col_name with
+      | None -> fail "Schema Error: no such column: %s" col_name
+      | Some constraints ->
+        let new_constraints = Constraints.add Unique constraints in
+        Hashtbl.replace constraints_table col_name new_constraints
+      end
+    | _ -> fail "FIXME: support for composite constraints"
+  ) constraints;
+  List.map (fun attr ->
+    match Hashtbl.find_opt constraints_table attr.name with
+    | Some constraints -> { attr with extra = constraints }
+    | None -> attr
+  ) attrs
+
 let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema schema) ->
-      Tables.add (name, schema);
+  | Create (name,`Schema (attrs, constraints)) ->
+      let new_schema = resolve_schema_with_constraints attrs constraints in
+      Tables.add (name, new_schema);
       ([],[],Create name)
   | Create (name,`Select select) ->
       let (schema,params,_) = eval_select_full empty_env select in

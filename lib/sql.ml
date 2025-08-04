@@ -575,8 +575,10 @@ type insert_action =
   on_conflict_clause : (conflict_clause * assignments) option;
 } [@@deriving show {with_path=false}]
 
+type constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
+
 type stmt =
-| Create of table_name * [ `Schema of schema | `Select of select_full ]
+| Create of table_name * [ `Schema of schema * constraints list | `Select of select_full ]
 | Drop of table_name
 | Alter of table_name * alter_action list
 | Rename of (table_name * table_name) list
