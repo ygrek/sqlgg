@@ -215,10 +215,10 @@ table_definition: t=sequence_(column_def1) ignore_after(RPAREN)
                           (fun x (attrs, constraints) -> match x with
                           | `Attr a -> a::attrs, constraints
                           | `Constraint c -> attrs, c::constraints
-                          | `Index _ -> attrs, constraints) (* FIXME don't ignore index *)
+                          | `Index _ -> attrs, constraints)
                           t ([], [])
                       }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> attrs, [] } (* mysql *)
+                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> (attrs, []) } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }

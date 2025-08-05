@@ -900,14 +900,13 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
   | On_duplicate, values -> values
 ) []
 
-let resolve_schema_with_constraints attrs constraints =
+let with_constraints attrs constraints : Schema.t =
   let constraints_table : (string, Constraints.t) Hashtbl.t = Hashtbl.create (List.length attrs) in
   List.iter (fun attr ->
     Hashtbl.replace constraints_table attr.name attr.extra
   ) attrs;
   List.iter (fun constr ->
     match constr with
-    | `Ignore -> ()
     | `Primary [] -> fail "Schema Error: PRIMARY KEY must have at least one column"
     | `Unique [] -> fail "Schema Error: UNIQUE constraint must have at least one column"
     | `Primary [ col_name ] -> begin
@@ -942,6 +941,7 @@ let resolve_schema_with_constraints attrs constraints =
           Hashtbl.replace constraints_table col new_constraints
       ) cols
     end
+    | `Ignore -> ()
   ) constraints;
   List.map (fun attr ->
     match Hashtbl.find_opt constraints_table attr.name with
@@ -954,9 +954,9 @@ let rec eval (stmt:Sql.stmt) =
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema (attrs, constraints)) ->
-      let new_schema = resolve_schema_with_constraints attrs constraints in
-      Tables.add (name, new_schema);
+  | Create (name,`Schema (schema, constraints)) ->
+      let schema = with_constraints schema constraints in
+      Tables.add (name, schema);
       ([],[],Create name)
   | Create (name,`Select select) ->
       let (schema,params,_) = eval_select_full empty_env select in
