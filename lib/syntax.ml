@@ -882,22 +882,80 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
       col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
      | e -> e
     ) values in
+    let names = List.map (fun attr -> attr.cname) attrs in
+    let composite_primary_key = Constraint.make_composite_primary names in
+    let composite_unique = Constraint.make_composite_unique names in
     List.iter (fun col -> 
       let resolved = resolve_column ~env col in
-      if  (Constraints.disjoint (Constraints.of_list [Unique; PrimaryKey]) resolved.attr.extra ) then
-        fail "Schema Error: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint column: %s"
-        (show_col_name col)
+      if (Constraints.disjoint (Constraints.of_list [
+        Unique; PrimaryKey;
+        composite_primary_key;
+        composite_unique
+      ]) resolved.attr.extra ) then
+        fail "Schema Error: ON CONFLICT clause (%s) does not match the PRIMARY KEY or UNIQUE constraint for column: %s"
+          (names |> String.concat ", ")
+          (show_col_name col)
     ) attrs;
     ss
   | On_duplicate, values -> values
 ) []
+
+let with_constraints attrs constraints : Schema.t =
+  let constraints_table : (string, Constraints.t) Hashtbl.t = Hashtbl.create (List.length attrs) in
+  List.iter (fun attr ->
+    Hashtbl.replace constraints_table attr.name attr.extra
+  ) attrs;
+  List.iter (fun constr ->
+    match constr with
+    | `Primary [] -> fail "Schema Error: PRIMARY KEY must have at least one column"
+    | `Unique [] -> fail "Schema Error: UNIQUE constraint must have at least one column"
+    | `Primary [ col_name ] -> begin
+      match Hashtbl.find_opt constraints_table col_name with
+      | None -> fail "Schema Error: no such column: %s" col_name
+      | Some constraints ->
+        let new_constraints = Constraints.add PrimaryKey constraints in
+        Hashtbl.replace constraints_table col_name new_constraints
+      end
+    | `Unique [ col_name ] -> begin
+      match Hashtbl.find_opt constraints_table col_name with
+      | None -> fail "Schema Error: no such column: %s" col_name
+      | Some constraints ->
+        let new_constraints = Constraints.add Unique constraints in
+        Hashtbl.replace constraints_table col_name new_constraints
+      end
+    | `Primary cols -> begin
+      List.iter (fun col ->
+        match Hashtbl.find_opt constraints_table col with
+        | None -> fail "Schema Error: no such column: %s" col
+        | Some constraints ->
+          let new_constraints = Constraints.add (Constraint.make_composite_primary cols) constraints in
+          Hashtbl.replace constraints_table col new_constraints
+      ) cols
+    end
+    | `Unique cols -> begin
+      List.iter (fun col ->
+        match Hashtbl.find_opt constraints_table col with
+        | None -> fail "Schema Error: no such column: %s" col
+        | Some constraints ->
+          let new_constraints = Constraints.add (Constraint.make_composite_unique cols) constraints in
+          Hashtbl.replace constraints_table col new_constraints
+      ) cols
+    end
+    | `Ignore -> ()
+  ) constraints;
+  List.map (fun attr ->
+    match Hashtbl.find_opt constraints_table attr.name with
+    | Some constraints -> { attr with extra = constraints }
+    | None -> attr
+  ) attrs
 
 let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema schema) ->
+  | Create (name,`Schema (schema, constraints)) ->
+      let schema = with_constraints schema constraints in
       Tables.add (name, schema);
       ([],[],Create name)
   | Create (name,`Select select) ->

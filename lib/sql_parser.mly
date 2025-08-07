@@ -209,8 +209,16 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) ignore_after(RPAREN) { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
+                      { 
+                        List.fold_right
+                          (fun x (attrs, constraints) -> match x with
+                          | `Attr a -> a::attrs, constraints
+                          | `Constraint c -> attrs, c::constraints
+                          | `Index _ -> attrs, constraints)
+                          t ([], [])
+                      }
+                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> (attrs, []) } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -283,7 +291,7 @@ conflict_algo: CONFLICT_ALGO | REPLACE { }
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
     { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate, ss }
-  | ON CONFLICT LPAREN attrs=nonempty_list(attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
+  | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
     { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict attrs, ss }
 
 select_type: DISTINCT | ALL { }
@@ -376,12 +384,12 @@ table_index: IDENT? l=sequence(key_part) index_options { l }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | PRIMARY KEY l=sequence(key_part) { l }
-      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { l }
+      | PRIMARY KEY l=sequence(key_part) { `Primary l }
+      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { `Unique l }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
         reference_action_clause*
-          { [] }
-      | CHECK LPAREN expr RPAREN { [] }
+          { `Ignore }
+      | CHECK LPAREN expr RPAREN { `Ignore }
 
 reference_action_clause:
   ON either(DELETE, UPDATE) reference_action { }
