@@ -1629,6 +1629,63 @@ let test_on_conflict_do_update = [
   |};
 ]
 
+let test_enum_with_in_and_between = [
+  tt {|
+    CREATE TABLE table_20250807 (
+      col_0 INT PRIMARY KEY AUTO_INCREMENT,
+      col_1 ENUM('todo', 'in_progress', 'review', 'done', 'cancelled') NOT NULL,
+      col_2 ENUM('low', 'medium', 'high') DEFAULT 'medium'
+    )
+  |} [][];
+  tt {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 IN ('todo', 'in_progress', 'review')
+  |} [ attr' ~extra:[PrimaryKey;Autoincrement] ~meta:[] "col_0" Int;][];
+  wrong {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 IN ('todo', 'in_progress', 'review', 'non_existent')
+  |};
+  wrong {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 IN ('todo1', 'in_progress', 'review')
+  |};
+  tt {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 BETWEEN 'todo' AND 'review'
+  |} [ attr' ~extra:[PrimaryKey;Autoincrement] ~meta:[] "col_0" Int;][];
+  wrong {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 BETWEEN 'todo' AND 'non_existent'
+  |};
+  tt {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 >= 'todo' AND col_1 <= 'review'
+  |} [ attr' ~extra:[PrimaryKey;Autoincrement] ~meta:[] "col_0" Int;][];
+  wrong {|
+    SELECT col_0 FROM table_20250807
+    WHERE col_1 >= 'todo' AND col_1 <= 'non_existent'
+  |};
+  wrong {|
+    SELECT col_1 IN ('todo', 'in_progress', 'review', 'nonono')
+    FROM table_20250807
+  |};
+  tt {|
+    SELECT col_1 IN ('todo', 'in_progress', 'review') AS is_valid
+    FROM table_20250807
+  |} [attr' "is_valid" Bool;][];
+  tt {|
+    SELECT col_1 IN ('todo', 'in_progress', 'review') AS is_valid
+    FROM table_20250807
+    WHERE col_1 IN ('todo', 'in_progress', 'review')
+  |} [attr' "is_valid" Bool;][];
+  tt {|
+    SELECT IF (col_1 IN ('todo', 'in_progress', 'review'), 'valid', 'invalid') AS status
+    FROM table_20250807
+  |} [attr' "status" (Type.(Union { ctors = 
+    (Enum_kind.Ctors.of_list ["valid"; "invalid"]); is_closed = false }));
+  ][]
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -1663,6 +1720,7 @@ let run () =
     "test_meta_insert_update" >:: test_meta_insert_update;
     "test_multi_functions" >::: test_multi_functions;
     "test_on_conflict_do_update" >::: test_on_conflict_do_update;
+    "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
   ]
   in
   let test_suite = "main" >::: tests in
