@@ -111,9 +111,10 @@ module Conv = struct
   let int = "Int", function INT i -> i | x -> raise (Type_mismatch x)
   let text = "Text", function TEXT s | BLOB s -> s | x -> raise (Type_mismatch x)
   let float = "Float", function FLOAT x -> x | x -> raise (Type_mismatch x)
-  let decimal = "Decimal", function INT i -> Int64.to_float i | FLOAT x -> x | x -> raise (Type_mismatch x)
+  let numeric = "Numeric", function INT i -> Int64.to_float i | FLOAT x -> x | x -> raise (Type_mismatch x)
+  let decimal = "Decimal", fun x -> snd numeric x
 
-  let datetime = "Datetime", fun x -> Float.to_string @@ snd float x
+  let datetime = "Datetime", fun x -> Float.to_string @@ snd numeric x
 end
 
 let get_column_ty (name,conv) =
@@ -132,7 +133,7 @@ let get_column_Text, get_column_Text_nullable = get_column_ty Conv.text
 let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
 let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty Conv.decimal
-let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.float
+let get_column_Datetime, get_column_Datetime_nullable = get_column_ty Conv.numeric
 
 let get_column_bool, get_column_bool_nullable = (get_column_Bool, get_column_Bool_nullable)
 let get_column_int64, get_column_int64_nullable = (get_column_Int, get_column_Int_nullable)
