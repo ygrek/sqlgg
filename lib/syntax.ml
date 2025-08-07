@@ -586,8 +586,10 @@ and resolve_types env expr =
     assign_types env expr
   with
     exn ->
-      eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
-      eprintfn "%s" (show_res_expr expr);
+      if !debug then begin
+        eprintfn "resolve_types failed with %s at:" (Printexc.to_string exn);
+        eprintfn "%s" (show_res_expr expr)
+      end;
       raise exn
 
 and infer_schema env columns =

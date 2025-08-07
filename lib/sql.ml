@@ -83,12 +83,15 @@ struct
     | StringLiteral a, StringLiteral b -> 
       `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
 
-    | StringLiteral a, Union { ctors = b; is_closed  } | Union { ctors = b; is_closed  }, StringLiteral a when Enum_kind.Ctors.mem a b 
-      -> `Order (StringLiteral a, Union { ctors = (Enum_kind.Ctors.add a b); is_closed })
-
-    | StringLiteral a, Union { ctors = b; is_closed = false  }  | Union { ctors = b; is_closed = false  }, StringLiteral a -> 
-      `StringLiteralUnion (Union { ctors = (Enum_kind.Ctors.add a b); is_closed = false; })
-
+    | StringLiteral a, Union u | Union u, StringLiteral a ->
+      let b = u.ctors in
+      let b' = Enum_kind.Ctors.add a b in
+      begin match Enum_kind.Ctors.mem a b, u.is_closed with
+      | true, true -> `Equal
+      | true, false -> `Order (StringLiteral a, Union { u with ctors = b' })
+      | false, false -> `StringLiteralUnion (Union { ctors = b'; is_closed = false })
+      | false, true -> `No
+      end
     | StringLiteral _  as x , Text -> `Order (x, Text)
     | Text, (StringLiteral _ as x) -> `Order (x, Text)
 
