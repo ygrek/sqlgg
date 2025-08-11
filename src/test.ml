@@ -117,7 +117,7 @@ let test = Type.[
     [attr' ~nullability:(Nullable) "str" Text;]
     [named "id" Int; named_nullable "x" Int; named "id" Int];
   tt "select 3/5"
-    [attr' ~nullability:(Strict) "" Float;]
+    [attr' ~nullability:Strict "" Float;]
     [];
 ]
 
@@ -151,17 +151,17 @@ let test4 =
   tt "select max(x,y) from test4" a [] ~kind:(Select `Nat);
   tt "select max(x,y) from test4 limit 1" a [] ~kind:(Select `Zero_one);
   tt "select max(x,y) from test4 limit 2" a [] ~kind:(Select `Nat);
-  tt "select 1" [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `One);
-  tt "select greatest(1+2,10)"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `One);
-  tt "select greatest(1+2,10) where 1 = 2"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Zero_one);
-  tt "select 1 from test4"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
-  tt "select 1+2 from test4"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
+  tt "select 1" [attr' ~nullability:Strict "" Int] [] ~kind:(Select `One);
+  tt "select greatest(1+2,10)"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `One);
+  tt "select greatest(1+2,10) where 1 = 2"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Zero_one);
+  tt "select 1 from test4"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
+  tt "select 1+2 from test4"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
   tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
-    [attr' ~nullability:(Strict)  "" Int; attr' ~nullability:(Strict) "" Text] [] ~kind:(Select `Nat);
+    [attr' ~nullability:Strict  "" Int; attr' ~nullability:Strict "" Text] [] ~kind:(Select `Nat);
   tt "select greatest(10,x) from test4" [attr' ~nullability:(Nullable) "" Int] [] ~kind:(Select `Nat);
-  tt "select 1+2 from test4 where x=y"  [attr' ~nullability:(Strict) "" Int] [] ~kind:(Select `Nat);
+  tt "select 1+2 from test4 where x=y"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
   tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:(Nullable) "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
-  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:(Strict) "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:Strict "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
 ]
 
 let test_parsing = [
@@ -244,7 +244,7 @@ let test_coalesce = [
 
 let test_primary_strict = [
   tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
-  tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:(Strict) "x" Int;] [];
+  tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:Strict "x" Int;] [];
 ]
 
 let test_not_null_default_field = [
@@ -1686,6 +1686,40 @@ let test_enum_with_in_and_between = [
   ][]
 ]
 
+let test_datefns = [
+  tt "SELECT DAY(CURRENT_DATE) AS day_" [attr' ~nullability:Strict "day_" Int] [];
+  tt "SELECT EXTRACT(DAY FROM CURRENT_DATE) AS day_extract" [attr' ~nullability:Strict "day_extract" Int] [];
+  tt "SELECT CURRENT_TIMESTAMP() + INTERVAL 1 DAY AS ts_plus_interval" [attr' ~nullability:Strict "ts_plus_interval" Datetime] [];
+  tt "SELECT DATE_SUB(CURRENT_DATE, INTERVAL 5 WEEK) AS date_sub_weeks" [attr' ~nullability:Strict "date_sub_weeks" Datetime] [];
+  tt "SELECT TIMESTAMPDIFF(MONTH,'2003-02-01','2003-05-01') AS tsdiff1" [attr' ~nullability:Strict "tsdiff1" Int] [];
+  tt "SELECT TIMESTAMPDIFF(MONTH, '2019-11-12', CURRENT_TIMESTAMP()) AS tsdiff2" [attr' ~nullability:Strict "tsdiff2" Int] [];
+  tt "SELECT CURRENT_DATE + INTERVAL 3 MONTH AS date_plus_months" [attr' ~nullability:Strict "date_plus_months" Datetime] [];
+  tt "SELECT DATE_ADD(CURRENT_DATE, INTERVAL 2 DAY) AS date_add_days" [attr' ~nullability:Strict "date_add_days" Datetime] [];
+  tt "SELECT LAST_DAY(CURRENT_DATE) AS last_day" [attr' ~nullability:Strict "last_day" Datetime] [];
+  tt "SELECT YEAR(CURRENT_DATE) AS year_, MONTH(CURRENT_DATE) AS month_, WEEK(CURRENT_DATE) AS week_, QUARTER(CURRENT_DATE) AS quarter_"
+    [ attr' ~nullability:Strict "year_" Int; attr' ~nullability:Strict "month_" Int; attr' ~nullability:Strict "week_" Int; attr' ~nullability:Strict "quarter_" Int ] [];
+  tt "SELECT TIMESTAMPDIFF(MONTH, '2002-05-01', @dt) AS tsdiff_param" [attr' ~nullability:Strict "tsdiff_param" Int] [named "dt" Datetime];
+  tt "SELECT DATE_ADD(@dt, INTERVAL 7 DAY) AS date_add_param" [attr' ~nullability:Strict "date_add_param" Datetime] [named "dt" Datetime];
+  tt "SELECT @dt + INTERVAL @n DAY AS dt_plus_param" [attr' ~nullability:Strict "dt_plus_param" Datetime] [named "dt" Datetime; named "n" Int];
+
+  tt "SELECT TIME(CURRENT_TIMESTAMP()) AS time_" [attr' ~nullability:Strict "time_" Text] [];
+  tt "SELECT DATE('2020-01-01 12:34:56') AS date_cast" [attr' ~nullability:Strict "date_cast" Datetime] [];
+  tt "SELECT FROM_UNIXTIME(946684800) AS from_unix_dt" [attr' ~nullability:Strict "from_unix_dt" Datetime] [];
+  tt "SELECT FROM_UNIXTIME(946684800, '%Y-%m-%d') AS from_unix_str" [attr' ~nullability:Strict "from_unix_str" Text] [];
+  tt "SELECT UNIX_TIMESTAMP() AS now_unix" [attr' ~nullability:Strict "now_unix" Int] [];
+  tt "SELECT UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) AS ts_unix" [attr' ~nullability:Strict "ts_unix" Int] [];
+  tt "SELECT DATE_FORMAT(CURRENT_DATE, '%Y-%m') AS date_fmt" [attr' ~nullability:Strict "date_fmt" Text] [];
+  tt "SELECT TIME_FORMAT(CURRENT_TIME, '%H:%i') AS time_fmt" [attr' ~nullability:Strict "time_fmt" Text] [];
+  tt "SELECT DAYOFMONTH(CURRENT_DATE) AS dom" [attr' ~nullability:Strict "dom" Int] [];
+  tt "SELECT DAYOFWEEK(CURRENT_DATE) AS dow" [attr' ~nullability:Strict "dow" Int] [];
+  tt "SELECT DAYOFYEAR(CURRENT_DATE) AS doy" [attr' ~nullability:Strict "doy" Int] [];
+  tt "SELECT HOUR(CURRENT_TIMESTAMP()) AS hour_" [attr' ~nullability:Strict "hour_" Int] [];
+  tt "SELECT MINUTE(CURRENT_TIMESTAMP()) AS minute_" [attr' ~nullability:Strict "minute_" Int] [];
+  tt "SELECT SECOND(CURRENT_TIMESTAMP()) AS second_" [attr' ~nullability:Strict "second_" Int] [];
+  tt "SELECT MICROSECOND(CURRENT_TIMESTAMP()) AS microsecond_" [attr' ~nullability:Strict "microsecond_" Int] [];
+  tt "SELECT EXTRACT(YEAR FROM CURRENT_DATE) AS year_extracted" [attr' ~nullability:Strict "year_extracted" Int] [];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -1721,6 +1755,7 @@ let run () =
     "test_multi_functions" >::: test_multi_functions;
     "test_on_conflict_do_update" >::: test_on_conflict_do_update;
     "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
+    "test_datefns" >::: test_datefns;
   ]
   in
   let test_suite = "main" >::: tests in

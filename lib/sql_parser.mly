@@ -46,8 +46,7 @@
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
-%token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
-       SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
+%token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
        YEAR_MONTH FALSE TRUE DUPLICATE EXTRACT
@@ -455,7 +454,7 @@ expr:
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
-    | INTERVAL_UNIT { Value (strict (Unit `Interval)) }
+    | INTERVAL_UNIT { Value (strict Datetime) }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
@@ -477,8 +476,8 @@ expr:
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
     | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
-    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun (Function.lookup f 1, [e]) }
-    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun (Function.lookup "extract" 1, [e]) }
+    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun { kind = Function.lookup f 1; parameters = [e]; is_over_clause = false } }
+    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun { kind = Function.lookup "extract" 1; parameters = [e]; is_over_clause = false } }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
@@ -578,7 +577,7 @@ interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
-             | YEAR_MONTH { Value (strict (Unit `Interval)) }
+             | YEAR_MONTH { Value (strict Datetime) }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }
@@ -587,7 +586,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
-               | T_DATETIME (* | YEAR *) | DATE | TIME | TIMESTAMP { Datetime }
+               | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
                | T_UUID { Blob }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }

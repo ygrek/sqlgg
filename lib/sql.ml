@@ -25,7 +25,6 @@ struct
   type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}]
 
   type kind =
-    | Unit of [`Interval]
     | Int
     | Text
     | Blob
@@ -73,8 +72,6 @@ struct
   let type_name t = show_kind t.t
 
   let is_any { t; nullability = _ } = equal_kind t Any
-
-  let is_unit = function { t = Unit _; _ } -> true | _ -> false
 
   (** @return (subtype, supertype) *)
   let order_kind x y =  
@@ -708,10 +705,11 @@ let () =
   ["pow"; "power"] ||> monomorphic float [float;int];
   "unix_timestamp" |> monomorphic int [];
   "unix_timestamp" |> monomorphic int [datetime];
-  ["extract";"dayofmonth";"dayofweek";"dayofyear";"last_day"] ||> monomorphic int [datetime];
+  ["extract"; "dayofmonth";"dayofweek";"dayofyear";] ||> monomorphic int [datetime];
+  "last_day" |> monomorphic datetime [datetime];
   ["microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ] ||> monomorphic int [datetime];
-  ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
-  ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Unit `Interval];
+  ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Datetime;datetime;datetime];
+  ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Datetime];
   ["date_format";"time_format"] ||> monomorphic text [datetime; text];
   "str_to_date" |> monomorphic datetime [text;text];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
@@ -724,8 +722,6 @@ let () =
   "uuid" |> monomorphic text [];
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];
-  ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
-  "date_format" |> monomorphic text [datetime; text];
   "json_remove" |> multi ~ret:(Typ text) (Typ text);
   "json_array" |> multi ~ret:(Typ text) (Typ text);
   "json_object" |> multi ~ret:(Typ text) (Typ text);
