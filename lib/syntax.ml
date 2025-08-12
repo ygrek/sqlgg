@@ -795,7 +795,16 @@ and eval_select env { columns; from; where; group; having; } =
   } where in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
-  let has_unique_constraint_satisfied _where =
+  let has_unique_constraint_satisfied _where _env =
+    let expr_represents_equals expr =
+      match expr with
+      | Fun { kind = Comparison Comp_equal; parameters = _; is_over_clause = false } -> true
+      | _ -> false
+    in
+    (* stub *)
+    (* 1. get all EQUALITY checks on the where clause *)
+    (* 2. get all the constraints on the schema that match Composite, Unique, PrimaryKey *)
+    (* 3. compare the equality checks with the constraints *)
     false
   in
   let cardinality =
@@ -804,7 +813,7 @@ and eval_select env { columns; from; where; group; having; } =
     else match where with
     | None -> `Nat
     | Some where -> 
-      if has_unique_constraint_satisfied where then `Zero_one else `Nat
+      if has_unique_constraint_satisfied where env then `Zero_one else `Nat
   in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
