@@ -467,7 +467,7 @@ and assign_types env expr =
             (* Since we have string literals, we can check if the enums are already exhausted or if a default case is required *)
             let values = Type.Enum_kind.Ctors.of_list @@ List.filter_map (function ResValue { t = StringLiteral v; _ } -> Some v | _ -> None) whens_e in
             Type.Enum_kind.Ctors.compare values ctors = 0
-          | Unit _ | Int | Text | Blob | Float | Datetime | Decimal | Any | StringLiteral _ | Bool -> false in
+          | Int | Text | Blob | Float | Datetime | Decimal | Any | StringLiteral _ | Bool -> false in
         let exhaust_checked = if is_exhausted then types else List.map Type.make_nullable types in  
         match Type.common_supertype @@ Option.map_default (fun else_t -> types @ [get_or_failwith else_t]) exhaust_checked else_t with
         | None -> failwith "no common supertype for all case then branches"
