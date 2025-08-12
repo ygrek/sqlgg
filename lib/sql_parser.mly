@@ -29,6 +29,7 @@
 %token <Sql.param_id> PARAM
 %token <Sql.shared_query_ref_id> SHARED_QUERY_REF
 %token <int> LCURLY RCURLY
+%token <string> INTERVAL_UNIT (* interval unit keyword or function *)
 %token LPAREN RPAREN COMMA EOF DOT NULL
 %token CONFLICT_ALGO
 %token SELECT INSERT OR INTO CREATE UPDATE VIEW TABLE VALUES WHERE ASTERISK DISTINCT ALL ANY SOME
@@ -45,10 +46,9 @@
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
-%token MICROSECOND SECOND MINUTE HOUR DAY WEEK MONTH QUARTER YEAR
-       SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
+%token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
-       DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR
+       DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR EXTRACT
        YEAR_MONTH FALSE TRUE DUPLICATE
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
@@ -209,8 +209,16 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? collate? order_type? { name }
 
-table_definition: t=sequence_(column_def1) ignore_after(RPAREN) { List.filter_map (function `Attr a -> Some a | `Constraint _ | `Index _ -> None) t }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd } (* mysql *)
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
+                      { 
+                        List.fold_right
+                          (fun x (attrs, constraints) -> match x with
+                          | `Attr a -> a::attrs, constraints
+                          | `Constraint c -> attrs, c::constraints
+                          | `Index _ -> attrs, constraints)
+                          t ([], [])
+                      }
+                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> (attrs, []) } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -283,7 +291,7 @@ conflict_algo: CONFLICT_ALGO | REPLACE { }
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
     { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate, ss }
-  | ON CONFLICT LPAREN attrs=nonempty_list(attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
+  | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
     { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict attrs, ss }
 
 select_type: DISTINCT | ALL { }
@@ -376,12 +384,12 @@ table_index: IDENT? l=sequence(key_part) index_options { l }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | PRIMARY KEY l=sequence(key_part) { l }
-      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { l }
+      | PRIMARY KEY l=sequence(key_part) { `Primary l }
+      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { `Unique l }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
         reference_action_clause*
-          { [] }
-      | CHECK LPAREN expr RPAREN { [] }
+          { `Ignore }
+      | CHECK LPAREN expr RPAREN { `Ignore }
 
 reference_action_clause:
   ON either(DELETE, UPDATE) reference_action { }
@@ -446,7 +454,7 @@ expr:
     | a=attr_name collate? { Column a }
     | VALUES LPAREN n=IDENT RPAREN { Inserted n }
     | v=literal_value | v=datetime_value { v }
-    | v=interval_unit { v }
+    | INTERVAL_UNIT { Value (strict Datetime) }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
@@ -468,6 +476,8 @@ expr:
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
     | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
+    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun { kind = Function.lookup f 1; parameters = [e]; is_over_clause = false } }
+    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun { kind = Function.lookup "extract" 1; parameters = [e]; is_over_clause = false } }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
@@ -563,11 +573,11 @@ unary_op: EXCL { }
         | TILDE { }
         | NOT { }
 
-interval_unit: MICROSECOND | SECOND | MINUTE | HOUR | DAY | WEEK | MONTH | QUARTER | YEAR
+interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
-             | YEAR_MONTH { Value (strict (Unit `Interval)) }
+             | YEAR_MONTH { Value (strict Datetime) }
 
 sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | T_DECIMAL { Decimal }
@@ -576,7 +586,7 @@ sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
                | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
                | T_FLOAT PRECISION? { Float }
                | T_BOOLEAN { Bool }
-               | T_DATETIME | YEAR | DATE | TIME | TIMESTAMP { Datetime }
+               | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
                | T_UUID { Blob }
                | T_JSON { Json }
 

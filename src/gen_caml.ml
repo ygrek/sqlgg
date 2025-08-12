@@ -133,7 +133,6 @@ module L = struct
   let as_lang_type = function
   | { t = Blob; nullability } -> type_name { t = Text; nullability }
   | { t = StringLiteral _; nullability } -> type_name { t = Text; nullability }
-  | { t = Unit _; _ }
   | { t = Int; _ }
   | { t = Text; _ }
   | { t = Float; _ }
@@ -153,7 +152,6 @@ module L = struct
   | { t = Union _; _ }
   | { t = Json_path; _ }
   | { t = StringLiteral _; _ } -> "string"
-  | { t = Unit _; _ } -> "unit"
   | { t = Int; _ } -> "int64"
   | { t = Float; _ } -> "float"
   | { t = Bool; _ } -> "bool"
@@ -637,7 +635,7 @@ let generate_enum_modules stmts =
 
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
-    | Unit _ | Int | Text | Blob | Float | Bool | Json
+    | Int | Text | Blob | Float | Bool | Json
     | Datetime | Decimal | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 

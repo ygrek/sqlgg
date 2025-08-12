@@ -408,13 +408,89 @@ Test SQLite dialect with ON DUPLICATE KEY UPDATE (should fail):
   Errors encountered, no code generated
   [1]
 
-Test SQLite dialect with ON CONFLICT (should work):
+Test SQLite dialect with ON CONFLICT, column-level primary key (should work):
   $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
   > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
   > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
   > EOF
   $ echo $?
   0
+
+Test SQLite dialect with ON CONFLICT, column-level unique constraint (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, UNIQUE(id));
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT, table-level primary key (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, PRIMARY KEY(id));
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT, composite primary key (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, PRIMARY KEY(id, name));
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id, name) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT, non-existent primary key (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  Failed : INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]
+
+Test SQLite dialect with ON CONFLICT, non-existent composite primary key (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT, name TEXT, address TEXT, PRIMARY KEY(id, name));
+  > INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name;
+  > EOF
+  Failed : INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]
+
+Test SQLite dialect with ON CONFLICT, table-level unique constraint (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, UNIQUE(id));
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT, composite unique constraint (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, UNIQUE(id, name));
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id, name) DO UPDATE SET name = excluded.name;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT, non-existent unique constraint (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT, name TEXT);
+  > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
+  > EOF
+  Failed : INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]
+
+Test SQLite dialect with ON CONFLICT, non-existent composite unique constraint (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE users (id INT, name TEXT, address TEXT, UNIQUE(id, name));
+  > INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name;
+  > EOF
+  Failed : INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]
 
 Test MySQL dialect with ON CONFLICT (should fail):
   $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1 

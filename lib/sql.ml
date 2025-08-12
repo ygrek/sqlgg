@@ -25,7 +25,6 @@ struct
   type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}]
 
   type kind =
-    | Unit of [`Interval]
     | Int
     | Text
     | Blob
@@ -77,8 +76,6 @@ struct
 
   let is_any { t; nullability = _ } = equal_kind t Any
 
-  let is_unit = function { t = Unit _; _ } -> true | _ -> false
-
   let is_one_or_all s = List.mem (String.lowercase_ascii s) ["one"; "all"]
 
   (** @return (subtype, supertype) *)
@@ -88,12 +85,15 @@ struct
     | StringLiteral a, StringLiteral b -> 
       `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
 
-    | StringLiteral a, Union { ctors = b; is_closed  } | Union { ctors = b; is_closed  }, StringLiteral a when Enum_kind.Ctors.mem a b 
-      -> `Order (StringLiteral a, Union { ctors = (Enum_kind.Ctors.add a b); is_closed })
-
-    | StringLiteral a, Union { ctors = b; is_closed = false  }  | Union { ctors = b; is_closed = false  }, StringLiteral a -> 
-      `StringLiteralUnion (Union { ctors = (Enum_kind.Ctors.add a b); is_closed = false; })
-
+    | StringLiteral a, Union u | Union u, StringLiteral a ->
+      let b = u.ctors in
+      let b' = Enum_kind.Ctors.add a b in
+      begin match Enum_kind.Ctors.mem a b, u.is_closed with
+      | true, true -> `Equal
+      | true, false -> `Order (StringLiteral a, Union { u with ctors = b' })
+      | false, false -> `StringLiteralUnion (Union { ctors = b'; is_closed = false })
+      | false, true -> `No
+      end
     | StringLiteral _  as x , Text -> `Order (x, Text)
     | Text, (StringLiteral _ as x) -> `Order (x, Text)
 
@@ -260,11 +260,23 @@ end
 
 module Constraint =
 struct
+  module StringSet = struct
+    include Set.Make(String)
+    let show s = [%derive.show: string list] (elements s)
+    let pp fmt s = Format.fprintf fmt "%s" (show s)
+  end
+
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
     [@@deriving show{with_path=false}, ord]
 
-  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault
+  type composite = | CompositePrimary of StringSet.t | CompositeUnique of StringSet.t
     [@@deriving show{with_path=false}, ord]
+
+  type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault | Composite of composite
+    [@@deriving show{with_path=false}, ord]
+
+  let make_composite_primary cols = Composite (CompositePrimary (StringSet.of_list cols))
+  let make_composite_unique cols = Composite (CompositeUnique (StringSet.of_list cols))
 end
 
 module Constraints = struct
@@ -635,8 +647,10 @@ type insert_action =
   on_conflict_clause : (conflict_clause * assignments) option;
 } [@@deriving show {with_path=false}]
 
+type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
+
 type stmt =
-| Create of table_name * [ `Schema of schema | `Select of select_full ]
+| Create of table_name * [ `Schema of schema * table_constraints list | `Select of select_full ]
 | Drop of table_name
 | Alter of table_name * alter_action list
 | Rename of (table_name * table_name) list
@@ -763,7 +777,13 @@ let () =
   ["pow"; "power"] ||> monomorphic float [float;int];
   "unix_timestamp" |> monomorphic int [];
   "unix_timestamp" |> monomorphic int [datetime];
-  ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Unit `Interval;datetime;datetime];
+  ["extract"; "dayofmonth";"dayofweek";"dayofyear";] ||> monomorphic int [datetime];
+  "last_day" |> monomorphic datetime [datetime];
+  ["microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ] ||> monomorphic int [datetime];
+  ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Datetime;datetime;datetime];
+  ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Datetime];
+  ["date_format";"time_format"] ||> monomorphic text [datetime; text];
+  "str_to_date" |> monomorphic datetime [text;text];
   "any_value" |> add 1 (F (Var 0,[Var 0])); (* 'a -> 'a but not aggregate *)
   ["substring"; "sha2"] ||> monomorphic text [text; int];
   "substring" |> monomorphic text [text; int; int];
@@ -774,8 +794,6 @@ let () =
   "uuid" |> monomorphic text [];
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];
-  ["date_add"; "date_sub"] ||> monomorphic datetime [datetime; datetime];
-  "date_format" |> monomorphic text [datetime; text];
   "makedate" |> monomorphic datetime [int; int];
   (* 
      Any is used instead of Var because MySQL JSON functions have unique semantics:
