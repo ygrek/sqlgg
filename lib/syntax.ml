@@ -784,11 +784,6 @@ and eval_nested env nested =
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
-  let cardinality =
-    if from = None then (if where = None then `One else `Zero_one)
-    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
-    else `Nat
-  in
   let final_schema = infer_schema env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
@@ -800,6 +795,17 @@ and eval_select env { columns; from; where; group; having; } =
   } where in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
+  let has_unique_constraint_satisfied _where =
+    false
+  in
+  let cardinality =
+    if from = None then (if where = None then `One else `Zero_one)
+    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
+    else match where with
+    | None -> `Nat
+    | Some where -> 
+      if has_unique_constraint_satisfied where then `Zero_one else `Nat
+  in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
   (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
