@@ -209,10 +209,12 @@ struct
     | Count (* count it's count function which never returns null  *) 
     | Avg (* avg it's avg function that returns float *)
 
+  type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq
+
   type func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
   | Coalesce of tyvar * tyvar
-  | Comparison
+  | Comparison of comparison_op
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
   | Multi of { 
@@ -241,7 +243,7 @@ struct
   | Ret ret -> fprintf pp "_ -> %s" (show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
   | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
-  | Comparison -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
+  | Comparison _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
   | Multi { ret; fixed_args; repeating_pattern } ->
       let fixed_str = match fixed_args with
         | [] -> ""
@@ -255,7 +257,7 @@ struct
 
   let is_grouping = function
   | Agg _ -> true
-  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison  -> false
+  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison _-> false
 end
 
 module Constraint =

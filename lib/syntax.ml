@@ -275,11 +275,11 @@ let rec bool_choice_id = function
 let extract_meta_from_col ~env expr = 
   let rec aux = function 
     (* col_name = @param *)
-    | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison; _ } as fn)
+    | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([Column a; (Inparam _) as b]); _ } as fn) -> 
       Fun { fn with parameters = [Column a; set_param_meta ~env a b] }
-    | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison; _ } as fn)
+    | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
       Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
@@ -631,7 +631,7 @@ and assign_types env expr =
         | Ret ret, _ ->
           let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
           { ret with nullability }, types (* ignoring arguments FIXME *)
-        | Comparison, _  ->
+        | Comparison _, _  ->
           if set_tyvar_strict then 
             let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
             ret, List.map make_strict args 

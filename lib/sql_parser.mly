@@ -438,7 +438,7 @@ expr:
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { kind = (Ret (depends Float)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr DIV e2=expr %prec PLUS { Fun { kind = (Ret (depends Int)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr boolean_bin_op e2=expr %prec AND { Fun { kind = (fixed Bool [Bool;Bool]); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison; parameters = [e1; e2]; is_over_clause = false } }
+    | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
     | e=like_expr esc=escape?
@@ -566,7 +566,16 @@ func_params: DISTINCT? l=expr_list { l }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
-comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
+comparison_op: 
+    | EQUAL { Comp_equal }
+    | NUM_CMP_OP { Comp_num_cmp }
+    | NUM_EQ_OP { 
+      (* it would be nice to go into num_eq_op, 
+         and consider == as equal as well. but for now
+         we conservatively return `Comp_num_eq *)  
+      Comp_num_eq 
+    }
+
 boolean_bin_op: AND | OR | XOR { }
 
 unary_op: EXCL { }
