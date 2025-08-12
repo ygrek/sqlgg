@@ -1836,6 +1836,46 @@ let test_json_and_fixed_then_pairs_fn_kind  = [
       ] [];
 ]
 
+let test_cardinality =
+  let x = [attr' ~nullability:Strict "x" ~extra:[PrimaryKey] Int] in
+  let y = [attr' ~nullability:Nullable "y" ~extra:[Unique] Int] in
+  let z = [attr' ~nullability:Nullable "z" ~extra:[Constraint.make_composite_unique ["z"; "a"]] Int] in
+  let a = [attr' ~nullability:Nullable "a" ~extra:[Constraint.make_composite_unique ["z"; "a"]] Int] in
+  let b = [attr' ~nullability:Nullable "b" Int] in
+  [
+  tt "CREATE TABLE test_cardinality (x INT PRIMARY KEY, y INT, z INT, a INT, b INT, UNIQUE(y), UNIQUE(z, a))" [] [];
+  tt "select x from test_cardinality where x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select y from test_cardinality where y = 1" y [] ~kind:(Select `Zero_one);
+  tt "select z from test_cardinality where z = 1" z [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x = 1 limit 1" x [] ~kind:(Select `Zero_one);
+  tt "select y from test_cardinality where y = 1 limit 1" y [] ~kind:(Select `Zero_one);
+  tt "select z from test_cardinality where z = 1 limit 1" z [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where x = 1 limit 2" x [] ~kind:(Select `Zero_one);
+  tt "select y from test_cardinality where y = 1 limit 2" y [] ~kind:(Select `Zero_one);
+  tt "select z from test_cardinality where z = 1 limit 2" z [] ~kind:(Select `Nat);
+  tt "select x,y from test_cardinality where x = 1" (x @ y) [] ~kind:(Select `Zero_one);
+  tt "select x,y from test_cardinality where x = 1 limit 1" (x @ y) [] ~kind:(Select `Zero_one);
+  tt "select x,y from test_cardinality where x = 1 limit 2" (x @ y) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where x = 1" (x @ z) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where x = 1 limit 1" (x @ z) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where x = 1 limit 2" (x @ z) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where z = 1" (x @ z) [] ~kind:(Select `Nat);
+  tt "select x,z from test_cardinality where z = 1 limit 1" (x @ z) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where z = 1 limit 2" (x @ z) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z = 1 and a = 1" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where (z = 1) and (a = 1)" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 1" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 2" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1" (z @ a @ b) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 1" (z @ a @ b) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 2" (z @ a @ b) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1" (z @ a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z = 1 limit 1" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 limit 2" (z @ a) [] ~kind:(Select `Nat);
+  tt "select a,b from test_cardinality where a = 1 and b = 1" (a @ b) [] ~kind:(Select `Nat);
+]
+
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -1873,6 +1913,7 @@ let run () =
     "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
     "test_datefns" >::: test_datefns;
     "test_json_and_fixed_then_pairs_fn_kind" >::: test_json_and_fixed_then_pairs_fn_kind;
+    "test_cardinality" >::: test_cardinality;
   ]
   in
   let test_suite = "main" >::: tests in
