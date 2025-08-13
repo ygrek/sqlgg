@@ -115,45 +115,16 @@ module Async_lru = struct
     let capacity t = t.capacity
     let is_empty t = t.size = 0
 
-    let iter f t =
-      let rec iter_nodes = function
-        | None -> ()
-        | Some node ->
-            f node.key node.value;
-            iter_nodes node.next
-      in
-      iter_nodes t.head
-
-    let fold f acc t =
-      let rec fold_nodes acc = function
-        | None -> acc
-        | Some node ->
-            let new_acc = f node.key node.value acc in
-            fold_nodes new_acc node.next
-      in
-      fold_nodes acc t.head
-
     let clear t =
-      let rec collect_nodes acc = function
-        | None -> acc
-        | Some node -> collect_nodes ((node.key, node.value) :: acc) node.next
-      in
-      let all_nodes = collect_nodes [] t.head in
+      
+      let all_values = Hashtbl.fold (fun _ node acc -> node.value :: acc) t.hash [] in
       
       Hashtbl.clear t.hash;
       t.head <- None;
       t.tail <- None;
       t.size <- 0;
       
-      let rec evict_all = function
-        | [] -> IO.return ()
-        | (_, value) :: rest ->
-            catch
-              (fun () -> Evict.on_evict value)
-              (fun _ -> IO.return ()) >>= fun () ->
-            evict_all rest
-      in
-      evict_all all_nodes
+      List.iter_s Evict.on_evict all_values
   end
 end
 
