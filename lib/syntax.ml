@@ -793,27 +793,46 @@ and eval_select env { columns; from; where; group; having; } =
     (* Aliases aren't available on the WHERE stage *)
     schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema; 
   } where in
-  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
-  let has_unique_constraint_satisfied _where _env =
-    let expr_represents_equals expr =
-      match expr with
-      | Fun { kind = Comparison Comp_equal; parameters = _; is_over_clause = false } -> true
-      | _ -> false
+  let has_constraint_satisfied where env =
+    let get_all_eql_checks expr = 
+      let rec aux acc expr_list =
+        match expr_list with
+        | [] -> acc
+        | expr :: expr_list ->
+          match expr with
+          | Fun { kind = Comparison Comp_equal; parameters; _ } -> 
+            (* this is an equality check, get the columns from the parameters *)
+            let columns = List.filter_map (fun p -> 
+              match p with 
+              | Column col_name -> Some col_name
+              | _ -> None) parameters 
+            in
+            aux (columns @ acc) expr_list
+          | Fun { parameters; _ } -> aux acc (parameters @ expr_list)
+          | _ -> aux acc expr_list
+      in
+      aux [] [expr]
     in
-    (* stub *)
-    (* 1. get all EQUALITY checks on the where clause *)
-    (* 2. get all the constraints on the schema that match Composite, Unique, PrimaryKey *)
-    (* 3. compare the equality checks with the constraints *)
-    false
+    let open Schema in
+    let columns = get_all_eql_checks where in
+    let resolved = List.map (resolve_column ~env) columns in
+    let has_single_value_constraint sattrs =
+      let constraints = sattrs |> List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) in
+      List.exists (fun con -> Constraints.mem PrimaryKey con || Constraints.mem Unique con) constraints
+    in
+    (* TODO *)
+    let has_composite_constraint sattrs = false in
+    has_single_value_constraint resolved || has_composite_constraint resolved
   in
+  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
     else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
     else match where with
     | None -> `Nat
     | Some where -> 
-      if has_unique_constraint_satisfied where env then `Zero_one else `Nat
+      if has_constraint_satisfied where env then `Zero_one else `Nat
   in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
