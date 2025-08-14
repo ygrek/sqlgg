@@ -130,7 +130,7 @@ let main () =
     "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set SQL dialect - will only allow this dialect's features in SQL queries";
     "-no-check", Arg.String set_no_check, "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select) - do not enforce dialect feature checks";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
-    "-test", Arg.Unit (fun () -> Prelude.silent_output := true; Test.run ()), " Run unit tests";
+    "-test", Arg.Unit Test.run, " Run unit tests";
   ]
   in
   Arg.parse args work usage_msg;

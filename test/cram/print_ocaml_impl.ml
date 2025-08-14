@@ -134,7 +134,7 @@ module Types = struct
   module Json = struct
     type t = Yojson.Basic.t
     let to_literal j = Text.to_literal (Yojson.Basic.to_string j)
-    let json_to_literal (j : Sqlgg_trait_types.json) = Text.to_literal (Yojson.Basic.to_string (json_to_yojson j))
+    let json_to_literal j = Text.to_literal (Yojson.Basic.to_string (json_to_yojson j))
   end
 
   module Json_path = struct
@@ -317,12 +317,12 @@ let get_column_datetime_nullable (row : mock_row_data) (index : int) : string op
   | None -> None
 
 (* Functions that return Sqlgg_trait_types.json instead of Yojson.Basic.t *)
-let get_column_json (row : mock_row_data) (index : int) : Sqlgg_trait_types.json = 
+let get_column_json (row : mock_row_data) (index : int) : json = 
   match get_mock_value row index with
   | `Json v -> printf "[MOCK] get_column_json[%d] = %s\n" index (Yojson.Basic.to_string (json_to_yojson v)); v
   | _ -> printf "[MOCK] get_column_json[%d] = null (default)\n" index; `Null
 
-let get_column_json_nullable (row : mock_row_data) (index : int) : Sqlgg_trait_types.json option = 
+let get_column_json_nullable (row : mock_row_data) (index : int) : json option = 
   match get_mock_value row index with
   | `Json v -> printf "[MOCK] get_column_json_nullable[%d] = Some %s\n" index (Yojson.Basic.to_string (json_to_yojson v)); Some v
   | `Null -> printf "[MOCK] get_column_json_nullable[%d] = None\n" index; None
@@ -380,7 +380,7 @@ let set_param_float (params : params) v = bind_param (Float.to_string v) params
 let set_param_decimal (params : params) v = bind_param (Float.to_string v) params
 let set_param_string (params : params) v = bind_param (sprintf "'%s'" (String.escaped v)) params
 let set_param_datetime (params : params) v = bind_param (Float.to_string v) params
-let set_param_json (params : params) (v : Sqlgg_trait_types.json) = bind_param (sprintf "'%s'" (String.escaped (Yojson.Basic.to_string (json_to_yojson v)))) params
+let set_param_json (params : params) (v : json) = bind_param (sprintf "'%s'" (String.escaped (Yojson.Basic.to_string (json_to_yojson v)))) params
 let set_param_json_path (params : params) v = bind_param (sprintf "'%s'" (String.escaped (Sqlgg_json_path.Json_path.string_of_json_path v))) params
 let set_param_one_or_all (params : params) v = bind_param (match v with `One -> "'one'" | `All -> "'all'") params
 

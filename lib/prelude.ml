@@ -13,14 +13,5 @@ let option_list = function Some x -> [x] | None -> []
 
 let fail fmt = Printf.ksprintf failwith fmt
 let failed ~at fmt = Printf.ksprintf (fun s -> raise (At (at, Failure s))) fmt
-
-let silent_output = ref false
-
-let printfn fmt = 
-  if !silent_output
-  then Printf.ksprintf ignore fmt
-  else Printf.ksprintf print_endline fmt
-
-let eprintfn fmt = if !silent_output
-  then Printf.ksprintf ignore fmt
-  else Printf.ksprintf prerr_endline fmt
+let printfn fmt = Printf.ksprintf print_endline fmt
+let eprintfn fmt = Printf.ksprintf prerr_endline fmt
