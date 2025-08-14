@@ -1834,6 +1834,70 @@ let test_json_and_fixed_then_pairs_fn_kind  = [
         attr' ~nullability:Nullable "is_admin" Bool; 
         attr' ~nullability:Nullable "test_path" Json;
       ] [];
+
+  tt "SELECT JSON_DEPTH(@json) as depth" [ attr' ~nullability:Strict "depth" Int ] [ named "json" Json ];
+  tt "SELECT JSON_DEPTH(@json_nullable :: Json Null) as depth_n" [ attr' ~nullability:Nullable "depth_n" Int ] [ named_nullable "json_nullable" Json ];
+  
+  
+  tt "SELECT JSON_REMOVE(@json, '$.field1', '$.field2', '$.nested.prop') as result" 
+    [ attr' "result" Json ] [ named "json" Json ];
+]
+
+let test_json_arrow_ops = [
+  tt "CREATE TABLE table20250814 ( id INT AUTO_INCREMENT PRIMARY KEY, data JSON)" [] [];
+  tt "SELECT data -> '$.name' as js_name FROM table20250814" [attr' ~nullability:Nullable "js_name" Json] [];
+  tt "SELECT data ->> '$.name' as name FROM table20250814" [attr' ~nullability:Nullable "name" Text] [];
+  tt "SELECT data -> @name_path as js_name FROM table20250814" [attr' ~nullability:Nullable "js_name" Json] [named "name_path" Json_path];
+  tt "SELECT data ->> @email_path as email FROM table20250814" [attr' ~nullability:Nullable "email" Text] [named "email_path" Json_path];
+  tt "SELECT id FROM table20250814 WHERE data ->> '$.address.city' = 'Paris'" [attr' ~extra:[Autoincrement;PrimaryKey] "id" Int] [];
+  tt "SELECT data -> '$.user' ->> '$.name' as user_name FROM table20250814" [attr' ~nullability:Nullable "user_name" Text] [];
+]
+
+let test_json_additional_functions = [
+  tt "CREATE TABLE table20250814_2 ( id INT AUTO_INCREMENT PRIMARY KEY, data JSON)" [] [];
+
+  tt "SELECT JSON_ARRAY_INSERT(data, '$[0]', 'x') as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+  tt "SELECT JSON_CONTAINS_PATH(data, 'one', '$.a', '$.b') as has_path FROM table20250814_2" [attr' ~nullability:Nullable "has_path" Bool] [];
+  tt "SELECT JSON_DEPTH(data) as depth FROM table20250814_2" [attr' ~nullability:Nullable "depth" Int] [];
+  tt "SELECT JSON_INSERT(data, '$.a', 1, '$.b', true) as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+
+  tt "SELECT JSON_INSERT(@json, '$.a', 1) as r" [attr' ~nullability:Strict "r" Json] [named "json" Json];
+  tt "SELECT JSON_INSERT(@json, @p, NULL) as r" [attr' ~nullability:Nullable "r" Json] [named "json" Json; named "p" Json_path];
+  tt "SELECT JSON_INSERT(@json, '$.a', @v :: Int Null) as r" [attr' ~nullability:Nullable "r" Json] [named "json" Json; named_nullable "v" Int];
+  tt "SELECT JSON_INSERT(@json_nullable :: Json Null, '$.a', 1) as r" [attr' ~nullability:Nullable "r" Json] [named_nullable "json_nullable" Json];
+  tt "SELECT JSON_INSERT(@json, '$.a', 1, NULL, 2) as r" [attr' ~nullability:Nullable "r" Json] [named "json" Json; ];
+
+  tt "SELECT JSON_KEYS(data) as keys FROM table20250814_2" [attr' ~nullability:Nullable "keys" Json] [];
+  tt "SELECT JSON_KEYS(data, '$') as keys2 FROM table20250814_2" [attr' ~nullability:Nullable "keys2" Json] [];
+  tt "SELECT JSON_LENGTH(data) as len FROM table20250814_2" [attr' ~nullability:Strict "len" Int] [];
+  tt "SELECT JSON_LENGTH(data, '$.a') as len FROM table20250814_2" [attr' ~nullability:Strict "len" Int] [];
+
+  tt "SELECT JSON_MERGE(data, JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+  tt "SELECT JSON_MERGE(JSON_OBJECT('y',1), JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' "result" Json] [];
+
+  tt "SELECT JSON_MERGE_PATCH(data, JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+  tt "SELECT JSON_MERGE_PATCH(JSON_OBJECT('y',1), JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' "result" Json] [];
+
+  tt "SELECT JSON_MERGE_PRESERVE(data, JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+  tt "SELECT JSON_MERGE_PRESERVE(JSON_OBJECT('y',1), JSON_OBJECT('x',1)) as result FROM table20250814_2" [attr' "result" Json] [];
+
+  tt "SELECT JSON_PRETTY(data) as pretty FROM table20250814_2" [attr' ~nullability:Nullable "pretty" Text] [];
+  tt "SELECT JSON_PRETTY('[1, 3, 10]') as pretty FROM table20250814_2" [attr' "pretty" Text] [];
+
+  tt "SELECT JSON_QUOTE('hello') as quoted" [attr' "quoted" Text] [];
+  tt "SELECT JSON_REPLACE(data, '$.a', 2) as result FROM table20250814_2" [attr' ~nullability:Nullable "result" Json] [];
+  tt "SELECT JSON_REPLACE(JSON_OBJECT('x',1), '$.a', 2) as result FROM table20250814_2" [attr' "result" Json] [];
+  tt "SELECT JSON_STORAGE_SIZE(data) as sz FROM table20250814_2" [attr' ~nullability:Nullable "sz" Int] [];
+  tt "SELECT JSON_TYPE(data) as t FROM table20250814_2" [attr' ~nullability:Nullable "t" Text] [];
+  tt "SELECT JSON_VALID('{\"a\":1}') as v1" [attr' "v1" Bool] [];
+  tt "SELECT JSON_VALID('{oops}') as v2" [attr' "v2" Bool] [];
+  tt "SELECT JSON_CONTAINS_PATH(data, 'all', @p1, @p2) as has_all FROM table20250814_2" [attr' ~nullability:Nullable "has_all" Bool] [named "p1" Json_path; named "p2" Json_path];
+
+  tt "CREATE TABLE table20250814_3 ( id INT AUTO_INCREMENT PRIMARY KEY, data JSON NOT NULL)" [] [];
+  tt "SELECT JSON_CONTAINS_PATH(data, 'one', '$.a') as has_strict FROM table20250814_3" [attr' ~nullability:Nullable "has_strict" Bool] [];
+  tt "SELECT JSON_CONTAINS_PATH(data, @mode, '$.a') as has_mode FROM table20250814_2" [attr' ~nullability:Nullable "has_mode" Bool] [named "mode" One_or_all];
+  tt "SELECT JSON_CONTAINS_PATH(data, 'one', @p) as has_p FROM table20250814_2" [attr' ~nullability:Nullable "has_p" Bool] [named "p" Json_path];
+  tt "SELECT JSON_CONTAINS_PATH(data, 'all', '$.a', @p2) as has_p2 FROM table20250814_2" [attr' ~nullability:Nullable "has_p2" Bool] [named "p2" Json_path];
 ]
 
 let run () =
@@ -1873,6 +1937,8 @@ let run () =
     "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
     "test_datefns" >::: test_datefns;
     "test_json_and_fixed_then_pairs_fn_kind" >::: test_json_and_fixed_then_pairs_fn_kind;
+    "test_json_arrow_ops" >::: test_json_arrow_ops;
+    "test_json_additional_functions" >::: test_json_additional_functions;
   ]
   in
   let test_suite = "main" >::: tests in
