@@ -1846,6 +1846,9 @@ let test_cardinality =
   tt "CREATE TABLE test_cardinality (x INT PRIMARY KEY, y INT, z INT, a INT, b INT, UNIQUE(y), UNIQUE(z, a))" [] [];
   tt "select x from test_cardinality where x = 1" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where x != 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x <> 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where not x = 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x < 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x > 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x <= 1" x [] ~kind:(Select `Nat);
@@ -1874,6 +1877,10 @@ let test_cardinality =
   tt "select x,z from test_cardinality where z = 1 limit 1" (x @ z) [] ~kind:(Select `Zero_one);
   tt "select x,z from test_cardinality where z = 1 limit 2" (x @ z) [] ~kind:(Select `Nat);
   tt "select z,a from test_cardinality where z = 1 and a = 1" (z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and not (a = 1)" (z @ a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where not (z = 1 and a = 1)" (z @ a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where not (z = 1) and a = 1" (z @ a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where not not (a = 1)" (z @ a) [] ~kind:(Select `Nat);
   tt "select z,a from test_cardinality where z = 1 and a != 1" (z @ a) [] ~kind:(Select `Nat);
   tt "select z,a from test_cardinality where z != 1 and a = 1" (z @ a) [] ~kind:(Select `Nat);
   tt "select z,a from test_cardinality where (z = 1) and (a = 1)" (z @ a) [] ~kind:(Select `Zero_one);

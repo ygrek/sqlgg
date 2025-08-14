@@ -639,6 +639,8 @@ and assign_types env expr =
             let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
             let nullable = common_nullability args in
             undepend ret nullable, args
+        | Negation, [typ] -> typ, types
+        | Negation, _ -> fail "negation requires a single argument"
         in
         let (ret,inferred_params) = infer_fn kind types in
         ResFun { kind; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
@@ -807,6 +809,7 @@ and eval_select env { columns; from; where; group; having; } =
               List.filter_map (function Column col_name -> Some col_name | _ -> None) parameters 
             in 
             aux (compared_columns @ acc) expr_list
+          | Fun { kind = Negation; _ } -> aux acc expr_list (* bail out of negation *)
           | Fun { parameters; _ } -> aux acc (parameters @ expr_list)
           | _ -> aux acc expr_list
       in

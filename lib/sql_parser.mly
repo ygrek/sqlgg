@@ -447,7 +447,7 @@ expr:
         | None -> e
         | Some esc -> Fun { kind = (fixed Bool [Bool; Text]); parameters = [e;esc]; is_over_clause = false }
       }
-    | unary_op e=expr { e }
+    | f=unary_op e=expr { f e }
     | MINUS e=expr %prec UNARY_MINUS { e }
     | INTERVAL e=expr interval_unit { Fun { kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
@@ -578,9 +578,12 @@ comparison_op:
 
 boolean_bin_op: AND | OR | XOR { }
 
-unary_op: EXCL { }
-        | TILDE { }
-        | NOT { }
+unary_op: EXCL { 
+          (* Some SQLs use ! as negation, some don't. play it safe and negate it,
+             since negation is currently only used to verify cardinality constraints *)
+          (fun id -> Fun { kind = Negation; parameters = [id]; is_over_clause = false }) } 
+        | TILDE { (fun id -> id) }
+        | NOT { (fun id -> Fun { kind = Negation; parameters = [id]; is_over_clause = false }) }
 
 interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
