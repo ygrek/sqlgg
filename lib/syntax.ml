@@ -795,7 +795,7 @@ and eval_select env { columns; from; where; group; having; } =
   } where in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
-  let has_constraint_satisfied where env =
+  let satisfies_some_constraint where env =
     let get_all_eql_checks expr = 
       let rec aux acc expr_list =
         match expr_list with
@@ -803,45 +803,48 @@ and eval_select env { columns; from; where; group; having; } =
         | expr :: expr_list ->
           match expr with
           | Fun { kind = Comparison Comp_equal; parameters; _ } -> 
-            (* this is an equality check, get the columns from the parameters *)
-            let columns = List.filter_map (fun p -> 
-              match p with 
-              | Column col_name -> Some col_name
-              | _ -> None) parameters 
-            in
-            aux (columns @ acc) expr_list
+            let compared_columns = 
+              List.filter_map (function Column col_name -> Some col_name | _ -> None) parameters 
+            in 
+            aux (compared_columns @ acc) expr_list
           | Fun { parameters; _ } -> aux acc (parameters @ expr_list)
           | _ -> aux acc expr_list
       in
       aux [] [expr]
     in
     let open Schema in
-    let columns = get_all_eql_checks where in
-    let resolved = List.map (resolve_column ~env) columns in
-    let constraints = resolved |> List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) in
-    let has_single_value_constraint () =
-      List.exists (fun con -> Constraints.mem PrimaryKey con || Constraints.mem Unique con) constraints
+    (* identify if the set of columns used in WHERE clause contains/represents constraints *)
+    let columns_in_where = get_all_eql_checks where in
+    let attributes_in_where = List.map (resolve_column ~env) columns_in_where in
+    let column_constraints = 
+      List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) attributes_in_where 
     in
-    let has_composite_constraint () = 
-      let ids = columns |> List.map (fun col -> col.cname) in
-      let get_composite_sets constraints =
+    let satisfies_single_value_constraint () =
+      List.exists (fun column_constraint -> 
+        Constraints.mem PrimaryKey column_constraint || Constraints.mem Unique column_constraint
+      ) column_constraints
+    in
+    let satisfies_composite_constraint () = 
+      let ids = columns_in_where |> List.map (fun col -> col.cname) in
+      (* get the list of unique/primary key constraint groupings over a single column*)
+      let get_composite_sets_over_column constraints =
         List.filter_map (function
           | Constraint.Composite (CompositePrimary x) -> Some (Constraint.StringSet.elements x)
           | Constraint.Composite (CompositeUnique x) -> Some (Constraint.StringSet.elements x)
           | _ -> None
-        ) constraints
+        ) (Constraints.elements constraints)
       in
-      let composites = constraints |> List.map Constraints.elements |> List.concat |> get_composite_sets in
-      match composites with
+      let composite_constraint_sets = List.concat_map get_composite_sets_over_column column_constraints in
+      match composite_constraint_sets with
       | [] -> false
       | _ -> 
-      (* for each set of composites, we want to see if all the columns in the composite are present in the resolved columns *)
-      let has_all_columns composites =
-        List.for_all (fun composite -> List.for_all (fun col -> List.mem col ids) composite) composites
-      in
-      has_all_columns composites
+      List.exists (fun composite_set -> 
+        List.for_all 
+        (fun composite_component -> List.mem composite_component ids) 
+        composite_set
+      ) composite_constraint_sets
     in
-    has_single_value_constraint () || has_composite_constraint ()
+    satisfies_single_value_constraint () || satisfies_composite_constraint ()
   in
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
@@ -849,7 +852,7 @@ and eval_select env { columns; from; where; group; having; } =
     else match where with
     | None -> `Nat
     | Some where -> 
-      if has_constraint_satisfied where env then `Zero_one else `Nat
+      if satisfies_some_constraint where env then `Zero_one else `Nat
   in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
