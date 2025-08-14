@@ -319,7 +319,50 @@ let rec resolve_columns env expr =
   let rec each e =
     match e with
     | Value x -> ResValue x
-    | Column col -> ResValue (resolve_column ~env col).attr.domain
+    | Column col ->
+      let attr = (resolve_column ~env col).attr in
+      let json_null_kind = Meta.find_opt attr.meta "json_null_kind" in
+      let text_as_json = Meta.find_opt attr.meta "text_as_json" in
+      let domain = match json_null_kind, text_as_json, attr.domain with
+        | v, _, ({ t = Json; nullability } as d)
+        | v, Some "true", ({ t = Text; nullability } as d) -> 
+          (*
+            Determines whether JSON null is allowed as a valid value in the column.
+
+            JSON null (i.e. the literal `null` in a JSON document) is distinct from SQL NULL.
+            - JSON null is an actual value in JSON and can appear inside arrays or objects.
+            - SQL NULL means "no value at all" and causes most JSON functions to return NULL
+              if encountered as an argument (e.g. JSON_ARRAY_APPEND returns NULL if any argument is SQL NULL).
+
+            Standard SQL DDL (e.g. CREATE TABLE) does not allow expressing whether JSON null is allowed
+            for JSON columns — it only covers SQL NULL via NOT NULL constraints.
+
+            To bridge this semantic gap, we introduce a custom meta-attribute `json_null_kind`:
+              - "true" or "auto" → JSON null is allowed (treated as a Nullable domain)
+              - "false"          → JSON null is disallowed (treated as Strict)
+
+            Additionally, if `text_as_json` is set and the underlying type is `Text`,
+            we apply the same logic (since JSON is serialized into text in that case).
+
+            The resulting domain is:
+              - Nullable → JSON null is allowed in values
+              - Strict   → JSON null is rejected during validation
+
+            This impacts how JSON expressions are parsed, validated, and how DDL is generated.
+          *)
+          let nullability = match v, nullability with 
+          | Some "false", Type.Strict -> Type.Strict
+          | _ -> Type.Nullable
+          in
+          { Type.t = d.t; nullability; }
+        | _, Some _, _ -> 
+          fail "Column %s has text_as_json meta, but its type is not Text" col.cname  
+        | Some _, _, _ -> 
+          fail "Column %s has json_null_kind meta, but its type is not Json or Text" col.cname
+        | None, _, _ -> 
+          attr.domain
+      in
+      ResValue domain
     | OptionActions { choice; pos; kind } ->
       let choice_id = match bool_choice_id choice with
       | Some choice_id -> choice_id
@@ -467,7 +510,8 @@ and assign_types env expr =
             (* Since we have string literals, we can check if the enums are already exhausted or if a default case is required *)
             let values = Type.Enum_kind.Ctors.of_list @@ List.filter_map (function ResValue { t = StringLiteral v; _ } -> Some v | _ -> None) whens_e in
             Type.Enum_kind.Ctors.compare values ctors = 0
-          | Int | Text | Blob | Float | Datetime | Decimal | Any | StringLiteral _ | Bool -> false in
+          | Int | Text | Blob | Float | Datetime 
+          | Decimal | Any | One_or_all | Json | StringLiteral _ | Json_path | Bool -> false in
         let exhaust_checked = if is_exhausted then types else List.map Type.make_nullable types in  
         match Type.common_supertype @@ Option.map_default (fun else_t -> types @ [get_or_failwith else_t]) exhaust_checked else_t with
         | None -> failwith "no common supertype for all case then branches"
@@ -533,7 +577,32 @@ and assign_types env expr =
         let consider_agg_nullability typ = if (env.query_has_grouping || is_over_clause) && is_strict typ then typ else make_nullable typ in
 
         let rec infer_fn func types = match func, types with
-        | Multi (ret, each_arg), t -> infer_fn (F (ret, types_to_arg each_arg)) t
+        | Multi { ret; fixed_args = []; repeating_pattern = [each_arg] }, t -> 
+          infer_fn (F (ret, types_to_arg each_arg)) t
+        | Multi { ret; fixed_args; repeating_pattern }, t->
+          let fixed_count = List.length fixed_args in
+          let pattern_length = List.length repeating_pattern in
+          let total_args = List.length types in
+
+          if total_args < fixed_count then
+            fail "function %s requires at least %d arguments, got %d" 
+              (show_func ()) fixed_count total_args
+          else if Stdlib.(pattern_length = 0) then (
+            if total_args <> fixed_count then
+              fail "function %s requires exactly %d arguments, got %d" 
+          (show_func ()) fixed_count total_args
+            else
+              infer_fn (F (ret, fixed_args)) t
+          ) else if (total_args - fixed_count) mod pattern_length <> 0 then
+            fail "function %s requires %d fixed args + multiples of %d args, got %d" 
+              (show_func ()) fixed_count pattern_length total_args
+          else
+            let remaining_count = total_args - fixed_count in
+            let repeating_cycles = remaining_count / pattern_length in
+            let repeated_args =
+              List.flatten (List.init repeating_cycles (Fun.const repeating_pattern))
+            in
+            infer_fn (F (ret, fixed_args @ repeated_args)) t
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
         | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
         | Agg Self, [typ] -> consider_agg_nullability typ, types

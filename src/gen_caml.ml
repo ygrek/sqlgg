@@ -140,6 +140,9 @@ module L = struct
   | { t = Datetime; _ }
   | { t = Decimal; _ }
   | { t = Union _; _ }
+  | { t = Json; _ }
+  | { t = Json_path; _ }
+  | { t = One_or_all; _ } 
   | { t = Any; _ } as t -> type_name t
 
   let as_runtime_repr_name = function
@@ -147,12 +150,15 @@ module L = struct
   | { t = Text; _ }
   | { t = Any; _ }
   | { t = Union _; _ }
+  | { t = Json_path; _ }
   | { t = StringLiteral _; _ } -> "string"
   | { t = Int; _ } -> "int64"
   | { t = Float; _ } -> "float"
   | { t = Bool; _ } -> "bool"
   | { t = Datetime; _ }
   | { t = Decimal; _ } -> "float"
+  | { t = Json; _ } -> "json"
+  | { t = One_or_all; _ } -> "text"
 
 
   let as_api_type = as_lang_type
@@ -629,7 +635,8 @@ let generate_enum_modules stmts =
 
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
-    | Int | Text | Blob | Float | Bool  | Datetime | Decimal | Any | StringLiteral  _ -> None
+    | Int | Text | Blob | Float | Bool | Json
+    | Datetime | Decimal | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
   let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in

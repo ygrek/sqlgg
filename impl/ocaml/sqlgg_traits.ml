@@ -13,6 +13,8 @@
   For more information, please refer to <http://unlicense.org/>
 *)
 
+open Sqlgg_trait_types
+
 module type Value = sig
   type t
 
@@ -102,6 +104,18 @@ module type M = sig
       include Value
       val float_to_literal : float -> string
     end
+    module Json : sig
+      include Value
+      val json_to_literal : json -> string
+    end
+    module Json_path : sig
+      include Value
+      val json_path_to_literal : json_path -> string
+    end
+    module One_or_all : sig
+      include Value
+      val to_literal : one_or_all -> string
+    end
     module Any : Value
   end
 
@@ -121,6 +135,10 @@ module type M = sig
   val get_column_Float : row -> int -> Float.t
   val get_column_Decimal : row -> int -> Decimal.t
   val get_column_Datetime : row -> int -> Datetime.t
+  val get_column_Json: row -> int -> Json.t
+  val get_column_Json_path: row -> int -> Json_path.t
+  val get_column_One_or_all : row -> int -> One_or_all.t
+
 
   val get_column_Bool_nullable : row -> int -> Bool.t option
   val get_column_Int_nullable : row -> int -> Int.t option
@@ -129,6 +147,10 @@ module type M = sig
   val get_column_Float_nullable : row -> int -> Float.t option
   val get_column_Decimal_nullable : row -> int -> Decimal.t option
   val get_column_Datetime_nullable : row -> int -> Datetime.t option
+  val get_column_Json_nullable : row -> int -> Json.t option
+  val get_column_Json_path_nullable : row -> int -> Json_path.t option
+  val get_column_One_or_all_nullable : row -> int -> One_or_all.t option
+
 
   val get_column_bool : row -> int -> bool
   val get_column_bool_nullable : row -> int -> bool option
@@ -148,6 +170,15 @@ module type M = sig
   val get_column_string : row -> int -> string
   val get_column_string_nullable : row -> int -> string option
 
+  val get_column_json : row -> int -> json
+  val get_column_json_nullable : row -> int -> json option
+
+  val get_column_json_path : row -> int -> json_path
+  val get_column_json_path_nullable : row -> int -> json_path option
+
+  val get_column_one_or_all : row -> int -> one_or_all
+  val get_column_one_or_all_nullable : row -> int -> one_or_all option
+
   val start_params : statement -> int -> params
 
   (** [set_param_* stmt index val]. [index] is 0-based,
@@ -160,6 +191,9 @@ module type M = sig
   val set_param_Float : params -> Float.t -> unit
   val set_param_Decimal : params -> Decimal.t -> unit
   val set_param_Datetime : params -> Datetime.t -> unit
+  val set_param_Json: params -> Json.t -> unit
+  val set_param_Json_path: params -> Json_path.t -> unit
+  val set_param_One_or_all : params -> One_or_all.t -> unit
 
   val set_param_bool : params -> bool -> unit
   val set_param_int64 : params -> int64 -> unit
@@ -167,6 +201,9 @@ module type M = sig
   val set_param_decimal : params -> float -> unit
   val set_param_string : params -> string -> unit
   val set_param_datetime : params -> float -> unit
+  val set_param_json : params -> json -> unit
+  val set_param_json_path : params -> json_path -> unit
+  val set_param_one_or_all : params -> one_or_all -> unit
 
   module Make_enum: functor (E : Enum) -> sig
     (* The type itself is not exposed to provide a user a polymorphic type without aliases. *)

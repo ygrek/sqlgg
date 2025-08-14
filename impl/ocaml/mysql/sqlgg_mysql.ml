@@ -14,6 +14,7 @@
 *)
 
 open Printf
+open Sqlgg_trait_types
 
 module P = Mysql.Prepared
 
@@ -70,6 +71,29 @@ module type Types = sig
     val set_float: float -> string
     val float_to_literal : float -> string
   end
+
+  module Json : sig
+    include Value
+    val get_string : string -> json
+    val set_string : json -> string
+    val json_to_literal : json -> string
+  end
+
+  module Json_path: sig
+    include Value
+    val get_json_path : string -> json_path
+
+    val set_json_path : json_path -> string
+    val json_path_to_literal : json_path -> string
+  end
+
+  module One_or_all : sig
+    include Value
+    val get_one_or_all : string -> one_or_all
+    val set_one_or_all : one_or_all -> string
+    val one_or_all_to_literal : one_or_all -> string
+  end
+
   module Any : Value
 end
 
@@ -156,6 +180,69 @@ module Default_types = struct
     let set_float x = Text.set_string (Float.to_string x)
     let float_to_literal x = Text.to_literal (Float.to_literal x)
   end
+
+  
+  module Json = struct
+    type t = json
+
+    let of_string s = convert_json @@ Yojson.Safe.from_string s
+
+    let to_string (x: t) = match x with
+     | `Bool x -> Bool.to_string x
+     | `Int x -> Int.to_string (Int64.of_int x)
+     | `Intlit x ->  Int.to_string (Int64.of_string x)
+     | `Float x -> Float.to_string x
+     | #t  -> Yojson.Safe.to_string (x :> Yojson.Safe.t)
+
+    let to_literal (x: t) = match x with
+     | `Bool x -> Bool.to_literal x
+     | `Int x -> Int.to_literal (Int64.of_int x)
+     | `Intlit x ->  Int.to_string (Int64.of_string x)
+     | `Float x -> Float.to_literal x
+     | #t -> Text.to_literal @@ Yojson.Safe.to_string (x :> Yojson.Safe.t)
+
+    let get_string = of_string
+    let set_string = to_string
+    let json_to_literal = to_literal
+  end
+
+ module Json_path = struct
+    open Sqlgg_json_path
+    type t = json_path
+    
+    let of_string = Json_path.parse_json_path
+    let to_string = Json_path.string_of_json_path
+    let to_literal j = Text.to_literal (Json_path.string_of_json_path j)
+
+    let get_json_path = Json_path.parse_json_path
+
+    let set_json_path = Json_path.string_of_json_path
+
+    let json_path_to_literal = to_literal
+  end
+
+  module One_or_all = struct
+    type t = one_or_all
+
+    let of_string s =
+      match String.lowercase_ascii s with
+      | "one" -> `One
+      | "all" -> `All
+      | _ -> failwith (sprintf "One_or_all.of_string: unknown value %s" s)
+
+    let to_string = function
+      | `One -> "one"
+      | `All -> "all"
+
+    let to_literal = function
+      | `One -> "one"
+      | `All -> "all"
+
+    let get_one_or_all = of_string
+    let set_one_or_all = to_string
+    let one_or_all_to_literal = to_literal
+  end
+
   module Any = Text
 end
 
@@ -226,6 +313,9 @@ let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_str
 let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_string
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_string
 let get_column_Datetime, get_column_Datetime_nullable = get_column_ty "Datetime" Datetime.of_string
+let get_column_Json, get_column_Json_nullable = get_column_ty "Json" Json.of_string
+let get_column_Json_path, get_column_Json_path_nullable = get_column_ty "Json_path" Json_path.of_string
+let get_column_One_or_all, get_column_One_or_all_nullable = get_column_ty "One_or_all" One_or_all.of_string
 let get_column_Any, get_column_Any_nullable = get_column_ty "Any" Any.of_string
 
 let get_column_bool, get_column_bool_nullable = get_column_ty "bool" Bool.get_bool
@@ -234,6 +324,9 @@ let get_column_float, get_column_float_nullable = get_column_ty "float" Float.ge
 let get_column_decimal, get_column_decimal_nullable = get_column_ty "float" Decimal.get_float
 let get_column_datetime, get_column_datetime_nullable = get_column_ty "string" Datetime.get_string
 let get_column_string, get_column_string_nullable = get_column_ty "string" Text.get_string
+let get_column_json, get_column_json_nullable = get_column_ty "json" Json.get_string
+let get_column_json_path, get_column_json_path_nullable = get_column_ty "json_path" Json_path.get_json_path
+let get_column_one_or_all, get_column_one_or_all_nullable = get_column_ty "one_or_all" One_or_all.get_one_or_all
 
 let bind_param data (_,params,index) =
   match data with
@@ -253,6 +346,9 @@ let set_param_Int = set_param_ty Int.to_string
 let set_param_Float = set_param_ty Float.to_string
 let set_param_Decimal = set_param_ty Decimal.to_string
 let set_param_Datetime = set_param_ty Datetime.to_string
+let set_param_Json = set_param_ty Json.to_string
+let set_param_Json_path = set_param_ty Json_path.to_string
+let set_param_One_or_all = set_param_ty One_or_all.to_string
 
 let set_param_string = set_param_ty Text.set_string
 let set_param_bool = set_param_ty Bool.set_bool
@@ -260,8 +356,9 @@ let set_param_int64 = set_param_ty Int.set_int64
 let set_param_float = set_param_ty Float.set_float
 let set_param_decimal = set_param_ty Decimal.set_float
 let set_param_datetime = set_param_ty Datetime.set_float
-
-(* enum support *)
+let set_param_json = set_param_ty Json.set_string
+let set_param_json_path = set_param_ty Json_path.set_json_path
+let set_param_one_or_all = set_param_ty One_or_all.set_one_or_all
 
 module Make_enum (E: Enum) = struct 
 

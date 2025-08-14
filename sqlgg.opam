@@ -12,6 +12,7 @@ build: [
 ]
 depends: [
   "ocaml" {>= "4.13.0"}
+  "yojson" {>= "1.6.0"}
   "dune" {>= "2.7"}
   "menhir" {>= "20180523"}
   "mybuild" {> "3"}
@@ -36,4 +37,10 @@ as possible and leaving the choice of SQL database (and API to access it) to the
 
 conflicts: [
   "mariadb" {<= "1.1.6"}
+]
+
+pin-depends: [
+  [ "mariadb"
+    "git+https://github.com/ocaml-community/ocaml-mariadb.git#1993263770048d50696f4e698907dbf6e62800d3"
+  ]
 ]

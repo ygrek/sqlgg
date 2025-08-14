@@ -1,5 +1,5 @@
 (library
-  (name sqlgg_sqlite3)
-  (public_name sqlgg.sqlite3)
-  (optional)
-  (libraries sqlite3 sqlgg.traits))
+ (name sqlgg_sqlite3)
+ (public_name sqlgg.sqlite3)
+ (optional)
+ (libraries sqlite3 yojson sqlgg.traits))
