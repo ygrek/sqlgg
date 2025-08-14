@@ -52,17 +52,14 @@ module M (T: Sqlgg_traits.M with type Types.Json.t = Yojson.Basic.t and
     printf "[TEST 3] Testing SELECT with JSON path extraction\n";
     
     Print_ocaml_impl.clear_mock_responses ();
-    Print_ocaml_impl.setup_select_response [
-      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Alice"; Print_ocaml_impl.mock_text "Alice Johnson"];
-      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 2L; Print_ocaml_impl.mock_text "Bob"; Print_ocaml_impl.mock_text "Bob Smith"];
-    ];
-    
+    Print_ocaml_impl.setup_select_one_response (Some (
+      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Alice"; Print_ocaml_impl.mock_text "Alice Johnson"]
+    ));
+
     let open Sqlgg_json_path in
     let open Ast.Syntax in
     let name_path = root / ~."name" in
-    let result = Sql.test3 ~id:1L ~name_path connection (fun ~r -> 
-      printf "  -> Callback executed for test3 with result\n"
-    ) in
+    let result = Sql.test3 ~id:1L ~name_path connection in
     printf "[TEST 3] Result: completed\n\n";
     result
 
@@ -70,16 +67,14 @@ module M (T: Sqlgg_traits.M with type Types.Json.t = Yojson.Basic.t and
     printf "[TEST 4] Testing SELECT with nested JSON path\n";
     
     Print_ocaml_impl.clear_mock_responses ();
-    Print_ocaml_impl.setup_select_response [
-      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 2L; Print_ocaml_impl.mock_text "user@example.com"];
-    ];
+    Print_ocaml_impl.setup_select_one_response (Some (
+      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 2L; Print_ocaml_impl.mock_text "user@example.com"]
+    ));
     
     let open Sqlgg_json_path in
     let open Ast.Syntax in  
     let email_path = root / ~."user" / ~."email" in
-    let result = Sql.test4 ~id:2L ~email_path connection (fun ~r -> 
-      printf "  -> Callback executed for test4 with result\n"
-    ) in
+    let result = Sql.test4 ~id:2L ~email_path connection in
     printf "[TEST 4] Result: completed\n\n";
     result
 
@@ -100,13 +95,11 @@ module M (T: Sqlgg_traits.M with type Types.Json.t = Yojson.Basic.t and
     printf "[TEST 6] Testing simple SELECT with callback\n";
     
     Print_ocaml_impl.clear_mock_responses ();
-    Print_ocaml_impl.setup_select_response [
-      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 4L; Print_ocaml_impl.mock_text "active"];
-    ];
+    Print_ocaml_impl.setup_select_one_response (Some (
+      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 4L; Print_ocaml_impl.mock_text "active"]
+    ));
     
-    let result = Sql.test6 ~id:4L connection (fun ~r -> 
-      printf "  -> Callback executed for test6 with result\n"
-    ) in
+    let result = Sql.test6 ~id:4L connection in
     printf "[TEST 6] Result: completed\n\n";
     result
 
@@ -167,13 +160,11 @@ module M (T: Sqlgg_traits.M with type Types.Json.t = Yojson.Basic.t and
     printf "[TEST 10] Testing search with text parameter\n";
     
     Print_ocaml_impl.clear_mock_responses ();
-    Print_ocaml_impl.setup_select_response [
-      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_json (`String "$.test[0]")];
-    ];
+    Print_ocaml_impl.setup_select_one_response (Some (
+      Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_json (`String "$.test[0]")]
+    ));
     
-    let result = Sql.test10 ~search_value:"admin" ~id:5L connection (fun ~r -> 
-      printf "  -> Callback executed for test10 with result\n"
-    ) in
+    let result = Sql.test10 ~search_value:"admin" ~id:5L connection in
     printf "[TEST 10] Result: completed\n\n";
     result
 

@@ -2,9 +2,9 @@ Issue183 is fixed:
   $ cat registration_feedbacks.sql | sqlgg -gen caml - > output.ml
 
   $ grep -n "let p = T.start_params stmt" output.ml | head -1
-  25:      let p = T.start_params stmt (1 + (match search with Some (_, _, xs, xss) -> 3 + (match xs with [] -> 0 | _ :: _ -> 0) + (match xss with `A _ -> 1 | `B _ -> 1) | None -> 0)) in
+  22:      let p = T.start_params stmt (1 + (match search with Some (_, _, xs, xss) -> 3 + (match xs with [] -> 0 | _ :: _ -> 0) + (match xss with `A _ -> 1 | `B _ -> 1) | None -> 0)) in
 
-  $ sed -n '27,44p' output.ml
+  $ sed -n '24,41p' output.ml
         begin match search with
         | None -> ()
         | Some (search,search2,xs,xss) ->
@@ -24,7 +24,7 @@ Issue183 is fixed:
           end;
         end;
 
-  $ sed -n '49p' output.ml | grep -o "match search with Some (_, _, xs, xss)"
+  $ sed -n '46p' output.ml | grep -o "match search with Some (_, _, xs, xss)"
   match search with Some (_, _, xs, xss)
 
 Support reusable queries as CTE:
@@ -409,24 +409,17 @@ Test Json functions and ocaml compiles:
   [TEST 2] Result: completed
   
   [TEST 3] Testing SELECT with JSON path extraction
-  [MOCK SELECT] Connection type: [> `RO ]
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
   [SQL] SELECT JSON_EXTRACT(col1, '$.name') FROM table1 WHERE id = 1
-  [MOCK] Returning 2 rows
-    Row 0: col0=1 col1=Alice col2=Alice Johnson 
+  [MOCK] Returning one row
   [MOCK] get_column_Json_nullable[0] = Some null (default)
-    -> Callback executed for test3 with result
-    Row 1: col0=2 col1=Bob col2=Bob Smith 
-  [MOCK] get_column_Json_nullable[0] = Some null (default)
-    -> Callback executed for test3 with result
   [TEST 3] Result: completed
   
   [TEST 4] Testing SELECT with nested JSON path
-  [MOCK SELECT] Connection type: [> `RO ]
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
   [SQL] SELECT JSON_UNQUOTE(JSON_EXTRACT(col1, '$.user.email')) FROM table1 WHERE id = 2
-  [MOCK] Returning 1 rows
-    Row 0: col0=2 col1=user@example.com 
+  [MOCK] Returning one row
   [MOCK] get_column_Text_nullable[0] = Some "mock_text" (default)
-    -> Callback executed for test4 with result
   [TEST 4] Result: completed
   
   [TEST 5] Testing SELECT ONE with JSON path
@@ -436,12 +429,10 @@ Test Json functions and ocaml compiles:
   [TEST 5] Result: completed
   
   [TEST 6] Testing simple SELECT with callback
-  [MOCK SELECT] Connection type: [> `RO ]
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
   [SQL] SELECT JSON_CONTAINS(col1, '"value"') FROM table1 WHERE id = 4
-  [MOCK] Returning 1 rows
-    Row 0: col0=4 col1=active 
+  [MOCK] Returning one row
   [MOCK] get_column_Bool_nullable[0] = Some false (default)
-    -> Callback executed for test6 with result
   [TEST 6] Result: completed
   
   [TEST 7] Testing SELECT with JSON path filter
@@ -483,12 +474,10 @@ Test Json functions and ocaml compiles:
   [TEST 9] Result: affected_rows=3, insert_id=42
   
   [TEST 10] Testing search with text parameter
-  [MOCK SELECT] Connection type: [> `RO ]
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
   [SQL] SELECT JSON_SEARCH(col1, 'one', 'admin') FROM table1 WHERE id = 5
-  [MOCK] Returning 1 rows
-    Row 0: col0="$.test[0]" 
+  [MOCK] Returning one row
   [MOCK] get_column_Json_nullable[0] = Some "$.test[0]"
-    -> Callback executed for test10 with result
   [TEST 10] Result: completed
   
   === All JSON Path Tests Completed Successfully ===
