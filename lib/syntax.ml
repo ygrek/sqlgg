@@ -793,6 +793,7 @@ and eval_select env { columns; from; where; group; having; } =
     (* Aliases aren't available on the WHERE stage *)
     schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema; 
   } where in
+  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
   let has_constraint_satisfied where env =
     let get_all_eql_checks expr = 
@@ -817,15 +818,31 @@ and eval_select env { columns; from; where; group; having; } =
     let open Schema in
     let columns = get_all_eql_checks where in
     let resolved = List.map (resolve_column ~env) columns in
-    let has_single_value_constraint sattrs =
-      let constraints = sattrs |> List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) in
+    let constraints = resolved |> List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) in
+    let has_single_value_constraint () =
       List.exists (fun con -> Constraints.mem PrimaryKey con || Constraints.mem Unique con) constraints
     in
-    (* TODO *)
-    let has_composite_constraint sattrs = false in
-    has_single_value_constraint resolved || has_composite_constraint resolved
+    let has_composite_constraint () = 
+      let ids = columns |> List.map (fun col -> col.cname) in
+      let get_composite_sets constraints =
+        List.filter_map (function
+          | Constraint.Composite (CompositePrimary x) -> Some (Constraint.StringSet.elements x)
+          | Constraint.Composite (CompositeUnique x) -> Some (Constraint.StringSet.elements x)
+          | _ -> None
+        ) constraints
+      in
+      let composites = constraints |> List.map Constraints.elements |> List.concat |> get_composite_sets in
+      match composites with
+      | [] -> false
+      | _ -> 
+      (* for each set of composites, we want to see if all the columns in the composite are present in the resolved columns *)
+      let has_all_columns composites =
+        List.for_all (fun composite -> List.for_all (fun col -> List.mem col ids) composite) composites
+      in
+      has_all_columns composites
+    in
+    has_single_value_constraint () || has_composite_constraint ()
   in
-  (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let cardinality =
     if from = None then (if where = None then `One else `Zero_one)
     else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
