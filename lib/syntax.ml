@@ -808,31 +808,17 @@ and eval_select env { columns; from; where; group; having; } =
         | [] -> acc
         | expr :: expr_list ->
           match expr with
-          | Fun { kind = Comparison Comp_equal; parameters; _ } -> begin
-            let forms_tautology parameters =
-              let contains_duplicates xs =
-                let seen = Hashtbl.create 10 in
-                let rec aux = function
-                  | [] -> false
-                  | x :: xs -> 
-                  match Hashtbl.mem seen x with
-                  | true -> true
-                  | false -> 
-                    Hashtbl.add seen x (); 
-                    aux xs
-                in
-                aux xs
-              in
-              contains_duplicates parameters
+          | Fun { kind = Comparison Comp_equal; parameters = [v1; v2]; _ } ->
+            let columns_in_eql_check =
+            match v1, v2 with
+            | Column _, Column _ -> [] (* Columns may refer to each other in foreign
+                                          key constraints, so don't add any of them for now. 
+                                          TODO: consider foreign key constraints *)
+            | Column col1, _ -> [col1]
+            | _ , Column col2 -> [col2]
+            | _ -> []
             in
-            match forms_tautology parameters with
-            | true -> aux acc expr_list
-            | false ->
-              let compared_columns =
-                List.filter_map (function Column col_name -> Some col_name | _ -> None) parameters
-              in
-              aux (compared_columns @ acc) expr_list
-            end
+            aux (columns_in_eql_check @ acc) expr_list
           | Fun { kind = Logical And; parameters = [x; y]; _ } -> aux acc (x :: y :: expr_list)
             (* as OR, XOR can easily propagate to tautology, we avoid checking them *)
           | Fun { kind = Logical Or; _ } -> aux acc expr_list
