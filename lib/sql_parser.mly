@@ -51,6 +51,7 @@
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR EXTRACT
        YEAR_MONTH FALSE TRUE DUPLICATE
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
+%token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 %token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
 
 (*
@@ -73,6 +74,7 @@
 %left NUM_BIT_SHIFT
 %left PLUS MINUS
 %left ASTERISK NUM_DIV_OP MOD DIV
+%left JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 (* ^ *)
 %nonassoc UNARY_MINUS TILDE
 %nonassoc EXCL
@@ -441,6 +443,11 @@ expr:
     | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison; parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr JSON_EXTRACT_OP e2=expr { Fun { kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } }
+    | e1=expr JSON_UNQUOTE_EXTRACT_OP e2=expr { 
+        let extracted = Fun { kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } in 
+        Fun { kind = (Function.lookup "json_unquote" 1); parameters = [extracted]; is_over_clause = false } 
+      }
     | e=like_expr esc=escape?
       {
         match esc with

@@ -331,6 +331,9 @@ ruleMain = parse
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
 
+  | "->"  { JSON_EXTRACT_OP }
+  | "->>" { JSON_UNQUOTE_EXTRACT_OP }
+
   | "?"   { QSTN }
   | "??"  { TWO_QSTN }
   | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
