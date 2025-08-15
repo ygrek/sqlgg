@@ -801,7 +801,7 @@ and eval_select env { columns; from; where; group; having; } =
   } where in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
-  let satisfies_some_constraint where env =
+  let satisfies_some_relevant_constraint table where env =
     let get_all_eql_checks expr = 
       let rec aux acc expr_list =
         match expr_list with
@@ -830,6 +830,7 @@ and eval_select env { columns; from; where; group; having; } =
     (* identify if the set of columns used in WHERE clause contains/represents constraints *)
     let columns_in_where = get_all_eql_checks where in
     let attributes_in_where = List.map (resolve_column ~env) columns_in_where in
+    let attributes_in_where = List.filter (fun attr -> List.mem table attr.Schema.Source.Attr.sources) attributes_in_where in
     let column_constraints = 
       List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) attributes_in_where 
     in
@@ -855,12 +856,19 @@ and eval_select env { columns; from; where; group; having; } =
     satisfies_single_value_constraint () || satisfies_composite_constraint ()
   in
   let cardinality =
-    if from = None then (if where = None then `One else `Zero_one)
-    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
-    else match where with
-    | None -> `Nat
-    | Some where -> 
-      if satisfies_some_constraint where env then `Zero_one else `Nat
+    match from with
+    | None -> (if where = None then `One else `Zero_one)
+    | Some ((from, _), _) ->
+    match group = [] && exists_grouping columns && not @@ exists_windowing columns with
+    | true -> `One
+    | false -> 
+    match from with
+    | `Table t -> begin
+      match where with
+      | None -> `Nat
+      | Some where -> if satisfies_some_relevant_constraint t where env then `Zero_one else `Nat 
+    end
+    | _ -> `Nat
   in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
