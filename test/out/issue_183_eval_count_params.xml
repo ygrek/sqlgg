@@ -5,7 +5,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="select_1" sql="SELECT * FROM registration_feedbacks WHERE&#x0A;  id = @id AND&#x0A;  {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
+ <stmt name="select_1" sql="SELECT * FROM registration_feedbacks WHERE&#x0A;  id = @id AND&#x0A;  {TODO dynamic choice}" category="DQL" kind="select" cardinality="0,1">
   <in>
    <value name="id" type="Int"/>
    <value name="search" type="Text"/>

@@ -439,8 +439,8 @@ expr:
     | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* mysql special *)
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { kind = (Ret (depends Float)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr DIV e2=expr %prec PLUS { Fun { kind = (Ret (depends Int)); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr boolean_bin_op e2=expr %prec AND { Fun { kind = (fixed Bool [Bool;Bool]); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison; parameters = [e1; e2]; is_over_clause = false } }
+    | e1=expr bool_op=boolean_bin_op e2=expr %prec AND { Fun { kind = (Logical bool_op); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr JSON_EXTRACT_OP e2=expr { Fun { kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } }
@@ -454,7 +454,7 @@ expr:
         | None -> e
         | Some esc -> Fun { kind = (fixed Bool [Bool; Text]); parameters = [e;esc]; is_over_clause = false }
       }
-    | unary_op e=expr { e }
+    | f=unary_op e=expr { f e }
     | MINUS e=expr %prec UNARY_MINUS { e }
     | INTERVAL e=expr interval_unit { Fun { kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
@@ -573,12 +573,27 @@ func_params: DISTINCT? l=expr_list { l }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
-comparison_op: EQUAL | NUM_CMP_OP | NUM_EQ_OP { }
-boolean_bin_op: AND | OR | XOR { }
+comparison_op: 
+    | EQUAL { Comp_equal }
+    | NUM_CMP_OP { Comp_num_cmp }
+    | NUM_EQ_OP { 
+      (* it would be nice to go into num_eq_op, 
+         and consider == as equal as well. but for now
+         we conservatively return `Comp_num_eq *)  
+      Comp_num_eq 
+    }
 
-unary_op: EXCL { }
-        | TILDE { }
-        | NOT { }
+boolean_bin_op: 
+    | AND { And }
+    | OR { Or }
+    | XOR { Xor }
+
+unary_op: EXCL { 
+          (* Some SQLs use ! as negation, some don't. play it safe and negate it,
+             since negation is currently only used to verify cardinality constraints *)
+          (fun id -> Fun { kind = Negation; parameters = [id]; is_over_clause = false }) } 
+        | TILDE { (fun id -> id) }
+        | NOT { (fun id -> Fun { kind = Negation; parameters = [id]; is_over_clause = false }) }
 
 interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND

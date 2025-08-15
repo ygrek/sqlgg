@@ -275,11 +275,11 @@ let rec bool_choice_id = function
 let extract_meta_from_col ~env expr = 
   let rec aux = function 
     (* col_name = @param *)
-    | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison; _ } as fn)
+    | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([Column a; (Inparam _) as b]); _ } as fn) -> 
       Fun { fn with parameters = [Column a; set_param_meta ~env a b] }
-    | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison; _ } as fn)
+    | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
       Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
@@ -631,7 +631,7 @@ and assign_types env expr =
         | Ret ret, _ ->
           let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
           { ret with nullability }, types (* ignoring arguments FIXME *)
-        | Comparison, _  ->
+        | Comparison _, _  ->
           if set_tyvar_strict then 
             let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
             ret, List.map make_strict args 
@@ -639,6 +639,12 @@ and assign_types env expr =
             let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
             let nullable = common_nullability args in
             undepend ret nullable, args
+        | Negation, [_] -> 
+          infer_fn (fixed Bool [Bool]) types
+        | Negation, _ -> fail "negation requires a single argument"
+        | Logical _, [_ ; _] ->
+          infer_fn (fixed Bool [Bool; Bool]) types
+        | Logical _, _ -> fail "logical operators require two arguments"
         in
         let (ret,inferred_params) = infer_fn kind types in
         ResFun { kind; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
@@ -784,11 +790,6 @@ and eval_nested env nested =
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
-  let cardinality =
-    if from = None then (if where = None then `One else `Zero_one)
-    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
-    else `Nat
-  in
   let final_schema = infer_schema env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
@@ -800,6 +801,74 @@ and eval_select env { columns; from; where; group; having; } =
   } where in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
+  let satisfies_some_constraint where env =
+    let get_all_eql_checks expr = 
+      let rec aux acc expr_list =
+        match expr_list with
+        | [] -> acc
+        | expr :: expr_list ->
+          match expr with
+          | Fun { kind = Comparison Comp_equal; parameters = [v1; v2]; _ } ->
+            let columns_in_eql_check =
+            match v1, v2 with
+            | Column _, Column _ -> [] (* Columns may refer to each other in foreign
+                                          key constraints, so don't add any of them for now. 
+                                          TODO: consider foreign key constraints *)
+            | Column col1, _ -> [col1]
+            | _ , Column col2 -> [col2]
+            | _ -> []
+            in
+            aux (columns_in_eql_check @ acc) expr_list
+          | Fun { kind = Logical And; parameters = [x; y]; _ } -> aux acc (x :: y :: expr_list)
+            (* as OR, XOR can easily propagate to tautology, we avoid checking them *)
+          | Fun { kind = Logical Or; _ } -> aux acc expr_list
+          | Fun { kind = Logical Xor; _ } -> aux acc expr_list
+          | _ -> aux acc expr_list
+      in
+      aux [] [expr]
+    in
+    let open Schema in
+    (* identify if the set of columns used in WHERE clause contains/represents constraints *)
+    let columns_in_where = get_all_eql_checks where in
+    let attributes_in_where = List.map (resolve_column ~env) columns_in_where in
+    let column_constraints = 
+      List.map (fun (attr : table_name Source.Attr.t) -> attr.attr.extra) attributes_in_where 
+    in
+    let satisfies_single_value_constraint () =
+      List.exists (fun column_constraint -> 
+        Constraints.mem PrimaryKey column_constraint || Constraints.mem Unique column_constraint
+      ) column_constraints
+    in
+    let satisfies_composite_constraint () = 
+      let ids = columns_in_where |> List.map (fun col -> col.cname) in
+      (* get the list of unique/primary key constraint groupings over a single column*)
+      let get_composite_sets_over_column constraints =
+        List.filter_map (function
+          | Constraint.Composite (CompositePrimary x) -> Some (Constraint.StringSet.elements x)
+          | Constraint.Composite (CompositeUnique x) -> Some (Constraint.StringSet.elements x)
+          | _ -> None
+        ) (Constraints.elements constraints)
+      in
+      let composite_constraint_sets = List.concat_map get_composite_sets_over_column column_constraints in
+      match composite_constraint_sets with
+      | [] -> false
+      | _ -> 
+      List.exists (fun composite_set -> 
+        List.for_all 
+        (fun composite_component -> List.mem composite_component ids) 
+        composite_set
+      ) composite_constraint_sets
+    in
+    satisfies_single_value_constraint () || satisfies_composite_constraint ()
+  in
+  let cardinality =
+    if from = None then (if where = None then `One else `Zero_one)
+    else if group = [] && exists_grouping columns && not @@ exists_windowing columns then `One
+    else match where with
+    | None -> `Nat
+    | Some where -> 
+      if satisfies_some_constraint where env then `Zero_one else `Nat
+  in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
   (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
