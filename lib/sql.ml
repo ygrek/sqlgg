@@ -890,4 +890,33 @@ let () =
     ~ret:(Typ (nullable Json))
     ~fixed_args:[Typ json; Typ json_path]
     ~repeating_pattern:[Typ json_path];
+  "json_array_insert" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[Typ json; Typ json_path; Typ (strict Any)]
+    ~repeating_pattern:[Typ json_path; Typ (strict Any)];
+  "json_contains_path" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Bool))
+    ~fixed_args:[Typ (depends Json); Typ (depends One_or_all); Typ (depends Json_path)]
+    ~repeating_pattern:[Typ (depends Json_path)];
+  "json_depth" |> add 1 (F (Typ (depends Int), [Typ (strict Json)]));
+  "json_insert" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[Typ json; Typ json_path; Typ (strict Any)]
+    ~repeating_pattern:[Typ json_path; Typ (strict Any)];
+  "json_keys" |> add 1 (F (Typ (depends Json), [Typ json]));
+  "json_keys" |> add 2 (F (Typ (depends Json), [Typ json; Typ json_path]));
+  "json_length" |> add 1 (F (Typ (strict Int), [Typ json]));
+  "json_length" |> add 2 (F (Typ (strict Int), [Typ json; Typ json_path]));
+  "json_merge" |> multi ~ret:(Typ (depends Json)) (Typ json);
+  "json_merge_patch" |> multi ~ret:(Typ (depends Json)) (Typ json);
+  "json_merge_preserve" |> multi ~ret:(Typ (depends Json)) (Typ json);
+  "json_pretty" |> monomorphic (depends Text) [json];
+  "json_quote" |> monomorphic (depends Text) [text];
+  "json_replace" |> add_fixed_then_pairs
+    ~ret:(Typ (depends Json))
+    ~fixed_args:[Typ json; Typ json_path; Typ (strict Any)]
+    ~repeating_pattern:[Typ json_path; Typ (strict Any)];
+  "json_storage_size" |> add 1 (F (Typ (depends Int), [Typ json]));
+  "json_type" |> add 1 (F (Typ (depends Text), [Typ json]));
+  "json_valid" |> add 1 (F (Typ (depends Bool), [Typ text]));
   ()
