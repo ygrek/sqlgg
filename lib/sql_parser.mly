@@ -437,7 +437,7 @@ expr:
     | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun { kind = (Ret (depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* mysql special *)
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { kind = (Ret (depends Float)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr DIV e2=expr %prec PLUS { Fun { kind = (Ret (depends Int)); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr boolean_bin_op e2=expr %prec AND { Fun { kind = (fixed Bool [Bool;Bool]); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr bool_op=boolean_bin_op e2=expr %prec AND { bool_op e1 e2 }
     | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
@@ -576,7 +576,10 @@ comparison_op:
       Comp_num_eq 
     }
 
-boolean_bin_op: AND | OR | XOR { }
+boolean_bin_op: 
+    | AND { (fun x y -> Fun { kind = (fixed Bool [Bool;Bool]); parameters = [x;y]; is_over_clause = false }) }
+    | OR { (fun x y -> Fun { kind = (fixed Bool [Bool;Bool]); parameters = [x;y]; is_over_clause = false }) }
+    | XOR { (fun x y -> Fun { kind = (fixed Bool [Bool;Bool]); parameters = [x;y]; is_over_clause = false }) }
 
 unary_op: EXCL { 
           (* Some SQLs use ! as negation, some don't. play it safe and negate it,
