@@ -1844,6 +1844,8 @@ let test_cardinality =
   let b = [attr' ~nullability:Nullable "b" Int] in
   [
   tt "CREATE TABLE test_cardinality (x INT PRIMARY KEY, y INT, z INT, a INT, b INT, UNIQUE(y), UNIQUE(z, a))" [] [];
+  tt "select x from test_cardinality where true" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where false" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x = 1" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where x != 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x <> 1" x [] ~kind:(Select `Nat);
@@ -1851,9 +1853,13 @@ let test_cardinality =
   tt "select x from test_cardinality where not x = 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x = x" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where false and x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where x = 1 and false" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where true and x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where x = 1 and false" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where true or x = 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x = 1 or true" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where false or x = 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x = 1 or false" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x < 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x > 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x <= 1" x [] ~kind:(Select `Nat);
