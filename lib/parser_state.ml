@@ -25,5 +25,13 @@ module Dialect_feature = struct
   let set_on_duplicate_key pos = add_feature @@ Dialect.get_on_duplicate_key pos
   let set_on_conflict pos = add_feature @@ Dialect.get_on_conflict pos
 
+  let set_straight_join pos = add_feature @@ Dialect.get_straight_join pos
+  let set_lock_in_share_mode pos = add_feature @@ Dialect.get_lock_in_share_mode pos
+  let set_fulltext_index pos = add_feature @@ Dialect.get_fulltext_index pos
+  let set_unsigned_types pos = add_feature @@ Dialect.get_unsigned_types pos
+  let set_autoincrement pos = add_feature @@ Dialect.get_autoincrement pos
+  let set_replace_into pos = add_feature @@ Dialect.get_replace_into pos
+  let set_row_locking pos = add_feature @@ Dialect.get_row_locking pos
+
   let reset () = state := []
 end

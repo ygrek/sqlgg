@@ -253,7 +253,7 @@ inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
 left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
 right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
-straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
+straight_join: STRAIGHT_JOIN { Dialect_feature.set_straight_join ($startofs, $endofs); Schema.Join.Inner }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { Dialect_feature.set_join_source src ($startofs, $endofs); src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
@@ -286,7 +286,9 @@ source: src=source1 alias=maybe_as_with_detupled? {
   ) alias 
 }
 
-insert_cmd: INSERT DELAYED? OR? conflict_algo INTO | INSERT INTO | REPLACE INTO { }
+insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { }
+           | INSERT INTO { }
+           | REPLACE INTO { Dialect_feature.set_replace_into ($startofs, $endofs) }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
 
@@ -300,9 +302,9 @@ select_type: DISTINCT | ALL { }
 
 select_row_locking:
     for_update_or_share+
-      { }
+      { Dialect_feature.set_row_locking ($startofs, $endofs) }
   | LOCK IN SHARE MODE
-      { }
+      { Dialect_feature.set_lock_in_share_mode ($startofs, $endofs) }
 
 for_update_or_share:
   FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
@@ -377,9 +379,13 @@ column_def: name=IDENT t=sql_type? extra=column_def_extra*
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
            | index_or_key l=table_index { `Index l }
-           | either(FULLTEXT,SPATIAL) index_or_key? l=table_index { `Index l }
+           | FULLTEXT index_or_key? l=table_index { Dialect_feature.set_fulltext_index ($startofs, $endofs); `Index l }
+           | SPATIAL index_or_key? l=table_index { `Index l }
 
-key_part: n=IDENT delimited(LPAREN,INTEGER,RPAREN)? either(ASC,DESC)? { n }
+key_part:
+            n=IDENT delimited(LPAREN,INTEGER,RPAREN)? { n }
+           | n=IDENT delimited(LPAREN,INTEGER,RPAREN)? ASC { n }
+           | n=IDENT delimited(LPAREN,INTEGER,RPAREN)? DESC { n }
 index_options: list(IDENT)? { }
 
 table_index: IDENT? l=sequence(key_part) index_options { l }
@@ -404,7 +410,7 @@ column_def_extra: PRIMARY? KEY { Some PrimaryKey }
                 | NOT NULL { Some NotNull }
                 | NULL { Some Null }
                 | UNIQUE KEY? { Some Unique }
-                | AUTOINCREMENT { Some Autoincrement }
+                | AUTOINCREMENT { Dialect_feature.set_autoincrement ($startofs, $endofs); Some Autoincrement }
                 | DEFAULT default_value { Some WithDefault }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
@@ -601,7 +607,10 @@ interval_unit: INTERVAL_UNIT
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
              | YEAR_MONTH { Value (strict Datetime) }
 
-sql_type_flavor: T_INTEGER UNSIGNED? ZEROFILL? { Int }
+sql_type_flavor: T_INTEGER u=UNSIGNED? ZEROFILL? {
+  Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u;
+  Int
+}
                | T_DECIMAL { Decimal }
                | binary { Blob }
                | NATIONAL? text VARYING? charset? collate? { Text }

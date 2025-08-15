@@ -92,7 +92,7 @@ let set_dialect d =
   | "postgresql" -> Dialect.PostgreSQL
   | "tidb" -> Dialect.TiDB
   | _ -> failwith (sprintf "Unknown dialect: %s" d) in 
-  Sqlgg_config.set_dialect d;
+  Dialect.set_selected d;
   match !Gen.params_mode with
   | Some _ -> () (* if manually set via -params, keep user's choice *)
   | None -> Gen.params_mode := match d with
