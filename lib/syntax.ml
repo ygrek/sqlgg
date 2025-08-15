@@ -856,19 +856,17 @@ and eval_select env { columns; from; where; group; having; } =
     satisfies_single_value_constraint () || satisfies_composite_constraint ()
   in
   let cardinality =
-    match from with
-    | None -> (if where = None then `One else `Zero_one)
-    | Some ((from, _), _) ->
-    match group = [] && exists_grouping columns && not @@ exists_windowing columns with
-    | true -> `One
-    | false -> 
-    match from with
-    | `Table t -> begin
-      match where with
-      | None -> `Nat
-      | Some where -> if satisfies_some_relevant_constraint t where env then `Zero_one else `Nat 
-    end
-    | _ -> `Nat
+    match from, where with
+    | None, None ->
+      `One
+    | None, Some _ ->
+      `Zero_one
+    | Some _, _ when group = [] && exists_grouping columns && not (exists_windowing columns) ->
+      `One
+    | Some ((`Table t, _), _), Some w when satisfies_some_relevant_constraint t w env ->
+      `Zero_one
+    | Some _, _ ->
+      `Nat
   in
   let p4 = get_params_l env group in
   let p5 = get_params_opt env having in
