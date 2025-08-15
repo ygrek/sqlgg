@@ -1849,6 +1849,11 @@ let test_cardinality =
   tt "select x from test_cardinality where x <> 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x = 1" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where not x = 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where x = x" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where false and x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where true and x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select x from test_cardinality where true or x = 1" x [] ~kind:(Select `Nat);
+  tt "select x from test_cardinality where false or x = 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x < 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x > 1" x [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x <= 1" x [] ~kind:(Select `Nat);
