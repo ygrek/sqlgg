@@ -814,8 +814,7 @@ and eval_select env { columns; from; where; group; having; } =
             | Column _, Column _ -> [] (* Columns may refer to each other in foreign
                                           key constraints, so don't add any of them for now. 
                                           TODO: consider foreign key constraints *)
-            | Column col1, _ -> [col1]
-            | _ , Column col2 -> [col2]
+            | Column c, _ | _, Column c -> [c]
             | _ -> []
             in
             aux (columns_in_eql_check @ acc) expr_list
@@ -839,25 +838,19 @@ and eval_select env { columns; from; where; group; having; } =
         Constraints.mem PrimaryKey column_constraint || Constraints.mem Unique column_constraint
       ) column_constraints
     in
-    let satisfies_composite_constraint () = 
-      let ids = columns_in_where |> List.map (fun col -> col.cname) in
-      (* get the list of unique/primary key constraint groupings over a single column*)
-      let get_composite_sets_over_column constraints =
-        List.filter_map (function
-          | Constraint.Composite (CompositePrimary x) -> Some (Constraint.StringSet.elements x)
-          | Constraint.Composite (CompositeUnique x) -> Some (Constraint.StringSet.elements x)
-          | _ -> None
-        ) (Constraints.elements constraints)
-      in
-      let composite_constraint_sets = List.concat_map get_composite_sets_over_column column_constraints in
-      match composite_constraint_sets with
-      | [] -> false
-      | _ -> 
-      List.exists (fun composite_set -> 
-        List.for_all 
-        (fun composite_component -> List.mem composite_component ids) 
-        composite_set
-      ) composite_constraint_sets
+    let satisfies_composite_constraint () =
+      let open Constraint.StringSet in
+      let ids_set = of_list (List.map (fun col -> col.cname) columns_in_where) in
+      List.exists
+        (fun col ->
+          List.exists
+            (function
+              | Constraint.Composite (CompositePrimary s)
+              | Constraint.Composite (CompositeUnique s) -> subset s ids_set
+              | _ -> false)
+            (Constraints.elements col)
+        )
+        column_constraints
     in
     satisfies_single_value_constraint () || satisfies_composite_constraint ()
   in
