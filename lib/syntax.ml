@@ -811,11 +811,17 @@ and eval_select env { columns; from; where; group; having; } =
           | Fun { kind = Comparison Comp_equal; parameters; _ } -> begin
             let forms_tautology parameters =
               let contains_duplicates xs =
-                let rec aux seen = function
+                let seen = Hashtbl.create 10 in
+                let rec aux = function
                   | [] -> false
-                  | x :: xs -> if List.mem x seen then true else aux (x :: seen) xs
+                  | x :: xs -> 
+                  match Hashtbl.mem seen x with
+                  | true -> true
+                  | false -> 
+                    Hashtbl.add seen x (); 
+                    aux xs
                 in
-                aux [] xs
+                aux xs
               in
               contains_duplicates parameters
             in
@@ -828,10 +834,9 @@ and eval_select env { columns; from; where; group; having; } =
               aux (compared_columns @ acc) expr_list
             end
           | Fun { kind = Logical And; parameters = [x; y]; _ } -> aux acc (x :: y :: expr_list)
-          | Fun { kind = Logical Or; _ } -> aux acc expr_list (* assume OR produces a tautology *)
-          | Fun { kind = Logical Xor; _ } -> aux acc expr_list (* assume XOR produces a tautology *)
-          | Fun { kind = Negation; _ } -> aux acc expr_list (* assume negation produces a tautology *)
-          | Fun { parameters; _ } -> aux acc (parameters @ expr_list)
+            (* as OR, XOR can easily propagate to tautology, we avoid checking them *)
+          | Fun { kind = Logical Or; _ } -> aux acc expr_list
+          | Fun { kind = Logical Xor; _ } -> aux acc expr_list
           | _ -> aux acc expr_list
       in
       aux [] [expr]
