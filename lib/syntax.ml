@@ -639,8 +639,12 @@ and assign_types env expr =
             let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
             let nullable = common_nullability args in
             undepend ret nullable, args
-        | Negation, [typ] -> typ, types
+        | Negation, [_] -> 
+          infer_fn (fixed Bool [Bool]) types
         | Negation, _ -> fail "negation requires a single argument"
+        | Logical _, [_ ; _] ->
+          infer_fn (fixed Bool [Bool; Bool]) types
+        | Logical _, _ -> fail "logical operators require two arguments"
         in
         let (ret,inferred_params) = infer_fn kind types in
         ResFun { kind; parameters = (List.map2 assign_params inferred_params params); is_over_clause }, `Ok ret
@@ -804,12 +808,29 @@ and eval_select env { columns; from; where; group; having; } =
         | [] -> acc
         | expr :: expr_list ->
           match expr with
-          | Fun { kind = Comparison Comp_equal; parameters; _ } -> 
-            let compared_columns = 
-              List.filter_map (function Column col_name -> Some col_name | _ -> None) parameters 
-            in 
-            aux (compared_columns @ acc) expr_list
-          | Fun { kind = Negation; _ } -> aux acc expr_list (* bail out of negation *)
+          | Fun { kind = Comparison Comp_equal; parameters; _ } -> begin
+            let forms_tautology parameters =
+              let contains_duplicates xs =
+                let rec aux seen = function
+                  | [] -> false
+                  | x :: xs -> if List.mem x seen then true else aux (x :: seen) xs
+                in
+                aux [] xs
+              in
+              contains_duplicates parameters
+            in
+            match forms_tautology parameters with
+            | true -> aux acc expr_list
+            | false ->
+              let compared_columns =
+                List.filter_map (function Column col_name -> Some col_name | _ -> None) parameters
+              in
+              aux (compared_columns @ acc) expr_list
+            end
+          | Fun { kind = Logical And; parameters = [x; y]; _ } -> aux acc (x :: y :: expr_list)
+          | Fun { kind = Logical Or; _ } -> aux acc expr_list (* assume OR produces a tautology *)
+          | Fun { kind = Logical Xor; _ } -> aux acc expr_list (* assume XOR produces a tautology *)
+          | Fun { kind = Negation; _ } -> aux acc expr_list (* assume negation produces a tautology *)
           | Fun { parameters; _ } -> aux acc (parameters @ expr_list)
           | _ -> aux acc expr_list
       in
