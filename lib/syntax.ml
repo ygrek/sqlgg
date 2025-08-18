@@ -863,7 +863,8 @@ and eval_select env { columns; from; where; group; having; } =
       `Zero_one
     | Some _, _ when group = [] && exists_grouping columns && not (exists_windowing columns) ->
       `One
-    | Some ((`Table t, _), _), Some w when satisfies_some_relevant_constraint t w env ->
+      (* TODO: analyse join types to determine if cardinality optimization can be done *)
+    | Some ((`Table t, _), []), Some w when satisfies_some_relevant_constraint t w env ->
       `Zero_one
     | Some _, _ ->
       `Nat

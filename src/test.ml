@@ -1972,14 +1972,19 @@ let test_cardinality =
   tt "select a,b from test_cardinality where a = 1 and b = 1" (a @ b) [] ~kind:(Select `Nat);
 ]
 
-let test_cardinality_2 = 
+let test_cardinality_optimization_validity = 
   let x = [attr' ~nullability:Strict "x" ~extra:[PrimaryKey] Int] in
   let id = [attr' ~nullability:Nullable "id" Int] in
   let one_x = [attr' ~nullability:Nullable "one_x" Int] in
   [
   tt "CREATE TABLE tc2_1 (x INT PRIMARY KEY)" [] [];
   tt "CREATE TABLE tc2_2 (id INT, one_x INT, FOREIGN KEY (one_x) REFERENCES tc2_1(x))" [] [];
+  tt "select * from tc2_1 where x = 1" x [] ~kind:(Select `Zero_one);
+  tt "select * from tc2_2 where one_x = 1" (id @ one_x) [] ~kind:(Select `Nat);
+  (* below should return one row -- tc2_1.x is a primary key, but tc2_2.one_x is not *)
   tt "select * from tc2_2 join tc2_1 on tc2_2.one_x = tc2_1.x where tc2_1.x = 1" (id @ one_x @ x) [] ~kind:(Select `Nat);
+  (* below should return multiple rows -- tc2_1.x is a primary key, but joining on it allows multiple rows with it to be returned *)
+  tt "select * from tc2_1 join tc2_2 on tc2_1.x = tc2_2.one_x where tc2_1.x = 1" (x @ id @ one_x) [] ~kind:(Select `Nat);
 ]
 
 let run () =
@@ -2022,7 +2027,7 @@ let run () =
     "test_json_arrow_ops" >::: test_json_arrow_ops;
     "test_json_additional_functions" >::: test_json_additional_functions;
     "test_cardinality" >::: test_cardinality;
-    "test_cardinality_2" >::: test_cardinality_2;
+    "test_cardinality_optimization_validity" >::: test_cardinality_optimization_validity;
   ]
   in
   let test_suite = "main" >::: tests in
