@@ -489,3 +489,216 @@ Test Json functions and ocaml compiles:
   
   ============================================================
   All tests executed successfully!
+
+Test MySQL dialect with STRAIGHT_JOIN (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > CREATE TABLE orders (id INT, user_id INT, amount DECIMAL);
+  > SELECT u.name, o.amount FROM users u STRAIGHT_JOIN orders o ON u.id = o.user_id;
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with STRAIGHT_JOIN (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > CREATE TABLE orders (id INT, user_id INT, amount DECIMAL);
+  > SELECT u.name, o.amount FROM users u STRAIGHT_JOIN orders o ON u.id = o.user_id;
+  > EOF
+  Feature StraightJoin is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at STRAIGHT_JOIN
+  Errors encountered, no code generated
+  [1]
+
+
+Test MySQL dialect with REPLACE INTO (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > REPLACE INTO users (id, name) VALUES (1, 'John');
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with REPLACE INTO (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > REPLACE INTO users (id, name) VALUES (1, 'John');
+  > EOF
+  Feature ReplaceInto is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at REPLACE INTO
+  Errors encountered, no code generated
+  [1]
+
+Test MySQL dialect with LOCK IN SHARE MODE (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > SELECT * FROM users LOCK IN SHARE MODE;
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with LOCK IN SHARE MODE (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > SELECT * FROM users LOCK IN SHARE MODE;
+  > EOF
+  Feature LockInShareMode is not supported for dialect PostgreSQL (supported by: MySQL) at LOCK IN SHARE MODE
+  Errors encountered, no code generated
+  [1]
+
+Test MySQL dialect with FULLTEXT INDEX (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE articles (
+  >     id INT AUTO_INCREMENT PRIMARY KEY,
+  >     title VARCHAR(255) NOT NULL,
+  >     content TEXT,
+  >     FULLTEXT INDEX idx_title_content (title, content)
+  > );
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with FULLTEXT INDEX (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE articles (
+  >     id INT AUTO_INCREMENT PRIMARY KEY,
+  >     title VARCHAR(255) NOT NULL,
+  >     content TEXT,
+  >     FULLTEXT INDEX idx_title_content (title, content)
+  > );
+  > EOF
+  Feature FulltextIndex is not supported for dialect PostgreSQL (supported by: MySQL) at FULLTEXT INDEX idx_title_content (title, content)
+  Feature AutoIncrement is not supported for dialect PostgreSQL (supported by: SQLite, MySQL, TiDB) at AUTO_INCREMENT
+  Errors encountered, no code generated
+  [1]
+
+
+
+Test MySQL dialect with UNSIGNED (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE counters (
+  >     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY
+  > );
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with UNSIGNED (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE counters (
+  >     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY
+  > );
+  > EOF
+  Feature AutoIncrement is not supported for dialect PostgreSQL (supported by: SQLite, MySQL, TiDB) at AUTO_INCREMENT
+  Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
+  Errors encountered, no code generated
+  [1]
+Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
+Errors encountered, no code generated
+
+
+
+Test SQLite dialect with JSON_EXTRACT operator (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE json_data (data JSON);
+  > SELECT json_extract(data, '$.name') FROM json_data;
+  > EOF
+  $ echo $?
+  0
+
+
+Test SQLite dialect with AUTOINCREMENT (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (
+  >     id INTEGER AUTOINCREMENT PRIMARY KEY,
+  >     name TEXT
+  > );
+  > EOF
+  $ echo $?
+  0
+
+Test PostgreSQL dialect with AUTOINCREMENT (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE users (
+  >     id INTEGER AUTOINCREMENT PRIMARY KEY,
+  >     name TEXT
+  > );
+  > EOF
+  Feature AutoIncrement is not supported for dialect PostgreSQL (supported by: SQLite, MySQL, TiDB) at AUTOINCREMENT
+  Errors encountered, no code generated
+  [1]
+
+Test MySQL dialect with LIMIT OFFSET syntax (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > SELECT * FROM users LIMIT 10 OFFSET 20;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ROW LOCKING (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > SELECT * FROM users FOR UPDATE;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ROW LOCKING (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > SELECT * FROM users FOR UPDATE;
+  > EOF
+  Feature RowLocking is not supported for dialect SQLite (supported by: PostgreSQL, MySQL, TiDB) at FOR UPDATE
+  Errors encountered, no code generated
+  [1]
+
+Test SQLite dialect with WHERE aliasing (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT, score INT);
+  > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with WHERE aliasing (should fail):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT, score INT);
+  > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
+  > EOF
+  Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
+  [2]
+
+Test PostgreSQL dialect with WHERE aliasing (should fail):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT, score INT);
+  > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
+  > EOF
+  Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
+  [2]
+
+Test TiDB dialect with WHERE aliasing (should fail):
+  $ sqlgg -gen caml -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT, score INT);
+  > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
+  > EOF
+  Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
+  [2]
+
+Fix issue 96 (should fail):
+  $ sqlgg -gen caml -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE test (x INT, `key` VARBINARY(200));
+  > SELECT x AS foo FROM test WHERE foo > 0;
+  > EOF
+  Failed : SELECT x AS foo FROM test WHERE foo > 0
+  Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : foo")
+  [2]
+
+Fix issue 96 (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE test (x INT, `key` VARBINARY(200));
+  > SELECT x AS foo FROM test WHERE foo > 0;
+  > EOF
+  $ echo $?
+  0

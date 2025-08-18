@@ -1,3 +1,4 @@
+
 (** SQL syntax and RA *)
 
 open Printf
@@ -793,12 +794,15 @@ and eval_select env { columns; from; where; group; having; } =
   let final_schema = infer_schema env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
-  let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema) } in (* enrich schema in scope with aliases *)
-  (* WHERE requires explicit column source when ambiguous fields are present *)
-  let p3 = get_params_opt { env with set_tyvar_strict = true; 
-    (* Aliases aren't available on the WHERE stage *)
-    schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema; 
-  } where in
+  let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then
+    let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema) } in
+    env, get_params_opt { env with set_tyvar_strict = true; } where
+  else
+    let p3 = get_params_opt { env with set_tyvar_strict = true; 
+       (* Some dialects support aliasing *)
+      schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema; } where in
+    env, p3
+  in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
   let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
   let satisfies_some_relevant_constraint table where env =

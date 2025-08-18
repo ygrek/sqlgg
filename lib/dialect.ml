@@ -1,4 +1,8 @@
-type t = MySQL | PostgreSQL | SQLite | TiDB [@@deriving show { with_path = false }]
+type t = MySQL | PostgreSQL | SQLite | TiDB [@@deriving eq, show { with_path = false }]
+
+let selected = ref MySQL
+
+let set_selected d = selected := d
 
 type feature =
   | Collation
@@ -6,6 +10,13 @@ type feature =
   | CreateTableAsSelect
   | OnDuplicateKey
   | OnConflict
+  | StraightJoin
+  | LockInShareMode
+  | FulltextIndex
+  | UnsignedTypes
+  | AutoIncrement
+  | ReplaceInto
+  | RowLocking
 [@@deriving show { with_path = false }]
 
 let feature_to_string = function
@@ -14,6 +25,13 @@ let feature_to_string = function
   | CreateTableAsSelect -> "create_table_as_select"
   | OnDuplicateKey -> "on_duplicate_key"
   | OnConflict -> "on_conflict"
+  | StraightJoin -> "straight_join"
+  | LockInShareMode -> "lock_in_share_mode"
+  | FulltextIndex -> "fulltext_index"
+  | UnsignedTypes -> "unsigned_types"
+  | AutoIncrement -> "autoincrement"
+  | ReplaceInto -> "replace_into"
+  | RowLocking -> "row_locking"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
@@ -22,6 +40,13 @@ let feature_of_string s =
   | "create_table_as_select" -> CreateTableAsSelect
   | "on_duplicate_key" -> OnDuplicateKey
   | "on_conflict" -> OnConflict
+  | "straight_join" -> StraightJoin
+  | "lock_in_share_mode" -> LockInShareMode
+  | "fulltext_index" -> FulltextIndex
+  | "unsigned_types" -> UnsignedTypes
+  | "autoincrement" -> AutoIncrement
+  | "replace_into" -> ReplaceInto
+  | "row_locking" -> RowLocking
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -96,3 +121,21 @@ let get_create_table_as_select pos = {
 let get_on_duplicate_key pos = only OnDuplicateKey [MySQL; TiDB] pos
 
 let get_on_conflict pos = only OnConflict [SQLite; PostgreSQL] pos
+
+let get_straight_join pos = only StraightJoin [MySQL; TiDB] pos
+
+let get_lock_in_share_mode pos = only LockInShareMode [MySQL] pos
+
+let get_fulltext_index pos = only FulltextIndex [MySQL] pos
+
+let get_unsigned_types pos = only UnsignedTypes [MySQL; TiDB] pos
+
+let get_autoincrement pos = only AutoIncrement [SQLite; MySQL; TiDB] pos
+
+let get_replace_into pos = only ReplaceInto [MySQL; TiDB] pos
+
+let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
+
+module Semantic = struct 
+  let is_where_aliases_dialect () = !selected = SQLite
+end

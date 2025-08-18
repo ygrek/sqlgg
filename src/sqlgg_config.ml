@@ -19,9 +19,6 @@ let include_category : [ `All | `None | `Only of Stmt.category list | `Except of
 
 let enum_as_poly_variant = ref false
 
-let dialect = ref Dialect.MySQL
-let set_dialect d = dialect := d
-
 let no_check_features: Dialect.feature list ref = ref []
 
 let set_no_check_features l = no_check_features := l
