@@ -1028,18 +1028,7 @@ let annotate_select select types =
   { select with select = { select1 with columns = loop [] select1.columns types }, compound }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
-  | On_conflict attrs, values -> 
-    let ss = List.map (function 
-      (*
-        The SET and WHERE clauses in ON CONFLICT DO UPDATE have access 
-        to the existing row using the table's name (or an alias),
-        and to rows proposed for insertion using the special excluded table.
-        From our perspective, it is the same as accessing the table into which we write.
-      *)
-     | col, RegularExpr (Column { cname ; tname = Some { tn = "excluded"; db }; }) -> 
-      col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
-     | e -> e
-    ) values in
+  | On_conflict (action, attrs) -> 
     let names = List.map (fun attr -> attr.cname) attrs in
     let composite_primary_key = Constraint.make_composite_primary names in
     let composite_unique = Constraint.make_composite_unique names in
@@ -1054,8 +1043,23 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
           (names |> String.concat ", ")
           (show_col_name col)
     ) attrs;
-    ss
-  | On_duplicate, values -> values
+    begin match action with
+    | Do_nothing -> []
+    | Do_update values -> 
+        let ss = List.map (function
+          (*
+            The SET and WHERE clauses in ON CONFLICT DO UPDATE have access 
+            to the existing row using the table's name (or an alias),
+            and to rows proposed for insertion using the special excluded table.
+            From our perspective, it is the same as accessing the table into which we write.
+          *)
+         | col, RegularExpr (Column { cname ; tname = Some { tn = "excluded"; db }; }) -> 
+          col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
+         | e -> e
+        ) values in
+        ss
+    end
+  | On_duplicate values -> values
 ) []
 
 let with_constraints attrs constraints : Schema.t =

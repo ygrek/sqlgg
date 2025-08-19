@@ -36,7 +36,7 @@
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET STRAIGHT_JOIN JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
-       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO TEMPORARY IF EXISTS
+       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS
        PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
@@ -292,11 +292,15 @@ insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
 
+on_conflict_action:
+  | UPDATE SET ss=commas(set_column) { Do_update ss }
+  | NOTHING { Do_nothing }
+
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
-    { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate, ss }
-  | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO UPDATE SET ss=commas(set_column) 
-    { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict attrs, ss }
+    { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate ss }
+  | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO action=on_conflict_action
+    { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict (action, attrs) }
 
 select_type: DISTINCT | ALL { }
 
