@@ -1987,6 +1987,22 @@ let test_cardinality_optimization_validity =
   tt "select * from tc2_1 join tc2_2 on tc2_1.x = tc2_2.one_x where tc2_1.x = 1" (x @ id @ one_x) [] ~kind:(Select `Nat);
 ]
 
+let test_nullability_rules = [
+  tt "CREATE TABLE test20250819 (a INT, b INT NOT NULL, c TEXT)" [] [];
+
+  tt "SELECT a <=> b AS r FROM test20250819" [attr' "r" Bool] [];
+  tt "SELECT NULL <=> NULL AS r" [attr' "r" Bool] [];
+  tt "SELECT 1 IS NOT DISTINCT FROM NULL AS r" [attr' "r" Bool] [];
+  tt "SELECT NULLIF(NULL, 1) AS r" [attr' ~nullability:Nullable "r" Int] [];
+  tt "SELECT NULLIF(1, a) AS r FROM test20250819" [attr' ~nullability:Nullable "r" Int] [];
+  tt "SELECT NULLIF(1, 1) AS r" [attr' ~nullability:Nullable "r" Int] [];
+  tt "SELECT IFNULL(NULL, 1) AS r" [attr' "r" Int][];
+  tt "SELECT IFNULL(1, a) AS r FROM test20250819" [attr' "r" Int][];
+  tt "SELECT IFNULL(a, a) AS r FROM test20250819" [attr' ~nullability:Nullable "r" Int][];
+  tt "SELECT IFNULL(NULL, a) AS r FROM test20250819" [attr' ~nullability:Nullable "r" Int][];
+  tt "SELECT 1 as r FROM test20250819 WHERE a < @param" [attr' "r" Int][ named "param" Int ]
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -2028,6 +2044,7 @@ let run () =
     "test_json_additional_functions" >::: test_json_additional_functions;
     "test_cardinality" >::: test_cardinality;
     "test_cardinality_optimization_validity" >::: test_cardinality_optimization_validity;
+    "test_nullability_rules" >::: test_nullability_rules;
   ]
   in
   let test_suite = "main" >::: tests in
