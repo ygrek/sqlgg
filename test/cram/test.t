@@ -702,3 +702,79 @@ Fix issue 96 (should work):
   > EOF
   $ echo $?
   0
+
+Test SQLite dialect with ON CONFLICT DO NOTHING (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE test20250819 (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT DO NOTHING, table-level primary key (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE test20250819 (id INT, name TEXT, PRIMARY KEY(id));
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT DO NOTHING, composite primary key (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE test20250819 (id INT, name TEXT, PRIMARY KEY(id, name));
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id, name) DO NOTHING;
+  > EOF
+  $ echo $?
+  0
+
+Test SQLite dialect with ON CONFLICT DO NOTHING, unique constraint (should work):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
+  > CREATE TABLE test20250819 (id INT, name TEXT, UNIQUE(id));
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ON CONFLICT DO NOTHING (should fail):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE test20250819 (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  Feature OnConflict is not supported for dialect MySQL (supported by: SQLite, PostgreSQL) at ON CONFLICT(id) DO NOTHING
+  Errors encountered, no code generated
+  [1]
+
+Test PostgreSQL dialect with ON CONFLICT DO NOTHING (should work):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' >/dev/null
+  > CREATE TABLE test20250819 (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  $ echo $?
+  0
+
+Test TiDB dialect with ON CONFLICT DO NOTHING (should fail):
+  $ sqlgg -gen caml -dialect=tidb - <<'EOF' 2>&1 
+  > CREATE TABLE test20250819 (id INT PRIMARY KEY, name TEXT);
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  Feature OnConflict is not supported for dialect TiDB (supported by: SQLite, PostgreSQL) at ON CONFLICT(id) DO NOTHING
+  Errors encountered, no code generated
+  [1]
+
+Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent primary key (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE test20250819 (id INT, name TEXT);
+  > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
+  > EOF
+  Failed : INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]
+
+Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent composite constraint (should fail):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1 
+  > CREATE TABLE test20250819 (id INT, name TEXT, address TEXT, PRIMARY KEY(id, name));
+  > INSERT INTO test20250819 (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO NOTHING;
+  > EOF
+  Failed : INSERT INTO test20250819 (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO NOTHING
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  [2]

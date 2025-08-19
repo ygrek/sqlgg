@@ -644,7 +644,9 @@ type assignment_expr =
 
 type assignments = (col_name * assignment_expr) list [@@deriving show]
 
-type conflict_clause = On_duplicate | On_conflict of col_name list [@@deriving show]
+type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
+
+type conflict_clause = On_duplicate of assignments | On_conflict of on_conflict * col_name list [@@deriving show]
 
 type insert_action =
 {
@@ -653,7 +655,7 @@ type insert_action =
            | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
-  on_conflict_clause : (conflict_clause * assignments) option;
+  on_conflict_clause : conflict_clause option;
 } [@@deriving show {with_path=false}]
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]

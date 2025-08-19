@@ -124,6 +124,7 @@ let keywords =
    "natural",NATURAL;
    "no", NO;
    "not",NOT;
+   "nothing", NOTHING;
    "nowait", NOWAIT;
    "null",NULL;
    "of", OF;
