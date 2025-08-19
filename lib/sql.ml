@@ -210,11 +210,12 @@ struct
     | Avg (* avg it's avg function that returns float *)
 
   type logical_op = And | Or | Xor
-  type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq
+  type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq]
+  type null_handling_fn_kind = Coalesce of tyvar * tyvar | Null_if | If_null
 
   type func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
-  | Coalesce of tyvar * tyvar
+  | Null_handling of null_handling_fn_kind
   | Comparison of comparison_op
   | Logical of logical_op
   | Negation
@@ -245,7 +246,8 @@ struct
   | Agg Count -> fprintf pp "|'a| -> int"
   | Ret ret -> fprintf pp "_ -> %s" (show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  | Coalesce (ret, each_arg) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+  | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
   | Comparison _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
   | Logical _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
   | Negation -> fprintf pp "'a -> %s" (show_kind Bool)
@@ -262,7 +264,7 @@ struct
 
   let is_grouping = function
   | Agg _ -> true
-  | Ret _ | F _ | Multi _ | Coalesce _  | Comparison _ | Negation | Logical _ -> false
+  | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
 end
 
 module Constraint =
@@ -771,8 +773,8 @@ let () =
   "rand" |> monomorphic int [];
   "rand" |> monomorphic int [int];
   "floor" |> monomorphic int [float];
-  "nullif" |> add 2 (F (Var 0 (* TODO nullable *), [Var 0; Var 0]));
-  "ifnull" |> add 2 (F (Var 0, [Var 1; Var 0]));
+  "nullif" |> add 2 (Null_handling Null_if);
+  "ifnull" |> add 2 (Null_handling If_null);
   ["least";"greatest";] ||> multi_polymorphic;
   "strftime" |> exclude 1; (* requires at least 2 arguments *)
   ["concat";"concat_ws";"strftime"] ||> multi ~ret:(Typ (depends Text)) (Typ (depends Text));
@@ -797,7 +799,7 @@ let () =
   "substring_index" |> monomorphic text [text; text; int];
   "last_insert_id" |> monomorphic int [];
   "last_insert_id" |> monomorphic int [int];
-  add_multi Type.(Coalesce (Var 0, Var 0)) "coalesce";
+  add_multi Type.(Null_handling (Coalesce (Var 0, Var 0))) "coalesce";
   "uuid" |> monomorphic text [];
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];

@@ -447,7 +447,6 @@ expr:
     | e1=expr DIV e2=expr %prec PLUS { Fun { kind = (Ret (depends Int)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr bool_op=boolean_bin_op e2=expr %prec AND { Fun { kind = (Logical bool_op); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
-    | e1=expr NOT_DISTINCT_OP anyall? e2=expr %prec EQUAL { poly (depends Bool) [e1;e2] }
     | e1=expr CONCAT_OP e2=expr { Fun { kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr JSON_EXTRACT_OP e2=expr { Fun { kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr JSON_UNQUOTE_EXTRACT_OP e2=expr { 
@@ -497,7 +496,7 @@ expr:
     | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false } }
     | f=table_name LPAREN p=func_params RPAREN { Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } }
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
-    | e1=expr IS NOT? distinct_from? e2=expr { poly (strict Bool) [e1;e2] }
+    | e1=expr IS NOT? distinct_from? e2=expr { Fun { kind = Comparison Not_distinct_op; parameters = [e1; e2]; is_over_clause = false } }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun { kind = (F (Typ (strict Bool), [Typ (depends Any)])); parameters = [SelectExpr (select,`Exists)]; is_over_clause = false } }
     | CASE initial_expr=expr? branches_list=nonempty_list(case_branch) else_expr=preceded(ELSE,expr)? END
@@ -582,6 +581,7 @@ numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_B
 comparison_op: 
     | EQUAL { Comp_equal }
     | NUM_CMP_OP { Comp_num_cmp }
+    | NOT_DISTINCT_OP { Not_distinct_op }
     | NUM_EQ_OP { 
       (* it would be nice to go into num_eq_op, 
          and consider == as equal as well. but for now

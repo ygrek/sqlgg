@@ -577,6 +577,13 @@ and assign_types env expr =
            In both cases, if we're in a context that expects a value (like a subquery), the result should be nullable. *)
         let consider_agg_nullability typ = if (env.query_has_grouping || is_over_clause) && is_strict typ then typ else make_nullable typ in
 
+        let first_strict ret args = 
+          let has_one_strict = List.exists (fun arg -> equal_nullability arg.nullability Strict) types in
+          let ret = if has_one_strict then make_strict ret
+            else args |> common_nullability |> undepend ret in 
+          ret , args
+        in
+
         let rec infer_fn func types = match func, types with
         | Multi { ret; fixed_args = []; repeating_pattern = [each_arg] }, t -> 
           infer_fn (F (ret, types_to_arg each_arg)) t
@@ -609,17 +616,16 @@ and assign_types env expr =
         | Agg Self, [typ] -> consider_agg_nullability typ, types
         | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
-        | Coalesce (ret, each_arg) , _ -> 
+        | Null_handling (Coalesce (ret, each_arg)) , _ -> 
           let args = types_to_arg each_arg in
           let args, ret = convert_args ret args in
-          let has_one_strict = List.exists (fun arg ->
-            match arg.nullability with 
-            | Strict -> true | _ -> false
-          ) types in
-          let ret = if has_one_strict then
-            { ret with nullability = Strict }
-            else args |> common_nullability |> undepend ret in 
-          ret , args
+          first_strict ret args
+        | Null_handling Null_if , _ ->
+          let args, ret = convert_args (Var 0) [Var 0; Var 0] in
+          make_nullable ret, args
+         | Null_handling If_null, _ ->
+          let args, ret = convert_args (Var 0) [Var 1; Var 0] in
+          first_strict ret args
         | F (ret, args), _ ->
           let args, ret = convert_args ret args in
           let nullable = common_nullability args in
@@ -632,14 +638,22 @@ and assign_types env expr =
         | Ret ret, _ ->
           let nullability = common_nullability @@ ret :: types in (* remove this when subqueries are taken out separately *)
           { ret with nullability }, types (* ignoring arguments FIXME *)
+        | Comparison Not_distinct_op, _ ->
+          let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
+          ret, args 
+        | Comparison _, _ when set_tyvar_strict ->
+        (* In this expression, where set_tyvar_strict is set (currently only for WHERE) we treat the parameters as non-null by default. *)
+          let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
+          let strict_args = List.map2 (fun param_expr inferred_type ->
+            match param_expr with
+            | ResParam _ -> make_strict inferred_type
+            | _ -> inferred_type
+          ) parameters args in
+          ret, strict_args
         | Comparison _, _  ->
-          if set_tyvar_strict then 
-            let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
-            ret, List.map make_strict args 
-          else 
-            let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
-            let nullable = common_nullability args in
-            undepend ret nullable, args
+          let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
+          let nullable = common_nullability args in
+          undepend ret nullable, args
         | Negation, [_] -> 
           infer_fn (fixed Bool [Bool]) types
         | Negation, _ -> fail "negation requires a single argument"
