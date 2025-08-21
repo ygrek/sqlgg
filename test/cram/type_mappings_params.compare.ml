@@ -16,11 +16,6 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     in
     let set_params stmt =
       let p = T.start_params stmt (0 + (match x with [] -> 0 | _ :: _ -> 0)) in
-      begin match x with
-      | [] -> ()
-      | _ :: _ ->
-        ()
-      end;
       T.finish_params p
     in
     T.select db ("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")")) set_params invoke_callback
@@ -39,16 +34,6 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     in
     let set_params stmt =
       let p = T.start_params stmt (1 + (match name with [] -> 0 | _ :: _ -> 0) + (match name_2 with [] -> 0 | _ :: _ -> 0)) in
-      begin match name with
-      | [] -> ()
-      | _ :: _ ->
-        ()
-      end;
-      begin match name_2 with
-      | [] -> ()
-      | _ :: _ ->
-        ()
-      end;
       T.set_param_int64 p (ExampleId.set_param id);
       T.finish_params p
     in
@@ -65,11 +50,6 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
       in
       let set_params stmt =
         let p = T.start_params stmt (0 + (match x with [] -> 0 | _ :: _ -> 0)) in
-        begin match x with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.finish_params p
       in
       let r_acc = ref acc in
@@ -84,16 +64,6 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
       in
       let set_params stmt =
         let p = T.start_params stmt (1 + (match name with [] -> 0 | _ :: _ -> 0) + (match name_2 with [] -> 0 | _ :: _ -> 0)) in
-        begin match name with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
-        begin match name_2 with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.set_param_int64 p (ExampleId.set_param id);
         T.finish_params p
       in
@@ -114,11 +84,6 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
       in
       let set_params stmt =
         let p = T.start_params stmt (0 + (match x with [] -> 0 | _ :: _ -> 0)) in
-        begin match x with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.finish_params p
       in
       let r_acc = ref [] in
@@ -133,16 +98,6 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
       in
       let set_params stmt =
         let p = T.start_params stmt (1 + (match name with [] -> 0 | _ :: _ -> 0) + (match name_2 with [] -> 0 | _ :: _ -> 0)) in
-        begin match name with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
-        begin match name_2 with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.set_param_int64 p (ExampleId.set_param id);
         T.finish_params p
       in

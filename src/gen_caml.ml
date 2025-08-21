@@ -301,48 +301,127 @@ let rec set_param ~meta index param =
       else
         output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
   
-let rec set_var index var =
-  match var with
-  | Single (p, meta) -> set_param ~meta index p
-  | SharedVarsGroup (vars, _) -> List.iter (set_var index) vars
-  | TupleList (p, Where_in _) -> set_var index (ChoiceIn { param = p; vars = []; kind = `In })
-  | SingleIn _ | TupleList _ -> ()
-  | ChoiceIn { param = name; vars; _ } ->
-    output "begin match %s with" (make_param_name index name);
-    output "| [] -> ()";
-    output "| _ :: _ ->";
-    inc_indent ();
-    List.iter (set_var index) vars;
-    output "()";
-    dec_indent ();
-    output "end;"
-  | OptionActionChoice(name, vars, _, _) -> 
-    output "begin match %s with" (make_param_name index name);
-    [(Some "None", []); (Some "Some", vars)] |> List.iteri begin fun i (label, vars) ->
-      output "| %s%s -> %s"
-      (make_variant_name i label ~is_poly:false)
-      (match vars with [] -> "" | l -> " (" ^String.concat "," (names_of_vars l) ^ ")")
-      (match vars with [] -> "()" | _ -> "");
-      inc_indent ();
-      List.iter (set_var index) vars;
-      dec_indent ()
-    end;
-    output "end;"
-  | Choice (name, ctors) ->
-    output "begin match %s with" (make_param_name index name);
-    ctors |> List.iteri begin fun i ctor ->
-      match ctor with
-      | Simple (param,args) ->
-        output "| %s%s -> %s"
-          (make_variant_name i param.label ~is_poly:true)
-          (match args with Some [] | None -> "" | Some l -> " ("^String.concat "," (names_of_vars l)^")")
-          (match args with Some [] | None -> "()" | Some _ -> "");
-        inc_indent ();
-        List.iter (set_var index) (Option.default [] args);
-        dec_indent ()
-      | Verbatim (n,_) -> output "| %s -> ()" (vname n ~is_poly:true)
-    end;
-    output "end;" 
+let set_var index var =
+  let execute_generators = List.iter (fun f -> f ()) in
+  let with_indent action = inc_indent (); action (); dec_indent () in
+
+  let rec filter_generators index vars = List.filter_map (aux index) vars
+  
+  and aux index var = 
+    match var with
+    | Single (p, meta) -> 
+      Some (fun () -> set_param ~meta index p)
+    | SharedVarsGroup (vars, _) ->
+      let generators = filter_generators index vars in
+      if generators = [] then None
+      else Some (fun () -> execute_generators generators)
+    | TupleList (p, Where_in _) ->
+      aux index (ChoiceIn { param = p; vars = []; kind = `In })
+    | SingleIn _ | TupleList _ -> 
+      None
+    | ChoiceIn { param; vars; _ } ->
+      let generators = filter_generators index vars in
+      if generators = [] then None
+      else Some (fun () ->
+        output "begin match %s with" (make_param_name index param);
+        output "| [] -> ()";
+        output "| _ :: _ ->";
+        with_indent (fun () ->
+          execute_generators generators;
+          output "()"
+        );
+        output "end;"
+      )
+    | OptionActionChoice (name, vars, _, _) ->
+      let generators = filter_generators index vars in
+      if generators = [] then None
+      else Some (fun () ->
+        let seen = Hashtbl.create 16 in
+        let patterns = ref [] in
+        List.iter (fun var ->
+          let use_var = match var with
+            | Single ({ id; _ }, _) | SingleIn ({id; _}, _) | TupleList (id, _) ->
+              (match id.label with
+               | Some name when Hashtbl.mem seen name -> false
+               | Some name -> Hashtbl.add seen name (); true  
+               | None -> true)
+            | ChoiceIn _ | OptionActionChoice _ 
+            | SharedVarsGroup _ | Choice _ -> true
+          in
+          if use_var then
+            let pattern = match aux index var with
+              | Some _ -> List.hd (names_of_vars [var])
+              | None -> "_"
+            in
+            patterns := pattern :: !patterns
+        ) vars;
+        let param_pattern = match List.rev !patterns with
+          | [single] -> single
+          | many -> "(" ^ String.concat ", " many ^ ")"
+        in
+        output "begin match %s with" (make_param_name index name);
+        output "| None -> ()";
+        output "| Some %s ->" param_pattern;
+        with_indent (fun () -> execute_generators generators);
+        output "end;"
+      )
+    | Choice (name, ctors) ->
+      let unit_branches = ref [] in
+      let generator_branches = ref [] in
+      let has_content = ref false in
+      
+      List.iteri (fun i ctor ->
+        match ctor with
+        | Simple (param, args) ->
+          let args_list = Option.default [] args in
+          let inner_generators = filter_generators index args_list in
+          let branch_has_content = inner_generators <> [] in
+          if branch_has_content then has_content := true;
+          
+          let pattern_args = 
+            match args, branch_has_content with
+            | (Some [] | None), false -> ""
+            | (Some [] | None), true ->
+              (match param.label with Some n -> " " ^ n | None -> "")
+            | Some _, false -> " _"
+            | Some l, true -> 
+              " (" ^ String.concat "," (names_of_vars l) ^ ")"
+          in
+          let variant_name = 
+            make_variant_name i param.label ~is_poly:true 
+          in
+          
+          if branch_has_content then
+            generator_branches := (fun () ->
+              output "| %s%s ->" variant_name pattern_args;
+              inc_indent ();
+              execute_generators inner_generators;
+              dec_indent ()
+            ) :: !generator_branches
+          else
+            unit_branches := (fun () ->
+              output "| %s%s -> ()" variant_name pattern_args
+            ) :: !unit_branches
+
+        | Verbatim (n, _) ->
+          unit_branches := (fun () -> 
+            output "| %s -> ()" (vname n ~is_poly:true)
+          ) :: !unit_branches
+
+      ) ctors;
+      
+      if not !has_content then None
+      else
+        let all_generators = 
+          List.rev_append !unit_branches (List.rev !generator_branches)
+        in
+        Some (fun () ->
+          output "begin match %s with" (make_param_name index name);
+          execute_generators all_generators;
+          output "end;"
+        )
+  in
+  Option.may (fun g -> g ()) (aux index var)
 
 let rec eval_count_params vars =
   let (static, choices, bool_choices, choices_in) =
