@@ -17,29 +17,10 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     let set_params stmt =
       let p = T.start_params stmt (0 + (match id with `Another (ids) -> 0 + (match ids with [] -> 0 | _ :: _ -> 0) | `Andanother _ -> 1 | `Lol (idss) -> 0 + (match idss with [] -> 0 | _ :: _ -> 0)) + (match ids2 with Some (ids2) -> 0 + (match ids2 with [] -> 0 | _ :: _ -> 0) | None -> 0)) in
       begin match id with
-      | `Another (ids) ->
-        begin match ids with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
+      | `Another _ -> ()
+      | `Lol _ -> ()
       | `Andanother (x) ->
         T.set_param_Int p x;
-      | `Lol (idss) ->
-        begin match idss with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
-      end;
-      begin match ids2 with
-      | None -> ()
-      | Some (ids2) ->
-        begin match ids2 with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
       end;
       T.finish_params p
     in
@@ -55,11 +36,6 @@ WHERE \n\
     in
     let set_params stmt =
       let p = T.start_params stmt (0 + (match ids2 with [] -> 0 | _ :: _ -> 0)) in
-      begin match ids2 with
-      | [] -> ()
-      | _ :: _ ->
-        ()
-      end;
       T.finish_params p
     in
     T.select db ("SELECT id FROM random_table_1\n\
@@ -74,29 +50,10 @@ WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^
       let set_params stmt =
         let p = T.start_params stmt (0 + (match id with `Another (ids) -> 0 + (match ids with [] -> 0 | _ :: _ -> 0) | `Andanother _ -> 1 | `Lol (idss) -> 0 + (match idss with [] -> 0 | _ :: _ -> 0)) + (match ids2 with Some (ids2) -> 0 + (match ids2 with [] -> 0 | _ :: _ -> 0) | None -> 0)) in
         begin match id with
-        | `Another (ids) ->
-          begin match ids with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
+        | `Another _ -> ()
+        | `Lol _ -> ()
         | `Andanother (x) ->
           T.set_param_Int p x;
-        | `Lol (idss) ->
-          begin match idss with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
-        end;
-        begin match ids2 with
-        | None -> ()
-        | Some (ids2) ->
-          begin match ids2 with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
         end;
         T.finish_params p
       in
@@ -114,11 +71,6 @@ WHERE \n\
       in
       let set_params stmt =
         let p = T.start_params stmt (0 + (match ids2 with [] -> 0 | _ :: _ -> 0)) in
-        begin match ids2 with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.finish_params p
       in
       let r_acc = ref acc in
@@ -137,29 +89,10 @@ WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^
       let set_params stmt =
         let p = T.start_params stmt (0 + (match id with `Another (ids) -> 0 + (match ids with [] -> 0 | _ :: _ -> 0) | `Andanother _ -> 1 | `Lol (idss) -> 0 + (match idss with [] -> 0 | _ :: _ -> 0)) + (match ids2 with Some (ids2) -> 0 + (match ids2 with [] -> 0 | _ :: _ -> 0) | None -> 0)) in
         begin match id with
-        | `Another (ids) ->
-          begin match ids with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
+        | `Another _ -> ()
+        | `Lol _ -> ()
         | `Andanother (x) ->
           T.set_param_Int p x;
-        | `Lol (idss) ->
-          begin match idss with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
-        end;
-        begin match ids2 with
-        | None -> ()
-        | Some (ids2) ->
-          begin match ids2 with
-          | [] -> ()
-          | _ :: _ ->
-            ()
-          end;
         end;
         T.finish_params p
       in
@@ -177,11 +110,6 @@ WHERE \n\
       in
       let set_params stmt =
         let p = T.start_params stmt (0 + (match ids2 with [] -> 0 | _ :: _ -> 0)) in
-        begin match ids2 with
-        | [] -> ()
-        | _ :: _ ->
-          ()
-        end;
         T.finish_params p
       in
       let r_acc = ref [] in
