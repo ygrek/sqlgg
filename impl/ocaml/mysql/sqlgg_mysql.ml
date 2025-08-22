@@ -361,7 +361,6 @@ let set_param_json_path = set_param_ty Json_path.set_json_path
 let set_param_one_or_all = set_param_ty One_or_all.set_one_or_all
 
 module Make_enum (E: Enum) = struct 
-
   include E
 
   let get_column, get_column_nullable = get_column_ty "Enum" E.inj
@@ -373,6 +372,9 @@ end
 
 let no_params stmt = P.execute stmt [||]
 
+let prepare db sql = P.create db sql
+let close_stmt stmt = P.close stmt
+
 let try_finally final f x =
   let r =
     try f x with exn -> final (); raise exn
@@ -381,40 +383,54 @@ let try_finally final f x =
     r
 
 let bracket res dtor k = try_finally (fun () -> dtor res) k res
-let with_stmt db sql = bracket (P.create db sql) P.close
+
+let select_with_stmt stmt set_params callback =
+  let r = set_params stmt in
+  let rec loop () =
+    match P.fetch r with
+    | Some row -> callback row; loop ()
+    | None -> ()
+  in
+  loop ()
+
+let execute_with_stmt stmt set_params =
+  let _ = set_params stmt in
+  if 0 <> P.real_status stmt then oops "execute with stmt failed";
+  let insert_id =
+    match P.insert_id stmt with
+    | 0L -> None
+    | x -> Some x
+  in
+  { affected_rows = P.affected stmt; insert_id }
+
+let select_one_maybe_with_stmt stmt set_params convert =
+  match P.fetch (set_params stmt) with
+  | Some row -> Some (convert row)
+  | None -> None
+
+let select_one_with_stmt stmt set_params convert =
+  match P.fetch (set_params stmt) with
+  | Some row -> convert row
+  | None -> oops "no row but one expected in select_one_with_stmt"
+
+let with_stmt db sql f = 
+  bracket (prepare db sql) close_stmt f
 
 let select db sql set_params callback =
   with_stmt db sql (fun stmt ->
-    let r = set_params stmt in
-    let rec loop () =
-      match P.fetch r with
-      | Some row -> callback row; loop ()
-      | None -> ()
-    in
-    loop ())
+    select_with_stmt stmt set_params callback)
 
 let execute db sql set_params =
   with_stmt db sql (fun stmt ->
-    let _ = set_params stmt in
-    if 0 <> P.real_status stmt then oops "execute : %s" sql;
-    let insert_id =
-      match P.insert_id stmt with
-      | 0L -> None
-      | x -> Some x
-    in
-    { affected_rows = P.affected stmt; insert_id; })
+    execute_with_stmt stmt set_params)
 
 let select_one_maybe db sql set_params convert =
   with_stmt db sql (fun stmt ->
-    match P.fetch (set_params stmt) with
-    | Some row -> Some (convert row)
-    | None -> None)
+    select_one_maybe_with_stmt stmt set_params convert)
 
 let select_one db sql set_params convert =
   with_stmt db sql (fun stmt ->
-    match P.fetch (set_params stmt) with
-    | Some row -> convert row
-    | None -> oops "no row but one expected : %s" sql)
+    select_one_with_stmt stmt set_params convert)
 
 end
 
@@ -423,7 +439,16 @@ module Default = Make_(Default_types)
 let () =
   (* checking signature match *)
   let module M = (Default : Sqlgg_traits.M) in
-  ignore (M.Oops "OK")
+  let module Cache_config = struct 
+    let max_cache_size = 500
+    let ttl_seconds = None
+  end in
+  let module C = Sqlgg_stmt_cache.Make (Cache_config) (struct
+    module IO = Sqlgg_io.Blocking
+    include Default
+  end) in
+  ignore (M.Oops "OK");
+  ignore (C.Oops "OK");
 
 (* compatibility *)
 module Make(Number : Int) = struct

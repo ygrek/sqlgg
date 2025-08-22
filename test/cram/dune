@@ -5,4 +5,6 @@
   (glob_files *.compare.ml)
   (source_tree test_build_json_functions)
   (glob_files print_ocaml_impl.ml)
+  (glob_files test_cached_prepared_stmts.ml)
+  (glob_files print_impl.ml)
   sqlgg_test.sh))
