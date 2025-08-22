@@ -87,6 +87,59 @@ module Types = struct
     let to_literal t = sprintf "'%s'" (string_of_float t)
     let float_to_literal = to_literal
   end
+  module Json = struct
+    type t = Sqlgg_trait_types.json
+
+    let escape_sql_string (s : string) : string =
+      let b = Buffer.create (String.length s) in
+      String.iter (fun c -> if c = '\'' then (Buffer.add_char b '\''; Buffer.add_char b '\'') else Buffer.add_char b c) s;
+      Buffer.contents b
+
+    let escape_json_string (s : string) : string =
+      let b = Buffer.create (String.length s) in
+      String.iter (fun c ->
+        match c with
+        | '"' -> Buffer.add_string b "\\\""
+        | '\\' -> Buffer.add_string b "\\\\"
+        | '\b' -> Buffer.add_string b "\\b"
+        | '\012' -> Buffer.add_string b "\\f"
+        | '\n' -> Buffer.add_string b "\\n"
+        | '\r' -> Buffer.add_string b "\\r"
+        | '\t' -> Buffer.add_string b "\\t"
+        | c when Char.code c < 32 -> Buffer.add_string b (Printf.sprintf "\\u%04X" (Char.code c))
+        | c -> Buffer.add_char b c
+      ) s;
+      Buffer.contents b
+
+    let rec json_to_text (j : t) : string =
+      match j with
+      | `Null -> "null"
+      | `Bool b -> if b then "true" else "false"
+      | `Float f -> string_of_float f
+      | `Int i -> string_of_int i
+      | `Intlit s -> s
+      | `String s -> sprintf "\"%s\"" (escape_json_string s)
+      | `Assoc props ->
+        let parts = List.map (fun (k, v) -> sprintf "\"%s\":%s" (escape_json_string k) (json_to_text v)) props in
+        sprintf "{%s}" (String.concat "," parts)
+      | `List xs ->
+        let parts = List.map json_to_text xs in
+        sprintf "[%s]" (String.concat "," parts)
+
+    let to_literal (j : t) : string =
+      sprintf "'%s'" (escape_sql_string (json_to_text j))
+
+    let json_to_literal = to_literal
+  end
+  module Json_path = struct
+    type t = Sqlgg_trait_types.json_path
+    let to_literal (_ : t) = "'$'"
+    let json_path_to_literal = to_literal
+  end
+  module One_or_all = struct
+    type t = Sqlgg_trait_types.one_or_all
+    let to_literal = function `One -> "'one'" | `All -> "'all'"
+  end
   module Any = struct
     type t = string
     let to_literal s = sprintf "'%s'" (String.escaped s)
@@ -312,6 +365,16 @@ let get_column_Datetime (row : mock_row_data) (index : int) : Types.Datetime.t =
   | `Float v -> printf "[MOCK] get_column_Datetime[%d] = %f\n" index v; v
   | _ -> printf "[MOCK] get_column_Datetime[%d] = 0.0 (default)\n" index; 0.0
 
+let get_column_Json (_row : mock_row_data) (index : int) : Types.Json.t =
+  printf "[MOCK] get_column_Json[%d] = {} (default)\n" index; (`Assoc [])
+
+let get_column_Json_path (_row : mock_row_data) (index : int) : Types.Json_path.t =
+  printf "[MOCK] get_column_Json_path[%d] not mocked, using default '$' and failing on read\n" index;
+  failwith "get_column_Json_path not mocked"
+
+let get_column_One_or_all (_row : mock_row_data) (index : int) : Types.One_or_all.t =
+  printf "[MOCK] get_column_One_or_all[%d] = `One (default)\n" index; `One
+
 let get_column_Bool_nullable (row : mock_row_data) (index : int) : Types.Bool.t option = 
   match get_mock_value row index with
   | `Bool v -> printf "[MOCK] get_column_Bool_nullable[%d] = Some %b\n" index v; Some v
@@ -354,6 +417,15 @@ let get_column_Datetime_nullable (row : mock_row_data) (index : int) : Types.Dat
   | `Null -> printf "[MOCK] get_column_Datetime_nullable[%d] = None\n" index; None
   | _ -> printf "[MOCK] get_column_Datetime_nullable[%d] = Some 0.0 (default)\n" index; Some 0.0
 
+let get_column_Json_nullable (_row : mock_row_data) (index : int) : Types.Json.t option =
+  printf "[MOCK] get_column_Json_nullable[%d] = Some {} (default)\n" index; Some (`Assoc [])
+
+let get_column_Json_path_nullable (_row : mock_row_data) (index : int) : Types.Json_path.t option =
+  printf "[MOCK] get_column_Json_path_nullable[%d] = None (default)\n" index; None
+
+let get_column_One_or_all_nullable (_row : mock_row_data) (index : int) : Types.One_or_all.t option =
+  printf "[MOCK] get_column_One_or_all_nullable[%d] = Some `One (default)\n" index; Some `One
+
 let get_column_bool = get_column_Bool
 let get_column_bool_nullable = get_column_Bool_nullable
 let get_column_int64 = get_column_Int
@@ -370,6 +442,24 @@ let get_column_datetime_nullable (row : mock_row_data) (index : int) : string op
   match get_column_Float_nullable row index with
   | Some f -> Some (string_of_float f)
   | None -> None
+
+let get_column_json (row : mock_row_data) (index : int) : Sqlgg_trait_types.json =
+  (get_column_Json row index :> Sqlgg_trait_types.json)
+
+let get_column_json_nullable (row : mock_row_data) (index : int) : Sqlgg_trait_types.json option =
+  (get_column_Json_nullable row index :> Sqlgg_trait_types.json option)
+
+let get_column_json_path (_row : mock_row_data) (_index : int) : Sqlgg_trait_types.json_path =
+  failwith "get_column_json_path not mocked"
+
+let get_column_json_path_nullable (_row : mock_row_data) (index : int) : Sqlgg_trait_types.json_path option =
+  printf "[MOCK] get_column_json_path_nullable[%d] = None (default)\n" index; None
+
+let get_column_one_or_all (_row : mock_row_data) (index : int) : Sqlgg_trait_types.one_or_all =
+  printf "[MOCK] get_column_one_or_all[%d] = `One (default)\n" index; `One
+
+let get_column_one_or_all_nullable (_row : mock_row_data) (index : int) : Sqlgg_trait_types.one_or_all option =
+  printf "[MOCK] get_column_one_or_all_nullable[%d] = Some `One (default)\n" index; Some `One
 
 let substitute_params sql params =
   let param_array = Array.of_list params in
@@ -407,12 +497,20 @@ let set_param_Float (params : params) (v : Types.Float.t) = bind_param (Float.to
 let set_param_Decimal (params : params) (v : Types.Decimal.t) = bind_param (Float.to_string v) params
 let set_param_Datetime (params : params) (v : Types.Datetime.t) = bind_param (Float.to_string v) params
 
+let set_param_Json (params : params) (v : Types.Json.t) = bind_param (Types.Json.to_literal v) params
+let set_param_Json_path (params : params) (v : Types.Json_path.t) = bind_param (Types.Json_path.to_literal v) params
+let set_param_One_or_all (params : params) (v : Types.One_or_all.t) = bind_param (Types.One_or_all.to_literal v) params
+
 let set_param_bool (params : params) v = bind_param (if v then "TRUE" else "FALSE") params
 let set_param_int64 (params : params) v = bind_param (Int64.to_string v) params
 let set_param_float (params : params) v = bind_param (Float.to_string v) params
 let set_param_decimal (params : params) v = bind_param (Float.to_string v) params
 let set_param_string (params : params) v = bind_param (sprintf "'%s'" (String.escaped v)) params
 let set_param_datetime (params : params) v = bind_param (Float.to_string v) params
+
+let set_param_json (params : params) (v : Sqlgg_trait_types.json) = set_param_Json params v
+let set_param_json_path (params : params) (_v : Sqlgg_trait_types.json_path) = bind_param "'$'" params
+let set_param_one_or_all (params : params) (v : Sqlgg_trait_types.one_or_all) = set_param_One_or_all params v
 
 let no_params (stmt : statement) : result = 
   printf "[SQL] %s\n" stmt.sql;
