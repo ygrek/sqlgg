@@ -718,3 +718,32 @@ Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent composite constrai
   Failed : INSERT INTO test20250819 (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO NOTHING
   Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
   [2]
+
+Test Single style for SELECT 1/0..1 and hide empty modules:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT);
+  > SELECT COUNT(*) FROM test20250902;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test20250902 db  =
+      T.execute db ("CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT)") T.no_params
+  
+    let select_1 db  =
+      let get_row stmt =
+        (T.get_column_Int stmt 0)
+      in
+      T.select_one db ("SELECT COUNT(*) FROM test20250902") T.no_params get_row
+  
+    module Single = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~r:(T.get_column_Int stmt 0)
+        in
+        T.select_one db ("SELECT COUNT(*) FROM test20250902") T.no_params invoke_callback
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
