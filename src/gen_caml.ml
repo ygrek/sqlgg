@@ -194,7 +194,7 @@ module T = Translate(L)
 (* open L *)
 open T
 
-let output_schema_binder _ schema =
+let output_schema_binder_labeled _ schema =
   let name = "invoke_callback" in
   output "let %s stmt =" name;
   let args = Name.idents ~prefix:"r" (List.map (fun a -> a.name) schema) in
@@ -213,13 +213,19 @@ let output_select1_cb _ schema =
   output "in";
   name
 
+let select_func_of_kind = function
+| Stmt.Select `Zero_one -> "select_one_maybe"
+| Stmt.Select `One -> "select_one"
+| _ -> "select"
+
 let output_schema_binder index schema kind =
   match schema with
   | [] -> "execute",""
-  | _ -> match kind with
-         | Stmt.Select `Zero_one -> "select_one_maybe", output_select1_cb index schema
-         | Select `One -> "select_one", output_select1_cb index schema
-         | _ -> "select",output_schema_binder index schema
+  | _ ->
+    let func = select_func_of_kind kind in
+    match kind with
+    | Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index schema
+    | _ -> func, output_schema_binder_labeled index schema
 
 let is_callback stmt =
   match stmt.schema, stmt.kind with
@@ -640,10 +646,16 @@ let generate_stmt style index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map (fun v -> sprintf "~%s" v) |> inline_values in
-  match style, is_callback stmt with
-  | (`List | `Fold), false -> ()
-  | _ ->
-  let all_inputs = inputs ^ (if style = `List || is_callback stmt then " callback" else "") ^ (if style = `Fold then " acc" else "") in
+  let should_generate =
+    match style with
+    | `List | `Fold -> is_callback stmt
+    | `Single -> (match stmt.kind, stmt.schema with | Stmt.Select (`One | `Zero_one), _ :: _ -> true | _ -> false)
+    | `Direct -> true
+  in
+  if should_generate then begin
+  let needs_callback_param = match style with | `List | `Single -> true | _ -> is_callback stmt in
+  let needs_acc_param = style = `Fold in
+  let all_inputs = inputs ^ (if needs_callback_param then " callback" else "") ^ (if needs_acc_param then " acc" else "") in
   output "let %s db %s =" name all_inputs;
   inc_indent ();
   let sql = make_sql @@ get_sql stmt in
@@ -663,7 +675,16 @@ let generate_stmt style index stmt =
     output "in";
     "__sqlgg_sql"
   in
-  let (func,callback) = output_schema_binder index stmt.schema stmt.kind in
+  let (func,callback) =
+    match style with
+    | `Single ->
+      (match stmt.schema with
+      | [] -> ("execute", "")
+      | _ ->
+        let func = select_func_of_kind stmt.kind in
+        (func, output_schema_binder_labeled index stmt.schema))
+    | _ -> output_schema_binder index stmt.schema stmt.kind
+  in
   let params_binder_name = output_params_binder index stmt.vars in
   if style = `Fold then output "let r_acc = ref acc in";
   if style = `List then output "let r_acc = ref [] in";
@@ -671,7 +692,7 @@ let generate_stmt style index stmt =
     match style with
     | `Fold -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x !r_acc))" callback
     | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
-    | `Direct -> "", callback (* or empty string *)
+    | `Single | `Direct -> "", callback (* or empty string *)
   in
   let exec = sprintf "T.%s db %s %s %s" func sql params_binder_name callback in
   let exec =
@@ -694,6 +715,7 @@ let generate_stmt style index stmt =
   if style = `List then output "(fun () -> IO.return (List.rev !r_acc))";
   dec_indent ();
   empty_line ()
+  end
 
 let sanitize_to_variant_name s =
   let normalized =
@@ -791,17 +813,26 @@ let generate ~gen_io name stmts =
   generate_enum_modules stmts;
   empty_line ();
   List.iteri (generate_stmt `Direct) stmts;
-  output "module Fold = struct";
-  inc_indent ();
-  List.iteri (generate_stmt `Fold) stmts;
-  dec_indent ();
-  output "end (* module Fold *)";
-  output "";
-  output "module List = struct";
-  inc_indent ();
-  List.iteri (generate_stmt `List) stmts;
-  dec_indent ();
-  output "end (* module List *)";
+  let has_fold = List.exists is_callback stmts in
+  let has_list = has_fold in
+  let has_single = List.exists (fun stmt ->
+    match stmt.Gen.kind, stmt.Gen.schema with
+    | Stmt.Select (`One | `Zero_one), _ :: _ -> true
+    | _ -> false) stmts in
+  [ 
+    has_single, "Single", `Single;
+    has_fold,   "Fold",   `Fold;
+    has_list,   "List",   `List;
+  ]
+  |> List.filter_map (fun (cond, name, style) -> if cond then Some (name, style) else None)
+  |> List.iteri (fun i (name, style) ->
+    if i > 0 then output "";
+    output "module %s = struct" name;
+    inc_indent ();
+    List.iteri (generate_stmt style) stmts;
+    dec_indent ();
+    output "end (* module %s *)" name
+  );
   dec_indent ();
   output "end (* module %s *)" (String.capitalize_ascii name)
 

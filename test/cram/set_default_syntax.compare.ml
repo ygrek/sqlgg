@@ -25,9 +25,4 @@ SET\n\
   `user_message` = " ^ (match user_message with Some _ -> " ( " ^ " CONCAT(" ^ "?" ^ ", '22222') " ^ " ) " | None -> " DEFAULT ") ^ ",\n\
   `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> "'2'" | `B -> "'2'") ^ " " ^ " ) " | None -> " DEFAULT ")) set_params
 
-  module Fold = struct
-  end (* module Fold *)
-  
-  module List = struct
-  end (* module List *)
 end (* module Sqlgg *)
