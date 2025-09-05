@@ -241,6 +241,23 @@ module type M_io = sig
 
 end
 
+module type M_control_io = sig 
+
+  include M
+
+  module IO : Sqlgg_io.M_control
+
+  include FNS
+    with type params := params
+    with type result := result
+    with type 'a io_future := 'a IO.future
+    with type 'a connection := 'a connection
+    with type statement := statement
+    with type row := row
+    with type execute_response := execute_response
+
+end
+
 module type M_default_types = M with type Types.Bool.t = bool
   and type Types.Int.t = int64
   and type Types.Float.t = float

@@ -552,19 +552,28 @@ end
 module Default(IO : Sqlgg_io.M)(M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
   Make(IO)(M)(Default_types(M))
 
+module Make_control_io
+  (IO' : Sqlgg_io.M_control)
+  (M : Mariadb.Nonblocking.S with type 'a future = 'a IO'.future)
+  (Types : Types with type field = M.Field.t and type value = M.Field.value) = struct
+    include Make(IO')(M)(Types)
+    module IO = IO'
+  end
+
 module Default_cached
   (Config : Sqlgg_stmt_cache.Cache_config)
-  (IO : Sqlgg_io.M)
-  (M : Mariadb.Nonblocking.S with type 'a future = 'a IO.future) =
-  Sqlgg_stmt_cache.Make(Config)(Make(IO)(M)(Default_types(M)))
+  (IO' : Sqlgg_io.M_control)
+  (M : Mariadb.Nonblocking.S with type 'a future = 'a IO'.future) =
+  Sqlgg_stmt_cache.Make(Config)(Make_control_io(IO')(M)(Default_types(M)))
 
 let () =
   (* checking signature match *)
-  let module Default_blocking : Sqlgg_stmt_cache.Cached_m = Default(Sqlgg_io.Blocking)(struct include Mariadb.Blocking type 'a future = 'a end) in
-  let module Cache_config = struct 
+  let module B = struct include Mariadb.Blocking type 'a future = 'a end in
+  let module Default_blocking = Default(Sqlgg_io.Blocking)(B) in
+  let module Cache_config = struct
     let max_cache_size = 500
     let ttl_seconds = None
   end in
-  let module Default_blocking_cached = Sqlgg_stmt_cache.Make(Cache_config)(Default_blocking) in
+  let module Default_blocking_cached = Default_cached(Cache_config)(Sqlgg_io.Blocking)(B) in
   ignore (Default_blocking.Oops "ok");
   ignore (Default_blocking_cached.Oops "ok")
