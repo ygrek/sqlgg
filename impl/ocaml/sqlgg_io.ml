@@ -18,6 +18,10 @@ module type M = sig
   val return : 'a -> 'a future
   val (>>=) : 'a future -> ('a -> 'b future) -> 'b future
   val bracket : 'a future -> ('a -> unit future) -> ('a -> 'b future) -> 'b future
+end
+
+module type M_control = sig 
+  include M
   val catch : (unit -> 'a future) -> (exn -> 'a future) -> 'a future
   val try_bind : (unit -> 'a future) -> ('a -> 'b future) -> (exn -> 'b future) -> 'b future
   val async : (unit -> unit future) -> unit
@@ -27,7 +31,7 @@ module type M = sig
   end
 end
 
-module Blocking : M with type 'a future = 'a = struct
+module Blocking : M_control with type 'a future = 'a = struct
 
   type 'a future = 'a
 

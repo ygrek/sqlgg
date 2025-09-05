@@ -6,7 +6,7 @@ module Async_lru = struct
     val on_evict : value -> unit future
   end
 
-  module Make (IO : Sqlgg_io.M) (Evict : Evict with type 'a future = 'a IO.future) = struct
+  module Make (IO : Sqlgg_io.M_control) (Evict : Evict with type 'a future = 'a IO.future) = struct
   
     open IO
 
@@ -129,7 +129,8 @@ module Async_lru = struct
 end
 
 module type Cached_m = sig
-  include Sqlgg_traits.M_io
+  include Sqlgg_traits.M_control_io
+
 
   val prepare : 'a connection -> string -> statement IO.future
   val close_stmt : statement -> unit IO.future
