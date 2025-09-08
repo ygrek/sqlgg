@@ -747,3 +747,19 @@ Test Single style for SELECT 1/0..1 and hide empty modules:
   
     end (* module Single *)
   end (* module Sqlgg *)
+
+Test MySQL CAST/CONVERT syntax (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > SELECT CAST('-9142586270102516767' AS UNSIGNED);
+  > SELECT CONVERT('-9142586270102516767', UNSIGNED);
+  > SELECT CONVERT(@a :: Text, UNSIGNED) + 2;
+  > SELECT CAST('abc' AS CHAR(10));
+  > SELECT CAST('0xdeadbeef' AS BINARY(16));
+  > SELECT CAST('1.23' AS DECIMAL(10,2));
+  > SELECT CAST('2024-01-01' AS DATE);
+  > SELECT CAST('10:20:30' AS TIME);
+  > SELECT CAST('2024-01-01 00:00:00' AS DATETIME);
+  > SELECT CAST('{"a":1}' AS JSON);
+  > EOF
+  $ echo $?
+  0

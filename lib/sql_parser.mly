@@ -37,7 +37,7 @@
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS
-       PRECISION UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
+       PRECISION SIGNED UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
@@ -496,8 +496,8 @@ expr:
     | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun { kind = Function.lookup "extract" 1; parameters = [e]; is_over_clause = false } }
     | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = Type.identity; parameters = [Column a]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
-    | CONVERT LPAREN e=expr COMMA t=sql_type RPAREN
-    | CAST LPAREN e=expr AS t=sql_type RPAREN { Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false } }
+    | CONVERT LPAREN e=expr COMMA f=cast_as RPAREN { f e }
+    | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
     | f=table_name LPAREN p=func_params RPAREN { Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } }
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { Fun { kind = Comparison Not_distinct_op; parameters = [e1; e2]; is_over_clause = false } }
@@ -611,22 +611,31 @@ interval_unit: INTERVAL_UNIT
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
              | YEAR_MONTH { Value (strict Datetime) }
 
+expr_sql_type_flavor:
+                 | T_DECIMAL { Decimal }
+                 | binary { Blob }
+                 | NATIONAL? text VARYING? charset? collate? { Text }
+                 | T_FLOAT PRECISION? { Float }
+                 | T_BOOLEAN { Bool }
+                 | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
+                 | T_UUID { Blob }
+                 | T_JSON { Json }
+
+
 sql_type_flavor: T_INTEGER u=UNSIGNED? ZEROFILL? {
   Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u;
   Int
 }
-               | T_DECIMAL { Decimal }
-               | binary { Blob }
-               | NATIONAL? text VARYING? charset? collate? { Text }
+               | expr_sql_type_flavor { $1 }
                | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
-               | T_FLOAT PRECISION? { Float }
-               | T_BOOLEAN { Bool }
-               | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
-               | T_UUID { Blob }
-               | T_JSON { Json }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
+
+cast_as:
+    | t=cast_sql_type { (fun e -> Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false }) }
+    | UNSIGNED { Dialect_feature.set_unsigned_types ($startofs, $endofs); (fun e -> Fun { kind = (Ret (depends Int)); parameters = [e]; is_over_clause = false }) }
+    | SIGNED { (fun e -> Fun { kind = (Ret (depends Int)); parameters = [e]; is_over_clause = false }) }
 
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
@@ -640,6 +649,11 @@ collate: COLLATE c=IDENT { Dialect_feature.set_collation c ($startofs, $endofs) 
 sql_type: t=sql_type_flavor
         | t=sql_type_flavor LPAREN INTEGER RPAREN UNSIGNED?
         | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
+        { t }
+
+cast_sql_type: t=expr_sql_type_flavor
+        | t=expr_sql_type_flavor LPAREN INTEGER RPAREN
+        | t=expr_sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
 compound_op:
