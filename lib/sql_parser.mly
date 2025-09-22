@@ -297,7 +297,7 @@ on_conflict_action:
   | NOTHING { Do_nothing }
 
 conflict_clause: 
-  | ON DUPLICATE KEY UPDATE ss=commas(set_column) 
+  | ON DUPLICATE KEY UPDATE ss=commas(set_column)
     { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate ss }
   | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO action=on_conflict_action
     { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict (action, attrs) }
@@ -468,7 +468,7 @@ expr:
     | INTERVAL e=expr interval_unit { Fun { kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
     | a=attr_name collate? { Column a }
-    | VALUES LPAREN n=IDENT RPAREN { Inserted n }
+    | VALUES LPAREN n=IDENT RPAREN { Of_values n }
     | v=literal_value | v=datetime_value { v }
     | INTERVAL_UNIT { Value (strict Datetime) }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }

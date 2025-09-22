@@ -66,6 +66,8 @@ struct
 
   let is_strict { nullability; _ } = nullability = Strict
 
+  let is_nullable { nullability; _ } = nullability = Nullable
+
   let (=) : t -> t -> bool = equal
 
   let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
@@ -221,6 +223,7 @@ struct
   | Negation
   | Ret of t (* _ -> t *) (* TODO eliminate *)
   | F of tyvar * tyvar list
+  | Col_assign of { ret_t: tyvar; col_t: tyvar; arg_t: tyvar; }
   | Multi of { 
     ret: tyvar; 
     fixed_args: tyvar list; 
@@ -238,33 +241,36 @@ struct
 
   let identity = F (Var 0, [Var 0])
 
-  let pp_func pp =
+  let pp_func pp f =
     let open Format in
-  function
-  | Agg Self -> fprintf pp "|'a| -> 'a"
-  | Agg Avg -> fprintf pp "|'a| -> float"
-  | Agg Count -> fprintf pp "|'a| -> int"
-  | Ret ret -> fprintf pp "_ -> %s" (show ret)
-  | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-  | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
-  | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
-  | Comparison _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
-  | Logical _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
-  | Negation -> fprintf pp "'a -> %s" (show_kind Bool)
-  | Multi { ret; fixed_args; repeating_pattern } ->
-      let fixed_str = match fixed_args with
-        | [] -> ""
-        | args -> String.concat " -> " (List.map string_of_tyvar args) ^ " -> "
-      in
-      let repeating_str = String.concat ", " (List.map string_of_tyvar repeating_pattern) in
-      fprintf pp "%s[%s]* -> %s" fixed_str repeating_str (string_of_tyvar ret)
+    let rec aux = function
+    | Agg Self -> fprintf pp "|'a| -> 'a"
+    | Agg Avg -> fprintf pp "|'a| -> float"
+    | Agg Count -> fprintf pp "|'a| -> int"
+    | Ret ret -> fprintf pp "_ -> %s" (show ret)
+    | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
+    | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
+    | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
+    | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
+    | Comparison _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
+    | Logical _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
+    | Negation -> fprintf pp "'a -> %s" (show_kind Bool)
+    | Multi { ret; fixed_args; repeating_pattern } ->
+        let fixed_str = match fixed_args with
+          | [] -> ""
+          | args -> String.concat " -> " (List.map string_of_tyvar args) ^ " -> "
+        in
+        let repeating_str = String.concat ", " (List.map string_of_tyvar repeating_pattern) in
+        fprintf pp "%s[%s]* -> %s" fixed_str repeating_str (string_of_tyvar ret)
+    in 
+    aux f
 
 
   let string_of_func = Format.asprintf "%a" pp_func
 
   let is_grouping = function
   | Agg _ -> true
-  | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
+  | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
 end
 
 module Constraint =
@@ -330,6 +336,8 @@ module Meta = struct
       | None, Some v -> Some v
       | None, None -> None
     ) t1 t2
+
+  let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
@@ -615,13 +623,13 @@ and expr =
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
-  | Inserted of string (** inserted value *)
   | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos;}
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
-   *) 
+   *)
   | OptionActions of { choice: expr; pos: (pos * pos); kind: option_actions_kind }
   | Case of case
+  | Of_values of string (** VALUES(col_name) *)
 and column =
   | All
   | AllOf of table_name

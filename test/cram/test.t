@@ -763,3 +763,374 @@ Test MySQL CAST/CONVERT syntax (should work):
   > EOF
   $ echo $?
   0
+
+Test non_nullifiable when update:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL,
+  >     updated_at_not_nullable DATETIME NOT NULL
+  > );
+  > UPDATE non_nullifiable SET updated_at = @updated_at WHERE name = 'example';
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_non_nullifiable db  =
+      T.execute db ("CREATE TABLE non_nullifiable (\n\
+      name TEXT,\n\
+          updated_at DATETIME NULL,\n\
+      updated_at_not_nullable DATETIME NOT NULL\n\
+  )") T.no_params
+  
+    let update_non_nullifiable_1 db ~updated_at =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Datetime p updated_at;
+        T.finish_params p
+      in
+      T.execute db ("UPDATE non_nullifiable SET updated_at = ? WHERE name = 'example'") set_params
+  
+  end (* module Sqlgg *)
+
+Test non_nullifiable when update (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME,
+  >     updated_at_not_nullable DATETIME NOT NULL
+  > );
+  > UPDATE non_nullifiable SET updated_at = @updated_at :: Datetime Null WHERE name = 'example';
+  > EOF
+  Failed : UPDATE non_nullifiable SET updated_at = @updated_at :: Datetime Null WHERE name = 'example'
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Datetime, Datetime?)")
+  [2]
+
+Test INSERT set NULL where NOT NULL col (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     id INT PRIMARY KEY,
+  >     name TEXT NOT NULL
+  > );
+  > INSERT INTO non_nullifiable (id, name) VALUES (1, NULL);
+  > EOF
+  Failed : INSERT INTO non_nullifiable (id, name) VALUES (1, NULL)
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Text, Any?)")
+  [2]
+
+Test UPDATE set NULL where NOT NULL col (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     id INT PRIMARY KEY,
+  >     x TEXT NOT NULL
+  > );
+  > UPDATE non_nullifiable SET x = @x + NULL WHERE id = 1;
+  > EOF
+  Failed : UPDATE non_nullifiable SET x = @x + NULL WHERE id = 1
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Text, Any?)")
+  [2]
+
+
+Test non_nullifiable when update set NULL (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL,
+  >     updated_at_not_nullable DATETIME NOT NULL
+  > );
+  > UPDATE non_nullifiable SET updated_at = NULL WHERE name = 'example';
+  > EOF
+  Failed : UPDATE non_nullifiable SET updated_at = NULL WHERE name = 'example'
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Datetime, Any?)")
+  [2]
+
+Test non_nullifiable when update insert NULL:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE non_nullifiable (
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL,
+  >     updated_at_not_nullable DATETIME NOT NULL
+  > );
+  > INSERT INTO non_nullifiable (name, updated_at) VALUES ('example', NULL);
+  > EOF
+  Failed : INSERT INTO non_nullifiable (name, updated_at) VALUES ('example', NULL)
+  Fatal error: exception Failure("Fields: (updated_at_not_nullable) don't have a default value")
+  [2]
+
+Test non_nullifiable with multi-row INSERT (NULL allowed on insert):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_insert_multi (
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     published_at DATETIME
+  > );
+  > INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_nn_insert_multi db  =
+      T.execute db ("CREATE TABLE nn_insert_multi (\n\
+      id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+          published_at DATETIME\n\
+  )") T.no_params
+  
+    let insert_nn_insert_multi_1 db  =
+      T.execute db ("INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL)") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test non_nullifiable with INSERT ... ON DUPLICATE KEY UPDATE (values nullable, NEW strict) (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_upsert (
+  >     id INT PRIMARY KEY,
+  >     -- [sqlgg] non_nullifiable=true
+  >     column1 INT NULL,
+  >     -- [sqlgg] non_nullifiable=true
+  >     column2 VARCHAR(255) NULL
+  > );
+  > INSERT INTO nn_upsert (id, column1, column2)
+  > VALUES (1, @v1, @v2)
+  > ON DUPLICATE KEY UPDATE 
+  >   column1 = VALUES(column1),
+  >   column2 = VALUES(column2);
+  > EOF
+  Failed : INSERT INTO nn_upsert (id, column1, column2)
+  VALUES (1, @v1, @v2)
+  ON DUPLICATE KEY UPDATE 
+    column1 = VALUES(column1),
+    column2 = VALUES(column2)
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Int, Int?)")
+  [2]
+
+Test non_nullifiable with INSERT ... ON DUPLICATE KEY UPDATE (values nullable, NEW strict) (should work):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_upsert (
+  >     id INT PRIMARY KEY,
+  >     -- [sqlgg] non_nullifiable=true
+  >     column1 INT NULL,
+  >     -- [sqlgg] non_nullifiable=true
+  >     column2 VARCHAR(255) NULL
+  > );
+  > INSERT INTO nn_upsert (id, column1, column2)
+  > VALUES (1, @v1 :: Int, @v2 :: Text)
+  > ON DUPLICATE KEY UPDATE 
+  >   column1 = VALUES(column1),
+  >   column2 = VALUES(column2);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_nn_upsert db  =
+      T.execute db ("CREATE TABLE nn_upsert (\n\
+      id INT PRIMARY KEY,\n\
+          column1 INT NULL,\n\
+          column2 VARCHAR(255) NULL\n\
+  )") T.no_params
+  
+    let insert_nn_upsert_1 db ~v1 ~v2 =
+      let set_params stmt =
+        let p = T.start_params stmt (2) in
+        T.set_param_Int p v1;
+        T.set_param_Text p v2;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO nn_upsert (id, column1, column2)\n\
+  VALUES (1, ?, ?)\n\
+  ON DUPLICATE KEY UPDATE \n\
+    column1 = VALUES(column1),\n\
+    column2 = VALUES(column2)") set_params
+  
+  end (* module Sqlgg *)
+
+
+Test non_nullifiable with INSERT ... SELECT (source may produce NULLs):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_src (
+  >     id INT PRIMARY KEY,
+  >     ts DATETIME
+  > );
+  > CREATE TABLE nn_dst (
+  >     id INT PRIMARY KEY,
+  >     -- [sqlgg] non_nullifiable=true
+  >     published_at DATETIME
+  > );
+  > INSERT INTO nn_dst (id, published_at)
+  > SELECT id, ts FROM nn_src;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_nn_src db  =
+      T.execute db ("CREATE TABLE nn_src (\n\
+      id INT PRIMARY KEY,\n\
+      ts DATETIME\n\
+  )") T.no_params
+  
+    let create_nn_dst db  =
+      T.execute db ("CREATE TABLE nn_dst (\n\
+      id INT PRIMARY KEY,\n\
+          published_at DATETIME\n\
+  )") T.no_params
+  
+    let insert_nn_dst_2 db  =
+      T.execute db ("INSERT INTO nn_dst (id, published_at)\n\
+  SELECT id, ts FROM nn_src") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test INSERT (.. ) VALUES @rows with non_nullifiable column (NULL allowed on insert):
+  $ sqlgg -gen caml -no-header -params named -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_insert_param (
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     published_at DATETIME
+  > );
+  > INSERT INTO nn_insert_param (id, name, published_at) VALUES @rows;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_nn_insert_param db  =
+      T.execute db ("CREATE TABLE nn_insert_param (\n\
+      id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+          published_at DATETIME\n\
+  )") T.no_params
+  
+    let insert_nn_insert_param_1 db ~rows =
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db ("INSERT INTO nn_insert_param (id, name, published_at) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name, published_at) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match name with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match published_at with None -> "NULL" | Some v -> T.Types.Datetime.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) T.no_params )
+  
+  end (* module Sqlgg *)
+
+Test non_nullifiable with multi-table UPDATE (param must be non-nullable):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE nn_multi_t1 (
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     published_at DATETIME
+  > );
+  > CREATE TABLE nn_multi_t2 (
+  >     id INT,
+  >     ref TEXT
+  > );
+  > UPDATE nn_multi_t1 t1, nn_multi_t2 t2
+  >   SET t1.published_at = @published_at
+  > WHERE t2.ref = t1.name AND t2.id = 1;
+  > EOF
+  $ echo $?
+  0
+
+Test non_nullifiable with multi-table UPDATE forcing Null via type spec (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_multi_t3 (
+  >     k TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     refreshed_at DATETIME
+  > );
+  > CREATE TABLE nn_multi_t4 (
+  >     id INT,
+  >     k TEXT
+  > );
+  > UPDATE nn_multi_t3 a INNER JOIN nn_multi_t4 b ON b.k = a.k
+  >   SET a.refreshed_at = @refreshed_at :: Datetime Null
+  > WHERE b.id = 42;
+  > EOF
+  Failed : UPDATE nn_multi_t3 a INNER JOIN nn_multi_t4 b ON b.k = a.k
+    SET a.refreshed_at = @refreshed_at :: Datetime Null
+  WHERE b.id = 42
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Datetime, Datetime?)")
+  [2]
+
+Test multi-table UPDATE set NULL where non_nullifiable col (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE nn_multi_t5 (
+  >     k TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     locked_at DATETIME
+  > );
+  > CREATE TABLE nn_multi_t6 (
+  >     id INT,
+  >     k TEXT
+  > );
+  > UPDATE nn_multi_t5 a JOIN nn_multi_t6 b ON b.k = a.k
+  >   SET a.locked_at = NULL
+  > WHERE b.id = 7;
+  > EOF
+  Failed : UPDATE nn_multi_t5 a JOIN nn_multi_t6 b ON b.k = a.k
+    SET a.locked_at = NULL
+  WHERE b.id = 7
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Datetime, Any?)")
+  [2]
+
+Test non_nullifiable with UPDATE using subquery (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE nn_main (
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL
+  > );
+  > CREATE TABLE source_table (
+  >     id INT PRIMARY KEY,
+  >     ts DATETIME
+  > );
+  > UPDATE nn_main 
+  > SET updated_at = (SELECT ts FROM source_table WHERE id = 1)
+  > WHERE name = 'test';
+  > EOF
+  Failed : UPDATE nn_main 
+  SET updated_at = (SELECT ts FROM source_table WHERE id = 1)
+  WHERE name = 'test'
+  Fatal error: exception Failure("Cannot assign nullable value to a non-nullable column 'a -> 'a -> 'a applied to (Datetime, Datetime?)")
+  [2]
+
+Test non_nullifiable with UPDATE using subquery (should work):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE nn_main (
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL
+  > );
+  > CREATE TABLE source_table (
+  >     id INT PRIMARY KEY,
+  >     ts DATETIME
+  > );
+  > UPDATE nn_main 
+  > SET updated_at = COALESCE((SELECT ts FROM source_table WHERE id = 1), NOW())
+  > WHERE name = 'test';
+  > EOF
+  $ echo $?
+  0
+
+Test non_nullifiable with UPDATE using subquery (should work when allow-write-notnull-null):
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' >/dev/null
+  > CREATE TABLE nn_main (
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     -- [sqlgg] non_nullifiable=true
+  >     updated_at DATETIME NULL
+  > );
+  > CREATE TABLE source_table (
+  >     id INT PRIMARY KEY,
+  >     ts DATETIME
+  > );
+  > UPDATE nn_main 
+  > SET updated_at = (SELECT ts FROM source_table WHERE id = 1)
+  > WHERE name = 'test';
+  > EOF
+  $ echo $?
+  0

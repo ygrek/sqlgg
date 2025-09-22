@@ -138,4 +138,6 @@ let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
 
 module Semantic = struct 
   let is_where_aliases_dialect () = !selected = SQLite
+
+  let is_non_strict_mode_is_exists () = List.mem !selected [MySQL; TiDB; SQLite]
 end
