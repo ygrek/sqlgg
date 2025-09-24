@@ -1134,3 +1134,14 @@ Test non_nullifiable with UPDATE using subquery (should work when allow-write-no
   > EOF
   $ echo $?
   0
+
+order by and limit are supported with update stmt + table alias:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
+  > UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10;
+  > EOF
+  ==> UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10
+  Position 1:44 Tokens: ORDER BY t.id DESC LIMIT 10
+  Error: Sqlgg.Sql_parser.MenhirBasics.Error
+  Errors encountered, no code generated
+  [1]
