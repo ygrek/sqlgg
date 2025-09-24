@@ -1140,8 +1140,14 @@ order by and limit are supported with update stmt + table alias:
   > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
   > UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10;
   > EOF
-  ==> UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10
-  Position 1:44 Tokens: ORDER BY t.id DESC LIMIT 10
-  Error: Sqlgg.Sql_parser.MenhirBasics.Error
-  Errors encountered, no code generated
-  [1]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+  
+    let update_1 db  =
+      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10") T.no_params
+  
+  end (* module Sqlgg *)
