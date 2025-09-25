@@ -1303,11 +1303,13 @@ let rec eval (stmt:Sql.stmt) =
     let env = { env with schema = update_schema_with_aliases [] r; is_update = true } in
     let p3 = params_of_order o [] { env with tables = [(f, s)] } in
     [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update (Some table)
-  | UpdateMulti (tables,ss,w) ->
+  | UpdateMulti (tables,ss,w,o,lim) ->
     let env = { empty_env with is_update = true } in
-    let sources = List.map (fun src -> resolve_source empty_env ((`Nested src), None)) tables in
+    let sources = List.map (fun src -> resolve_source env ((`Nested src), None)) tables in
+    let tables = List.map (fun (_,_,table_list) -> table_list) sources |> List.flatten in
     let params = update_tables ~env sources ss w in
-    [], params, Update None
+    let p3 = params_of_order o [] { env with schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources; tables } in
+    [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update None
   | Select select -> 
     let (schema, a, b) = eval_select_full empty_env select in
     from_schema schema , a ,b

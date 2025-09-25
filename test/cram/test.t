@@ -1134,3 +1134,92 @@ Test non_nullifiable with UPDATE using subquery (should work when allow-write-no
   > EOF
   $ echo $?
   0
+
+order by and limit are supported with update stmt + table alias:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
+  > UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+  
+    let update_1 db  =
+      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10") T.no_params
+  
+  end (* module Sqlgg *)
+
+parametrized order by and limit are supported with update stmt + table alias:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
+  > UPDATE test t SET t.column_a = 'value' ORDER BY @order{ Id {t.id} } @direction LIMIT @limit;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+  
+    let update_1 db ~order ~direction ~limit =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + (match order with `Id -> 0) + (match direction with `ASC -> 0 | `DESC -> 0)) in
+        T.set_param_Int p limit;
+        T.finish_params p
+      in
+      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY " ^ (match order with `Id -> "t.id") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
+  
+  end (* module Sqlgg *)
+
+limit is supported with update stmt + table alias:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
+  > UPDATE test t SET t.column_a = 'value' LIMIT @limit;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+  
+    let update_1 db ~limit =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Int p limit;
+        T.finish_params p
+      in
+      T.execute db ("UPDATE test t SET t.column_a = 'value' LIMIT ?") set_params
+  
+  end (* module Sqlgg *)
+
+order by and limit are supported with update stmt + table alias + join:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header - <<'EOF' 2>&1 
+  > CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT);
+  > CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL);
+  > UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = @value, t2.column_a = @value ORDER BY @order{ Id_1 {t.id} | Id_2 {t2.id} } @direction LIMIT @limit;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+  
+    let create_test2 db  =
+      T.execute db ("CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL)") T.no_params
+  
+    let update_2 db ~value ~order ~direction ~limit =
+      let set_params stmt =
+        let p = T.start_params stmt (3 + (match order with `Id_1 -> 0 | `Id_2 -> 0) + (match direction with `ASC -> 0 | `DESC -> 0)) in
+        begin match value with None -> T.set_param_null p | Some v -> T.set_param_Text p v end;
+        begin match value with None -> T.set_param_null p | Some v -> T.set_param_Text p v end;
+        T.set_param_Int p limit;
+        T.finish_params p
+      in
+      T.execute db ("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> "t.id" | `Id_2 -> "t2.id") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
+  
+  end (* module Sqlgg *)
