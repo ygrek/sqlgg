@@ -156,9 +156,9 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Update (table,ss,w,o,lim)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
-         | update_cmd tables=commas(table_list) SET ss=commas(set_column) w=where? loption(order) loption(limit)
+         | update_cmd tables=commas(table_list) SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
-                UpdateMulti (tables,ss,w)
+                UpdateMulti (tables,ss,w,o,lim)
               }
          | DELETE FROM table=table_name w=where?
               {
