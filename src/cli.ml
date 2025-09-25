@@ -126,6 +126,7 @@ let main () =
     "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), "only output short static header without version/timestamp";
     "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
+    "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), "Treat writing NULL to NOT NULL columns as error";
     "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
     "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set SQL dialect - will only allow this dialect's features in SQL queries";
     "-no-check", Arg.String set_no_check, "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select) - do not enforce dialect feature checks";
