@@ -89,6 +89,7 @@ let keywords =
    "function", FUNCTION;
    "global",GLOBAL;
    "group",GROUP;
+   "group_concat", GROUP_CONCAT;
    "having",HAVING;
    "hour_microsecond", HOUR_MICROSECOND;
    "hour_minute", HOUR_MINUTE;
@@ -150,6 +151,7 @@ let keywords =
    "second_microsecond", SECOND_MICROSECOND;
    "select",SELECT;
    "set",SET;
+   "separator", SEPARATOR;
    "share", SHARE;
    "some",SOME;
    "spatial", SPATIAL;

@@ -204,73 +204,8 @@ struct
 
   let has_common_type x y = Option.is_some @@ subtype x y
 
-  type tyvar = Typ of t | Var of int
+  type tyvar = Typ of t | Var of int [@@deriving show{with_path=false}]
   let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
-
-  type agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
-    | Count (* count it's count function which never returns null  *) 
-    | Avg (* avg it's avg function that returns float *)
-
-  type logical_op = And | Or | Xor
-  type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq]
-  type null_handling_fn_kind = Coalesce of tyvar * tyvar | Null_if | If_null
-
-  type func =
-  | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
-  | Null_handling of null_handling_fn_kind
-  | Comparison of comparison_op
-  | Logical of logical_op
-  | Negation
-  | Ret of t (* _ -> t *) (* TODO eliminate *)
-  | F of tyvar * tyvar list
-  | Col_assign of { ret_t: tyvar; col_t: tyvar; arg_t: tyvar; }
-  | Multi of { 
-    ret: tyvar; 
-    fixed_args: tyvar list; 
-    repeating_pattern: tyvar list 
-  }
-  (* repeating_pattern is needed for functions with fixed initial args + optional repeating pattern
-     Example: JSON_ARRAY_APPEND(json_doc, path, val[, path, val] ...)
-     - return_type: what function returns
-     - fixed_args: required initial arguments [json_doc, path, val] 
-     - repeating_pattern: list of types that repeat [path_type, val_type]
-     Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
-
-  let monomorphic ret args = F (Typ ret, List.map (fun t -> Typ t) args)
-  let fixed ret args = monomorphic (depends ret) (List.map depends args)
-
-  let identity = F (Var 0, [Var 0])
-
-  let pp_func pp f =
-    let open Format in
-    let rec aux = function
-    | Agg Self -> fprintf pp "|'a| -> 'a"
-    | Agg Avg -> fprintf pp "|'a| -> float"
-    | Agg Count -> fprintf pp "|'a| -> int"
-    | Ret ret -> fprintf pp "_ -> %s" (show ret)
-    | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map string_of_tyvar args) (string_of_tyvar ret)
-    | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
-    | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (string_of_tyvar each_arg) (string_of_tyvar ret)
-    | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
-    | Comparison _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
-    | Logical _ -> fprintf pp "'a -> 'a -> %s" (show_kind Bool)
-    | Negation -> fprintf pp "'a -> %s" (show_kind Bool)
-    | Multi { ret; fixed_args; repeating_pattern } ->
-        let fixed_str = match fixed_args with
-          | [] -> ""
-          | args -> String.concat " -> " (List.map string_of_tyvar args) ^ " -> "
-        in
-        let repeating_str = String.concat ", " (List.map string_of_tyvar repeating_pattern) in
-        fprintf pp "%s[%s]* -> %s" fixed_str repeating_str (string_of_tyvar ret)
-    in 
-    aux f
-
-
-  let string_of_func = Format.asprintf "%a" pp_func
-
-  let is_grouping = function
-  | Agg _ -> true
-  | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
 end
 
 module Constraint =
@@ -577,6 +512,9 @@ type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
 } [@@deriving show]
+type logical_op = And | Or | Xor [@@deriving show]
+type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq, show]
+type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 and limit = param list * bool
 and nested = source * (source * Schema.Join.typ * join_condition) list [@@deriving show]
@@ -606,8 +544,37 @@ and row_values = {
   row_limit: limit option;
 }
 and order = (expr * direction option) list
+and agg_with_order_kind = 
+    | Group_concat
+and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
+    | Count (* count it's count function which never returns null  *) 
+    | Avg (* avg it's avg function that returns float *)
+    | With_order of {
+        with_order_kind: agg_with_order_kind;
+        order: order; 
+      }
+and func =
+  | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
+  | Null_handling of null_handling_fn_kind
+  | Comparison of comparison_op
+  | Logical of logical_op
+  | Negation
+  | Ret of Type.t (* _ -> t *) (* TODO eliminate *)
+  | F of Type.tyvar * Type.tyvar list
+  | Col_assign of { ret_t: Type.tyvar; col_t: Type.tyvar; arg_t: Type.tyvar; }
+  | Multi of { 
+    ret: Type.tyvar; 
+    fixed_args: Type.tyvar list; 
+    repeating_pattern: Type.tyvar list 
+  }
+  (* repeating_pattern is needed for functions with fixed initial args + optional repeating pattern
+     Example: JSON_ARRAY_APPEND(json_doc, path, val[, path, val] ...)
+     - return_type: what function returns
+     - fixed_args: required initial arguments [json_doc, path, val] 
+     - repeating_pattern: list of types that repeat [path_type, val_type]
+     Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
 and 'expr choices = (param_id * 'expr option) list
-and fun_ = { kind: Type.func; parameters: expr list; is_over_clause: bool; }
+and fun_ = { kind: func; parameters: expr list; is_over_clause: bool; }
 and case_branch = { when_: expr; then_: expr }
 and case = {  
   case: expr option;
@@ -694,18 +661,54 @@ let () = print (project ["b";"d"] test)
 let () = print (rename test "a" "new_a")
 *)
 
+let monomorphic ret args = F (Typ ret, List.map (fun t -> Type.Typ t) args)
+let fixed ret args = monomorphic (Type.depends ret) (List.map Type.depends args)
+
+let fun_identity = F (Var 0, [Var 0])
+
+let pp_func pp f =
+  let open Format in
+  let rec aux = function
+  | Agg Self -> fprintf pp "|'a| -> 'a"
+  | Agg Avg -> fprintf pp "|'a| -> float"
+  | Agg Count -> fprintf pp "|'a| -> int"
+  | Agg (With_order { with_order_kind = Group_concat; _ }) -> fprintf pp "|'a| -> text"
+  | Ret ret -> fprintf pp "_ -> %s" (Type.show ret)
+  | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map Type.string_of_tyvar args) (Type.string_of_tyvar ret)
+  | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
+  | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (Type.string_of_tyvar each_arg) (Type.string_of_tyvar ret)
+  | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
+  | Comparison _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
+  | Logical _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
+  | Negation -> fprintf pp "'a -> %s" (Type.show_kind Bool)
+  | Multi { ret; fixed_args; repeating_pattern } ->
+      let fixed_str = match fixed_args with
+        | [] -> ""
+        | args -> String.concat " -> " (List.map Type.string_of_tyvar args) ^ " -> "
+      in
+      let repeating_str = String.concat ", " (List.map Type.string_of_tyvar repeating_pattern) in
+      fprintf pp "%s[%s]* -> %s" fixed_str repeating_str (Type.string_of_tyvar ret)
+  in
+  aux f
+
+let string_of_func = Format.asprintf "%a" pp_func
+
+let is_grouping = function
+  | Agg _ -> true
+  | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
+
 module Function : sig
 
-val lookup : string -> int -> Type.func
-val lookup_agg : string -> int -> Type.func
+val lookup : string -> int -> func
+val lookup_agg : string -> int -> func
 
-val add : int -> Type.func -> string -> unit
+val add : int -> func -> string -> unit
 val exclude : int -> string -> unit
 val monomorphic : Type.t -> Type.t list -> string -> unit
 val multi : ret:Type.tyvar -> Type.tyvar -> string -> unit
 val multi_polymorphic : string -> unit
-val add_multi: Type.func -> string -> unit
-val sponge : Type.func
+val add_multi: func -> string -> unit
+val sponge : func
 val add_fixed_then_pairs : ret:Type.tyvar -> fixed_args:Type.tyvar list -> repeating_pattern:Type.tyvar list -> string -> unit
 
 end = struct
@@ -745,10 +748,10 @@ let lookup name narg =
     sponge
 
 let lookup_agg name narg = match lookup name narg with 
-  | Type.Agg _ as a -> a
+  | Agg _ as a -> a
   | _ -> fail "Function %s is not an aggregate function" name
 
-let monomorphic ret args name = add (List.length args) Type.(monomorphic ret args) name
+let monomorphic ret args name = add (List.length args) (monomorphic ret args) name
 let multi_polymorphic name = 
   add_multi (Multi { ret = Var 0; fixed_args = []; repeating_pattern = [Var 0] }) name
 
