@@ -83,18 +83,18 @@ let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
 let test = Type.[
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
   tt "SELECT str FROM test WHERE id=?"
-     [attr' ~nullability:(Nullable) "str" Text]
+     [attr' ~nullability:Nullable "str" Text]
      [param Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
-     [attr' ~nullability:(Nullable) "x" Text; attr' ~nullability:(Nullable) "z" Int]
+     [attr' ~nullability:Nullable "x" Text; attr' ~nullability:Nullable "z" Int]
      [param_nullable Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
-     [  attr' ~nullability:(Nullable) "name" Text;
-        attr' ~nullability:(Nullable) "other_name" Text
+     [  attr' ~nullability:Nullable "name" Text;
+        attr' ~nullability:Nullable "other_name" Text
      ]
      [named_nullable "delta" Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
-     [attr' ~nullability:(Nullable) "name" Text;]
+     [attr' ~nullability:Nullable "name" Text;]
      [named_nullable "x" Int; param Int; named_nullable "x" Int; param Int;];
   tt "insert into test values"
      []
@@ -108,13 +108,13 @@ let test = Type.[
   tt "insert or replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
   tt "replace into test values (2,?,?)" [] [param_nullable Text; param_nullable Text;];
  tt "select str, case when id > @id then name when id < @id then 'qqq' else @def end as q from test"
-    [attr' ~nullability:(Nullable) "str" Text; attr' ~nullability:(Nullable) "q" Text]
+    [attr' ~nullability:Nullable "str" Text; attr' ~nullability:Nullable "q" Text]
     [named_nullable "id" Int; named_nullable "id" Int; named_nullable "def" Text];
    wrong "insert into test values (1,2)";
   wrong "insert into test (str,name) values (1,'str','name')";
   (* check precedence of boolean and arithmetic operators *)
   tt "select str from test where id>=@id and id-@x<@id"
-    [attr' ~nullability:(Nullable) "str" Text;]
+    [attr' ~nullability:Nullable "str" Text;]
     [named "id" Int; named_nullable "x" Int; named "id" Int];
   tt "select 3/5"
     [attr' ~nullability:Strict "" Float;]
@@ -158,9 +158,9 @@ let test4 =
   tt "select 1+2 from test4"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
   tt "select least(10+unix_timestamp(),random()), concat('test',upper('qqqq')) from test"
     [attr' ~nullability:Strict  "" Int; attr' ~nullability:Strict "" Text] [] ~kind:(Select `Nat);
-  tt "select greatest(10,x) from test4" [attr' ~nullability:(Nullable) "" Int] [] ~kind:(Select `Nat);
+  tt "select greatest(10,x) from test4" [attr' ~nullability:Nullable "" Int] [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
-  tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:(Nullable) "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
+  tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:Nullable "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
   tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:Strict "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
 ]
 
@@ -238,7 +238,7 @@ let test_left_join = [
 
 let test_coalesce = [
   tt "CREATE TABLE test8 (x integer unsigned null)" [] [];
-  tt "SELECT COALESCE(x, null, null) as x FROM test8" [attr' ~nullability:(Nullable) "x" Int;] [];
+  tt "SELECT COALESCE(x, null, null) as x FROM test8" [attr' ~nullability:Nullable "x" Int;] [];
   tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
 ]
 
@@ -311,7 +311,7 @@ let test_in_clause_with_tuple_sets () =
     SELECT a FROM test17 
     WHERE (a, b, c) IN @abc
   |} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:(Nullable) "a" Int] stmt.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:Nullable "a" Int] stmt.schema;
   ()
 
 let test_agg_nullable = [
@@ -330,30 +330,30 @@ let test_agg_nullable = [
   tt "CREATE TABLE test18 (id INT, value INT NOT NULL)" [] [];
   tt {| 
     SELECT AVG(value) as avg_value FROM test18
-  |} [attr' ~nullability:(Nullable) "avg_value" Float] [];
+  |} [attr' ~nullability:Nullable "avg_value" Float] [];
   tt {| 
     SELECT MAX(value) as max_value FROM test18
-  |} [attr' ~nullability:(Nullable) "max_value" Int] [];
+  |} [attr' ~nullability:Nullable "max_value" Int] [];
   tt {| 
     SELECT MAX(value) as max_value FROM test18 GROUP BY id
   |} [attr' "max_value" Int] [];
   tt {| 
     SELECT MAX(value) as max_value, MAX(id) as max_id
     FROM test18 GROUP BY id
-  |} [attr' "max_value" Int; attr' "max_id" ~nullability:(Nullable) Int] [];
+  |} [attr' "max_value" Int; attr' "max_id" ~nullability:Nullable Int] [];
   tt {| 
     SELECT AVG(value) as avg_value, AVG(id) as avg_id
     FROM test18
   |} [
-    attr' "avg_value" ~nullability:(Nullable) Float; 
-    attr' "avg_id" ~nullability:(Nullable) Float
+    attr' "avg_value" ~nullability:Nullable Float; 
+    attr' "avg_id" ~nullability:Nullable Float
   ] [];
   tt {| 
     SELECT MAX((SELECT value FROM test18 WHERE value = 100)) AS result
     FROM test18
     GROUP BY value
   |} [
-  attr' "result" ~nullability:(Nullable) Int; 
+  attr' "result" ~nullability:Nullable Int; 
   ] [];
   tt {| 
     SELECT MAX((
@@ -364,7 +364,7 @@ let test_agg_nullable = [
     FROM test18
     GROUP BY value
   |} [
-  attr' "result" ~nullability:(Nullable) Int; 
+  attr' "result" ~nullability:Nullable Int; 
   ] [];
   tt {| 
     SELECT MAX(COALESCE(((SELECT value FROM test18 WHERE value = 100)), 1)) AS result
@@ -378,7 +378,7 @@ let test_agg_nullable = [
     FROM test19
     LEFT JOIN test20 on test19.a = test20.c
     GROUP BY b
-  |} [ attr' ~nullability:(Nullable) "result" Int; ][];
+  |} [ attr' ~nullability:Nullable "result" Int; ][];
   tt {|
     SELECT MAX(a) as result
     FROM test19
@@ -436,7 +436,7 @@ let cte_possible_rec_non_shared_select_only = [
     )
     SELECT num
     FROM cte
-  |} [ attr' ~nullability:(Nullable) "num" Int;][];
+  |} [ attr' ~nullability:Nullable "num" Int;][];
   tt {|
     CREATE TABLE test22 (
       col_id INT PRIMARY KEY,
@@ -486,6 +486,7 @@ let cte_possible_rec_non_shared_select_only = [
     SELECT col_id, col_value, col_group
     FROM new_values
   |}[][];
+  
   tt {|
     WITH RECURSIVE cte(num_name_just_an_alias_here) AS (
       SELECT 1 AS n
@@ -533,26 +534,26 @@ let test_ambiguous = [
      while it doesn't do that for WHERE.
   *)
   tt "select test23.id from test23 join test24 on test23.id = test24.id order by id" [
-    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:Nullable "id" Int;
   ] [];
   (* Wrong parses and asserts fail *)
   wrong "select test23.id from test23 join test24 on test23.id = test24.id where id > 2 order by id";
   tt "select test23.id from test23 join test24 on test23.id = test24.id group by id" [
-    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:Nullable "id" Int;
   ] [];
   tt "select test23.id as test from test23 join test24 on test23.id = test24.id group by column_a" [
-    attr' ~nullability:(Nullable) "test" Int;
+    attr' ~nullability:Nullable "test" Int;
   ][];
   tt "select test23.id, test24.id from test23 join test24 on test23.id = test24.id" [
-    attr' ~nullability:(Nullable) "id" Int;
-    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Nullable "id" Int;
   ] [];
   (* Wrong parses and asserts fail *)
   wrong "select id, id from test23 join test24 on test23.id = test24.id group by id";
   wrong "select id as id1, id as id2 from test23 join test24 on test23.id = test24.id group by id";
   wrong "select test23.id, test24.id from test23 join test24 on test23.id = test24.id group by id";
   tt "select test23.id from test23 join test24 on test23.id = test24.id group by id, column_a" [
-    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:Nullable "id" Int;
   ] [];
   tt "SELECT COUNT(column_a) as column_a FROM test23 WHERE column_a = @column_a" [
     (* COUNT(column_a :: Text) :: Int *)
@@ -565,19 +566,19 @@ let test_ambiguous = [
   tt "CREATE TABLE test26 (id INT)" [] [];
   wrong "select * from foo join bar on foo.id";
   tt "SELECT test23.id AS id1, test24.id AS id2 FROM test23 JOIN test24 ON test23.id = test24.id" [
-    attr' ~nullability:(Nullable) "id1" Int;
-    attr' ~nullability:(Nullable) "id2" Int;
+    attr' ~nullability:Nullable "id1" Int;
+    attr' ~nullability:Nullable "id2" Int;
   ] [];
   tt "SELECT test23.id, test24.id FROM test23 JOIN test24 ON test23.id = test24.id GROUP BY test23.id" [
-    attr' ~nullability:(Nullable) "id" Int;
-    attr' ~nullability:(Nullable) "id" Int;
+    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Nullable "id" Int;
   ][];
   wrong "SELECT COUNT(id) FROM test23 JOIN test24 ON test23.id = test24.id";
   wrong "SELECT COUNT(id) as id FROM test23 JOIN test24 ON test23.id = test24.id";
   wrong "SELECT id FROM test23 JOIN test24 ON test23.id = test24.id WHERE id > 2";
   tt "SELECT test23.id AS test_id, test24.id AS other_id FROM test23 JOIN test24 ON test23.id = test24.id" [
-    attr' ~nullability:(Nullable) "test_id" Int;
-    attr' ~nullability:(Nullable) "other_id" Int;
+    attr' ~nullability:Nullable "test_id" Int;
+    attr' ~nullability:Nullable "other_id" Int;
   ] [];
   tt "SELECT COUNT(test23.id) AS count_id FROM test23 JOIN test24 ON test23.id = test24.id" [
     attr' "count_id" Int;
@@ -591,9 +592,9 @@ let test_ambiguous = [
     JOIN test28 t2 ON t1.id = t2.id
     JOIN test29 t3 ON t1.id = t3.id
   |}[
-    attr' ~nullability:(Nullable) "id_from_test27" Int;
-    attr' ~nullability:(Nullable) "value_from_test28" Int;
-    attr' ~nullability:(Nullable) "value_from_test29" Int;
+    attr' ~nullability:Nullable "id_from_test27" Int;
+    attr' ~nullability:Nullable "value_from_test28" Int;
+    attr' ~nullability:Nullable "value_from_test29" Int;
   ][];
   (* In WHERE aliases aren't available *)
   wrong {|
@@ -920,25 +921,25 @@ let test_add_with_window_function = [
   (* Most aggregate functions also can be used as window functions *)
   tt {| SELECT SUM(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
   tt {| SELECT COUNT(*) OVER() WHERE FALSE |} [attr' "" Int;] [];
-  tt {| SELECT AVG(1) OVER() WHERE FALSE |} [attr' ~nullability:(Nullable) "" Float;] [];
+  tt {| SELECT AVG(1) OVER() WHERE FALSE |} [attr' ~nullability:Nullable "" Float;] [];
   tt {| SELECT MIN(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
   tt {| SELECT MAX(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
-  tt {| SELECT MAX(NULL) OVER() |} [attr' ~nullability:(Nullable) "" Any;] [];
+  tt {| SELECT MAX(NULL) OVER() |} [attr' ~nullability:Nullable "" Any;] [];
 
   (* Same but with PARTITION BY and ORDER BY *)
   tt {| SELECT SUM(1) OVER(PARTITION BY COALESCE(NULL, 'a')) |} [attr' "" Int;] [];
   tt {| SELECT SUM(1) OVER(ORDER BY 1 + 1) |} [attr' "" Int;] [];
   tt {| SELECT SUM(1) OVER(PARTITION BY CONCAT('a') ORDER BY 1 - 0) |} [attr' "" Int;] [];
 
-  tt {| SELECT 1 + (SELECT COUNT(1) OVER() WHERE FALSE) |} [attr' ~nullability:(Nullable) "" Int;] [];
+  tt {| SELECT 1 + (SELECT COUNT(1) OVER() WHERE FALSE) |} [attr' ~nullability:Nullable "" Int;] [];
 
   tt {| SELECT CASE WHEN SUM(2) OVER() > 100 THEN 'High' ELSE 'Low' END |} 
     [attr' "" (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["High"; "Low"]); is_closed = false }));] [];
 
-  tt {| SELECT (NULL - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) |} [attr' ~nullability:(Nullable) "" Float;] [];  
+  tt {| SELECT (NULL - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) |} [attr' ~nullability:Nullable "" Float;] [];  
   tt {| SELECT (0 - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) |} [attr' "" Float;] [];  
 
-  tt {| SELECT 1 + (SELECT (0 - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) ) |} [attr' ~nullability:(Nullable) "" Float;] [];
+  tt {| SELECT 1 + (SELECT (0 - MIN(2.0) OVER()) / (MAX(3) OVER() - MIN(4) OVER()) ) |} [attr' ~nullability:Nullable "" Float;] [];
 
   (* Non window, non agregate can't be  used *)
   wrong "SELECT IF(TRUE, 1, 2) OVER() WHERE FALSE" ;
@@ -974,8 +975,8 @@ let test_meta_propagation = [
   tt "SELECT col_1, col_2, col_3, col_4 FROM table_37 LEFT JOIN table_38 ON table_37.col_1 = table_38.col_3" [
     attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "col_1" Int;
     attr' ~extra:[NotNull;] "col_2" Int;
-    attr' ~extra:[PrimaryKey;] ~meta:["module", "FooBar"] ~nullability:(Nullable) "col_3" Int;
-    attr' ~extra:[NotNull;] ~nullability:(Nullable) "col_4" Text;
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "FooBar"] ~nullability:Nullable "col_3" Int;
+    attr' ~extra:[NotNull;] ~nullability:Nullable "col_4" Text;
   ] [];
 
   tt {|
@@ -1087,7 +1088,7 @@ let test_case_enum = [
 
   (* not exhausted (C not matched) then null *)
   tt "SELECT CASE status WHEN 'A' THEN 1 WHEN 'B' THEN 2 END `value` FROM test37" 
-    [attr' ~nullability:(Nullable) "value" Int;] [];
+    [attr' ~nullability:Nullable "value" Int;] [];
 
   (* not exhausted, else branch is presented then not null *)
   tt "SELECT CASE status WHEN 'A' THEN 1 WHEN 'B' THEN 2 ELSE 0 END `value` FROM test37" 
@@ -1099,11 +1100,11 @@ let test_case_enum = [
 
   (* not exhausted, else branch isn't presented then null *)
   tt "SELECT CASE WHEN 1 > 10 THEN 'High' END `value`" 
-    [attr' "value" ~nullability:(Nullable) (StringLiteral "High");][];  
+    [attr' "value" ~nullability:Nullable (StringLiteral "High");][];  
 
   (* not exhausted, else branch isn't presented, 'High' and 'Low' literals make Union *)
   tt "SELECT CASE WHEN 1 > 10 THEN 'High' WHEN FALSE THEN 'Low' END `value`" 
-    [attr' "value" ~nullability:(Nullable) 
+    [attr' "value" ~nullability:Nullable 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["High"; "Low"]); is_closed = false }));][]; 
       
   (* exhausted (else is presented), Int <: Float *)
@@ -1112,12 +1113,12 @@ let test_case_enum = [
 
   (* nullable since no rows possible inisde THEN *)
   tt {| SELECT CASE WHEN FALSE THEN (SELECT id FROM test37 WHERE FALSE ) ELSE 1 END `value`|} 
-    [attr' ~nullability:(Nullable) "value" Int;][];
+    [attr' ~nullability:Nullable "value" Int;][];
 
   tt {| 
     SELECT CASE WHEN FALSE THEN (SELECT id FROM test37 WHERE FALSE ) ELSE 1 END `value`
   |} 
-    [attr' ~nullability:(Nullable) "value" Int;][];
+    [attr' ~nullability:Nullable "value" Int;][];
 
   (* If COUNT is presented at least in a one branch then the NO ROWS case isn't possible *)
   tt {|
@@ -1151,7 +1152,7 @@ let test_case_enum = [
      FROM test38
      WHERE FALSE
     ) AS value
-  |} [attr' ~nullability:(Nullable) "value" Int;][];
+  |} [attr' ~nullability:Nullable "value" Int;][];
 
    tt {|
     SELECT
@@ -1166,7 +1167,7 @@ let test_case_enum = [
      FROM test38
      WHERE FALSE
     ) AS value
-  |} [attr' ~nullability:(Nullable) "value" Int;][];
+  |} [attr' ~nullability:Nullable "value" Int;][];
 ]
 
 let test_type_mapping_params _ = 
@@ -1562,16 +1563,16 @@ let test_multi_functions = [
   tt "CREATE TABLE test_multi (id INT, txt1 TEXT, txt2 TEXT NULL, txt3 TEXT NOT NULL)" [] [];
   
   tt "SELECT CONCAT(txt1, txt2) as result FROM test_multi" 
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
     
   tt "SELECT CONCAT('hello', 'world') as result" 
     [attr' "result" Text] [];
     
   tt "SELECT CONCAT('hello', txt2) as result FROM test_multi" 
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
     
   tt "SELECT CONCAT(txt1, @param) as result FROM test_multi" 
-    [attr' ~nullability:(Nullable) "result" Text] 
+    [attr' ~nullability:Nullable "result" Text] 
     [named "param" Text];
 
   tt "SELECT CONCAT(txt3, @param) as result FROM test_multi" 
@@ -1579,20 +1580,20 @@ let test_multi_functions = [
     [named "param" Text];
     
   tt "SELECT STRFTIME('%Y-%m-%d', txt1) as result FROM test_multi"
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
     
   tt "SELECT CONCAT_WS(',', txt1, txt2, 'static') as result FROM test_multi"
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
     
   tt "SELECT CONCAT(txt1, CONCAT_WS('-', txt2, 'suffix')) as result FROM test_multi"
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
     
   tt "SELECT id FROM test_multi WHERE CONCAT(txt1, txt2) = @search"
-    [attr' ~nullability:(Nullable) "id" Int]
+    [attr' ~nullability:Nullable "id" Int]
     [named "search" Text];
     
   tt "SELECT CONCAT('prefix:', (SELECT txt1 FROM test_multi LIMIT 1)) as result"
-    [attr' ~nullability:(Nullable) "result" Text] [];
+    [attr' ~nullability:Nullable "result" Text] [];
 ]
 
 
@@ -2003,6 +2004,91 @@ let test_nullability_rules = [
   tt "SELECT 1 as r FROM test20250819 WHERE a < @param" [attr' "r" Int][ named "param" Int ]
 ]
 
+let test_fn_group_by_arg = [
+  tt {|
+    CREATE TABLE table_1_2025_09_26 (
+      id INT PRIMARY KEY AUTO_INCREMENT,
+      date_1 DATE,
+      table_no INT,
+      date1_strict INT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE table_2_2025_09_26 (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        date_2 DATE,
+        table_no INT
+    )
+  |} [] [];
+
+  tt {|
+    SELECT 
+      t1.table_no,
+      GROUP_CONCAT(t1.date_1 ORDER BY t1.date_1 DESC) AS dates_from_t1,
+      GROUP_CONCAT(t1.date1_strict ORDER BY t1.date1_strict DESC) AS dates_from_t1_strict,
+      GROUP_CONCAT(t2.date_2 ORDER BY t2.date_2 DESC) AS dates_from_t2
+    FROM table_1_2025_09_26 t1
+    JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no
+    GROUP BY t1.table_no
+    ORDER BY dates_from_t1; 
+  |} [
+    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Nullable "dates_from_t1" Text;
+    attr' ~nullability:Strict "dates_from_t1_strict" Text;
+    attr' ~nullability:Nullable "dates_from_t2" Text;
+  ] [];
+
+  tt {|
+    SELECT 
+      t1.table_no,
+      GROUP_CONCAT(
+          t1.date_1 
+          ORDER BY YEAR(t1.date_1) * 10000 + MONTH(t1.date_1) * 100 + DAY(t1.date_1) DESC
+      ) AS dates_from_t1,
+      GROUP_CONCAT(
+          t2.date_2 
+          ORDER BY DAYOFYEAR(t2.date_2) ASC
+      ) AS dates_from_t2
+  FROM table_1_2025_09_26 t1
+  JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no
+  GROUP BY t1.table_no
+  ORDER BY dates_from_t1;
+  |} [
+    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Nullable "dates_from_t1" Text;
+    attr' ~nullability:Nullable "dates_from_t2" Text;
+  ] [];
+
+  tt {|
+    SELECT 
+      t1.table_no,
+      GROUP_CONCAT(t1.date_1 ORDER BY YEAR(t1.date_1) + @delta) AS dates_from_t1
+    FROM table_1_2025_09_26 t1
+    GROUP BY t1.table_no
+  |} [
+    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Nullable "dates_from_t1" Text;
+  ] [
+    named "delta" Int;
+  ];
+
+  tt {|
+    SELECT 
+      t1.table_no,
+      GROUP_CONCAT(t1.date_1 ORDER BY YEAR(t1.date_1) + @delta) AS dates_from_t1
+    FROM table_1_2025_09_26 t1
+    WHERE t1.table_no > @delta
+    GROUP BY t1.table_no
+  |} [
+    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Nullable "dates_from_t1" Text;
+  ] [
+    named "delta" Int;
+    named "delta" Int;
+  ];
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -2045,6 +2131,7 @@ let run () =
     "test_cardinality" >::: test_cardinality;
     "test_cardinality_optimization_validity" >::: test_cardinality_optimization_validity;
     "test_nullability_rules" >::: test_nullability_rules;
+    "test_fn_group_by_arg" >::: test_fn_group_by_arg;
   ]
   in
   let test_suite = "main" >::: tests in

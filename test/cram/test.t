@@ -1223,3 +1223,206 @@ order by and limit are supported with update stmt + table alias + join:
       T.execute db ("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> "t.id" | `Id_2 -> "t2.id") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
   
   end (* module Sqlgg *)
+
+
+Test GROUP_CONCAT with ORDER BY expressions and join:
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1
+  > CREATE TABLE table_1_2025_09_26 (
+  >     id INT PRIMARY KEY AUTO_INCREMENT,
+  >     date_1 DATE,
+  >     table_no INT
+  > );
+  > CREATE TABLE table_2_2025_09_26 (
+  >     id INT PRIMARY KEY AUTO_INCREMENT,
+  >     date_2 DATE,
+  >     table_no INT
+  > );
+  > SELECT 
+  >     t1.table_no,
+  >     GROUP_CONCAT(
+  >         t1.date_1 
+  >         ORDER BY YEAR(t1.date_1) * @par + MONTH(t1.date_1) * 100 + DAY(t1.date_1) @order_kind
+  >     ) AS dates_from_t1,
+  >     GROUP_CONCAT(
+  >         t2.date_2 
+  >         ORDER BY DAYOFYEAR(t2.date_2) ASC SEPARATOR ' | '
+  >     ) AS dates_from_t2,
+  >    GROUP_CONCAT(
+  >         t2.date_2  SEPARATOR ' | '
+  >     ) AS dates_from_t2_2
+  > FROM table_1_2025_09_26 t1
+  > JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > @par
+  > GROUP BY t1.table_no
+  > ORDER BY dates_from_t1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_table_1_2025_09_26 db  =
+      T.execute db ("CREATE TABLE table_1_2025_09_26 (\n\
+      id INT PRIMARY KEY AUTO_INCREMENT,\n\
+      date_1 DATE,\n\
+      table_no INT\n\
+  )") T.no_params
+  
+    let create_table_2_2025_09_26 db  =
+      T.execute db ("CREATE TABLE table_2_2025_09_26 (\n\
+      id INT PRIMARY KEY AUTO_INCREMENT,\n\
+      date_2 DATE,\n\
+      table_no INT\n\
+  )") T.no_params
+  
+    let select_2 db ~order_kind ~par callback =
+      let invoke_callback stmt =
+        callback
+          ~table_no:(T.get_column_Int_nullable stmt 0)
+          ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
+          ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
+          ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (2 + (match order_kind with `ASC -> 0 | `DESC -> 0)) in
+        T.set_param_Int p par;
+        T.set_param_Int p par;
+        T.finish_params p
+      in
+      T.select db ("SELECT \n\
+      t1.table_no,\n\
+      GROUP_CONCAT(\n\
+          t1.date_1 \n\
+          ORDER BY YEAR(t1.date_1) * ? + MONTH(t1.date_1) * 100 + DAY(t1.date_1) " ^ (match order_kind with `ASC -> "ASC" | `DESC -> "DESC") ^ "\n\
+      ) AS dates_from_t1,\n\
+      GROUP_CONCAT(\n\
+          t2.date_2 \n\
+          ORDER BY DAYOFYEAR(t2.date_2) ASC SEPARATOR ' | '\n\
+      ) AS dates_from_t2,\n\
+     GROUP_CONCAT(\n\
+          t2.date_2  SEPARATOR ' | '\n\
+      ) AS dates_from_t2_2\n\
+  FROM table_1_2025_09_26 t1\n\
+  JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
+  GROUP BY t1.table_no\n\
+  ORDER BY dates_from_t1") set_params invoke_callback
+  
+    module Fold = struct
+      let select_2 db ~order_kind ~par callback acc =
+        let invoke_callback stmt =
+          callback
+            ~table_no:(T.get_column_Int_nullable stmt 0)
+            ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
+            ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
+            ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (2 + (match order_kind with `ASC -> 0 | `DESC -> 0)) in
+          T.set_param_Int p par;
+          T.set_param_Int p par;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+      t1.table_no,\n\
+      GROUP_CONCAT(\n\
+          t1.date_1 \n\
+          ORDER BY YEAR(t1.date_1) * ? + MONTH(t1.date_1) * 100 + DAY(t1.date_1) " ^ (match order_kind with `ASC -> "ASC" | `DESC -> "DESC") ^ "\n\
+      ) AS dates_from_t1,\n\
+      GROUP_CONCAT(\n\
+          t2.date_2 \n\
+          ORDER BY DAYOFYEAR(t2.date_2) ASC SEPARATOR ' | '\n\
+      ) AS dates_from_t2,\n\
+     GROUP_CONCAT(\n\
+          t2.date_2  SEPARATOR ' | '\n\
+      ) AS dates_from_t2_2\n\
+  FROM table_1_2025_09_26 t1\n\
+  JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
+  GROUP BY t1.table_no\n\
+  ORDER BY dates_from_t1") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_2 db ~order_kind ~par callback =
+        let invoke_callback stmt =
+          callback
+            ~table_no:(T.get_column_Int_nullable stmt 0)
+            ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
+            ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
+            ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (2 + (match order_kind with `ASC -> 0 | `DESC -> 0)) in
+          T.set_param_Int p par;
+          T.set_param_Int p par;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+      t1.table_no,\n\
+      GROUP_CONCAT(\n\
+          t1.date_1 \n\
+          ORDER BY YEAR(t1.date_1) * ? + MONTH(t1.date_1) * 100 + DAY(t1.date_1) " ^ (match order_kind with `ASC -> "ASC" | `DESC -> "DESC") ^ "\n\
+      ) AS dates_from_t1,\n\
+      GROUP_CONCAT(\n\
+          t2.date_2 \n\
+          ORDER BY DAYOFYEAR(t2.date_2) ASC SEPARATOR ' | '\n\
+      ) AS dates_from_t2,\n\
+     GROUP_CONCAT(\n\
+          t2.date_2  SEPARATOR ' | '\n\
+      ) AS dates_from_t2_2\n\
+  FROM table_1_2025_09_26 t1\n\
+  JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
+  GROUP BY t1.table_no\n\
+  ORDER BY dates_from_t1") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
+
+Test GROUP_CONCAT with ORDER BY expressions and join (should fail):
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1
+  > CREATE TABLE table_1_2025_09_26 (
+  >     id INT PRIMARY KEY AUTO_INCREMENT,
+  >     date_1 DATE,
+  >     table_no INT
+  > );
+  > CREATE TABLE table_2_2025_09_26 (
+  >     id INT PRIMARY KEY AUTO_INCREMENT,
+  >     date_2 DATE,
+  >     table_no INT
+  > );
+  > SELECT 
+  >     t1.table_no,
+  >     GROUP_CONCAT(
+  >         t1.date_1 
+  >         ORDER BY t1.idontknow @order_kind
+  >     ) AS dates_from_t1,
+  >     GROUP_CONCAT(
+  >         t2.date_2 
+  >         ORDER BY DAYOFYEAR(t2.date_2) ASC
+  >     ) AS dates_from_t2
+  > FROM table_1_2025_09_26 t1
+  > JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > @par
+  > GROUP BY t1.table_no
+  > ORDER BY dates_from_t1;
+  > EOF
+  Failed : SELECT 
+      t1.table_no,
+      GROUP_CONCAT(
+          t1.date_1 
+          ORDER BY t1.idontknow @order_kind
+      ) AS dates_from_t1,
+      GROUP_CONCAT(
+          t2.date_2 
+          ORDER BY DAYOFYEAR(t2.date_2) ASC
+      ) AS dates_from_t2
+  FROM table_1_2025_09_26 t1
+  JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > @par
+  GROUP BY t1.table_no
+  ORDER BY dates_from_t1
+  Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : idontknow")
+  [2]

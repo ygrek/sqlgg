@@ -57,7 +57,7 @@ type res_expr =
 
 and case_branch = { when_: res_expr; then_: res_expr; } [@@deriving show]
 
-and res_fun = { kind: Type.func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
+and res_fun = { kind: func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
   
 and res_in_tuple_list = 
   ResTyped of (Type.t * Meta.t) list | Res of (res_expr * Meta.t) list
@@ -100,26 +100,6 @@ let values_or_all table names =
     Schema.project names schema
   | None -> schema
 
-let rec get_params_of_res_expr (e:res_expr) =
-  let rec loop acc e =
-    match e with
-    | ResSelect (_, p) -> (List.rev p) @ acc
-    | ResCase { case; branches; else_ } ->
-      let acc = match case with Some e -> loop acc e | None -> acc in
-      let acc = List.fold_left (fun acc { when_; then_ } -> loop (loop acc when_) then_) acc branches in
-      Option.map_default (loop acc) acc else_
-    | ResParam (p, m) -> Single (p, m) ::acc
-    | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
-      OptionActionChoice (choice_id, get_params_of_res_expr res_choice, pos, kind) :: acc
-    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in (types, kind, pos)) :: acc
-    | ResInparam (p, m) -> SingleIn (p, m)::acc
-    | ResFun { parameters; _ } -> List.fold_left loop acc parameters
-    | ResInTupleList _
-    | ResValue _ -> acc
-    | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr e } :: acc
-    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map get_params_of_res_expr e)) l) :: acc
-  in
-  loop [] e |> List.rev
 
 let list_same l =
   match l with
@@ -148,7 +128,7 @@ let rec is_grouping = function
 | InChoice (_, _, e) -> is_grouping e
 | Fun { kind ; parameters; _ } ->
   (* grouping function of zero or single parameter or function on grouping result *)
-  (Type.is_grouping kind && List.length parameters <= 1) || List.exists is_grouping parameters
+  (Sql.is_grouping kind && List.length parameters <= 1) || List.exists is_grouping parameters
 
 let rec is_windowing = function
 | Value _
@@ -630,6 +610,10 @@ and assign_types env expr =
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
         | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
         | Agg Self, [typ] -> consider_agg_nullability typ, types
+        | Agg (With_order { with_order_kind = Group_concat; _ }), [t1] -> 
+          let ret = depends Text in
+          let nullability = common_nullability [ret; t1] in
+          consider_agg_nullability @@ (undepend ret nullability), types
         | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
         | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
         | Null_handling (Coalesce (ret, each_arg)) , _ -> 
@@ -749,7 +733,7 @@ and infer_schema env columns =
   in
   flat_map resolve1 columns
 
-and get_params env e = e |> resolve_types env |> fst |> get_params_of_res_expr
+and get_params env e = e |> resolve_types env |> fst |> get_params_of_res_expr env
 
 (*
 let _ =
@@ -790,6 +774,31 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
 
+and get_params_of_res_expr env (e:res_expr) =
+  let rec loop acc e =
+    match e with
+    | ResSelect (_, p) -> (List.rev p) @ acc
+    | ResCase { case; branches; else_ } ->
+      let acc = match case with Some e -> loop acc e | None -> acc in
+      let acc = List.fold_left (fun acc { when_; then_ } -> loop (loop acc when_) then_) acc branches in
+      Option.map_default (loop acc) acc else_
+    | ResParam (p, m) -> Single (p, m) ::acc
+    | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
+      OptionActionChoice (choice_id, get_params_of_res_expr env res_choice, pos, kind) :: acc
+    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in (types, kind, pos)) :: acc
+    | ResInparam (p, m) -> SingleIn (p, m)::acc
+    | ResFun { parameters; kind; _ } -> 
+      let p1 = match kind with
+      | Agg (With_order { with_order_kind = Group_concat; order; _ }) -> List.rev @@ params_of_order order [] env
+      | _ -> [] in
+      p1 @ List.fold_left loop acc parameters
+    | ResInTupleList _
+    | ResValue _ -> acc
+    | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr env e } :: acc
+    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map (get_params_of_res_expr env) e)) l) :: acc
+  in
+  loop [] e |> List.rev
+
 and params_of_order order final_schema env =
   List.concat_map
     (fun (order, direction) ->
@@ -818,7 +827,7 @@ and ensure_res_expr = function
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Of_values _ -> failwith "Not a simple expression"
-  | Fun { kind; _ } when Type.is_grouping kind -> failwith "Grouping function not allowed in simple expression"
+  | Fun { kind; _ } when Sql.is_grouping kind -> failwith "Grouping function not allowed in simple expression"
   | Fun { kind; parameters; is_over_clause } ->
      ResFun { kind; parameters = List.map ensure_res_expr parameters; is_over_clause } (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
@@ -1195,7 +1204,7 @@ let rec eval (stmt:Sql.stmt) =
         let resolved = resolve_column_assignments ~env l in 
         List.map2 (fun e (c, _) -> 
           let (res, t) = resolve_types env e in 
-          let params = get_params_of_res_expr res in
+          let params = get_params_of_res_expr env res in
           c, params, get_or_failwith t
         ) resolved l
       ) assigns in
@@ -1289,7 +1298,7 @@ let rec eval (stmt:Sql.stmt) =
       vars |> List.map (fun (_k,e) ->
         match e with
         | Column _ -> [] (* this is not column but some db-specific identifier *)
-        | _ -> get_params_of_res_expr (ensure_res_expr e)) |> List.concat
+        | _ -> get_params_of_res_expr empty_env (ensure_res_expr e)) |> List.concat
     in
     begin match stmt with
     | None -> [], p, Other
