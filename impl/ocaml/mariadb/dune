@@ -2,4 +2,4 @@
  (name sqlgg_mariadb)
  (public_name sqlgg.mariadb)
  (optional)
- (libraries mariadb yojson sqlgg.traits))
+ (libraries mariadb integers yojson sqlgg.traits))

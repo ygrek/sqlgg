@@ -87,6 +87,10 @@ module type M = sig
       include Value
       val int64_to_literal : int64 -> string
     end
+    module UInt64 : sig 
+      include Value
+      val uint64_to_literal : Unsigned.UInt64.t -> string
+    end
     module Float : sig
       include Value
       val float_to_literal : float -> string
@@ -130,6 +134,7 @@ module type M = sig
 
   val get_column_Bool : row -> int -> Bool.t
   val get_column_Int : row -> int -> Int.t
+  val get_column_UInt64 : row -> int -> Unsigned.UInt64.t
   val get_column_Text : row -> int -> Text.t
   val get_column_Any : row -> int -> Any.t
   val get_column_Float : row -> int -> Float.t
@@ -142,6 +147,7 @@ module type M = sig
 
   val get_column_Bool_nullable : row -> int -> Bool.t option
   val get_column_Int_nullable : row -> int -> Int.t option
+  val get_column_UInt64_nullable : row -> int -> Unsigned.UInt64.t option
   val get_column_Text_nullable : row -> int -> Text.t option
   val get_column_Any_nullable : row -> int -> Any.t option
   val get_column_Float_nullable : row -> int -> Float.t option
@@ -157,7 +163,10 @@ module type M = sig
   
   val get_column_int64 : row -> int -> int64
   val get_column_int64_nullable : row -> int -> int64 option
-  
+
+  val get_column_uint64 : row -> int -> Unsigned.UInt64.t
+  val get_column_uint64_nullable : row -> int -> Unsigned.UInt64.t option
+
   val get_column_float : row -> int -> float
   val get_column_float_nullable : row -> int -> float option
   
@@ -188,6 +197,7 @@ module type M = sig
   val set_param_Any : params -> Any.t -> unit
   val set_param_Bool : params -> Bool.t -> unit
   val set_param_Int : params -> Int.t -> unit
+  val set_param_UInt64: params -> Unsigned.UInt64.t -> unit
   val set_param_Float : params -> Float.t -> unit
   val set_param_Decimal : params -> Decimal.t -> unit
   val set_param_Datetime : params -> Datetime.t -> unit
@@ -197,6 +207,7 @@ module type M = sig
 
   val set_param_bool : params -> bool -> unit
   val set_param_int64 : params -> int64 -> unit
+  val set_param_uint64 : params -> Unsigned.UInt64.t -> unit
   val set_param_float : params -> float -> unit
   val set_param_decimal : params -> float -> unit
   val set_param_string : params -> string -> unit

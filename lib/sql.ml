@@ -26,6 +26,7 @@ struct
 
   type kind =
     | Int
+    | UInt64
     | Text
     | Blob
     | Float
@@ -107,6 +108,10 @@ struct
     | Any, t | t, Any -> `Order (t, t)
     | Int, Float | Float, Int -> `Order (Int, Float)
     | Decimal, Int | Int, Decimal -> `Order (Int, Decimal)
+    (* UInt64 cannot be a subtype of Float: double precision only guarantees exact 
+     representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
+     Converting large UInt64 values to Float would lose precision *)
+    | UInt64, Int | Int, UInt64 -> `Order (Int, UInt64)
     | Text, Blob | Blob, Text -> `Order (Text, Blob)
     | Int, Datetime | Datetime, Int -> `Order (Int, Datetime)
     | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
