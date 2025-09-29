@@ -679,7 +679,7 @@ type stmt =
 | DeleteMulti of table_name list * nested * expr option
 | Set of (string * expr) list * stmt option
 | Update of table_name * assignments * expr option * order * param list (* where, order, limit *)
-| UpdateMulti of nested list * assignments * expr option
+| UpdateMulti of nested list * assignments * expr option * order * param list (* where, order, limit *)
 | Select of select_full
 | CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list (* table_name represents possibly namespaced function name *)
 [@@deriving show {with_path=false}]
