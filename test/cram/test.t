@@ -1426,3 +1426,174 @@ Test GROUP_CONCAT with ORDER BY expressions and join (should fail):
   ORDER BY dates_from_t1
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : idontknow")
   [2]
+
+Test UINT64 mapping for UNSIGNED INT:
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1 
+  > CREATE TABLE t1 (id BIGINT UNSIGNED, v INT);
+  > SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1;
+  > INSERT INTO t1 (id, v) VALUES (@id, 123);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (id BIGINT UNSIGNED, v INT)") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(T.get_column_UInt64_nullable stmt 0)
+          ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+          ~calc_2:(T.get_column_Float_nullable stmt 2)
+          ~v:(T.get_column_Int_nullable stmt 3)
+      in
+      T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params invoke_callback
+  
+    let insert_t1_2 db ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        begin match id with None -> T.set_param_null p | Some v -> T.set_param_UInt64 p v end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_UInt64_nullable stmt 0)
+            ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+            ~calc_2:(T.get_column_Float_nullable stmt 2)
+            ~v:(T.get_column_Int_nullable stmt 3)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_UInt64_nullable stmt 0)
+            ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+            ~calc_2:(T.get_column_Float_nullable stmt 2)
+            ~v:(T.get_column_Int_nullable stmt 3)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test UINT64 mapping for UNSIGNED INT with mapping:
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1 
+  > CREATE TABLE t1 (
+  > -- [sqlgg] module=Wrap_it
+  >  id BIGINT UNSIGNED,
+  >  v INT
+  > );
+  > SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1;
+  > INSERT INTO t1 (id, v) VALUES (@id, 123);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (\n\
+   id BIGINT UNSIGNED,\n\
+   v INT\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(Wrap_it.get_column_nullable (T.get_column_uint64_nullable stmt 0))
+          ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+          ~calc_2:(T.get_column_Float_nullable stmt 2)
+          ~v:(T.get_column_Int_nullable stmt 3)
+      in
+      T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params invoke_callback
+  
+    let insert_t1_2 db ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        begin match id with None -> T.set_param_null p | Some id -> T.set_param_uint64 p (Wrap_it.set_param id); end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~id:(Wrap_it.get_column_nullable (T.get_column_uint64_nullable stmt 0))
+            ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+            ~calc_2:(T.get_column_Float_nullable stmt 2)
+            ~v:(T.get_column_Int_nullable stmt 3)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~id:(Wrap_it.get_column_nullable (T.get_column_uint64_nullable stmt 0))
+            ~id_with_calc:(T.get_column_UInt64_nullable stmt 1)
+            ~calc_2:(T.get_column_Float_nullable stmt 2)
+            ~v:(T.get_column_Int_nullable stmt 3)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test UINT64 in type spec:
+  $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1 
+  > CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT);
+  > INSERT INTO t1 (id, v) VALUES (@id :: BIGINT UNSIGNED, 123);
+  > INSERT INTO t1 (id, v) VALUES (@id :: BIGINT UNSIGNED NULL, 123);
+  > INSERT INTO t1 (id, v) VALUES (@id :: BIGINT, 123);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT)") T.no_params
+  
+    let insert_t1_1 db ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_UInt64 p id;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
+  
+    let insert_t1_2 db ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        begin match id with None -> T.set_param_null p | Some v -> T.set_param_UInt64 p v end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
+  
+    let insert_t1_3 db ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Int p id;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
+  
+  end (* module Sqlgg *)

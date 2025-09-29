@@ -244,7 +244,7 @@ let test_coalesce = [
 
 let test_primary_strict = [
   tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
-  tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:Strict "x" Int;] [];
+  tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:Strict "x" UInt64;] [];
 ]
 
 let test_not_null_default_field = [

@@ -46,6 +46,7 @@ let as_lang_type t =
   | Union _
   | Json
   | One_or_all 
+  | UInt64
   | Json_path -> assert false
 
 let as_api_type = String.capitalize_ascii $ as_lang_type

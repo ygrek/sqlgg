@@ -101,6 +101,11 @@ module Types = struct
     let to_literal = Int64.to_string
     let int64_to_literal = to_literal
   end
+  module UInt64 = struct
+    type t = Unsigned.UInt64.t
+    let to_literal = Unsigned.UInt64.to_string
+    let uint64_to_literal = to_literal
+  end
   module Text = struct
     type t = string
     let to_literal s = sprintf "'%s'" (String.escaped s)
@@ -193,6 +198,10 @@ let get_column_Int (row : mock_row_data) (index : int) : Types.Int.t =
   | `Int v -> printf "[MOCK] get_column_Int[%d] = %Ld\n" index v; v
   | _ -> printf "[MOCK] get_column_Int[%d] = 0L (default)\n" index; 0L
 
+let get_column_UInt64 (row : mock_row_data) (index : int) : Unsigned.UInt64.t =
+  let _ = row, index in
+  printf "[MOCK] get_column_UInt64[%d] = 0 (default)\n" index; Unsigned.UInt64.zero
+
 let get_column_Text (row : mock_row_data) (index : int) : Types.Text.t = 
   match get_mock_value row index with
   | `Text v -> printf "[MOCK] get_column_Text[%d] = \"%s\"\n" index v; v
@@ -252,6 +261,11 @@ let get_column_Int_nullable (row : mock_row_data) (index : int) : Types.Int.t op
   | `Null -> printf "[MOCK] get_column_Int_nullable[%d] = None\n" index; None
   | _ -> printf "[MOCK] get_column_Int_nullable[%d] = Some 0L (default)\n" index; Some 0L
 
+let get_column_UInt64_nullable (row : mock_row_data) (index : int) : Unsigned.UInt64.t option =
+  match get_mock_value row index with
+  | `Null -> printf "[MOCK] get_column_UInt64_nullable[%d] = None\n" index; None
+  | _ -> printf "[MOCK] get_column_UInt64_nullable[%d] = Some 0 (default)\n" index; Some Unsigned.UInt64.zero
+
 let get_column_Text_nullable (row : mock_row_data) (index : int) : Types.Text.t option = 
   match get_mock_value row index with
   | `Text v -> printf "[MOCK] get_column_Text_nullable[%d] = Some \"%s\"\n" index v; Some v
@@ -303,6 +317,8 @@ let get_column_bool = get_column_Bool
 let get_column_bool_nullable = get_column_Bool_nullable
 let get_column_int64 = get_column_Int
 let get_column_int64_nullable = get_column_Int_nullable
+let get_column_uint64 = get_column_UInt64
+let get_column_uint64_nullable = get_column_UInt64_nullable
 let get_column_float = get_column_Float
 let get_column_float_nullable = get_column_Float_nullable
 let get_column_decimal = get_column_Decimal
@@ -367,6 +383,7 @@ let set_param_Text (params : params) (v : Types.Text.t) = bind_param (sprintf "'
 let set_param_Any (params : params) (v : Types.Any.t) = bind_param (sprintf "'%s'" (String.escaped v)) params
 let set_param_Bool (params : params) (v : Types.Bool.t) = bind_param (if v then "TRUE" else "FALSE") params
 let set_param_Int (params : params) (v : Types.Int.t) = bind_param (Int64.to_string v) params
+let set_param_UInt64 (params : params) (v : Unsigned.UInt64.t) = bind_param (Unsigned.UInt64.to_string v) params
 let set_param_Float (params : params) (v : Types.Float.t) = bind_param (Float.to_string v) params
 let set_param_Decimal (params : params) (v : Types.Decimal.t) = bind_param (Float.to_string v) params
 let set_param_Datetime (params : params) (v : Types.Datetime.t) = bind_param (Float.to_string v) params
@@ -376,6 +393,7 @@ let set_param_One_or_all (params : params) (v : Types.One_or_all.t) = bind_param
 
 let set_param_bool (params : params) v = bind_param (if v then "TRUE" else "FALSE") params
 let set_param_int64 (params : params) v = bind_param (Int64.to_string v) params
+let set_param_uint64 (params : params) v = bind_param (Unsigned.UInt64.to_string v) params
 let set_param_float (params : params) v = bind_param (Float.to_string v) params
 let set_param_decimal (params : params) v = bind_param (Float.to_string v) params
 let set_param_string (params : params) v = bind_param (sprintf "'%s'" (String.escaped v)) params

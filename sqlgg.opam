@@ -14,6 +14,7 @@ depends: [
   "ocaml" {>= "4.13.0"}
   "yojson" {>= "1.6.0"}
   "dune" {>= "2.7"}
+  "integers" {>= "0.4.0"}
   "menhir" {>= "20180523"}
   "mybuild" {> "3"}
   "ppx_deriving" {>= "4.3"}
@@ -41,6 +42,6 @@ conflicts: [
 
 pin-depends: [
   [ "mariadb"
-    "git+https://github.com/ocaml-community/ocaml-mariadb.git#1993263770048d50696f4e698907dbf6e62800d3"
+    "git+https://github.com/ocaml-community/ocaml-mariadb.git#e9f9ac750abd5adebb589da5e553e5c45d8ec066"
   ]
 ]
