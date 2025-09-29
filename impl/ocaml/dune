@@ -2,4 +2,4 @@
  (wrapped false)
  (name sqlgg_traits)
  (public_name sqlgg.traits)
- (libraries sqlgg_json_path))
+ (libraries integers sqlgg_json_path))

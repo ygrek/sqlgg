@@ -43,11 +43,19 @@ module type Types = sig
     val set_bool: bool -> value
     val bool_to_literal : bool -> string
   end
-  module Int : sig 
+  module Int: sig 
     include Value
     val get_int64 : field -> int64
     val set_int64: int64 -> value
     val int64_to_literal : int64 -> string
+    val of_int : int -> int64
+  end
+  module UInt64 : sig 
+    include Value
+    val get_uint64 : field -> Unsigned.UInt64.t
+    val set_uint64: Unsigned.UInt64.t -> value
+    val uint64_to_literal : Unsigned.UInt64.t -> string
+    val of_int : int -> Unsigned.UInt64.t
   end
   (* you probably want better type, e.g. (int*int) or Z.t *)
   module Float : sig
@@ -107,6 +115,7 @@ module Default_types(M : Mariadb.Nonblocking.S) : Types with
   type value = M.Field.value and
   type Bool.t = bool and
   type Int.t = int64 and
+  type UInt64.t = Unsigned.UInt64.t and
   type Text.t = string and
   type Blob.t = string and
   type Float.t = float and
@@ -136,6 +145,8 @@ struct
       match value with
       | `Null -> "null"
       | `Int x -> sprintf "int %d" x
+      | `Int64 x -> sprintf "int64 %Ld" x
+      | `UInt64 x -> sprintf "uint64 %s" (Unsigned.UInt64.to_string x)
       | `Float x -> sprintf "float %f" x
       | `String x -> sprintf "string %S" x
       | `Bytes x -> sprintf "bytes %S" (Bytes.to_string x)
@@ -153,14 +164,35 @@ struct
       let of_field field =
         match M.Field.value field with
         | `Int x -> Int64.of_int x
+        | `Int64 x -> x
         | `String x -> Int64.of_string x
-        | value -> convfail "int" field value
-      let to_value x = `Int (Int64.to_int x)
+        | value -> convfail "int64" field value
+      let to_value x = `Int64 x
       let to_literal = Int64.to_string
-    end) 
+    end)
     let get_int64 = of_field
     let set_int64 = to_value
     let int64_to_literal = to_literal
+    let of_int = Int64.of_int
+  end
+
+  module UInt64 = struct
+    include Make(struct
+      type t = Unsigned.UInt64.t
+      let of_field field =
+        match M.Field.value field with
+        | `UInt64 x -> x
+        | `Int64 x -> Unsigned.UInt64.of_int64 x
+        | `Int x -> Unsigned.UInt64.of_int x
+        | `String x -> Unsigned.UInt64.of_string x
+        | value -> convfail "uint64" field value
+      let to_value x = `UInt64 x
+      let to_literal x = Unsigned.UInt64.to_string x
+    end) 
+    let get_uint64 = of_field
+    let set_uint64 = to_value
+    let uint64_to_literal = to_literal
+    let of_int = Unsigned.UInt64.of_int
   end
 
   module Bool = struct 
@@ -410,6 +442,7 @@ let get_column_ty name conv =
 
 let get_column_Bool, get_column_Bool_nullable = get_column_ty "Bool" Bool.of_field
 let get_column_Int, get_column_Int_nullable = get_column_ty "Int" Int.of_field
+let get_column_UInt64, get_column_UInt64_nullable = get_column_ty "UInt64" UInt64.of_field
 let get_column_Text, get_column_Text_nullable = get_column_ty "Text" Text.of_field
 let get_column_Float, get_column_Float_nullable = get_column_ty "Float" Float.of_field
 let get_column_Decimal, get_column_Decimal_nullable = get_column_ty "Decimal" Decimal.of_field
@@ -421,6 +454,7 @@ let get_column_One_or_all, get_column_One_or_all_nullable = get_column_ty "One_o
 
 let get_column_bool, get_column_bool_nullable = get_column_ty "bool" Bool.get_bool
 let get_column_int64, get_column_int64_nullable = get_column_ty "int64" Int.get_int64
+let get_column_uint64, get_column_uint64_nullable = get_column_ty "uint64" UInt64.get_uint64
 let get_column_float, get_column_float_nullable = get_column_ty "float" Float.get_float
 let get_column_decimal, get_column_decimal_nullable = get_column_ty "float" Decimal.get_float
 let get_column_datetime, get_column_datetime_nullable = get_column_ty "string" Datetime.get_string
@@ -446,6 +480,7 @@ let set_param_Text = set_param_ty Text.to_value
 let set_param_Any = set_param_ty Any.to_value
 let set_param_Bool = set_param_ty Bool.to_value
 let set_param_Int = set_param_ty Int.to_value
+let set_param_UInt64 = set_param_ty UInt64.to_value
 let set_param_Float = set_param_ty Float.to_value
 let set_param_Decimal = set_param_ty Decimal.to_value
 let set_param_Datetime = set_param_ty Datetime.to_value
@@ -456,6 +491,7 @@ let set_param_One_or_all = set_param_ty One_or_all.to_value
 
 let set_param_bool = set_param_ty Bool.set_bool
 let set_param_int64 = set_param_ty Int.set_int64
+let set_param_uint64 = set_param_ty UInt64.set_uint64
 let set_param_string = set_param_ty Text.set_string
 let set_param_float = set_param_ty Float.set_float
 let set_param_decimal = set_param_ty Decimal.set_float

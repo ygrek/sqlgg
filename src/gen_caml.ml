@@ -142,7 +142,8 @@ module L = struct
   | { t = Union _; _ }
   | { t = Json; _ }
   | { t = Json_path; _ }
-  | { t = One_or_all; _ } 
+  | { t = One_or_all; _ }
+  | { t = UInt64; _ }
   | { t = Any; _ } as t -> type_name t
 
   let as_runtime_repr_name = function
@@ -158,6 +159,7 @@ module L = struct
   | { t = Datetime; _ }
   | { t = Decimal; _ } -> "float"
   | { t = Json; _ } -> "json"
+  | { t = UInt64; _ } -> "uint64"
   | { t = One_or_all; _ } -> "text"
 
 
@@ -736,7 +738,7 @@ let generate_enum_modules stmts =
 
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
-    | Int | Text | Blob | Float | Bool | Json
+    | Int | Text | Blob | Float | Bool | Json | UInt64
     | Datetime | Decimal | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
