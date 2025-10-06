@@ -1597,3 +1597,329 @@ Test UINT64 in type spec:
       T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
   
   end (* module Sqlgg *)
+
+Enum generation without custom module (should generate open variants):
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL);
+  > SELECT status FROM t_enum1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+      module Enum_0 = T.Make_enum(struct
+        type t = [`A | `B]
+        let inj = function | "a" -> `A | "b" -> `B | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
+        let proj = function  | `A -> "a"| `B -> "b"
+      end)
+  
+    let create_t_enum1 db  =
+      T.execute db ("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~status:(Enum_0.get_column stmt 0)
+      in
+      T.select db ("SELECT status FROM t_enum1") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~status:(Enum_0.get_column stmt 0)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum1") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~status:(Enum_0.get_column stmt 0)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum1") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL);
+  > SELECT status FROM t_enum1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+      module Enum_0 = T.Make_enum(struct
+        type t = [`A | `B]
+        let inj = function | "a" -> `A | "b" -> `B | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
+        let proj = function  | `A -> "a"| `B -> "b"
+      end)
+  
+    let create_t_enum1 db  =
+      T.execute db ("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~status:(Enum_0.get_column stmt 0)
+      in
+      T.select db ("SELECT status FROM t_enum1") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~status:(Enum_0.get_column stmt 0)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum1") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~status:(Enum_0.get_column stmt 0)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum1") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
+Enum generation with custom module (should not generate open variants, should use Custom):
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum2 (
+  >   -- [sqlgg] module=Custom
+  >   status ENUM('a','b') NOT NULL
+  > );
+  > SELECT status FROM t_enum2;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t_enum2 db  =
+      T.execute db ("CREATE TABLE t_enum2 (\n\
+      status ENUM('a','b') NOT NULL\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~status:(Custom.get_column (T.get_column_string stmt 0))
+      in
+      T.select db ("SELECT status FROM t_enum2") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~status:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum2") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~status:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum2") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum2 (
+  >   -- [sqlgg] module=Custom
+  >   status ENUM('a','b') NOT NULL
+  > );
+  > SELECT status FROM t_enum2;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t_enum2 db  =
+      T.execute db ("CREATE TABLE t_enum2 (\n\
+      status ENUM('a','b') NOT NULL\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~status:(Custom.get_column (T.get_column_string stmt 0))
+      in
+      T.select db ("SELECT status FROM t_enum2") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~status:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum2") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~status:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT status FROM t_enum2") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
+
+Enum mixed: one enum without module (generate 1 Enum_), one with module (skip):
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum_mix (
+  >   col_a ENUM('a','b') NOT NULL,
+  >   -- [sqlgg] module=Custom
+  >   col_b ENUM('x','y') NOT NULL
+  > );
+  > SELECT col_a, col_b FROM t_enum_mix;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+      module Enum_0 = T.Make_enum(struct
+        type t = [`A | `B]
+        let inj = function | "a" -> `A | "b" -> `B | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
+        let proj = function  | `A -> "a"| `B -> "b"
+      end)
+  
+    let create_t_enum_mix db  =
+      T.execute db ("CREATE TABLE t_enum_mix (\n\
+    col_a ENUM('a','b') NOT NULL,\n\
+      col_b ENUM('x','y') NOT NULL\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~col_a:(Enum_0.get_column stmt 0)
+          ~col_b:(Custom.get_column (T.get_column_string stmt 1))
+      in
+      T.select db ("SELECT col_a, col_b FROM t_enum_mix") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~col_a:(Enum_0.get_column stmt 0)
+            ~col_b:(Custom.get_column (T.get_column_string stmt 1))
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT col_a, col_b FROM t_enum_mix") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~col_a:(Enum_0.get_column stmt 0)
+            ~col_b:(Custom.get_column (T.get_column_string stmt 1))
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT col_a, col_b FROM t_enum_mix") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Enum only with custom module, including WHERE IN tuple param (should generate 0 Enum_):
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum_tuple (
+  >   -- [sqlgg] module=Custom
+  >   col_b ENUM('x','y') NOT NULL
+  > );
+  > SELECT col_b FROM t_enum_tuple WHERE col_b IN @vals;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t_enum_tuple db  =
+      T.execute db ("CREATE TABLE t_enum_tuple (\n\
+      col_b ENUM('x','y') NOT NULL\n\
+  )") T.no_params
+  
+    let select_1 db ~vals callback =
+      let invoke_callback stmt =
+        callback
+          ~col_b:(Custom.get_column (T.get_column_string stmt 0))
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match vals with [] -> 0 | _ :: _ -> 0)) in
+        T.finish_params p
+      in
+      T.select db ("SELECT col_b FROM t_enum_tuple WHERE " ^ (match vals with [] -> "FALSE" | _ :: _ -> "col_b IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Custom.set_param v)) vals) ^ ")")) set_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db ~vals callback acc =
+        let invoke_callback stmt =
+          callback
+            ~col_b:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match vals with [] -> 0 | _ :: _ -> 0)) in
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT col_b FROM t_enum_tuple WHERE " ^ (match vals with [] -> "FALSE" | _ :: _ -> "col_b IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Custom.set_param v)) vals) ^ ")")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db ~vals callback =
+        let invoke_callback stmt =
+          callback
+            ~col_b:(Custom.get_column (T.get_column_string stmt 0))
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match vals with [] -> 0 | _ :: _ -> 0)) in
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT col_b FROM t_enum_tuple WHERE " ^ (match vals with [] -> "FALSE" | _ :: _ -> "col_b IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Custom.set_param v)) vals) ^ ")")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)

@@ -249,8 +249,9 @@ module Meta = struct
   let of_list list = List.fold_left (fun map (k, v) -> StringMap.add k v map) StringMap.empty list
   
   let empty () = StringMap.empty
-  
   let find_opt k map = StringMap.find_opt map k
+  
+  let mem k map = StringMap.mem map k
   let pp fmt t =
     if StringMap.is_empty t then
       Format.fprintf fmt "{}"
