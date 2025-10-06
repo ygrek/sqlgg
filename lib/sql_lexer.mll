@@ -209,7 +209,8 @@ let keywords =
       BOOLEAN,
       DATE, TIME, TIMESTAMP, INTERVAL
     *)
-  all T_INTEGER ["integer";"int";"smallint";"bigint";"tinyint";"mediumint";"middleint";"serial";"identity"];
+  all T_INTEGER ["integer";"int";"smallint";"tinyint";"mediumint";"middleint";"serial";"identity"];
+  all T_BIG_INTEGER ["bigint"];
   all T_DECIMAL ["numeric";"decimal";"dec";"fixed"];
   all T_INTEGER ["number"]; (* oracle *)
   all T_BOOLEAN ["bool";"boolean"];

@@ -46,6 +46,7 @@ let as_api_type t =
   | Union _
   | Json_path
   | One_or_all
+  | UInt64
   | Json -> assert false
 
 let as_lang_type = as_api_type

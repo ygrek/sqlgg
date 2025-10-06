@@ -53,7 +53,7 @@
 %token GROUP_CONCAT SEPARATOR
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
-%token T_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
+%token T_INTEGER T_BIG_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
 
 (*
 %left COMMA_JOIN
@@ -626,11 +626,16 @@ expr_sql_type_flavor:
                  | T_UUID { Blob }
                  | T_JSON { Json }
 
+sql_int_type_flavor:
+  | T_INTEGER u=UNSIGNED? { Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u; Int } 
+  | T_BIG_INTEGER u=UNSIGNED? { 
+    Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u;
+    match u with
+    | Some _ -> UInt64
+    | None -> Int
+  }
 
-sql_type_flavor: T_INTEGER u=UNSIGNED? ZEROFILL? {
-  Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u;
-  Int
-}
+sql_type_flavor: t=sql_int_type_flavor ZEROFILL? { t }
                | expr_sql_type_flavor { $1 }
                | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
 
@@ -639,7 +644,7 @@ text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
 
 cast_as:
     | t=cast_sql_type { (fun e -> Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false }) }
-    | UNSIGNED { Dialect_feature.set_unsigned_types ($startofs, $endofs); (fun e -> Fun { kind = (Ret (depends Int)); parameters = [e]; is_over_clause = false }) }
+    | UNSIGNED { Dialect_feature.set_unsigned_types ($startofs, $endofs); (fun e -> Fun { kind = (Ret (depends UInt64)); parameters = [e]; is_over_clause = false }) }
     | SIGNED { (fun e -> Fun { kind = (Ret (depends Int)); parameters = [e]; is_over_clause = false }) }
 
 %inline either(X,Y): X | Y { }
@@ -668,13 +673,15 @@ compound_op:
   | INTERSECT { `Intersect }
 
 strict_type:
-    | T_TEXT     { Text }
-    | T_JSON     { Json }
-    | T_BLOB     { Blob }
-    | T_INTEGER  { Int }
-    | T_FLOAT    { Float }
-    | T_BOOLEAN  { Bool }
-    | T_DATETIME { Datetime }
+    | T_TEXT                 { Text }
+    | T_JSON                 { Json }
+    | T_BLOB                 { Blob }
+    | T_INTEGER              { Int }
+    | T_BIG_INTEGER          { Int }
+    | T_BIG_INTEGER UNSIGNED { UInt64 }
+    | T_FLOAT                { Float }
+    | T_BOOLEAN              { Bool }
+    | T_DATETIME             { Datetime }
 
 manual_type:
     | strict_type      { strict   $1 }

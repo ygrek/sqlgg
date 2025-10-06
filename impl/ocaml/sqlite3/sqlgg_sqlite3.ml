@@ -30,6 +30,11 @@ module Types = struct
     let to_literal = to_string
     let int64_to_literal = to_literal
   end
+  module UInt64 = struct
+    type t = Unsigned.UInt64.t
+    let to_literal _ = failwith "uint64 unsupported by sqlite"
+    let uint64_to_literal = to_literal
+  end
   module Text = struct
     type t = string
 
@@ -178,6 +183,9 @@ let get_column_ty (name,conv) =
 
 let get_column_Bool, get_column_Bool_nullable = get_column_ty Conv.bool
 let get_column_Int, get_column_Int_nullable = get_column_ty Conv.int
+let get_column_UInt64, get_column_UInt64_nullable =
+  ((fun _ _ -> raise (Oops "get_column_UInt64: uint64 unsupported by sqlite")),
+   (fun _ _ -> raise (Oops "get_column_UInt64_nullable: uint64 unsupported by sqlite")))
 let get_column_Text, get_column_Text_nullable = get_column_ty Conv.text
 let get_column_Any, get_column_Any_nullable = get_column_ty Conv.text
 let get_column_Float, get_column_Float_nullable = get_column_ty Conv.float
@@ -189,6 +197,9 @@ let get_column_One_or_all, get_column_One_or_all_nullable = get_column_ty Conv.o
 
 let get_column_bool, get_column_bool_nullable = (get_column_Bool, get_column_Bool_nullable)
 let get_column_int64, get_column_int64_nullable = (get_column_Int, get_column_Int_nullable)
+let get_column_uint64, get_column_uint64_nullable =
+  ((fun _ _ -> raise (Oops "get_column_uint64: uint64 unsupported by sqlite")),
+   (fun _ _ -> raise (Oops "get_column_uint64_nullable: uint64 unsupported by sqlite")))
 let get_column_float, get_column_float_nullable = (get_column_Float, get_column_Float_nullable)
 let get_column_decimal, get_column_decimal_nullable = (get_column_Decimal, get_column_Decimal_nullable)
 let get_column_string, get_column_string_nullable = (get_column_Text, get_column_Text_nullable)
@@ -223,6 +234,7 @@ let set_param_Text stmt v = bind_param (S.Data.TEXT v) stmt
 let set_param_Any = set_param_Text
 let set_param_Bool stmt v = bind_param (S.Data.INT (if v then 1L else 0L)) stmt
 let set_param_Int stmt v = bind_param (S.Data.INT v) stmt
+let set_param_UInt64 _ _ = failwith "set_param_UInt64: uint64 unsupported by sqlite"
 let set_param_Float stmt v = bind_param (S.Data.FLOAT v) stmt
 let set_param_Decimal = set_param_Float
 let set_param_Datetime = set_param_Float
@@ -237,6 +249,7 @@ let set_param_One_or_all stmt v = bind_param (S.Data.TEXT (match v with `One -> 
 
 let set_param_bool = set_param_Bool
 let set_param_int64 = set_param_Int
+let set_param_uint64 _ _ = failwith "set_param_uint64: uint64 unsupported by sqlite"
 let set_param_float = set_param_Float
 let set_param_decimal = set_param_Float
 let set_param_string = set_param_Text

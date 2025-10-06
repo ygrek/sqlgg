@@ -2,7 +2,7 @@ open Printf
 
 module M = struct
 
-type mock_value = [ `Bool of bool | `Int of int64 | `Text of string | `Float of float | `Null ]
+type mock_value = [ `Bool of bool | `Int of int64 | `UInt64 of Unsigned.UInt64.t | `Text of string | `Float of float | `Null ]
 
 type mock_row_data = {
   values: (int * mock_value) array;
@@ -43,6 +43,7 @@ let make_mock_row (values : mock_value list) : mock_row_data =
 
 let mock_bool (v : bool) : mock_value = `Bool v
 let mock_int (v : int64) : mock_value = `Int v  
+let mock_uint64 (v : Unsigned.UInt64.t) : mock_value = `UInt64 v
 let mock_text (v : string) : mock_value = `Text v
 let mock_float (v : float) : mock_value = `Float v
 let mock_null : mock_value = `Null
@@ -57,6 +58,11 @@ module Types = struct
     type t = int64
     let to_literal = Int64.to_string
     let int64_to_literal = to_literal
+  end
+  module UInt64 = struct
+    type t = Unsigned.UInt64.t
+    let to_literal = Unsigned.UInt64.to_string
+    let uint64_to_literal = to_literal
   end
   module Text = struct
     type t = string
@@ -276,6 +282,7 @@ let select_with_stmt stmt _set_params callback =
         let val_str = match value with
           | `Bool b -> string_of_bool b
           | `Int i -> Int64.to_string i
+          | `UInt64 u -> Unsigned.UInt64.to_string u
           | `Text s -> s
           | `Float f -> string_of_float f
           | `Null -> "NULL"
@@ -340,6 +347,11 @@ let get_column_Int (row : mock_row_data) (index : int) : Types.Int.t =
   | `Int v -> printf "[MOCK] get_column_Int[%d] = %Ld\n" index v; v
   | _ -> printf "[MOCK] get_column_Int[%d] = 0L (default)\n" index; 0L
 
+let get_column_UInt64 (row : mock_row_data) (index : int) : Unsigned.UInt64.t =
+  match get_mock_value row index with
+  | `UInt64 u -> printf "[MOCK] get_column_UInt64[%d] = %s\n" index (Unsigned.UInt64.to_string u); u
+  | _ -> printf "[MOCK] get_column_UInt64[%d] = 0 (default)\n" index; Unsigned.UInt64.zero
+
 let get_column_Text (row : mock_row_data) (index : int) : Types.Text.t = 
   match get_mock_value row index with
   | `Text v -> printf "[MOCK] get_column_Text[%d] = \"%s\"\n" index v; v
@@ -387,6 +399,12 @@ let get_column_Int_nullable (row : mock_row_data) (index : int) : Types.Int.t op
   | `Null -> printf "[MOCK] get_column_Int_nullable[%d] = None\n" index; None
   | _ -> printf "[MOCK] get_column_Int_nullable[%d] = Some 0L (default)\n" index; Some 0L
 
+let get_column_UInt64_nullable (row : mock_row_data) (index : int) : Unsigned.UInt64.t option =
+  match get_mock_value row index with
+  | `UInt64 u -> printf "[MOCK] get_column_UInt64_nullable[%d] = Some %s\n" index (Unsigned.UInt64.to_string u); Some u
+  | `Null -> printf "[MOCK] get_column_UInt64_nullable[%d] = None\n" index; None
+  | _ -> printf "[MOCK] get_column_UInt64_nullable[%d] = Some 0 (default)\n" index; Some Unsigned.UInt64.zero
+
 let get_column_Text_nullable (row : mock_row_data) (index : int) : Types.Text.t option = 
   match get_mock_value row index with
   | `Text v -> printf "[MOCK] get_column_Text_nullable[%d] = Some \"%s\"\n" index v; Some v
@@ -430,6 +448,8 @@ let get_column_bool = get_column_Bool
 let get_column_bool_nullable = get_column_Bool_nullable
 let get_column_int64 = get_column_Int
 let get_column_int64_nullable = get_column_Int_nullable
+let get_column_uint64 = get_column_UInt64
+let get_column_uint64_nullable = get_column_UInt64_nullable
 let get_column_float = get_column_Float
 let get_column_float_nullable = get_column_Float_nullable
 let get_column_decimal = get_column_Decimal
@@ -493,6 +513,7 @@ let set_param_Text (params : params) (v : Types.Text.t) = bind_param (sprintf "'
 let set_param_Any (params : params) (v : Types.Any.t) = bind_param (sprintf "'%s'" (String.escaped v)) params
 let set_param_Bool (params : params) (v : Types.Bool.t) = bind_param (if v then "TRUE" else "FALSE") params
 let set_param_Int (params : params) (v : Types.Int.t) = bind_param (Int64.to_string v) params
+let set_param_UInt64 (params : params) (v : Unsigned.UInt64.t) = bind_param (Unsigned.UInt64.to_string v) params
 let set_param_Float (params : params) (v : Types.Float.t) = bind_param (Float.to_string v) params
 let set_param_Decimal (params : params) (v : Types.Decimal.t) = bind_param (Float.to_string v) params
 let set_param_Datetime (params : params) (v : Types.Datetime.t) = bind_param (Float.to_string v) params
@@ -503,6 +524,7 @@ let set_param_One_or_all (params : params) (v : Types.One_or_all.t) = bind_param
 
 let set_param_bool (params : params) v = bind_param (if v then "TRUE" else "FALSE") params
 let set_param_int64 (params : params) v = bind_param (Int64.to_string v) params
+let set_param_uint64 (params : params) v = bind_param (Unsigned.UInt64.to_string v) params
 let set_param_float (params : params) v = bind_param (Float.to_string v) params
 let set_param_decimal (params : params) v = bind_param (Float.to_string v) params
 let set_param_string (params : params) v = bind_param (sprintf "'%s'" (String.escaped v)) params
@@ -537,6 +559,7 @@ let select (db : [> `RO ] connection) (sql : string) (set_params : statement -> 
         let val_str = match value with
           | `Bool b -> string_of_bool b
           | `Int i -> Int64.to_string i
+          | `UInt64 u -> Unsigned.UInt64.to_string u
           | `Text s -> s
           | `Float f -> string_of_float f
           | `Null -> "NULL"
