@@ -191,16 +191,33 @@ let resolve_column ~env {cname;tname} =
   | None -> find (Option.map_default (schema_of ~env) env.schema tname) cname
   | Some result -> result
 
+let rec merge_meta_into_params ~shallow meta expr =
+  match expr, shallow with
+  | Param (p, m), _ -> Param (p, Meta.merge_right meta m)
+  | Inparam (p, m), _ -> Inparam (p, Meta.merge_right meta m)
+  | OptionActions ({ choice; _ } as o), _->
+    OptionActions { o with choice = merge_meta_into_params ~shallow meta choice }
+  | Fun ({ parameters; _ } as fn), false ->
+    Fun { fn with parameters = List.map (merge_meta_into_params ~shallow meta) parameters }
+  | Case { case; branches; else_ }, false ->
+    let case = Option.map (merge_meta_into_params ~shallow meta) case in
+    let branches = List.map (fun { Sql.when_; then_ } ->
+      { Sql.when_ = merge_meta_into_params ~shallow meta when_;
+        then_ = merge_meta_into_params ~shallow meta then_ }
+    ) branches in
+    let else_ = Option.map (merge_meta_into_params ~shallow meta) else_ in
+    Case { case; branches; else_ }
+  | InChoice (n, k, e), false -> InChoice (n, k, merge_meta_into_params ~shallow meta e)
+  | InTupleList ({ exprs; _ } as tl), false ->
+    InTupleList { tl with exprs = List.map (merge_meta_into_params ~shallow meta) exprs }
+  | Choices (n, l), false ->
+    Choices (n, List.map (fun (n, e) -> n, Option.map (merge_meta_into_params ~shallow meta) e) l)
+  | (Value _ | Column _ | SelectExpr _ | Of_values _) as e, false -> e
+  | expr , true -> expr
+
 let set_param_meta ~env col e = 
   let m' = (resolve_column ~env col).attr.meta in
-  let rec aux = function 
-  | Param (p, m) -> Param (p, Meta.merge_right m' m)  
-  | Inparam (p, m) -> Inparam (p, Meta.merge_right m' m)
-  | OptionActions { choice; pos; kind } -> 
-    OptionActions { choice = aux choice; pos; kind }
-  | e -> e 
-  in
-  aux e
+  merge_meta_into_params ~shallow:true m' e
 
 let resolve_column_assignments ~env l =
   let open Schema.Source in 
@@ -1054,16 +1071,19 @@ let update_tables ~env sources ss w =
   let p2 = get_params_opt { env with set_tyvar_strict = true } w in
   p0 @ p1 @ p2
 
-let annotate_select select types =
+let annotate_select select attrs =
   let (select1,compound) = select.select in
-  let rec loop acc cols types =
-    match cols, types with
+  let rec loop acc cols attrs =
+    match cols, attrs with
     | [], [] -> List.rev acc
     | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
-    | Expr (e,name) :: cols, t :: types -> loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols types
+    | Expr (e,name) :: cols, a :: attrs ->
+      let e = merge_meta_into_params ~shallow:false a.meta e in
+      let t = a.domain in
+      loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
     | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
   in
-  { select with select = { select1 with columns = loop [] select1.columns types }, compound }
+  { select with select = { select1 with columns = loop [] select1.columns attrs }, compound }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
   | On_conflict (action, attrs) -> 
@@ -1259,7 +1279,7 @@ let rec eval (stmt:Sql.stmt) =
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
     } in
-    let select_complete = annotate_select select.select_complete (List.map (fun a -> a.domain) expect) in
+    let select_complete = annotate_select select.select_complete expect in
     let select = { select with select_complete } in
     let (schema,params,_) = eval_select_full env select in
     ignore (Schema.compound
