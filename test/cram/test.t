@@ -1382,6 +1382,42 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
   $ echo $?
   0
 
+INSERT ... SELECT with UNION ALL and enum meta propagation (short):
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_enum_union (
+  >   -- [sqlgg] module=Custom
+  >   pending_type ENUM('downgrade','upgrade') NOT NULL
+  > );
+  > INSERT INTO t_enum_union (pending_type)
+  > SELECT pending_type FROM t_enum_union WHERE pending_type = @p
+  > UNION ALL
+  > SELECT @p;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t_enum_union db  =
+      T.execute db ("CREATE TABLE t_enum_union (\n\
+      pending_type ENUM('downgrade','upgrade') NOT NULL\n\
+  )") T.no_params
+  
+    let insert_t_enum_union_1 db ~p =
+      let set_params stmt =
+        let p = T.start_params stmt (2) in
+        T.set_param_string p (Custom.set_param p);
+        T.set_param_string p (Custom.set_param p);
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t_enum_union (pending_type)\n\
+  SELECT pending_type FROM t_enum_union WHERE pending_type = ?\n\
+  UNION ALL\n\
+  SELECT ?") set_params
+  
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
 INSERT ... SELECT with meta propagation:
   $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
   > CREATE TABLE t_dst (
