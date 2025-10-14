@@ -1382,6 +1382,42 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
   $ echo $?
   0
 
+INSERT ... SELECT with meta propagation:
+  $ sqlgg -gen caml_io -params unnamed -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE t_dst (
+  >   status ENUM('a','b') NOT NULL
+  > );
+  > INSERT INTO t_dst (status)
+  > SELECT @s;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+      module Enum_0 = T.Make_enum(struct
+        type t = [`A | `B]
+        let inj = function | "a" -> `A | "b" -> `B | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
+        let proj = function  | `A -> "a"| `B -> "b"
+      end)
+  
+    let create_t_dst db  =
+      T.execute db ("CREATE TABLE t_dst (\n\
+    status ENUM('a','b') NOT NULL\n\
+  )") T.no_params
+  
+    let insert_t_dst_1 db ~s =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        Enum_0.set_param p s;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO t_dst (status)\n\
+  SELECT ?") set_params
+  
+  end (* module Sqlgg *)
+  $ echo $?
+  0
+
 
 Test GROUP_CONCAT with ORDER BY expressions and join (should fail):
   $ sqlgg -gen caml -no-header -dialect=mysql -allow-write-notnull-null - <<'EOF' 2>&1
