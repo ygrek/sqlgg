@@ -1073,17 +1073,22 @@ let update_tables ~env sources ss w =
 
 let annotate_select select attrs =
   let (select1,compound) = select.select in
-  let rec loop acc cols attrs =
-    match cols, attrs with
-    | [], [] -> List.rev acc
-    | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
-    | Expr (e,name) :: cols, a :: attrs ->
-      let e = merge_meta_into_params ~shallow:false a.meta e in
-      let t = a.domain in
-      loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
-    | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
+  let apply_to_columns cols attrs =
+    let rec loop acc cols attrs =
+      match cols, attrs with
+      | [], [] -> List.rev acc
+      | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
+      | Expr (e,name) :: cols, a :: attrs ->
+        let e = merge_meta_into_params ~shallow:false a.meta e in
+        let t = a.domain in
+        loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
+      | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
+    in
+    loop [] cols attrs
   in
-  { select with select = { select1 with columns = loop [] select1.columns attrs }, compound }
+  let select1' = { select1 with columns = apply_to_columns select1.columns attrs } in
+  let compound' = List.map (fun (op, sel) -> (op, { sel with columns = apply_to_columns sel.columns attrs })) compound in
+  { select with select = (select1', compound') }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
   | On_conflict (action, attrs) -> 
