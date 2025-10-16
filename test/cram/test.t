@@ -1995,3 +1995,83 @@ Enum only with custom module, including WHERE IN tuple param (should generate 0 
   
     end (* module List *)
   end (* module Sqlgg *)
+
+Test meta propagation: IFNULL with ENUM column should propagate metadata to result:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE test_ifnull_enum (
+  >   -- [sqlgg] module=Priority
+  >   priority ENUM('low','medium','high') NULL
+  > );
+  > SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test_ifnull_enum db  =
+      T.execute db ("CREATE TABLE test_ifnull_enum (\n\
+      priority ENUM('low','medium','high') NULL\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~r:(Priority.get_column (T.get_column_string stmt 0))
+      in
+      T.select db ("SELECT IFNULL(priority, 'medium')") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~r:(Priority.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT IFNULL(priority, 'medium')") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~r:(Priority.get_column (T.get_column_string stmt 0))
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT IFNULL(priority, 'medium')") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test meta propagation: INSERT with Choices should propagate ENUM metadata to choice branches:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE test_insert_choices (
+  >   -- [sqlgg] module=MyStatus
+  >   status ENUM('pending','completed') NOT NULL
+  > );
+  > INSERT INTO test_insert_choices SET status = @x { Set { @val } | Default { 'pending' } };
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test_insert_choices db  =
+      T.execute db ("CREATE TABLE test_insert_choices (\n\
+      status ENUM('pending','completed') NOT NULL\n\
+  )") T.no_params
+  
+    let insert_test_insert_choices_1 db ~x =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match x with `Set _ -> 1 | `Default -> 0)) in
+        begin match x with
+        | `Default -> ()
+        | `Set (val) ->
+          T.set_param_string p (MyStatus.set_param val);
+        end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " " ^ "?" ^ " " | `Default -> " 'pending' ")) set_params
+  
+  end (* module Sqlgg *)
