@@ -454,7 +454,7 @@ let cte_possible_rec_non_shared_select_only = [
     )
   |} [
     attr' ~extra:[PrimaryKey] "col_id" Int;
-    attr' ~nullability:Nullable "col_value" Decimal;
+    attr' ~nullability:Nullable "col_value" (Decimal { precision = Some 10; scale = Some 2; });
     attr' ~nullability:Nullable "col_group" Text;
   ] [
   ];
@@ -830,8 +830,8 @@ let test_select_exposed_alias = [
   ) as z (a, b, c, d) |} [
     attr' ~nullability:Nullable "a" Text;
     attr' "b" Int;
-    attr' ~nullability:Nullable "c" Decimal;
-    attr' ~nullability:Nullable "d" Decimal;
+    attr' ~nullability:Nullable "c" (Decimal { precision = Some 10; scale = Some 2; });
+    attr' ~nullability:Nullable "d" (Decimal { precision = Some 10; scale = Some 2; });
   ] [];
 
   tt {| SELECT outer_x.* FROM (
@@ -847,7 +847,7 @@ let test_select_exposed_alias = [
   ) as outer_x (str, num, price, flag, bonus) |} [
     attr' "str" (StringLiteral "abc");
     attr' "num" Int;
-    attr' "price" Float;
+    attr' "price" (FloatingLiteral 2.5);
     attr' "flag" Bool;
     attr' "bonus" Bool;
 ] [];
@@ -1364,15 +1364,15 @@ let test_type_mapping_params _ =
       attr' ~extra:[NotNull; Unique] ~meta:["module", "Module5"] "b" Text;
       attr' ~extra:[NotNull] ~meta:["module", "Module6"] "c" 
         (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["status_a"; "status_b"; "status_c"]); is_closed = true }));
-      attr' ~extra:[] ~meta:["module", "Module3"] "d" Decimal;
+      attr' ~extra:[] ~meta:["module", "Module3"] "d" (Decimal { precision = Some 10; scale = Some 2; });
       attr' "e" Int;
     ] 
     stmt.schema;
 
   assert_params_with_meta stmt [
     (named "param_1" Datetime, []);
-    (named "param_2" Decimal, ["module", "Module3"]);
-    (named "param_3" Decimal, []);
+    (named "param_2" (Decimal { precision = Some 10; scale = Some 2; }), ["module", "Module3"]);
+    (named "param_3" (Decimal { precision = Some 10; scale = Some 2; }), []);
     (named "param_4" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["status_a"; "status_b"; "status_c"]); is_closed = true })), 
       ["module", "Module6"]);
@@ -1463,7 +1463,7 @@ let test_meta_insert_update _ =
     (named "param3" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
       ["module", "Module3"]);
-    (named_nullable "param4" Decimal, ["module", "Module4"]);
+    (named_nullable "param4" (Decimal { precision = Some 10; scale = Some 2; }), ["module", "Module4"]);
     (named_nullable "param5" Datetime, []);
   ];
 
@@ -1476,7 +1476,7 @@ let test_meta_insert_update _ =
     WHERE t44.col_1 = @param4
   |} in
   assert_params_with_meta stmt [
-    (named_nullable "param1" Decimal, []);
+    (named_nullable "param1" (Decimal { precision = Some 10; scale = Some 2; }), []);
     (named "param2" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
       ["module", "Module3"]);
@@ -1524,12 +1524,12 @@ let test_meta_insert_update _ =
     (named "param3" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
       ["module", "Module3"]);
-    (named_nullable "param4" Decimal, ["module", "Module4"]);
+    (named_nullable "param4" (Decimal { precision = Some 10; scale = Some 2; }), ["module", "Module4"]);
     (named "param5" Text, ["module", "Module2"]);
     (named "param6" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["admin"; "user"; "moderator"]); is_closed = true })), 
       ["module", "Module3"]);
-    (named_nullable "param7" Decimal, []);
+    (named_nullable "param7" (Decimal { precision = Some 10; scale = Some 2; }), []);
   ];
 
   let stmt = parse {|
@@ -1554,7 +1554,7 @@ let test_meta_insert_update _ =
     WHERE col_1 = @param3
   |} in
   assert_params_with_meta stmt [
-    (named_nullable "param1" Decimal, []);  (* no meta from col_4 *)
+    (named_nullable "param1" (Decimal { precision = Some 10; scale = Some 2; }), []);  (* no meta from col_4 *)
     (named "param2" Text, []);  (* no meta from от col_2 *)
     (named "param3" Int, ["module", "Module1"]);
   ]

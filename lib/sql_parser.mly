@@ -565,7 +565,6 @@ strict_value:
     | TEXT { StringLiteral $1 }
     | BLOB collate? { Blob }
     | INTEGER { Int }
-    | FLOAT { Float }
     | TRUE
     | FALSE { Bool }
     | DATE TEXT
@@ -574,12 +573,13 @@ strict_value:
 
 literal_value:
     | strict_value { Value (strict $1) }
+    | FLOAT { Value (strict (FloatingLiteral $1)) }
     | NULL { Value (nullable Any) } (* he he *)
 
 single_literal_value:
     | literal_value { $1 }
     | MINUS INTEGER { Value (strict Int) }
-    | MINUS FLOAT { Value (strict Float) }
+    | MINUS FLOAT { Value (strict (FloatingLiteral $2)) }
 
 expr_list: l=commas(expr) { l }
 func_params: DISTINCT? l=expr_list { l }
@@ -617,7 +617,11 @@ interval_unit: INTERVAL_UNIT
              | YEAR_MONTH { Value (strict Datetime) }
 
 expr_sql_type_flavor:
-                 | T_DECIMAL { Decimal }
+                 | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) { 
+                      match p with
+                      | Some (precision, scale) -> Decimal { precision = Some precision; scale }
+                      | None -> Decimal { precision = None; scale = None}
+                  }
                  | binary { Blob }
                  | NATIONAL? text VARYING? charset? collate? { Text }
                  | T_FLOAT PRECISION? { Float }

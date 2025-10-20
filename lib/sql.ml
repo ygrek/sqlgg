@@ -24,6 +24,8 @@ struct
 
   type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}]
 
+  type decimal = { precision: int option; scale: int option } [@@deriving eq, show{with_path=false}]
+
   type kind =
     | Int
     | UInt64
@@ -32,9 +34,10 @@ struct
     | Float
     | Bool
     | Datetime
-    | Decimal
+    | Decimal of decimal
     | Union of union
     | StringLiteral of string
+    | FloatingLiteral of float
     | Json_path
     | One_or_all
     | Json
@@ -42,9 +45,13 @@ struct
     [@@deriving eq, show{with_path=false}]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
-    let show_kind = function 
+    let show_kind = function
       | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
       | StringLiteral l -> sprintf "StringLiteral (%s)" l
+      | FloatingLiteral f -> sprintf "FloatingLiteral (%g)" f
+      | Decimal { precision = Some p; scale = Some s } -> sprintf "Decimal(%d,%d)" p s
+      | Decimal { precision = Some p; scale = None } -> sprintf "Decimal(%d)" p
+      | Decimal _ -> "Decimal"
       | k -> show_kind k
 
   type nullability =
@@ -81,6 +88,15 @@ struct
 
   let is_one_or_all s = List.mem (String.lowercase_ascii s) ["one"; "all"]
 
+let check_exact_exact_number value { precision; scale } =
+  match precision, scale with
+  | Some p, Some s ->
+      let max =
+        (10. ** float_of_int (p - s)) -. (10. ** (-. float_of_int s))
+      in
+      value >= -.max && value <= max
+  | _ -> true
+
   (** @return (subtype, supertype) *)
   let order_kind x y =  
     match x, y with
@@ -106,8 +122,21 @@ struct
     | StringLiteral x, Datetime | Datetime, StringLiteral x -> `Order (Datetime, StringLiteral x)
     | StringLiteral x, Blob | Blob, StringLiteral x -> `Order (Blob, StringLiteral x)
     | Any, t | t, Any -> `Order (t, t)
+
+    | Int, Decimal dec | Decimal dec, Int -> `Order (Int, Decimal dec)
+    | Decimal d1, Decimal d2 when d1 <> d2 -> 
+        let scale = match d1.scale, d2.scale with
+          | None, _ | _, None -> None
+          | Some a, Some b -> Some (max a b) in
+        let common = Decimal { precision = None; scale } in
+        `Order (common, common)
+    | FloatingLiteral _, FloatingLiteral _ -> `Order (Float, Float)
     | Int, Float | Float, Int -> `Order (Int, Float)
-    | Decimal, Int | Int, Decimal -> `Order (Int, Decimal)
+    | Decimal _, Float | Float, Decimal _ -> `No
+    | FloatingLiteral _, Int | Int, FloatingLiteral _ -> `Order (Int, Float)
+    | FloatingLiteral x, Float | Float, FloatingLiteral x -> `Order (FloatingLiteral x, Float)
+    | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f -> 
+        if check_exact_exact_number f dec then `Equal else `No
     (* UInt64 cannot be a subtype of Float: double precision only guarantees exact 
      representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
      Converting large UInt64 values to Float would lose precision *)
@@ -201,9 +230,16 @@ struct
 
   let subtype = common_type_ get_subtype
   let supertype = common_type_ get_supertype
-  let common_subtype = common_type_l_ get_subtype
+  
+  let common_subtype types = 
+    match common_type_l_ get_subtype types with
+    | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
+    | result -> result
 
-  let common_supertype = common_type_l_ get_supertype
+  let common_supertype types = 
+    match common_type_l_ get_supertype types with
+    | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
+    | result -> result
 
   let common_type = subtype
 

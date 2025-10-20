@@ -37,10 +37,11 @@ let as_lang_type t =
   | Int -> "int"
   | Text -> "String"
   | Any -> "String"
-  | Float -> "float"
+  | Float
+  | FloatingLiteral _ -> "float"
   | Blob -> "Blob"
   | Bool -> "boolean"
-  | Decimal -> "float" (* BigDecimal? *)
+  | Decimal _ -> "float" (* BigDecimal? *)
   | Datetime -> "Timestamp"
   | StringLiteral _ -> "String"
   | Union _
