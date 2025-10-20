@@ -249,7 +249,9 @@ let resolve_column_assignments ~env l =
     let with_default assign = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname else assign in
     match expr with
     | RegularExpr (Choices (n,l)) ->
-      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l) (* FIXME hack, should propagate properly *)
+      (* Apply metadata to params inside each choice branch *)
+      let l_with_meta = List.map (fun (n,e) -> n, Option.map (set_param_meta ~env col) e) l in
+      Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l_with_meta)
     | RegularExpr (OptionActions ch) ->
       OptionActions { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
     | RegularExpr expr -> equality typ (set_param_meta ~env col expr)
@@ -641,7 +643,7 @@ and assign_types env expr =
           let args, ret = convert_args (Var 0) [Var 0; Var 0] in
           make_nullable ret, args
          | Null_handling If_null, _ ->
-          let args, ret = convert_args (Var 0) [Var 1; Var 0] in
+          let args, ret = convert_args (Var 0) [Var 0; Var 0] in
           first_strict ret args
         | F (ret, args), _ ->
           let args, ret = convert_args ret args in
@@ -722,6 +724,8 @@ and infer_schema env columns =
       result.attr.meta
     (* aggregated columns, ie: max, min *)
     | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
+     (* null handling functions that preserve metadata from first argument *)
+    | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = e :: _; _ } -> propagate_meta ~env e
     (* Or for subselect which always requests only one column, TODO: consider CTE in subselect, perhaps a rare occurrence *)
     | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) -> 
       let (env,_) = eval_nested env from in
