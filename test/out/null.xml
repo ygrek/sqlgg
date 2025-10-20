@@ -64,7 +64,7 @@
  </stmt>
  <stmt name="select_ifnull" sql="SELECT IFNULL(@maybe, 0)" category="DQL" kind="select" cardinality="1">
   <in>
-   <value name="maybe" type="Any"/>
+   <value name="maybe" type="Int"/>
   </in>
   <out>
    <value name="_0" type="Int"/>
