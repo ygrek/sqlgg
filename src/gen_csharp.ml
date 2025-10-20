@@ -36,10 +36,11 @@ let as_api_type t =
   match t.Type.t with
   | Int -> "Int64"
   | Text -> "String"
+  | FloatingLiteral _
   | Float -> "Float"
   | Blob -> "String"
   | Bool -> "Boolean"
-  | Decimal -> "Decimal"
+  | Decimal _ -> "Decimal"
   | Datetime -> "Datetime"
   | Any -> "String"
   | StringLiteral _ -> "String"

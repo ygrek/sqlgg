@@ -2075,3 +2075,351 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
       T.execute db ("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " " ^ "?" ^ " " | `Default -> " 'pending' ")) set_params
   
   end (* module Sqlgg *)
+
+Test FloatingLiteral:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > SELECT 1.2
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let select_0 db  =
+      let get_row stmt =
+        (T.get_column_Float stmt 0)
+      in
+      T.select_one db ("SELECT 1.2\n\
+  ") T.no_params get_row
+  
+    module Single = struct
+      let select_0 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~r:(T.get_column_Float stmt 0)
+        in
+        T.select_one db ("SELECT 1.2\n\
+  ") T.no_params invoke_callback
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
+
+Test numeric literals and decimal types:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE shop_items (
+  >  id INT PRIMARY KEY,
+  >  pending_price DECIMAL(12,3)
+  > );
+  > SELECT * FROM shop_items si
+  > WHERE si.pending_price <=> NULLIF(CAST(@pending_price + 0.0 AS DECIMAL(12, 3)), CAST(-1 AS DECIMAL));
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_shop_items db  =
+      T.execute db ("CREATE TABLE shop_items (\n\
+   id INT PRIMARY KEY,\n\
+   pending_price DECIMAL(12,3)\n\
+  )") T.no_params
+  
+    let select_1 db ~pending_price callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(T.get_column_Int stmt 0)
+          ~pending_price:(T.get_column_Decimal_nullable stmt 1)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Float p pending_price;
+        T.finish_params p
+      in
+      T.select db ("SELECT * FROM shop_items si\n\
+  WHERE si.pending_price <=> NULLIF(CAST(? + 0.0 AS DECIMAL(12, 3)), CAST(-1 AS DECIMAL))") set_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db ~pending_price callback acc =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_Int stmt 0)
+            ~pending_price:(T.get_column_Decimal_nullable stmt 1)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_Float p pending_price;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT * FROM shop_items si\n\
+  WHERE si.pending_price <=> NULLIF(CAST(? + 0.0 AS DECIMAL(12, 3)), CAST(-1 AS DECIMAL))") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db ~pending_price callback =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_Int stmt 0)
+            ~pending_price:(T.get_column_Decimal_nullable stmt 1)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_Float p pending_price;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT * FROM shop_items si\n\
+  WHERE si.pending_price <=> NULLIF(CAST(? + 0.0 AS DECIMAL(12, 3)), CAST(-1 AS DECIMAL))") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test numeric literal to float:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price FLOAT);
+  > INSERT INTO items VALUES (99.99);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price FLOAT)") T.no_params
+  
+    let insert_items_1 db  =
+      T.execute db ("INSERT INTO items VALUES (99.99)") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test numeric literal to decimal - valid:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(5,2));
+  > INSERT INTO items VALUES (99.99);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price DECIMAL(5,2))") T.no_params
+  
+    let insert_items_1 db  =
+      T.execute db ("INSERT INTO items VALUES (99.99)") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test numeric literal to decimal - invalid (too large):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(5,2));
+  > INSERT INTO items VALUES (9999.99);
+  > EOF
+  Failed : INSERT INTO items VALUES (9999.99)
+  Fatal error: exception Failure("types Decimal(5,2)? and FloatingLiteral (9999.99) for 'a do not match in 'a -> 'a -> 'a applied to (Decimal(5,2)?, FloatingLiteral (9999.99))")
+  [2]
+
+Test numeric literal to decimal - invalid (too many decimals):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(5,2));
+  > INSERT INTO items VALUES (99.999);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price DECIMAL(5,2))") T.no_params
+  
+    let insert_items_1 db  =
+      T.execute db ("INSERT INTO items VALUES (99.999)") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test numeric literal to decimal - invalid (too many decimals):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(5,2));
+  > INSERT INTO items VALUES (99999.999);
+  > EOF
+  Failed : INSERT INTO items VALUES (99999.999)
+  Fatal error: exception Failure("types Decimal(5,2)? and FloatingLiteral (100000) for 'a do not match in 'a -> 'a -> 'a applied to (Decimal(5,2)?, FloatingLiteral (100000))")
+  [2]
+
+Test decimal to float - allowed:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(10,2), price_float FLOAT);
+  > SELECT * FROM items WHERE price_float = price;
+  > EOF
+  Failed : SELECT * FROM items WHERE price_float = price
+  Fatal error: exception Failure("types Float? and Decimal(10,2)? for 'a do not match in 'a -> 'a -> Bool applied to (Float?, Decimal(10,2)?)")
+  [2]
+
+Test decimal to float - allowed:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(10,2), price_float FLOAT);
+  > SELECT * FROM items WHERE price_float = CAST(price AS FLOAT);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price DECIMAL(10,2), price_float FLOAT)") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~price:(T.get_column_Decimal_nullable stmt 0)
+          ~price_float:(T.get_column_Float_nullable stmt 1)
+      in
+      T.select db ("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~price:(T.get_column_Decimal_nullable stmt 0)
+            ~price_float:(T.get_column_Float_nullable stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~price:(T.get_column_Decimal_nullable stmt 0)
+            ~price_float:(T.get_column_Float_nullable stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test int to decimal - allowed:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(10,2));
+  > INSERT INTO items VALUES (100);
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price DECIMAL(10,2))") T.no_params
+  
+    let insert_items_1 db  =
+      T.execute db ("INSERT INTO items VALUES (100)") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test decimal arithmetic preserves scale:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE t1 (col1 DECIMAL(10,2));
+  > CREATE TABLE t2 (col2 DECIMAL(12,3));
+  > SELECT col1 + col2 as total FROM t1, t2;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (col1 DECIMAL(10,2))") T.no_params
+  
+    let create_t2 db  =
+      T.execute db ("CREATE TABLE t2 (col2 DECIMAL(12,3))") T.no_params
+  
+    let select_2 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~total:(T.get_column_Decimal_nullable stmt 0)
+      in
+      T.select db ("SELECT col1 + col2 as total FROM t1, t2") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_2 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~total:(T.get_column_Decimal_nullable stmt 0)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT col1 + col2 as total FROM t1, t2") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_2 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~total:(T.get_column_Decimal_nullable stmt 0)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT col1 + col2 as total FROM t1, t2") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test parameter with decimal cast:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (price DECIMAL(12,3));
+  > SELECT * FROM items WHERE price <=> CAST(@price AS DECIMAL(12,3));
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (price DECIMAL(12,3))") T.no_params
+  
+    let select_1 db ~price callback =
+      let invoke_callback stmt =
+        callback
+          ~price:(T.get_column_Decimal_nullable stmt 0)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Any p price;
+        T.finish_params p
+      in
+      T.select db ("SELECT * FROM items WHERE price <=> CAST(? AS DECIMAL(12,3))") set_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db ~price callback acc =
+        let invoke_callback stmt =
+          callback
+            ~price:(T.get_column_Decimal_nullable stmt 0)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_Any p price;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT * FROM items WHERE price <=> CAST(? AS DECIMAL(12,3))") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db ~price callback =
+        let invoke_callback stmt =
+          callback
+            ~price:(T.get_column_Decimal_nullable stmt 0)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_Any p price;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT * FROM items WHERE price <=> CAST(? AS DECIMAL(12,3))") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
