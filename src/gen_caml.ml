@@ -133,12 +133,13 @@ module L = struct
   let as_lang_type = function
   | { t = Blob; nullability } -> type_name { t = Text; nullability }
   | { t = StringLiteral _; nullability } -> type_name { t = Text; nullability }
+  | { t = FloatingLiteral _; nullability } -> type_name { t = Float; nullability }
+  | { t = Decimal _; nullability; } -> type_name { t = Decimal { precision = None; scale = None }; nullability } 
   | { t = Int; _ }
   | { t = Text; _ }
   | { t = Float; _ }
   | { t = Bool; _ }
   | { t = Datetime; _ }
-  | { t = Decimal; _ }
   | { t = Union _; _ }
   | { t = Json; _ }
   | { t = Json_path; _ }
@@ -154,10 +155,11 @@ module L = struct
   | { t = Json_path; _ }
   | { t = StringLiteral _; _ } -> "string"
   | { t = Int; _ } -> "int64"
-  | { t = Float; _ } -> "float"
+  | { t = Float; _ }
+  | { t = FloatingLiteral _; _ } -> "float"
   | { t = Bool; _ } -> "bool"
   | { t = Datetime; _ }
-  | { t = Decimal; _ } -> "float"
+  | { t = Decimal _; _ } -> "float"
   | { t = Json; _ } -> "json"
   | { t = UInt64; _ } -> "uint64"
   | { t = One_or_all; _ } -> "text"
@@ -739,7 +741,7 @@ let generate_enum_modules stmts =
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
     | Int | Text | Blob | Float | Bool | Json | UInt64
-    | Datetime | Decimal | Any | StringLiteral  _ | Json_path | One_or_all -> None
+    | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
   let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in
