@@ -491,6 +491,7 @@ expr:
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
+    | REPLACE LPAREN s=expr COMMA from=expr COMMA to_=expr RPAREN { Fun { kind = (Function.lookup "replace" 3); parameters = [s;from;to_]; is_over_clause = false } }
     | DATE LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
     | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun { kind = Function.lookup f 1; parameters = [e]; is_over_clause = false } }

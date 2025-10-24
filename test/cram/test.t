@@ -2423,3 +2423,42 @@ Test parameter with decimal cast:
   
     end (* module List *)
   end (* module Sqlgg *)
+
+Test REPLACE function for string substitution:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE table_24_10_2025 (col_1 TEXT, col_2 TEXT);
+  > UPDATE table_24_10_2025 SET col_1 = REPLACE(col_1, ',', ' ') WHERE col_2 = 'test';
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_table_24_10_2025 db  =
+      T.execute db ("CREATE TABLE table_24_10_2025 (col_1 TEXT, col_2 TEXT)") T.no_params
+  
+    let update_table_24_10_2025_1 db  =
+      T.execute db ("UPDATE table_24_10_2025 SET col_1 = REPLACE(col_1, ',', ' ') WHERE col_2 = 'test'") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test REPLACE function with INSERT REPLACE in same query:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE table_24_10_2025 (col_1 TEXT PRIMARY KEY, col_2 TEXT);
+  > REPLACE INTO table_24_10_2025 (col_1, col_2) VALUES (REPLACE(@value, ',', ' '), 'data');
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_table_24_10_2025 db  =
+      T.execute db ("CREATE TABLE table_24_10_2025 (col_1 TEXT PRIMARY KEY, col_2 TEXT)") T.no_params
+  
+    let insert_table_24_10_2025_1 db ~value =
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_Text p value;
+        T.finish_params p
+      in
+      T.execute db ("REPLACE INTO table_24_10_2025 (col_1, col_2) VALUES (REPLACE(?, ',', ' '), 'data')") set_params
+  
+  end (* module Sqlgg *)
