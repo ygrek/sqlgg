@@ -851,6 +851,7 @@ let () =
   ["substring"; "sha2"] ||> monomorphic text [text; int];
   "substring" |> monomorphic text [text; int; int];
   "substring_index" |> monomorphic text [text; text; int];
+  "replace" |> monomorphic text [text; text; text];
   "last_insert_id" |> monomorphic int [];
   "last_insert_id" |> monomorphic int [int];
   add_multi Type.(Null_handling (Coalesce (Var 0, Var 0))) "coalesce";
