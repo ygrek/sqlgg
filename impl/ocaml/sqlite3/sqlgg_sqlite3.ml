@@ -211,9 +211,10 @@ let get_column_one_or_all, get_column_one_or_all_nullable = (get_column_One_or_a
 
 module Make_enum (E: Enum) = struct 
   include E
-  let get_column, get_column_nullable = failwith "sqlite does not support enums"
-  let set_param = failwith "sqlite does not support enums"
-  let to_literal = failwith "sqlite does not support enums"
+  let get_column  _ _  = failwith "sqlite does not support enums"
+  let get_column_nullable _ _ = failwith "sqlite does not support enums"
+  let set_param _ _ = failwith "sqlite does not support enums"
+  let to_literal _ = failwith "sqlite does not support enums"
 end
 
 let test_ok sql rc =
