@@ -863,10 +863,58 @@ and eval_nested env nested =
   | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
   | None -> env, []
 
+(** Extract column names that have IS NOT NULL predicates in WHERE clause *)
+and extract_not_null_columns = function
+  | None -> []
+  | Some expr ->
+    let rec aux = function
+      | Column _ ->
+        (* Will be matched against by caller context *)
+        []
+      | Fun { kind = F (Typ { t = Bool; nullability = Strict }, _);
+              parameters = [Column col]; _ } ->
+        (* IS NOT NULL is: poly (strict Bool) [e] where e is Column *)
+        [col.cname]
+      | Fun { kind = Logical And; parameters; _ } ->
+        (* Recurse into AND branches *)
+        List.concat_map aux parameters
+      | Fun _ ->
+        (* Don't recurse into other functions - only AND is safe *)
+        []
+      | Case { case; branches; else_; } ->
+        (* Recurse into CASE *)
+        let case_cols = Option.map_default aux [] case in
+        let branch_cols = List.concat_map (fun (b:Sql.case_branch) -> aux b.when_ @ aux b.then_) branches in
+        let else_cols = Option.map_default aux [] else_ in
+        case_cols @ branch_cols @ else_cols
+      | Choices (_, choices) ->
+        List.concat_map (fun (_pid, e_opt) -> Option.map_default aux [] e_opt) choices
+      | InChoice (_, _, e) -> aux e
+      | OptionActions { choice; _ } -> aux choice
+      | SelectExpr _ | Value _ | Param _ | Inparam _
+      | InTupleList _ | Of_values _ -> []
+    in
+    aux expr
+
+(** Refine schema to make columns strict if they have IS NOT NULL in WHERE *)
+and refine_schema_with_not_null_predicates schema not_null_cols =
+  List.map (fun (source_attr: table_name Schema.Source.Attr.t) ->
+    let col_name = source_attr.attr.name in
+    if List.mem col_name not_null_cols && Type.is_nullable source_attr.attr.domain then
+      { source_attr with
+        attr = { source_attr.attr with
+                 domain = Type.make_strict source_attr.attr.domain } }
+    else
+      source_attr
+  ) schema
+
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
   let final_schema = infer_schema env columns in
+  (* Refine schema based on WHERE IS NOT NULL predicates *)
+  let not_null_cols = extract_not_null_columns where in
+  let final_schema = refine_schema_with_not_null_predicates final_schema not_null_cols in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
   let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then
