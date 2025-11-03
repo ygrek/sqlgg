@@ -96,6 +96,27 @@ let test = Type.[
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr' ~nullability:Nullable "name" Text;]
      [named_nullable "x" Int; param Int; named_nullable "x" Int; param Int;];
+  tt "SELECT name FROM test WHERE name IS NOT NULL"
+     [attr' "name" Text]  (* Strict, not Nullable *)
+     [];
+  (* IS NOT NULL refinement: column still nullable in output if not in WHERE *)
+  tt "SELECT name, str FROM test WHERE str IS NOT NULL"
+     [attr' "name" ~nullability:Nullable Text;  (* name not refined *)
+      attr' "str" Text]                          (* str IS refined *)
+     [];
+  (* IS NOT NULL refinement: multiple columns *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NOT NULL"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  (* IS NOT NULL refinement: doesn't apply if OR *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL OR id = 1"
+     [attr' "name" ~nullability:Nullable Text]  (* name could still be null in OR branch *)
+     [];
+  (* IS NOT NULL refinement: apply with AND *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND id = 1"
+     [attr' "name" Text]  (* name could still be null in OR branch *)
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
