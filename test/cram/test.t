@@ -2462,3 +2462,106 @@ Test REPLACE function with INSERT REPLACE in same query:
       T.execute db ("REPLACE INTO table_24_10_2025 (col_1, col_2) VALUES (REPLACE(?, ',', ' '), 'data')") set_params
   
   end (* module Sqlgg *)
+
+Test BIGINT(20) UNSIGNED with module annotation:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE test_table (
+  > -- [sqlgg] module=TestModule
+  >   id BIGINT(20) UNSIGNED NOT NULL,
+  >   counter INT(10) UNSIGNED NOT NULL,
+  >   counter2 BIGINT(10) UNSIGNED NOT NULL DEFAULT 0,
+  >   name TEXT
+  > );
+  > SELECT id, counter, counter2, name FROM test_table WHERE id = @id;
+  > INSERT INTO test_table (id, counter, counter2, name) VALUES (@id, @counter, @counter2, @name);
+  > UPDATE test_table SET counter = @counter, counter2 = @counter2, name = @name WHERE id = @id;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test_table db  =
+      T.execute db ("CREATE TABLE test_table (\n\
+    id BIGINT(20) UNSIGNED NOT NULL,\n\
+    counter INT(10) UNSIGNED NOT NULL,\n\
+    counter2 BIGINT(10) UNSIGNED NOT NULL DEFAULT 0,\n\
+    name TEXT\n\
+  )") T.no_params
+  
+    let select_1 db ~id callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(TestModule.get_column (T.get_column_uint64 stmt 0))
+          ~counter:(T.get_column_Int stmt 1)
+          ~counter2:(T.get_column_UInt64 stmt 2)
+          ~name:(T.get_column_Text_nullable stmt 3)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1) in
+        T.set_param_uint64 p (TestModule.set_param id);
+        T.finish_params p
+      in
+      T.select db ("SELECT id, counter, counter2, name FROM test_table WHERE id = ?") set_params invoke_callback
+  
+    let insert_test_table_2 db ~id ~counter ~counter2 ~name =
+      let set_params stmt =
+        let p = T.start_params stmt (4) in
+        T.set_param_uint64 p (TestModule.set_param id);
+        T.set_param_Int p counter;
+        T.set_param_UInt64 p counter2;
+        begin match name with None -> T.set_param_null p | Some v -> T.set_param_Text p v end;
+        T.finish_params p
+      in
+      T.execute db ("INSERT INTO test_table (id, counter, counter2, name) VALUES (?, ?, ?, ?)") set_params
+  
+    let update_test_table_3 db ~counter ~counter2 ~name ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (4) in
+        T.set_param_Int p counter;
+        T.set_param_UInt64 p counter2;
+        begin match name with None -> T.set_param_null p | Some v -> T.set_param_Text p v end;
+        T.set_param_uint64 p (TestModule.set_param id);
+        T.finish_params p
+      in
+      T.execute db ("UPDATE test_table SET counter = ?, counter2 = ?, name = ? WHERE id = ?") set_params
+  
+    module Fold = struct
+      let select_1 db ~id callback acc =
+        let invoke_callback stmt =
+          callback
+            ~id:(TestModule.get_column (T.get_column_uint64 stmt 0))
+            ~counter:(T.get_column_Int stmt 1)
+            ~counter2:(T.get_column_UInt64 stmt 2)
+            ~name:(T.get_column_Text_nullable stmt 3)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_uint64 p (TestModule.set_param id);
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT id, counter, counter2, name FROM test_table WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db ~id callback =
+        let invoke_callback stmt =
+          callback
+            ~id:(TestModule.get_column (T.get_column_uint64 stmt 0))
+            ~counter:(T.get_column_Int stmt 1)
+            ~counter2:(T.get_column_UInt64 stmt 2)
+            ~name:(T.get_column_Text_nullable stmt 3)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1) in
+          T.set_param_uint64 p (TestModule.set_param id);
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT id, counter, counter2, name FROM test_table WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
