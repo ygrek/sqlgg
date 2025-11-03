@@ -115,7 +115,17 @@ let test = Type.[
      [];
   (* IS NOT NULL refinement: apply with AND *)
   tt "SELECT name FROM test WHERE name IS NOT NULL AND id = 1"
-     [attr' "name" Text]  (* name could still be null in OR branch *)
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with select * *)
+  tt "SELECT * FROM test WHERE name IS NOT NULL"
+     [attr' "id" ~nullability:Nullable Int;
+      attr' "str" ~nullability:Nullable Text;
+      attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with alias *)
+  tt "SELECT name as my_name FROM test WHERE name IS NOT NULL"
+     [attr' "my_name" Text]
      [];
   tt "insert into test values"
      []
