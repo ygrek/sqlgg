@@ -387,10 +387,10 @@ column_def1: c=column_def { `Attr c }
            | FULLTEXT index_or_key? l=table_index { Dialect_feature.set_fulltext_index ($startofs, $endofs); `Index l }
            | SPATIAL index_or_key? l=table_index { `Index l }
 
-key_part:
-            n=IDENT delimited(LPAREN,INTEGER,RPAREN)? { n }
-           | n=IDENT delimited(LPAREN,INTEGER,RPAREN)? ASC { n }
-           | n=IDENT delimited(LPAREN,INTEGER,RPAREN)? DESC { n }
+int_arg: delimited(LPAREN,INTEGER,RPAREN) {}
+
+key_part: n=IDENT int_arg? either(ASC,DESC)? { n }
+
 index_options: list(IDENT)? { }
 
 table_index: IDENT? l=sequence(key_part) index_options { l }
@@ -617,6 +617,16 @@ interval_unit: INTERVAL_UNIT
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
              | YEAR_MONTH { Value (strict Datetime) }
 
+int1:
+  | T_INTEGER     { (Int, Int) }
+  | T_BIG_INTEGER { (Int, UInt64) }
+
+int_type:
+  | kind=int1 int_arg? u=UNSIGNED? {
+      let (signed, unsigned) = kind in
+      Option.map_default (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs); unsigned) signed u
+    }
+
 expr_sql_type_flavor:
                  | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) { 
                       match p with
@@ -631,18 +641,10 @@ expr_sql_type_flavor:
                  | T_UUID { Blob }
                  | T_JSON { Json }
 
-sql_int_type_flavor:
-  | T_INTEGER u=UNSIGNED? { Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u; Int } 
-  | T_BIG_INTEGER u=UNSIGNED? { 
-    Option.may (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs)) u;
-    match u with
-    | Some _ -> UInt64
-    | None -> Int
-  }
-
-sql_type_flavor: t=sql_int_type_flavor ZEROFILL? { t }
-               | expr_sql_type_flavor { $1 }
-               | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
+sql_type_flavor: 
+  | t=int_type ZEROFILL? { t }
+  | expr_sql_type_flavor { $1 }
+  | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
@@ -681,9 +683,7 @@ strict_type:
     | T_TEXT                 { Text }
     | T_JSON                 { Json }
     | T_BLOB                 { Blob }
-    | T_INTEGER              { Int }
-    | T_BIG_INTEGER          { Int }
-    | T_BIG_INTEGER UNSIGNED { UInt64 }
+    | int_type               { $1 }
     | T_FLOAT                { Float }
     | T_BOOLEAN              { Bool }
     | T_DATETIME             { Datetime }
