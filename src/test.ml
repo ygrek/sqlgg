@@ -67,6 +67,17 @@ let tt sql ?kind schema params =
   let test () = do_test sql ?kind schema params in
   sql >:: test
 
+(** Test helper for queries with Choice parameters - only checks schema *)
+let tt_schema_only sql ?kind schema =
+  let test () =
+    let stmt = parse sql in
+    assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+    match kind with
+    | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
+    | None -> ()
+  in
+  sql >:: test
+
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
@@ -157,6 +168,17 @@ let test = Type.[
   tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NULL"
      [attr' "name" Text; attr' "str" ~nullability:Nullable Text]
      [];
+  (* IS NOT NULL refinement: Choices - must be in ALL branches to refine *)
+  tt_schema_only "SELECT name FROM test WHERE @choice { A { name IS NOT NULL } | B { TRUE } }"
+     [attr' "name" ~nullability:Nullable Text];  (* name still nullable - only checked in A branch *)
+  tt_schema_only "SELECT name FROM test WHERE @choice { A { name IS NOT NULL } | B { name IS NOT NULL } }"
+     [attr' "name" Text];  (* name refined - checked in all branches *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL AND str IS NOT NULL } | B { TRUE } }"
+     [attr' "name" ~nullability:Nullable Text; attr' "str" ~nullability:Nullable Text];  (* both nullable *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL } | B { str IS NOT NULL } }"
+     [attr' "name" ~nullability:Nullable Text; attr' "str" ~nullability:Nullable Text];  (* different checks in branches *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL AND str IS NOT NULL } | B { name IS NOT NULL AND str IS NOT NULL } }"
+     [attr' "name" Text; attr' "str" Text];  (* both checked in all branches *)
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];

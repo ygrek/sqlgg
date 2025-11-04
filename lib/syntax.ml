@@ -889,13 +889,18 @@ and extract_not_null_column_keys env = function
         List.concat_map aux parameters
       | Fun _ ->
         []
-      | Case { case; branches; else_; } ->
-        let case_cols = Option.map_default aux [] case in
-        let branch_cols = List.concat_map (fun (b:Sql.case_branch) -> aux b.when_ @ aux b.then_) branches in
-        let else_cols = Option.map_default aux [] else_ in
-        case_cols @ branch_cols @ else_cols
+      | Case { case; _ } ->
+        (* For CASE expressions, be conservative - don't extract from branches
+           since the column might not satisfy IS NOT NULL in all branches *)
+        Option.map_default aux [] case
       | Choices (_, choices) ->
-        List.concat_map (fun (_pid, e_opt) -> Option.map_default aux [] e_opt) choices
+        (* Only refine if ALL branches have the IS NOT NULL check *)
+        let branch_cols = List.map (fun (_pid, e_opt) -> Option.map_default aux [] e_opt) choices in
+        let all_branches_have col =
+          List.for_all (fun branch -> List.mem col branch) branch_cols
+        in
+        let all_cols = List.concat branch_cols in
+        List.filter all_branches_have (List.sort_uniq compare all_cols)
       | InChoice (_, _, e) -> aux e
       | OptionActions { choice; _ } -> aux choice
       | SelectExpr _ | Value _ | Param _ | Inparam _
