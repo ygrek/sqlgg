@@ -124,6 +124,10 @@ let test = Type.[
   tt "SELECT name FROM test WHERE name IS NOT NULL OR id = 1"
      [attr' "name" ~nullability:Nullable Text]  (* name could still be null in OR branch *)
      [];
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL OR str IS NOT NULL"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str"  ~nullability:Nullable Text]
+     [];
   (* IS NOT NULL refinement: apply with AND *)
   tt "SELECT name FROM test WHERE name IS NOT NULL AND id = 1"
      [attr' "name" Text]
@@ -163,6 +167,13 @@ let test = Type.[
   (* IS NOT NULL refinement: subquery in WHERE *)
   tt "SELECT name FROM test WHERE name IS NOT NULL AND id IN (SELECT id FROM test WHERE str IS NOT NULL)"
      [attr' "name" Text]
+     [];
+  tt "SELECT name, str FROM test WHERE (name IS NOT NULL AND id > 10) OR (str IS NOT NULL AND id < 5)"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str"  ~nullability:Nullable Text]
+     [];
+  tt "SELECT name FROM test WHERE (name IS NOT NULL OR id IN (SELECT id FROM test WHERE str IS NOT NULL))"
+     [attr' "name" ~nullability:Nullable Text]
      [];
   (* IS NOT NULL refinement: with AND IS NULL *)
   tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NULL"
