@@ -190,6 +190,22 @@ let test = Type.[
      [attr' "name" ~nullability:Nullable Text; attr' "str" ~nullability:Nullable Text];  (* different checks in branches *)
   tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL AND str IS NOT NULL } | B { name IS NOT NULL AND str IS NOT NULL } }"
      [attr' "name" Text; attr' "str" Text];  (* both checked in all branches *)
+
+  (* IS NOT NULL refinement with aggregations *)
+  (* Aggregation results themselves are not affected by IS NOT NULL in WHERE *)
+  tt "SELECT COUNT(name) FROM test WHERE name IS NOT NULL"
+     [attr' "" Int]
+     [];
+  tt "SELECT SUM(id) FROM test WHERE id IS NOT NULL"
+     [attr' ~nullability:Nullable "" Int]  (* Still nullable - no rows matching WHERE returns NULL *)
+     [];
+  (* But GROUP BY columns are refined by IS NOT NULL *)
+  tt "SELECT name, COUNT(*), MAX(str) FROM test WHERE name IS NOT NULL GROUP BY name"
+     [attr' "name" Text;  (* name is refined to non-nullable *)
+      attr' "" Int;
+      attr' ~nullability:Nullable "" Text]
+     [];
+
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
