@@ -131,6 +131,28 @@ let test = Type.[
   tt "SELECT name FROM test WHERE name IS NULL"
      [attr' "name" ~nullability:Nullable Text]
      [];
+  (* IS NOT NULL refinement: double negation *)
+  tt "SELECT name FROM test WHERE NOT (name IS NULL)"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: combined with other conditions *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND name LIKE 'A%'"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with joins *)
+  tt "SELECT t1.name, t2.str FROM test t1 JOIN test t2 ON t1.id = t2.id WHERE t1.name IS NOT NULL AND t2.str IS NOT NULL"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  (* IS NOT NULL refinement: self-join *)
+  tt "SELECT a.name, b.name FROM test a, test b WHERE a.name IS NOT NULL AND b.name IS NOT NULL"
+     [attr' "name" Text;
+      attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: subquery in WHERE *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND id IN (SELECT id FROM test WHERE str IS NOT NULL)"
+     [attr' "name" Text]
+     [];
   (* IS NOT NULL refinement: with AND IS NULL *)
   tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NULL"
      [attr' "name" Text; attr' "str" ~nullability:Nullable Text]

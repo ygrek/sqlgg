@@ -879,6 +879,12 @@ and extract_not_null_column_keys env = function
         (* IS NOT NULL check on a column *)
         let resolved = resolve_column ~env col in
         [(resolved.sources, resolved.attr.name)]
+      | Fun { kind = Negation;
+              parameters = [Fun { kind = Comparison Is_null;
+                                   parameters = [Column col]; _ }]; _ } ->
+        (* NOT (column IS NULL) is equivalent to IS NOT NULL *)
+        let resolved = resolve_column ~env col in
+        [(resolved.sources, resolved.attr.name)]
       | Fun { kind = Logical And; parameters; _ } ->
         List.concat_map aux parameters
       | Fun _ ->
