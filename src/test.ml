@@ -127,6 +127,14 @@ let test = Type.[
   tt "SELECT name as my_name FROM test WHERE name IS NOT NULL"
      [attr' "my_name" Text]
      [];
+  (* IS NOT NULL refinement: with IS NULL *)
+  tt "SELECT name FROM test WHERE name IS NULL"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: with AND IS NULL *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NULL"
+     [attr' "name" Text; attr' "str" ~nullability:Nullable Text]
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];

@@ -659,7 +659,10 @@ and assign_types env expr =
           { ret with nullability }, types (* ignoring arguments FIXME *)
         | Comparison Not_distinct_op, _ ->
           let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
-          ret, args 
+          ret, args
+        | Comparison (Is_not_null | Is_null), _ ->
+          let args, ret = convert_args (Typ (strict Bool)) [Var 0] in
+          ret, args
         | Comparison _, _ when set_tyvar_strict ->
         (* In this expression, where set_tyvar_strict is set (currently only for WHERE) we treat the parameters as non-null by default. *)
           let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
@@ -871,9 +874,9 @@ and extract_not_null_column_keys env = function
       | Column _ ->
         (* Standalone columns are not IS NOT NULL checks *)
         []
-      | Fun { kind = F (Typ { t = Bool; nullability = Strict }, _);
+      | Fun { kind = Comparison Is_not_null;
               parameters = [Column col]; _ } ->
-        (* IS NOT NULL is: poly (strict Bool) [e] where e is Column *)
+        (* IS NOT NULL check on a column *)
         let resolved = resolve_column ~env col in
         [(resolved.sources, resolved.attr.name)]
       | Fun { kind = Logical And; parameters; _ } ->
