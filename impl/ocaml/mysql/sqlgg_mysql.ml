@@ -390,7 +390,7 @@ module Make_enum (E: Enum) = struct
 
   let set_param = set_param_ty E.proj
 
-  let to_literal = E.proj
+  let to_literal v = Text.to_literal (Text.of_string (E.proj v))
 end
 
 let no_params stmt = P.execute stmt [||]

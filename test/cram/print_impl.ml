@@ -543,7 +543,7 @@ module Make_enum (E: Enum) = struct
   let get_column (_ : mock_row_data) (_ : int) : E.t = E.inj "mock_enum"
   let get_column_nullable (_ : mock_row_data) (_ : int) : E.t option = Some (E.inj "mock_enum")
   let set_param (params : params) v = bind_param (sprintf "'%s'" (E.proj v)) params
-  let to_literal = E.proj
+  let to_literal v = Types.Text.to_literal (E.proj v)
 end
 
 let select (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (callback : row -> unit) : unit =
