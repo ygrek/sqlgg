@@ -409,10 +409,17 @@ let no_params (stmt : statement) : result =
   ()
 
 module Make_enum (E: Enum) = struct 
-  let get_column (row : mock_row_data) (index : int) : E.t = E.inj "mock_enum"
-  let get_column_nullable (row : mock_row_data) (index : int) : E.t option = Some (E.inj "mock_enum")
+  let get_column (row : mock_row_data) (index : int) : E.t = 
+    match get_mock_value row index with
+    | `Text v -> printf "[MOCK] get_column_Enum[%d] = \"%s\"\n" index v; E.inj v
+    | _ -> printf "[MOCK] get_column_Enum[%d] = \"mock_enum\" (default)\n" index; E.inj "mock_enum"
+  let get_column_nullable (row : mock_row_data) (index : int) : E.t option = 
+    match get_mock_value row index with
+    | `Null -> printf "[MOCK] get_column_Enum_nullable[%d] = None\n" index; None
+    | `Text v -> printf "[MOCK] get_column_Enum_nullable[%d] = Some \"%s\"\n" index v; Some (E.inj v)
+    | _ -> printf "[MOCK] get_column_Enum_nullable[%d] = Some \"mock_enum\" (default)\n" index; Some (E.inj "mock_enum")
   let set_param (params : params) v = bind_param (sprintf "'%s'" (E.proj v)) params
-  let to_literal = E.proj
+  let to_literal v = Types.Text.to_literal (E.proj v)
 end
 
 let select (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (callback : row -> unit) : unit =

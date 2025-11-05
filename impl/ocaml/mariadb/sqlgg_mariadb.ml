@@ -391,7 +391,7 @@ end
   
     let to_value v = `String (proj v)
   
-    let to_literal = proj
+    let to_literal v = Text.to_literal (proj v)
   end)
 end
 
