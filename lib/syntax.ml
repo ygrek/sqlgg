@@ -866,7 +866,16 @@ and eval_nested env nested =
   | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
   | None -> env, []
 
-(** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE *)
+(** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE/HAVING
+
+    Handles:
+    - Direct: name IS NOT NULL
+    - Double negation: NOT (name IS NULL)
+    - AND conjunctions: all checks must pass
+    - OR disjunctions: only if ALL branches have the same check
+    - De Morgan's law: NOT (A OR B) extracts from B if B is IS NULL check
+    - Choices: only if ALL branches have the check
+*)
 and extract_not_null_column_keys env = function
   | None -> []
   | Some expr ->
@@ -887,6 +896,33 @@ and extract_not_null_column_keys env = function
         [(resolved.sources, resolved.attr.name)]
       | Fun { kind = Logical And; parameters; _ } ->
         List.concat_map aux parameters
+      | Fun { kind = Logical Or; parameters; _ } ->
+        (* For OR, only refine if ALL branches have the IS NOT NULL check *)
+        let branch_cols = List.map aux parameters in
+        let all_branches_have col =
+          List.for_all (fun branch -> List.mem col branch) branch_cols
+        in
+        let all_cols = List.concat branch_cols in
+        List.filter all_branches_have (List.sort_uniq compare all_cols)
+      | Fun { kind = Negation;
+              parameters = [Fun { kind = Logical Or; parameters; _ }]; _ } ->
+        (* NOT (A OR B) = (NOT A) AND (NOT B) - De Morgan's law
+           For IS NULL refinement: NOT (... OR col IS NULL) means col IS NOT NULL
+           Recursively flatten nested ORs to find all IS NULL checks *)
+        let rec flatten_or_params = function
+          | Fun { kind = Logical Or; parameters; _ } ->
+            List.concat_map flatten_or_params parameters
+          | expr -> [expr]
+        in
+        let all_params = List.concat_map flatten_or_params parameters in
+        let has_is_null_check = function
+          | Fun { kind = Comparison Is_null;
+                  parameters = [Column col]; _ } ->
+            let resolved = resolve_column ~env col in
+            Some (resolved.sources, resolved.attr.name)
+          | _ -> None
+        in
+        List.filter_map has_is_null_check all_params
       | Fun _ ->
         []
       | Case { case; _ } ->

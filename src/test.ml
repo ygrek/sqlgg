@@ -210,6 +210,27 @@ let test = Type.[
      [attr' "name" Text; 
       attr' "" Int]
      [];
+  (* De Morgan's law: NOT (A OR name IS NULL) implies name IS NOT NULL *)
+  tt "SELECT name FROM test WHERE NOT (id < 10 OR name IS NULL)"
+     [attr' "name" Text]
+     [];
+  (* OR where ALL branches check IS NOT NULL - name guaranteed non-null *)
+  tt "SELECT name FROM test WHERE (id > 0 AND name IS NOT NULL) OR (id < 0 AND name IS NOT NULL)"
+     [attr' "name" Text]
+     [];
+  (* Edge case: NOT with AND should not refine *)
+  tt "SELECT name FROM test WHERE NOT (id > 0 AND name IS NOT NULL)"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* Edge case: Mixed OR where only some branches have IS NOT NULL *)
+  tt "SELECT name FROM test WHERE (name IS NOT NULL) OR (id > 10)"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* Edge case: Nested NOT OR *)
+  tt "SELECT name, str FROM test WHERE NOT (id > 10 OR (str IS NULL OR name IS NULL))"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
