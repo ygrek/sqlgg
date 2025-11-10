@@ -941,9 +941,11 @@ and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
   let final_schema = infer_schema env columns in
-  (* Refine schema based on WHERE IS NOT NULL predicates *)
+  (* Refine schema based on WHERE and HAVING IS NOT NULL predicates *)
   let column_keys = extract_column_keys env columns in
-  let not_null_keys = extract_not_null_column_keys env where in
+  let not_null_keys_where = extract_not_null_column_keys env where in
+  let not_null_keys_having = extract_not_null_column_keys env having in
+  let not_null_keys = not_null_keys_where @ not_null_keys_having in
   let final_schema = refine_schema_with_not_null_keys final_schema column_keys not_null_keys in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in

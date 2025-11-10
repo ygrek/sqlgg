@@ -205,7 +205,11 @@ let test = Type.[
       attr' "" Int;
       attr' ~nullability:Nullable "" Text]
      [];
-
+  (* should work with HAVING *)
+  tt "SELECT name, COUNT(*) FROM test GROUP BY name HAVING name IS NOT NULL"
+     [attr' "name" Text; 
+      attr' "" Int]
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
