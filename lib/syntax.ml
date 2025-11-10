@@ -925,10 +925,25 @@ and extract_not_null_column_keys env = function
         List.filter_map has_is_null_check all_params
       | Fun _ ->
         []
-      | Case { case; _ } ->
-        (* For CASE expressions, be conservative - don't extract from branches
-           since the column might not satisfy IS NOT NULL in all branches *)
-        Option.map_default aux [] case
+      | Case { case = _; branches; else_ } ->
+        (* In WHERE/HAVING: CASE must evaluate to TRUE
+           If ALL THEN branches AND ELSE have "col IS NOT NULL",
+           then col is guaranteed non-null when CASE is TRUE *)
+        let then_cols = List.map (fun { Sql.then_; _ } -> aux then_) branches in
+        let else_cols = Option.map_default aux [] else_ in
+
+        (* If ELSE is missing, we can't guarantee the check in all paths *)
+        let all_branch_cols = match else_ with
+          | None -> []  (* No ELSE = can't guarantee all paths checked *)
+          | Some _ -> then_cols @ [else_cols]
+        in
+
+        (* Only keep columns that appear in ALL branches *)
+        let all_cols = List.concat all_branch_cols in
+        let all_branches_have col =
+          List.for_all (fun branch -> List.mem col branch) all_branch_cols
+        in
+        List.filter all_branches_have (List.sort_uniq compare all_cols)
       | Choices (_, choices) ->
         (* Only refine if ALL branches have the IS NOT NULL check *)
         let branch_cols = List.map (fun (_pid, e_opt) -> Option.map_default aux [] e_opt) choices in

@@ -231,6 +231,24 @@ let test = Type.[
      [attr' "name" Text;
       attr' "str" Text]
      [];
+  (* All branches of CASES are NOT NULL *)
+  tt "SELECT name, str FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL WHEN id < 10 THEN str IS NOT NULL AND name IS NOT NULL ELSE name IS NOT NULL END"
+     [attr' "name" Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
+  (* CASE missing ELSE - should NOT refine (else branch might be NULL) *)
+  tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* CASE with one branch missing check - should NOT refine *)
+  tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL WHEN id < 10 THEN id > 0 ELSE name IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* CASE with different columns in branches - should NOT refine either *)
+  tt "SELECT name, str FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL ELSE str IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
