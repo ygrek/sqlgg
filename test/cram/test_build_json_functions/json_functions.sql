@@ -12,6 +12,12 @@ CREATE TABLE table2 (
     col2 JSON
 );
 
+CREATE TABLE table_custom (
+    id INT PRIMARY KEY,
+    -- [sqlgg] module=Custom
+    custom_col JSON
+);
+
 -- @test1
 SELECT JSON_SEARCH(@json, @one, 'dark');
 
@@ -48,3 +54,15 @@ WHERE JSON_EXTRACT(col1, @role_path) = @role;
 
 -- @test10
 SELECT JSON_SEARCH(col1, 'one', @search_value) FROM table1 WHERE id = @id;
+
+-- @test11 - Universal JSON_CONTAINS test (reusable with any JSON type)
+SELECT JSON_CONTAINS(col1, @json_value) FROM table1 WHERE id = @id;
+
+-- @test12 - Universal INSERT test (reusable with any JSON type)
+INSERT INTO table1 (id, col1) VALUES (@id, @json_data);
+
+-- @test13 - Test custom JSON type INSERT
+INSERT INTO table_custom (id, custom_col) VALUES (@id, @custom_data);
+
+-- @test14 - Test custom JSON type SELECT
+SELECT custom_col FROM table_custom WHERE id = @id;

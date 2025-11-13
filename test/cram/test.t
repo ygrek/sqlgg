@@ -321,12 +321,13 @@ Test Json functions:
 
 Test Json functions and ocaml compiles:
   $ cd test_build_json_functions
+  $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -c custom.ml
   $ cat "json_functions.sql" | sqlgg -no-header -gen caml_io -params unnamed -gen caml - > output.ml
-  $ ocamlfind ocamlc -package sqlgg.traits,sqlgg -c output.ml
+  $ ocamlfind ocamlc -package sqlgg.traits,sqlgg -I . -c output.ml
   $ cp ../print_ocaml_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -c print_ocaml_impl.ml
   $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -c test_run.ml
-  $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -linkpkg -o test_run.exe output.ml print_ocaml_impl.ml test_run.ml
+  $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -linkpkg -o test_run.exe custom.cmo output.ml print_ocaml_impl.ml test_run.ml
   $ ./test_run.exe
   Starting JSON Path Tests with Inline Mock Implementation
   ============================================================
@@ -420,12 +421,166 @@ Test Json functions and ocaml compiles:
   [MOCK] get_column_Json_nullable[0] = Some "$.test[0]"
   [TEST 10] Result: completed
   
-  === All JSON Path Tests Completed Successfully ===
-  Summary:
-  - Tests 1-8, 10: completed with inline mocked data
-  - Test 9: returned execute_response with affected_rows=3
-  - All SQL queries were logged
-  - Each test setup its own mock data
+  [TEST 11] Testing JSON with string literals and special characters
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '\"value with 'quotes' and \\\\backslash\"') FROM table1 WHERE id = 6
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 11] Result: completed (testing string quoting)
+  
+  [TEST 12] Testing INSERT with complex JSON structure
+  [MOCK EXECUTE] Connection type: [> `WR ]
+  [SQL] INSERT INTO table1 (id, col1) VALUES (7, '{\"name\":\"John O'Brien\",\"age\":30,\"active\":true,\"score\":95.5,\"tags\":[\"admin\",\"user\",\"it's a tag\"],\"metadata\":{\"created\":\"2024-01-15\",\"notes\":\"Special chars: 'quote', \\\\backslash, \\u0000null\"}}')
+  [MOCK] Execute result: affected_rows=1, insert_id=7
+  [TEST 12] Result: affected_rows=1, insert_id=7 (testing complex JSON quoting)
+  
+  [TEST 13] Testing JSON type: Bool true -> 'true'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, 'true') FROM table1 WHERE id = 1
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 13] Result: Bool true -> 'true' completed
+  
+  [TEST 14] Testing JSON type: Int 42 -> '42'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '42') FROM table1 WHERE id = 2
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 14] Result: Int 42 -> '42' completed
+  
+  [TEST 15] Testing JSON type: Float 3.14159 -> '3.14159'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '3.14159') FROM table1 WHERE id = 4
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 15] Result: Float 3.14159 -> '3.14159' completed
+  
+  [TEST 16] Testing JSON type: String with quotes -> '"O\'Reilly..."'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '\"O'Reilly's book: \\\"MySQL\\\" \\\\path\\\\to\\\\file\"') FROM table1 WHERE id = 5
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 16] Result: String with quotes -> '"O\'Reilly..."' completed
+  
+  [TEST 17] Testing JSON type: Null -> 'null'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, 'null') FROM table1 WHERE id = 6
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 17] Result: Null -> 'null' completed
+  
+  [TEST 18] Testing JSON type: Array mixed -> '["item1",123,false,...]'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '[\"item1\",123,false,\"it's ok\"]') FROM table1 WHERE id = 7
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 18] Result: Array mixed -> '["item1",123,false,...]' completed
+  
+  [TEST 19] Testing JSON type: Object simple -> '{"key1":"value\'s","key2":100,...}'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '{\"key1\":\"value's with apostrophe\",\"key2\":100,\"key3\":true}') FROM table1 WHERE id = 8
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 19] Result: Object simple -> '{"key1":"value\'s","key2":100,...}' completed
+  
+  [TEST 20] Testing JSON type: Bool false -> 'false'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, 'false') FROM table1 WHERE id = 9
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 20] Result: Bool false -> 'false' completed
+  
+  [TEST 21] Testing JSON type: Int negative -> '-999'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '-999') FROM table1 WHERE id = 10
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 21] Result: Int negative -> '-999' completed
+  
+  [TEST 22] Testing JSON type: Int zero -> '0'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '0') FROM table1 WHERE id = 11
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 22] Result: Int zero -> '0' completed
+  
+  [TEST 23] Testing JSON type: Float negative -> '-123.456'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '-123.456') FROM table1 WHERE id = 12
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 23] Result: Float negative -> '-123.456' completed
+  
+  [TEST 24] Testing JSON type: String empty -> '""'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '\"\"') FROM table1 WHERE id = 13
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 24] Result: String empty -> '""' completed
+  
+  [TEST 25] Testing JSON type: String with null byte -> '"before\\u0000after"'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '\"before\\u0000after\"') FROM table1 WHERE id = 14
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 25] Result: String with null byte -> '"before\\u0000after"' completed
+  
+  [TEST 26] Testing JSON type: String with \n and \t -> '"line1\\nline2\\ttab"'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '\"line1\\nline2\\ttab\"') FROM table1 WHERE id = 15
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 26] Result: String with \n and \t -> '"line1\\nline2\\ttab"' completed
+  
+  [TEST 27] Testing JSON type: Array empty -> '[]'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '[]') FROM table1 WHERE id = 16
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 27] Result: Array empty -> '[]' completed
+  
+  [TEST 28] Testing JSON type: Nested array -> '[1,[2,3],["nested",[true]]]'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '[1,[2,3],[\"nested\",[true]]]') FROM table1 WHERE id = 17
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 28] Result: Nested array -> '[1,[2,3],["nested",[true]]]' completed
+  
+  [TEST 29] Testing JSON type: Object empty -> '{}'
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '{}') FROM table1 WHERE id = 18
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 29] Result: Object empty -> '{}' completed
+  
+  [TEST 30] Testing JSON type: Nested object with coordinates
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT JSON_CONTAINS(col1, '{\"user\":{\"name\":\"Alice\",\"age\":30,\"address\":{\"city\":\"Paris\",\"coordinates\":[48.8566,2.3522]}},\"active\":true}') FROM table1 WHERE id = 19
+  [MOCK] Returning one row
+  [MOCK] get_column_Bool_nullable[0] = Some false (default)
+  [TEST 30] Result: Nested object with coordinates completed
+  
+  [TEST 31] Testing JSON complex nested structure with INSERT (reusing test12)
+  [MOCK EXECUTE] Connection type: [> `WR ]
+  [SQL] INSERT INTO table1 (id, col1) VALUES (20, '{\"users\":[{\"id\":1,\"name\":\"O'Reilly\",\"emails\":[\"test@example.com\",\"admin's email\"],\"metadata\":{\"created\":\"2024-01-01\",\"tags\":[\"admin\",\"user\"]}},{\"id\":2,\"name\":\"User \\\"Two\\\"\",\"active\":false,\"score\":98.765}],\"settings\":{\"theme\":\"dark\",\"notifications\":true,\"limits\":{\"max\":1000,\"current\":42}},\"nullValue\":null,\"emptyArray\":[],\"emptyObject\":{}}')
+  [MOCK] Execute result: affected_rows=1, insert_id=20
+  [TEST 31] Result: Complex structure (reused test12), affected_rows=1, insert_id=20
+  
+  [TEST 32] Testing custom JSON type with INSERT (module=Custom, reusing SQL test13)
+  [MOCK EXECUTE] Connection type: [> `WR ]
+  [SQL] INSERT INTO table_custom (id, custom_col) VALUES (21, '{\"a\":\"test with 'quotes' and \\\\backslash\",\"b\":42}')
+  [MOCK] Execute result: affected_rows=1, insert_id=21
+  [TEST 32] Result: Custom type INSERT into table_custom, affected_rows=1, insert_id=21
+  [TEST 32] Custom data: a='test with 'quotes' and \backslash', b=42
+  
+  [TEST 33] Testing custom JSON type with SELECT (module=Custom, reusing SQL test14)
+  [MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]
+  [SQL] SELECT custom_col FROM table_custom WHERE id = 21
+  [MOCK] Returning one row
+  [MOCK] get_column_json_nullable[0] = Some {"a":"retrieved value","b":123}
+  [TEST 33] Result: Custom type SELECT from table_custom completed
+  [TEST 33] Retrieved custom data: a='retrieved value', b=123
+  
   
   ============================================================
   All tests executed successfully!
