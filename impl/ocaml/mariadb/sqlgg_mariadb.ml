@@ -316,7 +316,8 @@ struct
         | `Bytes x -> Yojson.Safe.from_string (Bytes.to_string x)
         | #M.Field.value as value -> convfail "json" v value
 
-      let to_literal (x: t) = Yojson.Safe.to_string (x :> Yojson.Safe.t)
+      let to_literal (x: t) = Text.to_literal (Yojson.Safe.to_string (x :> Yojson.Safe.t))
+
       let of_field field = convert_json @@ handle_with_json field (M.Field.value field )
       let to_value (x: json) = match x with
         | `Bool x -> Bool.to_value x
