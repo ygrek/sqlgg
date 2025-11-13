@@ -879,96 +879,86 @@ and eval_nested env nested =
 
 (** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE/HAVING
 
-    Handles:
-    - Direct: name IS NOT NULL
-    - Double negation: NOT (name IS NULL)
-    - AND conjunctions: all checks must pass
-    - OR disjunctions: only if ALL branches have the same check
-    - De Morgan's law: NOT (A OR B) extracts from B if B is IS NULL check
-    - Choices: only if ALL branches have the check
+    Uses structured nullability analysis with uniform logic rules:
+    - Builds nullability AST: IsNotNull, IsNull, And, Or, Not
+    - Applies De Morgan's laws automatically
+    - Handles all combinations: NOT (A AND B), NOT (A OR B), nested logic
 *)
 and extract_not_null_column_keys env = function
   | None -> []
   | Some expr ->
-    let rec aux = function
-      | Column _ ->
-        (* Standalone columns are not IS NOT NULL checks *)
-        []
-      | Fun { kind = Comparison Is_not_null;
-              parameters = [Column col]; _ } ->
-        (* IS NOT NULL check on a column *)
-        let resolved = resolve_column ~env col in
-        [(resolved.sources, resolved.attr.name)]
-      | Fun { kind = Negation;
-              parameters = [Fun { kind = Comparison Is_null;
-                                   parameters = [Column col]; _ }]; _ } ->
-        (* NOT (column IS NULL) is equivalent to IS NOT NULL *)
-        let resolved = resolve_column ~env col in
-        [(resolved.sources, resolved.attr.name)]
+    let module NullCheck = struct
+      (* Nullability analysis AST *)
+      type t =
+        | IsNotNull of (table_name list * string)
+        | IsNull of (table_name list * string)
+        | And of t list
+        | Or of t list
+        | Unknown
+
+      (* Apply De Morgan's laws uniformly *)
+      let rec negate = function
+        | IsNotNull col -> IsNull col
+        | IsNull col -> IsNotNull col
+        | And checks -> Or (List.map negate checks)
+        | Or checks -> And (List.map negate checks)
+        | Unknown -> Unknown
+    end in
+
+    (* Build nullability AST from expression *)
+    let rec analyze = function
+      | Column _ -> NullCheck.Unknown
+      | Fun { kind = Comparison Is_not_null; parameters = [Column col]; _ } ->
+          let resolved = resolve_column ~env col in
+          NullCheck.IsNotNull (resolved.sources, resolved.attr.name)
+      | Fun { kind = Comparison Is_null; parameters = [Column col]; _ } ->
+          let resolved = resolve_column ~env col in
+          NullCheck.IsNull (resolved.sources, resolved.attr.name)
+      | Fun { kind = Negation; parameters = [e]; _ } ->
+          NullCheck.negate (analyze e)
       | Fun { kind = Logical And; parameters; _ } ->
-        List.concat_map aux parameters
+          NullCheck.And (List.map analyze parameters)
       | Fun { kind = Logical Or; parameters; _ } ->
-        (* For OR, only refine if ALL branches have the IS NOT NULL check *)
-        let branch_cols = List.map aux parameters in
-        let all_branches_have col =
-          List.for_all (fun branch -> List.mem col branch) branch_cols
-        in
-        let all_cols = List.concat branch_cols in
-        List.filter all_branches_have (List.sort_uniq compare all_cols)
-      | Fun { kind = Negation;
-              parameters = [Fun { kind = Logical Or; parameters; _ }]; _ } ->
-        (* NOT (A OR B) = (NOT A) AND (NOT B) - De Morgan's law
-           For IS NULL refinement: NOT (... OR col IS NULL) means col IS NOT NULL
-           Recursively flatten nested ORs to find all IS NULL checks *)
-        let rec flatten_or_params = function
-          | Fun { kind = Logical Or; parameters; _ } ->
-            List.concat_map flatten_or_params parameters
-          | expr -> [expr]
-        in
-        let all_params = List.concat_map flatten_or_params parameters in
-        let has_is_null_check = function
-          | Fun { kind = Comparison Is_null;
-                  parameters = [Column col]; _ } ->
-            let resolved = resolve_column ~env col in
-            Some (resolved.sources, resolved.attr.name)
-          | _ -> None
-        in
-        List.filter_map has_is_null_check all_params
-      | Fun _ ->
-        []
+          NullCheck.Or (List.map analyze parameters)
+      | Fun _ -> NullCheck.Unknown
       | Case { case = _; branches; else_ } ->
-        (* In WHERE/HAVING: CASE must evaluate to TRUE
-           If ALL THEN branches AND ELSE have "col IS NOT NULL",
-           then col is guaranteed non-null when CASE is TRUE *)
-        let then_cols = List.map (fun { Sql.then_; _ } -> aux then_) branches in
-        let else_cols = Option.map_default aux [] else_ in
-
-        (* If ELSE is missing, we can't guarantee the check in all paths *)
-        let all_branch_cols = match else_ with
-          | None -> []  (* No ELSE = can't guarantee all paths checked *)
-          | Some _ -> then_cols @ [else_cols]
-        in
-
-        (* Only keep columns that appear in ALL branches *)
-        let all_cols = List.concat all_branch_cols in
-        let all_branches_have col =
-          List.for_all (fun branch -> List.mem col branch) all_branch_cols
-        in
-        List.filter all_branches_have (List.sort_uniq compare all_cols)
+          (* CASE in WHERE: all THEN branches + ELSE must be analyzed *)
+          let then_checks = List.map (fun { Sql.then_; _ } -> analyze then_) branches in
+          let else_check = Option.map_default analyze NullCheck.Unknown else_ in
+          begin match else_ with
+          | None -> NullCheck.Unknown  (* No ELSE = can't guarantee all paths *)
+          | Some _ -> NullCheck.Or (then_checks @ [else_check])  (* One of them will be true *)
+          end
       | Choices (_, choices) ->
-        (* Only refine if ALL branches have the IS NOT NULL check *)
-        let branch_cols = List.map (fun (_pid, e_opt) -> Option.map_default aux [] e_opt) choices in
-        let all_branches_have col =
-          List.for_all (fun branch -> List.mem col branch) branch_cols
-        in
-        let all_cols = List.concat branch_cols in
-        List.filter all_branches_have (List.sort_uniq compare all_cols)
-      | InChoice (_, _, e) -> aux e
-      | OptionActions { choice; _ } -> aux choice
+          (* User chooses one branch at runtime *)
+          let branch_checks = List.map (fun (_pid, e_opt) ->
+            Option.map_default analyze NullCheck.Unknown e_opt
+          ) choices in
+          NullCheck.Or branch_checks  (* One of them will be chosen *)
+      | InChoice (_, _, e) -> analyze e
+      | OptionActions { choice; _ } -> analyze choice
       | SelectExpr _ | Value _ | Param _ | Inparam _
-      | InTupleList _ | Of_values _ -> []
+      | InTupleList _ | Of_values _ -> NullCheck.Unknown
     in
-    aux expr
+
+    (* Extract columns guaranteed to be non-null from nullability AST *)
+    let rec extract = function
+      | NullCheck.IsNotNull col -> [col]
+      | NullCheck.IsNull _ -> []
+      | NullCheck.And checks ->
+          (* All columns that are IsNotNull in ANY branch of AND *)
+          List.concat_map extract checks
+      | NullCheck.Or checks ->
+          (* Only columns that are IsNotNull in ALL branches of OR *)
+          let all_lists = List.map extract checks in
+          let all_cols = List.concat all_lists in
+          List.filter (fun col ->
+            List.for_all (fun branch -> List.mem col branch) all_lists
+          ) (List.sort_uniq compare all_cols)
+      | NullCheck.Unknown -> []
+    in
+
+    expr |> analyze |> extract
 
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in

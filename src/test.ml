@@ -155,6 +155,15 @@ let test = Type.[
   tt "SELECT name FROM test WHERE NOT (name IS NULL)"
      [attr' "name" Text]
      [];
+  (* IS NOT NULL refinement: De Morgan's law - NOT (A AND B) *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND NOT (str IS NULL AND id IS NULL)"
+     [attr' "name" Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: nested negations with De Morgan *)
+  tt "SELECT name FROM test WHERE NOT (NOT (name IS NOT NULL))"
+     [attr' "name" Text]
+     [];
   (* IS NOT NULL refinement: combined with other conditions *)
   tt "SELECT name FROM test WHERE name IS NOT NULL AND name LIKE 'A%'"
      [attr' "name" Text]
