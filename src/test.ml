@@ -67,6 +67,17 @@ let tt sql ?kind schema params =
   let test () = do_test sql ?kind schema params in
   sql >:: test
 
+(** Test helper for queries with Choice parameters - only checks schema *)
+let tt_schema_only sql ?kind schema =
+  let test () =
+    let stmt = parse sql in
+    assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+    match kind with
+    | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
+    | None -> ()
+  in
+  sql >:: test
+
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
@@ -96,6 +107,162 @@ let test = Type.[
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr' ~nullability:Nullable "name" Text;]
      [named_nullable "x" Int; param Int; named_nullable "x" Int; param Int;];
+  tt "SELECT name FROM test WHERE name IS NOT NULL"
+     [attr' "name" Text]  (* Strict, not Nullable *)
+     [];
+  (* IS NOT NULL refinement: column still nullable in output if not in WHERE *)
+  tt "SELECT name, str FROM test WHERE str IS NOT NULL"
+     [attr' "name" ~nullability:Nullable Text;  (* name not refined *)
+      attr' "str" Text]                          (* str IS refined *)
+     [];
+  (* IS NOT NULL refinement: multiple columns *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NOT NULL"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  (* IS NOT NULL refinement: doesn't apply if OR *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL OR id = 1"
+     [attr' "name" ~nullability:Nullable Text]  (* name could still be null in OR branch *)
+     [];
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL OR str IS NOT NULL"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str"  ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: apply with AND *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND id = 1"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with select * *)
+  tt "SELECT * FROM test WHERE name IS NOT NULL"
+     [attr' "id" ~nullability:Nullable Int;
+      attr' "str" ~nullability:Nullable Text;
+      attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with alias *)
+  tt "SELECT name as my_name FROM test WHERE name IS NOT NULL"
+     [attr' "my_name" Text]
+     [];
+  (* IS NOT NULL refinement: with IS NULL *)
+  tt "SELECT name FROM test WHERE name IS NULL"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: with computed expression - tests position alignment *)
+  tt "SELECT 2+2, str FROM test WHERE str IS NOT NULL"
+     [attr' "" Int;
+      attr' "str" Text]
+     [];
+  (* IS NOT NULL refinement: double negation *)
+  tt "SELECT name FROM test WHERE NOT (name IS NULL)"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: De Morgan's law - NOT (A AND B) *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND NOT (str IS NULL AND id IS NULL)"
+     [attr' "name" Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: nested negations with De Morgan *)
+  tt "SELECT name FROM test WHERE NOT (NOT (name IS NOT NULL))"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: combined with other conditions *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND name LIKE 'A%'"
+     [attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: with joins *)
+  tt "SELECT t1.name, t2.str FROM test t1 JOIN test t2 ON t1.id = t2.id WHERE t1.name IS NOT NULL AND t2.str IS NOT NULL"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  (* IS NOT NULL refinement: self-join *)
+  tt "SELECT a.name, b.name FROM test a, test b WHERE a.name IS NOT NULL AND b.name IS NOT NULL"
+     [attr' "name" Text;
+      attr' "name" Text]
+     [];
+  (* IS NOT NULL refinement: subquery in WHERE *)
+  tt "SELECT name FROM test WHERE name IS NOT NULL AND id IN (SELECT id FROM test WHERE str IS NOT NULL)"
+     [attr' "name" Text]
+     [];
+  tt "SELECT name, str FROM test WHERE (name IS NOT NULL AND id > 10) OR (str IS NOT NULL AND id < 5)"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str"  ~nullability:Nullable Text]
+     [];
+  tt "SELECT name FROM test WHERE (name IS NOT NULL OR id IN (SELECT id FROM test WHERE str IS NOT NULL))"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: with AND IS NULL *)
+  tt "SELECT name, str FROM test WHERE name IS NOT NULL AND str IS NULL"
+     [attr' "name" Text; attr' "str" ~nullability:Nullable Text]
+     [];
+  (* IS NOT NULL refinement: Choices - must be in ALL branches to refine *)
+  tt_schema_only "SELECT name FROM test WHERE @choice { A { name IS NOT NULL } | B { TRUE } }"
+     [attr' "name" ~nullability:Nullable Text];  (* name still nullable - only checked in A branch *)
+  tt_schema_only "SELECT name FROM test WHERE @choice { A { name IS NOT NULL } | B { name IS NOT NULL } }"
+     [attr' "name" Text];  (* name refined - checked in all branches *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL AND str IS NOT NULL } | B { TRUE } }"
+     [attr' "name" ~nullability:Nullable Text; attr' "str" ~nullability:Nullable Text];  (* both nullable *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL } | B { str IS NOT NULL } }"
+     [attr' "name" ~nullability:Nullable Text; attr' "str" ~nullability:Nullable Text];  (* different checks in branches *)
+  tt_schema_only "SELECT name, str FROM test WHERE @choice { A { name IS NOT NULL AND str IS NOT NULL } | B { name IS NOT NULL AND str IS NOT NULL } }"
+     [attr' "name" Text; attr' "str" Text];  (* both checked in all branches *)
+
+  (* IS NOT NULL refinement with aggregations *)
+  (* Aggregation results themselves are not affected by IS NOT NULL in WHERE *)
+  tt "SELECT COUNT(name) FROM test WHERE name IS NOT NULL"
+     [attr' "" Int]
+     [];
+  tt "SELECT SUM(id) FROM test WHERE id IS NOT NULL"
+     [attr' ~nullability:Nullable "" Int]  (* Still nullable - no rows matching WHERE returns NULL *)
+     [];
+  (* But GROUP BY columns are refined by IS NOT NULL *)
+  tt "SELECT name, COUNT(*), MAX(str) FROM test WHERE name IS NOT NULL GROUP BY name"
+     [attr' "name" Text;  (* name is refined to non-nullable *)
+      attr' "" Int;
+      attr' ~nullability:Nullable "" Text]
+     [];
+  (* should work with HAVING *)
+  tt "SELECT name, COUNT(*) FROM test GROUP BY name HAVING name IS NOT NULL"
+     [attr' "name" Text; 
+      attr' "" Int]
+     [];
+  (* De Morgan's law: NOT (A OR name IS NULL) implies name IS NOT NULL *)
+  tt "SELECT name FROM test WHERE NOT (id < 10 OR name IS NULL)"
+     [attr' "name" Text]
+     [];
+  (* OR where ALL branches check IS NOT NULL - name guaranteed non-null *)
+  tt "SELECT name FROM test WHERE (id > 0 AND name IS NOT NULL) OR (id < 0 AND name IS NOT NULL)"
+     [attr' "name" Text]
+     [];
+  (* Edge case: NOT with AND should not refine *)
+  tt "SELECT name FROM test WHERE NOT (id > 0 AND name IS NOT NULL)"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* Edge case: Mixed OR where only some branches have IS NOT NULL *)
+  tt "SELECT name FROM test WHERE (name IS NOT NULL) OR (id > 10)"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* Edge case: Nested NOT OR *)
+  tt "SELECT name, str FROM test WHERE NOT (id > 10 OR (str IS NULL OR name IS NULL))"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  (* All branches of CASES are NOT NULL *)
+  tt "SELECT name, str FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL WHEN id < 10 THEN str IS NOT NULL AND name IS NOT NULL ELSE name IS NOT NULL END"
+     [attr' "name" Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
+  (* CASE missing ELSE - should NOT refine (else branch might be NULL) *)
+  tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* CASE with one branch missing check - should NOT refine *)
+  tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL WHEN id < 10 THEN id > 0 ELSE name IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  (* CASE with different columns in branches - should NOT refine either *)
+  tt "SELECT name, str FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL ELSE str IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
   tt "insert into test values"
      []
      [named_nullable "id" Int; named_nullable "str" Text; named_nullable "name" Text];
