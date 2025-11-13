@@ -146,6 +146,11 @@ let test = Type.[
   tt "SELECT name FROM test WHERE name IS NULL"
      [attr' "name" ~nullability:Nullable Text]
      [];
+  (* IS NOT NULL refinement: with computed expression - tests position alignment *)
+  tt "SELECT 2+2, str FROM test WHERE str IS NOT NULL"
+     [attr' "" Int;
+      attr' "str" Text]
+     [];
   (* IS NOT NULL refinement: double negation *)
   tt "SELECT name FROM test WHERE NOT (name IS NULL)"
      [attr' "name" Text]

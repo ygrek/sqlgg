@@ -719,39 +719,50 @@ and resolve_types env expr =
       end;
       raise exn
 
-and infer_schema env columns =
+and infer_schema ~not_null_keys env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let rec propagate_meta ~env = function
-    | Column col -> 
-      let result = resolve_column ~env col in 
+    | Column col ->
+      let result = resolve_column ~env col in
       result.attr.meta
     (* aggregated columns, ie: max, min *)
     | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
      (* null handling functions that preserve metadata from first argument *)
     | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = e :: _; _ } -> propagate_meta ~env e
     (* Or for subselect which always requests only one column, TODO: consider CTE in subselect, perhaps a rare occurrence *)
-    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) -> 
+    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) ->
       let (env,_) = eval_nested env from in
       propagate_meta ~env e
     | Case _
-    | Value _ 
-    (* TODO: implement for custom props *) 
+    | Value _
+    (* TODO: implement for custom props *)
     | Param _ | Inparam _ | Choices _| InChoice _
     | Fun _ | SelectExpr _ | InTupleList _ | Of_values _
     | OptionActions _ -> Meta.empty ()
   in
+  let refine_column (col : table_name Schema.Source.Attr.t) =
+    let key = (col.sources, col.attr.name) in
+    if List.mem key not_null_keys && Type.is_nullable col.attr.domain then
+      { col with
+        attr = { col.attr with
+                 domain = Type.make_strict col.attr.domain } }
+    else
+      col
+  in
   let resolve1 = function
-    | All -> env.schema
-    | AllOf t -> schema_of ~env t
+    | All -> List.map refine_column env.schema
+    | AllOf t -> List.map refine_column (schema_of ~env t)
     | Expr (e,name) ->
       let col =
         match e with
         | Column col -> resolve_column ~env col
-        | e -> { 
+        | e -> {
           attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
-          sources = [] 
+          sources = []
         }
       in
+      (* Refine before applying alias, so we check against original column name *)
+      let col = refine_column col in
       let col = Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name in
       [ col ]
   in
@@ -959,45 +970,14 @@ and extract_not_null_column_keys env = function
     in
     aux expr
 
-(** Extract (sources, original_name) pairs before aliasing *)
-and extract_column_keys env columns =
-  let extract_key = function
-    | All ->
-        (* All expands to all columns in env.schema, preserve their keys *)
-        List.map (fun (sa: table_name Schema.Source.Attr.t) -> (sa.sources, sa.attr.name)) env.schema
-    | AllOf t ->
-        (* AllOf expands to all columns from specific table *)
-        let schema = schema_of ~env t in
-        List.map (fun (sa: table_name Schema.Source.Attr.t) -> (sa.sources, sa.attr.name)) schema
-    | Expr (Column col, _) ->
-        let resolved = resolve_column ~env col in
-        [(resolved.sources, resolved.attr.name)]
-    | Expr _ -> []
-  in
-  List.concat_map extract_key columns
-
-(** Refine schema to make columns strict if they have IS NOT NULL in WHERE *)
-and refine_schema_with_not_null_keys schema column_keys not_null_keys =
-  (* Schema and column_keys are in the same order from infer_schema/extract_column_keys *)
-  List.map2 (fun (source_attr: table_name Schema.Source.Attr.t) key_opt ->
-    match key_opt with
-    | Some key when List.mem key not_null_keys && Type.is_nullable source_attr.attr.domain ->
-        { source_attr with
-          attr = { source_attr.attr with
-                   domain = Type.make_strict source_attr.attr.domain } }
-    | _ -> source_attr
-  ) schema (List.map (fun x -> Some x) column_keys @ List.init (List.length schema - List.length column_keys) (fun _ -> None))
-
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
-  let final_schema = infer_schema env columns in
-  (* Refine schema based on WHERE and HAVING IS NOT NULL predicates *)
-  let column_keys = extract_column_keys env columns in
+  (* Extract IS NOT NULL predicates from WHERE and HAVING *)
   let not_null_keys_where = extract_not_null_column_keys env where in
   let not_null_keys_having = extract_not_null_column_keys env having in
   let not_null_keys = not_null_keys_where @ not_null_keys_having in
-  let final_schema = refine_schema_with_not_null_keys final_schema column_keys not_null_keys in
+  let final_schema = infer_schema ~not_null_keys env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
   let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then
@@ -1103,7 +1083,7 @@ and resolve_source env (x, alias) =
     s, p, tables
   | `Nested from ->
     let (env,p) = eval_nested env (Some from) in
-    let s = infer_schema env [All] in
+    let s = infer_schema ~not_null_keys:[] env [All] in
     if alias <> None then failwith "No alias allowed on nested tables";
     s, p, env.tables
   | `Table s ->
