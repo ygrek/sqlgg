@@ -209,12 +209,7 @@ module Default_types = struct
      | `Float x -> Float.to_string x
      | #t  -> Yojson.Safe.to_string (x :> Yojson.Safe.t)
 
-    let to_literal (x: t) = match x with
-     | `Bool x -> Bool.to_literal x
-     | `Int x -> Int.to_literal (Int64.of_int x)
-     | `Intlit x ->  Int.to_string (Int64.of_string x)
-     | `Float x -> Float.to_literal x
-     | #t -> Text.to_literal @@ Yojson.Safe.to_string (x :> Yojson.Safe.t)
+    let to_literal (x: t) = Text.to_literal (Yojson.Safe.to_string (x :> Yojson.Safe.t))
 
     let get_string = of_string
     let set_string = to_string

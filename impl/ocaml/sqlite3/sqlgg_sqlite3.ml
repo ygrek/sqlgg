@@ -87,12 +87,7 @@ module Types = struct
   module Json = struct
     type t = json
 
-    let to_literal (x: t) = match x with
-     | `Bool x -> Bool.to_literal x
-     | `Intlit x -> Int.to_literal (Int64.of_string x)
-     | `Int x -> Int.to_literal (Int64.of_int x)
-     | `Float x -> Float.to_literal x
-     | #t -> Yojson.Safe.to_string (x :> Yojson.Safe.t)
+    let to_literal (x: t) = Text.to_literal (Yojson.Safe.to_string (x :> Yojson.Safe.t))
     let json_to_literal = to_literal
   end
 
