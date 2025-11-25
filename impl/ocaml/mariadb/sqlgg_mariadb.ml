@@ -318,6 +318,7 @@ struct
       let handle_with_json v = function
         | `String x -> Yojson.Safe.from_string x
         | `Bytes x -> Yojson.Safe.from_string (Bytes.to_string x)
+        | `Json x -> Yojson.Safe.from_string x
         | #M.Field.value as value -> convfail "json" v value
 
       let to_literal (x: t) = Text.to_literal (Yojson.Safe.to_string (x :> Yojson.Safe.t))
