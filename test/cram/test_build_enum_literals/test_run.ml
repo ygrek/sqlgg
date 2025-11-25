@@ -16,7 +16,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Failed"]
     ];
     
-    let result = Sql.test1 ~status_list:[`Failed; `Skipped] connection (fun ~status:_ ->
+    let result = Sql.test1 ~status_list:["Failed"; "Skipped"] connection (fun ~status:_ ->
       printf "  -> Callback executed\n"
     ) in
     printf "[TEST 1] Completed\n\n";
@@ -28,7 +28,7 @@ module M (T: Sqlgg_traits.M with
     Print_ocaml_impl.clear_mock_responses ();
     Print_ocaml_impl.setup_execute_response ~affected_rows:2L ~insert_id:(Some 1L) ();
     
-    let result = Sql.test2 ~rows:[(1L, `Active); (2L, `Pending)] connection in
+    let result = Sql.test2 ~rows:[(1L, "Active"); (2L, "Pending")] connection in
     printf "[TEST 2] Completed: affected_rows=%Ld\n\n" result.affected_rows;
     result
   

@@ -1585,12 +1585,6 @@ INSERT ... SELECT with meta propagation:
   
     module IO = Sqlgg_io.Blocking
   
-      module Enum_0 = T.Make_enum(struct
-        type t = [`A | `B]
-        let inj = function | "a" -> `A | "b" -> `B | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
-        let proj = function  | `A -> "a"| `B -> "b"
-      end)
-  
     let create_t_dst db  =
       T.execute db ("CREATE TABLE t_dst (\n\
     status ENUM('a','b') NOT NULL\n\
@@ -1599,7 +1593,7 @@ INSERT ... SELECT with meta propagation:
     let insert_t_dst_1 db ~s =
       let set_params stmt =
         let p = T.start_params stmt (1) in
-        Enum_0.set_param p s;
+        T.set_param_Text p s;
         T.finish_params p
       in
       T.execute db ("INSERT INTO t_dst (status)\n\

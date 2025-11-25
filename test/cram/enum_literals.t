@@ -1,8 +1,3 @@
-Test Enum.to_literal generates proper SQL with quoted enum values:
-  $ /bin/sh ./sqlgg_test.sh test_build_enum_literals/test_enum.sql enum_literals.compare.ml
-  $ echo $?
-  0
-
 Test Enum.to_literal with actual execution (shows SQL with quotes):
   $ cd test_build_enum_literals
   $ cat test_enum.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml - > output.ml
@@ -21,7 +16,7 @@ Test Enum.to_literal with actual execution (shows SQL with quotes):
   [SQL] SELECT * FROM test_status WHERE status IN ('Failed', 'Skipped')
   [MOCK] Returning 1 rows
     Row 0: col0=Failed 
-  [MOCK] get_column_Enum[0] = "Failed"
+  [MOCK] get_column_Text[0] = "Failed"
     -> Callback executed
   [TEST 1] Completed
   
