@@ -162,11 +162,15 @@ struct
     include Make(struct
       type t = int64
       let of_field field =
-        match M.Field.value field with
-        | `Int x -> Int64.of_int x
-        | `Int64 x -> x
-        | `String x -> Int64.of_string x
-        | value -> convfail "int64" field value
+        let s =
+          match M.Field.value field with
+          | `Int x -> Int.to_string x
+          | `Int64 x -> Int64.to_string x
+          | `String s -> s
+          | `UInt64 x -> Unsigned.UInt64.to_string x (* Unsigned.UInt64.to_int64 simply changes sign in case of overflow *)
+          | value -> convfail "int64" field value
+        in
+        Int64.of_string s
       let to_value x = `Int64 x
       let to_literal = Int64.to_string
     end)
