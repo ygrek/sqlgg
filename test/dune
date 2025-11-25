@@ -1,0 +1,5 @@
+(executable
+ (name test_mariadb_json_field_type)
+ (modules test_mariadb_json_field_type)
+ (libraries yojson))
+
