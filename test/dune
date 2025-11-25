@@ -1,5 +1,4 @@
-(executable
- (name test_mariadb_json_field_type)
- (modules test_mariadb_json_field_type)
- (libraries yojson))
-
+(test
+ (name test_mariadb_json)
+ (modules test_mariadb_json)
+ (libraries ounit2 mariadb sqlgg.mariadb sqlgg.traits yojson integers))
