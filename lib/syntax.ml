@@ -629,8 +629,12 @@ and assign_types env expr =
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
         | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
         | Agg Self, [typ] -> consider_agg_nullability typ, types
-        | Agg (With_order { with_order_kind = Group_concat; _ }), [t1] -> 
+        | Agg (With_order { with_order_kind = Group_concat; _ }), ((_ :: _) as params) -> 
           let ret = depends Text in
+          let nullability = common_nullability (ret :: params) in
+          consider_agg_nullability @@ (undepend ret nullability), types
+        | Agg (With_order { with_order_kind = Json_arrayagg; _ }), [t1] -> 
+          let ret = depends Json in
           let nullability = common_nullability [ret; t1] in
           consider_agg_nullability @@ (undepend ret nullability), types
         | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
@@ -810,7 +814,7 @@ and get_params_of_res_expr env (e:res_expr) =
     | ResInparam (p, m) -> SingleIn (p, m)::acc
     | ResFun { parameters; kind; _ } -> 
       let p1 = match kind with
-      | Agg (With_order { with_order_kind = Group_concat; order; _ }) -> List.rev @@ params_of_order order [] env
+      | Agg (With_order { order; _ }) -> List.rev @@ params_of_order order [] env
       | _ -> [] in
       p1 @ List.fold_left loop acc parameters
     | ResInTupleList _
