@@ -91,6 +91,7 @@ let keywords =
    "group",GROUP;
    "group_concat", GROUP_CONCAT;
    "having",HAVING;
+   "json_arrayagg", JSON_ARRAYAGG;
    "hour_microsecond", HOUR_MICROSECOND;
    "hour_minute", HOUR_MINUTE;
    "hour_second", HOUR_SECOND;

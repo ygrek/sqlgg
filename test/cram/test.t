@@ -1818,3 +1818,440 @@ Test UINT64 in type spec:
       T.execute db ("INSERT INTO t1 (id, v) VALUES (?, 123)") set_params
   
   end (* module Sqlgg *)
+
+Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE orders (
+  >   id INT PRIMARY KEY,
+  >   customer_id INT NOT NULL,
+  >   product TEXT NOT NULL,
+  >   quantity INT NOT NULL,
+  >   price DECIMAL(10,2) NOT NULL,
+  >   description TEXT
+  > );
+  > SELECT 
+  >   customer_id,
+  >   GROUP_CONCAT(product, ':', quantity) as products_with_qty
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(product) as products_json
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(DISTINCT product) as unique_products
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(description) as descriptions
+  > FROM orders
+  > GROUP BY customer_id;
+  > SELECT 
+  >   customer_id,
+  >   JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions
+  > FROM orders
+  > GROUP BY customer_id;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_orders db  =
+      T.execute db ("CREATE TABLE orders (\n\
+    id INT PRIMARY KEY,\n\
+    customer_id INT NOT NULL,\n\
+    product TEXT NOT NULL,\n\
+    quantity INT NOT NULL,\n\
+    price DECIMAL(10,2) NOT NULL,\n\
+    description TEXT\n\
+  )") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~products_with_qty:(T.get_column_Text stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_2 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~unique_combos:(T.get_column_Text stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_3 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~products_json:(T.get_column_Json stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product) as products_json\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_4 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~unique_products:(T.get_column_Json stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_5 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~products_by_price:(T.get_column_Json stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_6 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~sorted_unique_products:(T.get_column_Json stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_7 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~top_3_products:(T.get_column_Json stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_8 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~descriptions:(T.get_column_Json_nullable stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description) as descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    let select_9 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~customer_id:(T.get_column_Int stmt 0)
+          ~ordered_descriptions:(T.get_column_Json_nullable stmt 1)
+      in
+      T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_with_qty:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_2 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~unique_combos:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_3 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_json:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product) as products_json\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_4 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~unique_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_5 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_by_price:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_6 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~sorted_unique_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_7 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~top_3_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_8 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~descriptions:(T.get_column_Json_nullable stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description) as descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+      let select_9 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~ordered_descriptions:(T.get_column_Json_nullable stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_with_qty:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_2 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~unique_combos:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_3 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_json:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product) as products_json\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_4 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~unique_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_5 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~products_by_price:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_6 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~sorted_unique_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_7 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~top_3_products:(T.get_column_Json stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_8 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~descriptions:(T.get_column_Json_nullable stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description) as descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+      let select_9 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~customer_id:(T.get_column_Int stmt 0)
+            ~ordered_descriptions:(T.get_column_Json_nullable stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT \n\
+    customer_id,\n\
+    JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
+  FROM orders\n\
+  GROUP BY customer_id") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)

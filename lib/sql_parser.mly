@@ -51,6 +51,7 @@
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR EXTRACT
        YEAR_MONTH FALSE TRUE DUPLICATE
 %token GROUP_CONCAT SEPARATOR
+%token JSON_ARRAYAGG
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 %token T_INTEGER T_BIG_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
@@ -502,6 +503,10 @@ expr:
     | GROUP_CONCAT LPAREN p=func_params order=loption(order) preceded(SEPARATOR, TEXT)? RPAREN
       {
         Fun { kind = Agg ( With_order({ with_order_kind = Group_concat; order })); parameters = p; is_over_clause = false } 
+      }
+    | JSON_ARRAYAGG LPAREN p=func_params order=loption(order) limit_t? RPAREN
+      {
+        Fun { kind = Agg ( With_order({ with_order_kind = Json_arrayagg; order })); parameters = p; is_over_clause = false } 
       }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
     | f=table_name LPAREN p=func_params RPAREN { Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } }

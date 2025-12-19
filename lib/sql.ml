@@ -587,6 +587,7 @@ and row_values = {
 and order = (expr * direction option) list
 and agg_with_order_kind = 
     | Group_concat
+    | Json_arrayagg
 and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
     | Count (* count it's count function which never returns null  *) 
     | Avg (* avg it's avg function that returns float *)
@@ -714,6 +715,7 @@ let pp_func pp f =
   | Agg Avg -> fprintf pp "|'a| -> float"
   | Agg Count -> fprintf pp "|'a| -> int"
   | Agg (With_order { with_order_kind = Group_concat; _ }) -> fprintf pp "|'a| -> text"
+  | Agg (With_order { with_order_kind = Json_arrayagg; _ }) -> fprintf pp "|'a| -> json"
   | Ret ret -> fprintf pp "_ -> %s" (Type.show ret)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map Type.string_of_tyvar args) (Type.string_of_tyvar ret)
   | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
