@@ -230,7 +230,7 @@ let output_schema_binder index schema kind =
     | Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index schema
     | _ -> func, output_schema_binder_labeled index schema
 
-let is_callback stmt =
+let is_callback (stmt : Gen.stmt) =
   match stmt.schema, stmt.kind with
   | [],_ -> false
   | _, Stmt.Select (`Zero_one | `One) -> false
@@ -258,22 +258,22 @@ let match_variant_pattern i name args ~is_poly =
   | Some arg_list ->
     let (_, _, all_wildcard), patterns =
       List.fold_left_map (fun (seen_wildcards, seen_names, all_wc) arg ->
-        let make_wildcard_param label = 
-          if List.mem label seen_wildcards
+        let make_wildcard_param value = 
+          if List.mem value seen_wildcards
             then ((seen_wildcards, seen_names, all_wc), None)
-            else ((label :: seen_wildcards, seen_names, all_wc), Some "_") in
+            else ((value :: seen_wildcards, seen_names, all_wc), Some "_") in
         match arg with
-        | Sql.Single (param, _) | SingleIn (param, _) -> make_wildcard_param param.id.label
+        | Sql.Single (param, _) | SingleIn (param, _) -> make_wildcard_param param.id.value
         | SharedVarsGroup _
-        | Choice ({ label = None; _ }, _)
-        | TupleList ({ label = None; _ }, _) 
-        | OptionActionChoice ({ label = None; _ }, _, _, _)
-        | ChoiceIn { param = { label = None; _ }; _ } ->
+        | Choice ({ value = None; _ }, _)
+        | TupleList ({ value = None; _ }, _) 
+        | OptionActionChoice ({ value = None; _ }, _, _, _)
+        | ChoiceIn { param = { value = None; _ }; _ } ->
           ((seen_wildcards, seen_names, all_wc), Some "_")
-        | TupleList ({ label = Some s; _ }, _) 
-        | Choice ({ label = Some s; _ }, _)
-        | OptionActionChoice ({ label = Some s; _ }, _, _, _)
-        | ChoiceIn { param = { label = Some s; _ }; _ } ->
+        | TupleList ({ value = Some s; _ }, _) 
+        | Choice ({ value = Some s; _ }, _)
+        | OptionActionChoice ({ value = Some s; _ }, _, _, _)
+        | ChoiceIn { param = { value = Some s; _ }; _ } ->
             if List.mem s seen_names
             then ((seen_wildcards, seen_names, false), None)
             else ((seen_wildcards, s :: seen_names, false), Some s)
@@ -304,9 +304,9 @@ let set_param ~meta index param =
         output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
   | None ->
       match param with
-      | { typ = { t=Union { ctors; _ }; _ }; _ } when nullable ->
+      | { typ = { t=(Union { ctors; _ }); _ }; _ } when nullable ->
           set_param_nullable "v" @@ (get_enum_name ctors) ^ ".set_param p v"
-      | { typ = { t=Union { ctors; _ }; _ }; _ } ->
+      | { typ = { t=(Union { ctors; _ }); _ }; _ } ->
           output "%s.set_param p %s;" (get_enum_name ctors) pname
       | param' ->
           if nullable then
@@ -354,7 +354,7 @@ let set_var index var =
         List.iter (fun var ->
           let use_var = match var with
             | Single ({ id; _ }, _) | SingleIn ({id; _}, _) | TupleList (id, _) ->
-              (match id.label with
+              (match id.value with
                | Some name when Hashtbl.mem seen name -> false
                | Some name -> Hashtbl.add seen name (); true  
                | None -> true)
@@ -395,13 +395,13 @@ let set_var index var =
             match args, branch_has_content with
             | (Some [] | None), false -> ""
             | (Some [] | None), true ->
-              (match param.label with Some n -> " " ^ n | None -> "")
+              (match param.value with Some n -> " " ^ n | None -> "")
             | Some _, false -> " _"
             | Some l, true -> 
               " (" ^ String.concat "," (names_of_vars l) ^ ")"
           in
           let variant_name = 
-            make_variant_name i param.label ~is_poly:true 
+            make_variant_name i param.value ~is_poly:true 
           in
           
           if branch_has_content then
@@ -495,7 +495,7 @@ let rec eval_count_params vars =
         | Verbatim (n,_) -> 
           sprintf "%s -> 0" (vname n ~is_poly:true)
         | Simple (param,args) -> 
-          sprintf "%s -> %s" (match_variant_pattern i param.label args ~is_poly:true)
+          sprintf "%s -> %s" (match_variant_pattern i param.value args ~is_poly:true)
             (eval_count_params @@ Option.default [] args)) |> String.concat " | ")
       ^ ")"
     end |> String.concat ""
@@ -549,10 +549,10 @@ let make_to_literal meta typ =
     | _ -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name typ)
 
 let gen_in_substitution meta var =
-  if Option.is_none var.id.label then failwith "empty label in IN param";
+  if Option.is_none var.id.value then failwith "empty label in IN param";
   sprintf {code| "(" ^ String.concat ", " (List.map %s %s) ^ ")"|code}
     (make_to_literal meta var.typ)
-    (Option.get var.id.label)
+    (Option.get var.id.value)
 
 let gen_tuple_printer ~is_row _label schema =
   let params = List.map (fun { name; _ } -> name) schema in
@@ -573,9 +573,9 @@ let gen_tuple_printer ~is_row _label schema =
            else to_literal name))
      schema)
 
-let resolve_tuple_label id = match id.label with
+let resolve_tuple_label id = match id.value with
 | None -> failwith "empty label in tuple param"
-| Some label -> label
+| Some value -> value
 
 let gen_tuple_substitution ~is_row label schema =
   sprintf
@@ -585,7 +585,7 @@ let gen_tuple_substitution ~is_row label schema =
 
 let make_schema_of_tuple_types label =
   List.mapi (fun idx (domain, meta) -> {
-    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta;
   })   
 
 let make_sql l =
@@ -614,7 +614,7 @@ let make_sql l =
       bprintf b "(match %s with" (make_param_name 0 name);
       ctors |> List.iteri (fun i ({ ctor; args; sql; is_poly }) -> 
         bprintf b " %s%s -> " (if i = 0 then "" else "| ") 
-          (match_variant_pattern i ctor.label args ~is_poly:is_poly); loop false sql);
+          (match_variant_pattern i ctor.value args ~is_poly:is_poly); loop false sql);
       bprintf b ")";
       loop true tl
     | SubstTuple (id, Insertion schema) :: tl ->
@@ -622,9 +622,10 @@ let make_sql l =
       let label = resolve_tuple_label id in
       Buffer.add_string b (gen_tuple_substitution ~is_row:false label schema);
       loop true tl
-    | SubstTuple (id, Where_in (types, _, _)) :: tl ->
+    | SubstTuple (id, Where_in { value = (types, _); pos = _ }) :: tl ->
       if app then bprintf b " ^ ";
       let label = resolve_tuple_label id in
+      let types = List.map (fun (t, m) -> (t, m)) types in
       let schema = make_schema_of_tuple_types label types in
       bprintf b "%s ^ " (quote "(");
       Buffer.add_string b (gen_tuple_substitution ~is_row:false label schema);
@@ -713,9 +714,9 @@ let generate_stmt style index stmt =
     with
     | None -> exec
     | Some id ->
-    match id.label with
+    match id.value with
     | None -> failwith "empty label in tuple substitution"
-    | Some label -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> %s)|} label exec
+    | Some value -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> %s)|} value exec
   in
   output "%s%s" bind exec;
   if style = `Fold then output "(fun () -> IO.return !r_acc)";
@@ -771,7 +772,7 @@ let generate_enum_modules stmts =
         ) ctor_list
       | TupleList (_,  ValueRows { types; _ }) -> 
         List.concat_map enum_opt types
-      | TupleList (_, Where_in (types, _, _)) ->
+      | TupleList (_, Where_in { value = (types, _); pos = _ }) ->
         List.concat_map (fun (typ, meta) -> enum_opt_with_meta typ meta) types
       | TupleList (_, Insertion schema) -> schemas_to_enums schema
     ) vars in

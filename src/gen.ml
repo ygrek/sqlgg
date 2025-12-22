@@ -33,11 +33,11 @@ let name_of attr index =
   | s -> s
 
 let make_param_name index (p:Sql.param_id) =
-  match p.label with
+  match p.value with
   | None -> sprintf "_%u" index
   | Some s -> s
 
-let show_param_name (p:Sql.param) index = make_param_name index p.id
+let show_param_name (p: Sql.Type.t Sql.param) index = make_param_name index p.id
 
 let make_name props default = Option.default default (Props.get props "name")
 let default_name str index = sprintf "%s_%u" str index
@@ -71,7 +71,7 @@ let choose_name props kind index =
 type sql =
     Static of string
   | Dynamic of Sql.param_id * sql_dynamic_ctor list 
-  | SubstIn of Sql.param * Sql.Meta.t
+  | SubstIn of Sql.Type.t Sql.param * Sql.Meta.t
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
 
@@ -131,7 +131,7 @@ let substitute_vars s vars subst_param =
           in
           { ctor; sql; args; is_poly=true }
         | Verbatim (n,v) ->
-          { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
+          { ctor = Sql.make_located ~value:(Some n) ~pos:(0,0); args=Some []; sql=[Static v]; is_poly=true }
         end
       in
       let (i1,i2) = name.pos in
@@ -139,13 +139,13 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
-    | TupleList (id, Where_in (types, in_not_in, (j1, j2))) :: tl ->
+    | TupleList (id, Where_in { value = (types, in_not_in); pos = (j1, j2) }) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
       assert (i1 > i);
       assert (j2 > j1);
       assert (j1 > i); 
-      let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in (types, in_not_in, (j1, j2)))] in
+      let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in { value = (types, in_not_in); pos = (j1, j2) })] in
       let acc =  DynamicIn (id, in_not_in, sub) :: acc @ [Static (String.slice ~first:i ~last:j1 s)] in
       loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
@@ -168,12 +168,12 @@ let substitute_vars s vars subst_param =
         let (acc, last) = loop s [] c1 0 vars in
         let s_choice = 
           let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let ctor = Sql.{ value=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
         let n = 
           let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT ") in
-          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let ctor = Sql.{ value=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
         [s_choice; n]
@@ -184,7 +184,7 @@ let substitute_vars s vars subst_param =
         let (i1,i2) = id.pos in
         assert (i2 > i1);
         assert (i1 > i);
-        let shared_sql, (_: Sql.select_full) = Shared_queries.get id.ref_name in
+        let shared_sql, (_: Sql.select_full) = Shared_queries.get id.value in
         let raw_processed = loop_and_squash shared_sql shared_vars in
         let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
         loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl
@@ -238,7 +238,7 @@ end
 
 let is_param_nullable param =
   let open Sql in
-  param.typ.nullability = Nullable
+  param.typ.Type.nullability = Nullable
 
 let is_attr_nullable attr =
   let open Sql in
@@ -249,10 +249,10 @@ type value = { vname : string; vtyp : string; nullable : bool; }
 module Translate(T : LangTypes) = struct
 
 let show_param_type p = T.as_api_type p.Sql.typ
-let schema_to_values = List.mapi (fun i attr -> { vname = name_of attr i; vtyp = T.as_lang_type attr.Sql.domain; nullable = is_attr_nullable attr || attr.domain.nullability = Nullable })
+let schema_to_values list = List.mapi (fun i attr -> { vname = name_of attr i; vtyp = T.as_lang_type attr.Sql.domain; nullable = is_attr_nullable attr || attr.domain.nullability = Nullable }) list
 (* let schema_to_string = G.Values.to_string $ schema_to_values  *)
 let all_params_to_values l =
-  l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p || p.typ.nullability = Nullable; })
+  l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p || p.typ.Sql.Type.nullability = Nullable; })
   |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
 (* rev unique rev -- to preserve ordering with respect to first occurrences *)
 let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values

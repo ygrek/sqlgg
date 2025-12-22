@@ -14,7 +14,6 @@ type parse_result = {
 }
 
 let parse_stmt stmt = 
-  Parser_state.Dialect_feature.reset ();
-  let statement = T.parse_buf_exn (Lexing.from_string stmt) in
-  let dialect_features = !Parser_state.Dialect_feature.state in
-   { statement; dialect_features }
+  let stmt = T.parse_buf_exn (Lexing.from_string stmt) in
+  let dialect_features = Dialect.analyze stmt in
+  { statement = stmt; dialect_features }

@@ -6,7 +6,7 @@ open Sql
 (* open Sql.Type *)
 open Stmt
 
-let cmp_param p1 p2 = p1.id.label = p2.id.label && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos
+let cmp_param p1 p2 = p1.id.value = p2.id.value && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos
 
 let cmp_params p1 p2 =
   try
@@ -29,7 +29,7 @@ let parse sql =
       | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
       | Some stmt -> stmt
 let assert_params_with_meta stmt meta = 
-    let meta = List.map (fun (p, m) -> (p, Meta.of_list m)) meta in
+    let meta = List.map (fun (p, m) -> p, Meta.of_list m) meta in
     assert_equal 
       ~msg:"params with meta" 
       ~cmp:(fun p1 p2 ->
@@ -39,7 +39,7 @@ let assert_params_with_meta stmt meta =
             p1 
             p2
         with _ -> false)
-      ~printer:[%derive.show: (Sql.param * Sql.Meta.t) list]
+      ~printer:[%derive.show: (Type.t Sql.param * Sql.Meta.t) list]
       meta
       (List.map 
         (
@@ -86,10 +86,10 @@ let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =
   let domain: Type.t = { t = kind; nullability; } in
   {name;domain;extra=Constraints.of_list extra; meta = Meta.of_list meta; }
 
-let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
-let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
-let param_nullable t = new_param { label = None; pos = (0,0) } (Type.nullable t)
-let param t = new_param { label = None; pos = (0,0) } (Type.strict t)
+let named s t = make_param ~id:(make_located ~value:(Some s) ~pos:(0,0)) ~typ:(Type.strict t)
+let named_nullable s t = make_param ~id:(make_located ~value:(Some s) ~pos:(0,0)) ~typ:(Type.nullable t)
+let param_nullable t = make_param ~id:(make_located ~value:None ~pos:(0,0)) ~typ:(Type.nullable t)
+let param t = make_param ~id:(make_located ~value:None ~pos:(0,0)) ~typ:(Type.strict t)
 
 let test = Type.[
   tt "CREATE TABLE test (id INT, str TEXT, name TEXT)" [] [];
@@ -344,7 +344,7 @@ let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name ->
     if String.ends_with name ~suffix:"?" then
-      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty() }
+      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty();}
     else
       attr name Int)
   in
@@ -400,7 +400,7 @@ let test_left_join = [
   tt "CREATE TABLE users (id INT NOT NULL, user_id INT NOT NULL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT NULL, FOREIGN KEY (account_type_id) REFERENCES account_types(type_id))" [][];
   tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
   [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
-  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty()}] [];
+  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty();}] [];
 ]
 
 let test_coalesce = [
@@ -1434,17 +1434,17 @@ let test_type_mapping_params _ =
   assert_equal 
     ~msg:"params with meta" 
     ~cmp:(fun p1 p2 -> match List.hd p1, List.hd p2 with
-      | TupleList ({ label; _ }, Where_in (l1, _, _)), TupleList ({ label = label2; _ }, Where_in (l2, _, _)) -> 
-        label = label2 && l1 = l2
+      | TupleList ({ value; _ }, Where_in { value = (l1, _); pos = _ }), TupleList ({ value = value2; _ }, Where_in { value = (l2, _); pos = _ }) -> 
+        value = value2 && l1 = l2
       | _ -> false
     )
     ~printer:show_vars
     stmt.vars 
     [
-      TupleList ({ label = Some "txt2"; pos = (0, 0) }, Where_in ([
+      TupleList (make_located ~value:(Some "txt2") ~pos:(0, 0), Where_in (make_located ~value:([
         Type.strict Text, Meta.empty ();
         Type.strict Text, Meta.of_list ["module", "Txt_module_name"];
-      ], `In, (0, 0)));
+      ], `In) ~pos:(0,0)));
     ];
   let stmt = parse {|
     SELECT id = @id as booo

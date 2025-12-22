@@ -5,7 +5,7 @@ open ExtLib
 type insert_kind = Values | Assign [@@deriving show {with_path=false}]
 
 (** inferred inserted values to complete sql statement *)
-type inferred = (insert_kind * Sql.Schema.t) option [@@deriving show]
+type inferred = (insert_kind * Sql.schema) option [@@deriving show]
 
 (** possible number of rows in query result *)
 type cardinality = [`Zero_one | `One | `Nat] [@@deriving show]
