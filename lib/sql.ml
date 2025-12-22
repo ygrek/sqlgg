@@ -88,7 +88,7 @@ struct
 
   let is_one_or_all s = List.mem (String.lowercase_ascii s) ["one"; "all"]
 
-let check_exact_exact_number value { precision; scale } =
+  let check_exact_exact_number value { precision; scale } =
   match precision, scale with
   | Some p, Some s ->
       let max =
@@ -846,6 +846,8 @@ let () =
   ["extract"; "dayofmonth";"dayofweek";"dayofyear";] ||> monomorphic int [datetime];
   "last_day" |> monomorphic datetime [datetime];
   ["microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ] ||> monomorphic int [datetime];
+  ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now" ] ||> monomorphic datetime [];
+  "getdate" |> monomorphic datetime [];
   ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Datetime;datetime;datetime];
   ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Datetime];
   ["date_format";"time_format"] ||> monomorphic text [datetime; text];
