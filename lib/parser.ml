@@ -1,7 +1,7 @@
 module T_SQL_parser =
   struct
     type token = Sql_parser.token
-    type result = Sql.stmt
+    type result = Dialect_pass.Internal.stmt
     let rule = Sql_lexer.parse_rule
     let input = Sql_parser.input
   end
@@ -14,7 +14,6 @@ type parse_result = {
 }
 
 let parse_stmt stmt = 
-  Parser_state.Dialect_feature.reset ();
-  let statement = T.parse_buf_exn (Lexing.from_string stmt) in
-  let dialect_features = !Parser_state.Dialect_feature.state in
-   { statement; dialect_features }
+  let internal_stmt = T.parse_buf_exn (Lexing.from_string stmt) in
+  let { Dialect_pass.ast; dialect_features } = Dialect_pass.analyze internal_stmt in
+   { statement = ast; dialect_features }

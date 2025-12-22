@@ -4,6 +4,11 @@ open Printf
 open ExtLib
 open Prelude
 
+type pos = (int * int) [@@deriving show]
+
+type 'a located  = { value : 'a; pos : pos } [@@deriving show]
+type 'a collated = { collated: 'a; collation: string located option } [@@deriving show]
+
 module Type =
 struct
 
@@ -29,6 +34,7 @@ struct
   type kind =
     | Int
     | UInt64
+    | UInt32
     | Text
     | Blob
     | Float
@@ -45,6 +51,11 @@ struct
     [@@deriving eq, show{with_path=false}]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
+    (* UInt32 should be equal to Int for comparison purposes *)
+    let equal_kind a b = match a, b with
+      | UInt32, Int | Int, UInt32 -> true
+      | a, b -> equal_kind a b
+
     let show_kind = function
       | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
       | StringLiteral l -> sprintf "StringLiteral (%s)" l
@@ -52,6 +63,7 @@ struct
       | Decimal { precision = Some p; scale = Some s } -> sprintf "Decimal(%d,%d)" p s
       | Decimal { precision = Some p; scale = None } -> sprintf "Decimal(%d)" p
       | Decimal _ -> "Decimal"
+      | UInt32 -> show_kind Int
       | k -> show_kind k
 
   type nullability =
@@ -88,7 +100,7 @@ struct
 
   let is_one_or_all s = List.mem (String.lowercase_ascii s) ["one"; "all"]
 
-let check_exact_exact_number value { precision; scale } =
+  let check_exact_exact_number value { precision; scale } =
   match precision, scale with
   | Some p, Some s ->
       let max =
@@ -98,7 +110,7 @@ let check_exact_exact_number value { precision; scale } =
   | _ -> true
 
   (** @return (subtype, supertype) *)
-  let order_kind x y =  
+  let rec order_kind x y =  
     match x, y with
     | x, y when equal_kind x y -> `Equal
     | StringLiteral a, StringLiteral b -> 
@@ -141,6 +153,8 @@ let check_exact_exact_number value { precision; scale } =
      representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
      Converting large UInt64 values to Float would lose precision *)
     | UInt64, Int | Int, UInt64 -> `Order (Int, UInt64)
+    | x, UInt32 -> order_kind x Int
+    | UInt32, x -> order_kind Int x
     | Text, Blob | Blob, Text -> `Order (Text, Blob)
     | Int, Datetime | Datetime, Int -> `Order (Int, Datetime)
     | Text, Datetime | Datetime, Text -> `Order (Datetime, Text)
@@ -317,18 +331,18 @@ module Meta = struct
   let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
 end
 
-type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
+type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
   [@@deriving show {with_path=false}]
 
 let make_attribute name kind extra ~meta =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
     then Strict else Nullable } in
-  {name;domain;extra;meta=Meta.of_list meta}
+  {name;domain;extra;meta=Meta.of_list meta;}
 
-let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta}
+let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta;}
 
-let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta }
+let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta; }
 
 module Schema =
 struct
@@ -407,7 +421,7 @@ struct
   module Join = struct
 
     type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
-    type typ = Left | Right | Full | Inner [@@deriving show]
+    type typ = Left | Right | Full | Inner | Straight [@@deriving show]
 
     let cross t1 t2 = t1 @ t2
 
@@ -432,7 +446,7 @@ struct
         Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
-      | Inner -> action a b
+      | Inner | Straight -> action a b
       | Left -> action a (nullable b)
       | Right -> action (nullable a) b
       | Full -> action (nullable a) (nullable b)
@@ -497,7 +511,6 @@ let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn 
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
 type table = table_name * schema [@@deriving show]
-type pos = (int * int) [@@deriving show]
 
 let print_table out (name,schema) =
   IO.write_line out (show_table_name name);
@@ -507,8 +520,8 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = { label : string option; pos : pos; } [@@deriving show]
-type shared_query_ref_id = { ref_name : string; pos : pos } [@@deriving show]
+type param_id = string option located [@@deriving show]
+type shared_query_ref_id = string located [@@deriving show]
 type param = { id : param_id; typ : Type.t; } [@@deriving show]
 let new_param id typ = { id; typ; }
 type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
@@ -526,7 +539,10 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = Insertion of schema | Where_in of (Type.t * Meta.t) list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
+and tuple_list_kind = 
+  | Insertion of schema 
+  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located 
+  | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
 
@@ -558,10 +574,11 @@ type logical_op = And | Or | Xor [@@deriving show]
 type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
+type select_row_locking_kind = For_update | For_share [@@deriving show]
 and limit = param list * bool
-and nested = source * (source * Schema.Join.typ * join_condition) list [@@deriving show]
+and nested = source * (source * Schema.Join.typ located * join_condition) located list [@@deriving show]
 and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
-and source = source_kind * source_alias option (* alias *)
+and source = (source_kind * source_alias option) (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -577,6 +594,7 @@ and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
+  select_row_locking: select_row_locking_kind located option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
 and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
@@ -617,23 +635,24 @@ and func =
      - repeating_pattern: list of types that repeat [path_type, val_type]
      Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
 and 'expr choices = (param_id * 'expr option) list
-and fun_ = { kind: func; parameters: expr list; is_over_clause: bool; }
+and fun_ = { fn_name: string; kind: func; parameters: expr list; is_over_clause: bool; }
 and case_branch = { when_: expr; then_: expr }
 and case = {  
   case: expr option;
   branches: case_branch list;
   else_: expr option;
 } [@@deriving show]
+and in_tuple_list = { exprs: expr list; param_id: param_id; kind: in_or_not_in; } [@@deriving show]
 and expr =
-  | Value of Type.t (** literal value *)
+  | Value of Type.t collated (** literal value *)
   | Param of param * Meta.t
   | Inparam of param * Meta.t
   | Choices of param_id * expr choices
   | InChoice of param_id * in_or_not_in * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
-  | Column of col_name
-  | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos;}
+  | Column of col_name collated
+  | InTupleList of in_tuple_list located
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *)
@@ -664,22 +683,42 @@ type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
 
-type conflict_clause = On_duplicate of assignments | On_conflict of on_conflict * col_name list [@@deriving show]
+type conflict_clause = 
+  | On_duplicate of { assignments: assignments; }
+  | On_conflict of { action: on_conflict; attrs: col_name list; }
+  [@@deriving show]
+
+type insert_action_kind = Insert_into | Replace_into of pos [@@deriving show]
 
 type insert_action =
 {
+  insert_action_kind: insert_action_kind;
   target : table_name;
   action : [ `Set of assignments option
            | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
-  on_conflict_clause : conflict_clause option;
+  on_conflict_clause : conflict_clause located option;
 } [@@deriving show {with_path=false}]
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
 
+type index_kind  = 
+  | Regular_idx
+  | Fulltext
+  | Spatial
+  [@@deriving show {with_path=false}]
+
+type create_target_schema = { schema: schema; constraints: table_constraints list; indexes: index_kind located list; }
+  [@@deriving show]
+
+type create_target = 
+  | Schema of create_target_schema
+  | Select of select_full located
+  [@@deriving show {with_path=false}]
+
 type stmt =
-| Create of table_name * [ `Schema of schema * table_constraints list | `Select of select_full ]
+| Create of table_name * create_target
 | Drop of table_name
 | Alter of table_name * alter_action list
 | Rename of (table_name * table_name) list
@@ -846,6 +885,8 @@ let () =
   ["extract"; "dayofmonth";"dayofweek";"dayofyear";] ||> monomorphic int [datetime];
   "last_day" |> monomorphic datetime [datetime];
   ["microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ] ||> monomorphic int [datetime];
+  ["current_date";"current_timestamp";"current_time";"localtime";"localtimestamp";"now" ] ||> monomorphic datetime [];
+  "getdate" |> monomorphic datetime [];
   ["timestampdiff";"timestampadd"] ||> monomorphic int [strict @@ Datetime;datetime;datetime];
   ["date_add";"date_sub"] ||> monomorphic datetime [datetime; strict @@ Datetime];
   ["date_format";"time_format"] ||> monomorphic text [datetime; text];
