@@ -2255,3 +2255,222 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
   
     end (* module List *)
   end (* module Sqlgg *)
+
+Test test date functions that are both expressions and functions:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP();
+  > SELECT DAY(CURRENT_DATE)
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let select_0 db  =
+      let get_row stmt =
+        (T.get_column_Datetime stmt 0), (T.get_column_Datetime stmt 1), (T.get_column_Datetime stmt 2)
+      in
+      T.select_one db ("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") T.no_params get_row
+  
+    let select_1 db  =
+      let get_row stmt =
+        (T.get_column_Int stmt 0)
+      in
+      T.select_one db ("SELECT DAY(CURRENT_DATE)\n\
+  ") T.no_params get_row
+  
+    module Single = struct
+      let select_0 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~r:(T.get_column_Datetime stmt 0)
+            ~r0:(T.get_column_Datetime stmt 1)
+            ~r1:(T.get_column_Datetime stmt 2)
+        in
+        T.select_one db ("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") T.no_params invoke_callback
+  
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~r:(T.get_column_Int stmt 0)
+        in
+        T.select_one db ("SELECT DAY(CURRENT_DATE)\n\
+  ") T.no_params invoke_callback
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
+
+
+Test DEFAULT dialect feature valid for mysql:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE ok_ts_interval (
+  >   ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  > );
+  > CREATE TABLE ok_ts_func (
+  >   ts DATETIME DEFAULT (DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY))
+  > );
+  > CREATE TABLE ok_tidb_ts (
+  >   ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_ok_ts_interval db  =
+      T.execute db ("CREATE TABLE ok_ts_interval (\n\
+    ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
+  )") T.no_params
+  
+    let create_ok_ts_func db  =
+      T.execute db ("CREATE TABLE ok_ts_func (\n\
+    ts DATETIME DEFAULT (DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY))\n\
+  )") T.no_params
+  
+    let create_ok_tidb_ts db  =
+      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+    ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test DEFAULT dialect feature invalid for mysql:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE bad_subquery (
+  >   x INT DEFAULT ((SELECT 1))
+  > );
+  > EOF
+  Feature with this kind of default expressions is not supported for dialect MySQL at DEFAULT ((SELECT 1))
+  Errors encountered, no code generated
+  [1]
+
+
+Test DEFAULT dialect feature invalid for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE ok_tidb_ts (
+  >   ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  > );
+  > EOF
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  Errors encountered, no code generated
+  [1]
+
+Test DEFAULT dialect feature valid for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE ok_tidb_ts (
+  >   ts DATETIME DEFAULT NOW()
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_ok_tidb_ts db  =
+      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+    ts DATETIME DEFAULT NOW()\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test DEFAULT dialect feature invalid for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE ok_tidb_ts (
+  >   ts INTEGER DEFAULT (1 + 2)
+  > );
+  > EOF
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (1 + 2)
+  Errors encountered, no code generated
+  [1]
+
+Test DEFAULT dialect feature valid for sqlite:
+  $ sqlgg -gen caml -no-header -dialect=sqlite - <<'EOF' 2>&1
+  > CREATE TABLE ok_tidb_ts (
+  >   ts DATETIME DEFAULT NOW()
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_ok_tidb_ts db  =
+      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+    ts DATETIME DEFAULT NOW()\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test DEFAULT dialect feature valid json for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE t4 (
+  >   id bigint PRIMARY KEY,
+  >   j json DEFAULT (JSON_OBJECT("a", 1, "b", 2))
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t4 db  =
+      T.execute db ("CREATE TABLE t4 (\n\
+    id bigint PRIMARY KEY,\n\
+    j json DEFAULT (JSON_OBJECT(\"a\", 1, \"b\", 2))\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+Test DEFAULT dialect feature invalid json for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE t5 (
+  >   id bigint PRIMARY KEY,
+  >   j json DEFAULT ('{"a": 1, "b": 2}')
+  > );
+  > EOF
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ('{"a": 1, "b": 2}')
+  Errors encountered, no code generated
+  [1]
+
+
+Test DEFAULT dialect feature valid json for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE user_status (
+  >  status ENUM('active', 'inactive', 'banned') NOT NULL DEFAULT 'active'
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_user_status db  =
+      T.execute db ("CREATE TABLE user_status (\n\
+   status ENUM('active', 'inactive', 'banned') NOT NULL DEFAULT 'active'\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+
+Test DEFAULT dialect feature valid json for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE tbl (
+  >  f1 INT NOT NULL DEFAULT 1
+  > );
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_tbl db  =
+      T.execute db ("CREATE TABLE tbl (\n\
+   f1 INT NOT NULL DEFAULT 1\n\
+  )") T.no_params
+  
+  end (* module Sqlgg *)
+
+
+Test DEFAULT dialect feature valid json for tidb:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE tbl (
+  >  f1 INT NOT NULL DEFAULT ( 1 + 1 )
+  > );
+  > EOF
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ( 1 + 1 )
+  Errors encountered, no code generated
+  [1]
