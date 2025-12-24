@@ -33,7 +33,7 @@ let name_of attr index =
   | s -> s
 
 let make_param_name index (p:Sql.param_id) =
-  match p.label with
+  match p.value with
   | None -> sprintf "_%u" index
   | Some s -> s
 
@@ -131,7 +131,7 @@ let substitute_vars s vars subst_param =
           in
           { ctor; sql; args; is_poly=true }
         | Verbatim (n,v) ->
-          { ctor = { label = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
+          { ctor = { value = Some n; pos = (0,0) }; args=Some []; sql=[Static v]; is_poly=true }
         end
       in
       let (i1,i2) = name.pos in
@@ -139,13 +139,13 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
-    | TupleList (id, Where_in (types, in_not_in, (j1, j2))) :: tl ->
+    | TupleList (id, Where_in { value = (types, in_not_in); pos = (j1, j2) }) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
       assert (i1 > i);
       assert (j2 > j1);
       assert (j1 > i); 
-      let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in (types, in_not_in, (j1, j2)))] in
+      let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in { value = (types, in_not_in); pos = (j1, j2) })] in
       let acc =  DynamicIn (id, in_not_in, sub) :: acc @ [Static (String.slice ~first:i ~last:j1 s)] in
       loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
@@ -168,12 +168,12 @@ let substitute_vars s vars subst_param =
         let (acc, last) = loop s [] c1 0 vars in
         let s_choice = 
           let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
-          let ctor = Sql.{ label=Some("Some"); pos=(0, 0); } in
+          let ctor = Sql.{ value=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
         let n = 
           let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT ") in
-          let ctor = Sql.{ label=Some("None"); pos=(0, 0); } in
+          let ctor = Sql.{ value=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
         [s_choice; n]
@@ -184,7 +184,7 @@ let substitute_vars s vars subst_param =
         let (i1,i2) = id.pos in
         assert (i2 > i1);
         assert (i1 > i);
-        let shared_sql, (_: Sql.select_full) = Shared_queries.get id.ref_name in
+        let shared_sql, (_: Sql.select_full) = Shared_queries.get id.value in
         let raw_processed = loop_and_squash shared_sql shared_vars in
         let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
         loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl

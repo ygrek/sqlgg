@@ -15,7 +15,7 @@
   let make_limit l =
     let param = function
       | _, `Const _ -> None
-      | x, `Param { label=None; pos } -> Some (new_param { label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } (strict Int))
+      | x, `Param { value=None; pos } -> Some (new_param { value = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } (strict Int))
       | _, `Param id -> Some (new_param id (strict Int))
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
@@ -93,7 +93,7 @@
 input: statement EOF { $1 }
 
 param: 
-  | QSTN { { label=None; pos = ($startofs, $endofs) } }
+  | QSTN { { value=None; pos = ($startofs, $endofs) } }
   | PARAM  { $1 }
 
 if_not_exists: IF NOT EXISTS { }
@@ -118,9 +118,9 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Create (name, Schema schema)
               }
-         | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(select_stmt)
+         | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(located(select_stmt))
               {
-                Create (name, Select { select; pos = ($startofs, $endofs) })
+                Create (name, Select select)
               }
          | ALTER TABLE name=table_name actions=commas(alter_action)
               {
@@ -136,19 +136,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name SET set=commas(set_column)? ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name SET set=commas(set_column)? ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Set set; on_conflict_clause=ss; }
               }
@@ -237,7 +237,7 @@ select_stmt: cte=cte? select_complete=select_stmt_plain
                 { select_complete; cte; }
               }
 
-select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking=select_row_locking?
+select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking=located(select_row_locking)?
               {
                 { select = (core, other); order=o; limit=lim; select_row_locking; }
               }
@@ -250,25 +250,25 @@ select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(
 table_list: src=source joins=join_source* { (src,joins) }
 
 anyorder(X,Y): x=X y=Y | y=Y x=X { x,y }
-inner_join: either(CROSS,INNER)? { { Schema.Join.typ = Schema.Join.Inner; pos = ($startofs, $endofs) } }
-left_join: anyorder(LEFT,OUTER?) { { Schema.Join.typ = Schema.Join.Left; pos = ($startofs, $endofs) } }
-right_join: anyorder(RIGHT,OUTER?) { { Schema.Join.typ = Schema.Join.Right; pos = ($startofs, $endofs) } }
-full_join: anyorder(FULL,OUTER?) { { Schema.Join.typ = Schema.Join.Full; pos = ($startofs, $endofs) } }
-straight_join: STRAIGHT_JOIN { { Schema.Join.typ = Schema.Join.Inner; pos = ($startofs, $endofs) } }
+inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
+left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
+right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
+full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
+straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
-join_source: COMMA src=source c=join_cond { src, { Schema.Join.typ = Schema.Join.Inner; pos = ($startofs, $endofs) }, c }
-           | j=natural(left_join)
-           | j=natural(right_join)
-           | j=natural(full_join)
-           | j=natural(inner_join)
-           | j=cond(left_join)
-           | j=cond(right_join)
-           | j=cond(full_join)
-           | j=cond(inner_join) { j }
-           | j=straight_cond(straight_join) { j }
+join_source: COMMA src=source c=join_cond { src, {value = Schema.Join.Inner; pos = ($startofs, $endofs) }, c }
+           | j=natural(located(left_join))
+           | j=natural(located(right_join))
+           | j=natural(located(full_join))
+           | j=natural(located(inner_join))
+           | j=cond(located(left_join))
+           | j=cond(located(right_join))
+           | j=cond(located(full_join))
+           | j=cond(located(inner_join)) { j }
+           | j=straight_cond(located(straight_join)) { j }
 
 join_cond: ON e=expr { On e }
          | USING l=sequence(IDENT) { Using l }
@@ -280,12 +280,15 @@ source1: table_name { `Table $1 }
        | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
 source: src=source1 alias=maybe_as_with_detupled? { 
-  src, 
-  Option.map (fun (tbl, cols) -> 
-    let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
-    { table_name = Sql.make_table_name tbl; column_aliases; }
-  ) alias,
-  ($startofs, $endofs)
+  {
+    value = ( src, 
+      Option.map (fun (tbl, cols) -> 
+        let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
+        { table_name = Sql.make_table_name tbl; column_aliases; }
+      ) alias
+    );
+    pos = ($startofs, $endofs);
+  }
 }
 
 insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { Insert_into }
@@ -300,17 +303,17 @@ on_conflict_action:
 
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column)
-    { { conflict_clause_kind = On_duplicate { assignments = ss; }; pos = ($startofs, $endofs) } }
+    { On_duplicate { assignments = ss; }; }
   | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO action=on_conflict_action
-    { { conflict_clause_kind = On_conflict { action; attrs; }; pos = ($startofs, $endofs) } }
+    { On_conflict { action; attrs; }; }
 
 select_type: DISTINCT | ALL { }
 
 select_row_locking:
     for_update_or_share+
-      { { kind = For_update; pos = ($startofs, $endofs) } }
+      { For_update }
   | LOCK IN SHARE MODE
-      { { kind = For_share; pos = ($startofs, $endofs) } }
+      { For_share }
 
 for_update_or_share:
   FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
@@ -383,14 +386,14 @@ column_def: name=IDENT kind=sql_type? extra=column_def_extra*
       | Parser_state.Default (e, pos) -> Dialect_feature.set_default_expr kind e pos; WithDefault
       | Other_extra c -> c
     )) extra in
-    make_attribute name kind extra ~meta ~pos:(Some ($startofs, $endofs)) ()
+    make_attribute name kind extra ~meta
   }
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
-           | index_or_key table_index { `Index { index_kind = Regular_idx; pos = ($startofs, $endofs); } }
-           | FULLTEXT index_or_key? table_index { `Index { index_kind = Fulltext; pos = ($startofs, $endofs); } }
-           | SPATIAL index_or_key? table_index { `Index { index_kind = Spatial; pos = ($startofs, $endofs); } }
+           | index_or_key table_index { `Index { value = Regular_idx; pos = ($startofs, $endofs); } }
+           | FULLTEXT index_or_key? table_index { `Index { value = Fulltext; pos = ($startofs, $endofs); } }
+           | SPATIAL index_or_key? table_index { `Index { value = Spatial; pos = ($startofs, $endofs); } }
 
 int_arg: delimited(LPAREN,INTEGER,RPAREN) {}
 
@@ -483,16 +486,16 @@ expr:
     | e1=expr k=in_or_not_in p=param
       {
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any), Meta.empty()) ] in
-        InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
+        InChoice ({ value = p.value; pos = ($startofs, $endofs) }, k, e )
       }
     | LPAREN exprs=commas(expr) RPAREN k=in_or_not_in p=param
       {
-        InTupleList({exprs; param_id = p; kind = k; pos = ($startofs, $endofs); })
+        InTupleList({ value = { exprs; param_id = p; kind = k; }; pos = ($startofs, $endofs)  })
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t), Meta.empty())  }
     | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
-    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
+    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { value; pos=(p1,_p2) } = p in Choices ({ value; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
@@ -568,7 +571,7 @@ case_branch: WHEN w=expr THEN t=expr
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
+choice: parser_state_normal value=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ value; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
@@ -713,3 +716,5 @@ lock:
  | EXCLUSIVE {}
  | DEFAULT {}
  | SHARED {}
+
+located(X): X { { value = $1; pos = ($startofs, $endofs) } }

@@ -18,7 +18,7 @@ let rec analyze_expr = function
       (* Анализируем параметры функций *)
       List.concat_map analyze_expr parameters
   | SelectExpr (select_full, _) -> analyze_select_full select_full
-  | InTupleList { exprs; _ } -> List.concat_map analyze_expr exprs
+  | InTupleList { value = { exprs; _ }; _ } -> List.concat_map analyze_expr exprs
   | OptionActions { choice; _ } -> analyze_expr choice
   | Case { case; branches; else_; } ->
       let case_features = Option.map_default analyze_expr [] case in
@@ -34,8 +34,7 @@ and analyze_column = function
   | Expr (expr, _) -> analyze_expr expr
 
 (* Обход source *)
-and analyze_source (src, _alias, pos) =
-  let _ = pos in (* позиция используется неявно через структуру source *)
+and analyze_source { value = (src, _); _ } =
   match src with
   | `Table _ -> []
   | `Select select_full -> analyze_select_full select_full
@@ -57,7 +56,7 @@ and analyze_nested (src, joins) =
   let src_features = analyze_source src in
   let joins_features = List.concat_map (fun (joined_src, join_typ, join_cond) ->
     (* Проверяем join на subquery *)
-    let (src_kind, _, _) = joined_src in
+    let { value = (src_kind, _); _ } = joined_src in
     let subquery_features = match src_kind with
     | `Select select_full ->
         Dialect.get_join_source joined_src :: analyze_select_full select_full
@@ -70,7 +69,7 @@ and analyze_nested (src, joins) =
     | Schema.Join.Natural -> []
     | Schema.Join.Default -> []
     in
-    let join_typ_features = match join_typ.Schema.Join.typ with
+    let join_typ_features = match join_typ.value with
     | Schema.Join.Inner -> [] (* straight_join уже обрабатывается в парсере *)
     | Schema.Join.Left | Schema.Join.Right | Schema.Join.Full -> []
     in
@@ -118,21 +117,21 @@ and analyze_assignments assignments =
   List.concat_map (fun (_, assignment_expr) -> analyze_assignment_expr assignment_expr) assignments
 
 (* Обход column_def для поиска DEFAULT выражений *)
-and analyze_column_def { domain; extra; pos; _ } =
-  let pos = Option.default (0, 0) pos in
+and analyze_column_def { domain; extra; _ } =
   (* Проверяем наличие AUTOINCREMENT *)
   let autoincrement_features = 
     if Constraints.mem Autoincrement extra then
-      [Dialect.get_autoincrement pos]
+      (* [Dialect.get_autoincrement pos] *) 
+      []
     else []
   in
   (* Проверяем unsigned типы *)
-  let unsigned_features = check_unsigned_type pos domain in
+  (* let unsigned_features = check_unsigned_type pos domain in *)
   (* Note: DEFAULT expressions обрабатываются в парсере через Parser_state.Default,
      но здесь мы их не можем извлечь из extra, так как они не сохранены в AST.
      Это одна из причин, почему некоторые features все еще должны обрабатываться
      в парсере *)
-  autoincrement_features @ unsigned_features
+  autoincrement_features @ []
 
 (* Обход alter_action *)
 and analyze_alter_action = function
@@ -151,11 +150,11 @@ and analyze_insert_action { action; on_conflict_clause; insert_action_kind; _ } 
   | `Set assignments -> Option.map_default analyze_assignments [] assignments
   in
   let conflict_features = match on_conflict_clause with
-  | Some ({ conflict_clause_kind = On_duplicate { assignments; }; pos }) ->
+  | Some ({ value = On_duplicate { assignments; }; pos }) ->
       Dialect.get_on_duplicate_key pos :: analyze_assignments assignments
-  | Some ({ conflict_clause_kind = On_conflict { action = Do_update assignments; _ }; pos }) ->
+  | Some ({ value = On_conflict { action = Do_update assignments; _ }; pos }) ->
       Dialect.get_on_conflict pos :: analyze_assignments assignments
-  | Some ({ conflict_clause_kind = On_conflict { action = Do_nothing; _ }; pos }) ->
+  | Some ({ value = On_conflict { action = Do_nothing; _ }; pos }) ->
       [Dialect.get_on_conflict pos]
   | None -> []
   in
@@ -165,7 +164,7 @@ and analyze_insert_action { action; on_conflict_clause; insert_action_kind; _ } 
   in
   action_features @ conflict_features @ replace_into_features
 
-let analyze_schema_index idx = match idx.index_kind with
+let analyze_schema_index idx = match idx.value with
   | Regular_idx -> None
   | Fulltext -> Some (Dialect.get_fulltext_index idx.pos)
   | Spatial -> None
@@ -175,7 +174,7 @@ let rec analyze = function
   | Create (_, Schema { schema; indexes; _ }) ->
       let schema_idx_features = List.filter_map analyze_schema_index indexes in
       schema_idx_features @ List.concat_map analyze_column_def schema
-  | Create (_, Select { select; pos }) ->
+  | Create (_, Select { value = select; pos }) ->
       Dialect.get_create_table_as_select pos :: analyze_select_full select
   | Drop _ -> []
   | Alter (_, actions) ->

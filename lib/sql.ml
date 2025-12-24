@@ -6,6 +6,8 @@ open Prelude
 
 type pos = (int * int) [@@deriving show]
 
+type 'a located = { value : 'a; pos : pos } [@@deriving show]
+
 module Type =
 struct
 
@@ -319,18 +321,18 @@ module Meta = struct
   let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
 end
 
-type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; pos: pos option }
+type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
   [@@deriving show {with_path=false}]
 
-let make_attribute name kind extra ~meta ?(pos=None) () =
+let make_attribute name kind extra ~meta =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
     then Strict else Nullable } in
-  {name;domain;extra;meta=Meta.of_list meta;pos}
+  {name;domain;extra;meta=Meta.of_list meta;}
 
-let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta;pos=None}
+let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta;}
 
-let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta; pos = None }
+let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta; }
 
 module Schema =
 struct
@@ -409,8 +411,7 @@ struct
   module Join = struct
 
     type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
-    type kind = Left | Right | Full | Inner [@@deriving show]
-    type typ = { pos: pos; typ: kind } [@@deriving show]
+    type typ = Left | Right | Full | Inner [@@deriving show]
 
     let cross t1 t2 = t1 @ t2
 
@@ -509,8 +510,8 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = { label : string option; pos : pos; } [@@deriving show]
-type shared_query_ref_id = { ref_name : string; pos : pos } [@@deriving show]
+type param_id = string option located [@@deriving show]
+type shared_query_ref_id = string located [@@deriving show]
 type param = { id : param_id; typ : Type.t; } [@@deriving show]
 let new_param id typ = { id; typ; }
 type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
@@ -528,7 +529,10 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = Insertion of schema | Where_in of (Type.t * Meta.t) list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
+and tuple_list_kind = 
+  | Insertion of schema 
+  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located 
+  | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
 
@@ -561,11 +565,10 @@ type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 type select_row_locking_kind = For_update | For_share [@@deriving show]
-type select_row_locking = { kind: select_row_locking_kind; pos: pos } [@@deriving show]
 and limit = param list * bool
-and nested = source * (source * Schema.Join.typ * join_condition) list [@@deriving show]
+and nested = source * (source * Schema.Join.typ located * join_condition) list [@@deriving show]
 and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
-and source = source_kind * source_alias option * pos (* alias, position *)
+and source = (source_kind * source_alias option) located (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -581,7 +584,7 @@ and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
-  select_row_locking: select_row_locking option;
+  select_row_locking: select_row_locking_kind located option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
 and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
@@ -629,6 +632,7 @@ and case = {
   branches: case_branch list;
   else_: expr option;
 } [@@deriving show]
+and in_tuple_list = { exprs: expr list; param_id: param_id; kind: in_or_not_in; } [@@deriving show]
 and expr =
   | Value of Type.t (** literal value *)
   | Param of param * Meta.t
@@ -638,7 +642,7 @@ and expr =
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
   | Column of col_name
-  | InTupleList of { exprs: expr list; param_id: param_id; kind: in_or_not_in; pos: pos;}
+  | InTupleList of in_tuple_list located
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.
    *)
@@ -669,12 +673,10 @@ type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
 
-type conflict_clause_kind = 
+type conflict_clause = 
   | On_duplicate of { assignments: assignments; }
   | On_conflict of { action: on_conflict; attrs: col_name list; }
   [@@deriving show]
-
-type conflict_clause = { conflict_clause_kind: conflict_clause_kind; pos: pos } [@@deriving show]
 
 type insert_action_kind = Insert_into | Replace_into of pos [@@deriving show]
 
@@ -686,7 +688,7 @@ type insert_action =
            | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
-  on_conflict_clause : conflict_clause option;
+  on_conflict_clause : conflict_clause located option;
 } [@@deriving show {with_path=false}]
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
@@ -697,14 +699,12 @@ type index_kind  =
   | Spatial
   [@@deriving show {with_path=false}]
 
-type idx = { index_kind: index_kind;  pos: pos } [@@deriving show {with_path=false}]
-
-type create_target_schema = { schema: schema; constraints: table_constraints list; indexes: idx list; }
+type create_target_schema = { schema: schema; constraints: table_constraints list; indexes: index_kind located list; }
   [@@deriving show]
 
 type create_target = 
   | Schema of create_target_schema
-  | Select of { select: select_full; pos: pos }
+  | Select of select_full located
   [@@deriving show {with_path=false}]
 
 type stmt =
