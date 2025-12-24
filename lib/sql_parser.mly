@@ -247,19 +247,19 @@ select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(
                 { columns=r; from=f; where=w; group=g; having=h; }
               }
 
-table_list: src=source joins=join_source* { (src,joins) }
+table_list: src=source joins=located(join_source)* { (src,joins) }
 
 anyorder(X,Y): x=X y=Y | y=Y x=X { x,y }
 inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
 left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
 right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
-straight_join: STRAIGHT_JOIN { Schema.Join.Inner }
+straight_join: STRAIGHT_JOIN { Schema.Join.Straight }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
-join_source: COMMA src=source c=join_cond { src, {value = Schema.Join.Inner; pos = ($startofs, $endofs) }, c }
+join_source: COMMA src=source c=join_cond { src, { value = Schema.Join.Inner; pos = ($startofs, $endofs) }, c }
            | j=natural(located(left_join))
            | j=natural(located(right_join))
            | j=natural(located(full_join))
@@ -269,7 +269,6 @@ join_source: COMMA src=source c=join_cond { src, {value = Schema.Join.Inner; pos
            | j=cond(located(full_join))
            | j=cond(located(inner_join)) { j }
            | j=straight_cond(located(straight_join)) { j }
-
 join_cond: ON e=expr { On e }
          | USING l=sequence(IDENT) { Using l }
          | (* *) { Default }
@@ -280,15 +279,12 @@ source1: table_name { `Table $1 }
        | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
 source: src=source1 alias=maybe_as_with_detupled? { 
-  {
-    value = ( src, 
-      Option.map (fun (tbl, cols) -> 
-        let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
-        { table_name = Sql.make_table_name tbl; column_aliases; }
-      ) alias
-    );
-    pos = ($startofs, $endofs);
-  }
+  ( src, 
+    Option.map (fun (tbl, cols) -> 
+      let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
+      { table_name = Sql.make_table_name tbl; column_aliases; }
+    ) alias
+  )
 }
 
 insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { Insert_into }

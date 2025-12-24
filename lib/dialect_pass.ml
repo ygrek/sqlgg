@@ -34,7 +34,7 @@ and analyze_column = function
   | Expr (expr, _) -> analyze_expr expr
 
 (* Обход source *)
-and analyze_source { value = (src, _); _ } =
+and analyze_source src =
   match src with
   | `Table _ -> []
   | `Select select_full -> analyze_select_full select_full
@@ -52,17 +52,16 @@ and analyze_row_values { row_constructor_list; row_order; row_limit = _ } =
   constructor_features @ order_features
 
 (* Обход nested (joins) *)
-and analyze_nested (src, joins) =
-  let src_features = analyze_source src in
-  let joins_features = List.concat_map (fun (joined_src, join_typ, join_cond) ->
+and analyze_nested ((src_kind, _), joins) =
+  let src_features = analyze_source src_kind in
+  let joins_features = List.concat_map (fun { value = ((join_src_kind, _), join_typ, join_cond); pos } ->
     (* Проверяем join на subquery *)
-    let { value = (src_kind, _); _ } = joined_src in
-    let subquery_features = match src_kind with
+    let subquery_features = match join_src_kind with
     | `Select select_full ->
-        Dialect.get_join_source joined_src :: analyze_select_full select_full
+        Dialect.get_join_source join_src_kind pos :: analyze_select_full select_full
     | _ -> []
     in
-    let joined_features = analyze_source joined_src in
+    let joined_features = analyze_source join_src_kind in
     let cond_features = match join_cond with
     | Schema.Join.On expr -> analyze_expr expr
     | Schema.Join.Using _ -> []
@@ -70,8 +69,9 @@ and analyze_nested (src, joins) =
     | Schema.Join.Default -> []
     in
     let join_typ_features = match join_typ.value with
-    | Schema.Join.Inner -> [] (* straight_join уже обрабатывается в парсере *)
-    | Schema.Join.Left | Schema.Join.Right | Schema.Join.Full -> []
+    | Schema.Join.Inner -> []
+    | Straight -> [Dialect.get_straight_join join_typ.pos]
+    | Left | Right | Full -> []
     in
     subquery_features @ joined_features @ cond_features @ join_typ_features
   ) joins in

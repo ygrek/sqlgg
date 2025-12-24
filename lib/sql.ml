@@ -411,7 +411,7 @@ struct
   module Join = struct
 
     type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
-    type typ = Left | Right | Full | Inner [@@deriving show]
+    type typ = Left | Right | Full | Inner | Straight [@@deriving show]
 
     let cross t1 t2 = t1 @ t2
 
@@ -436,7 +436,7 @@ struct
         Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
-      | Inner -> action a b
+      | Inner | Straight -> action a b
       | Left -> action a (nullable b)
       | Right -> action (nullable a) b
       | Full -> action (nullable a) (nullable b)
@@ -566,9 +566,9 @@ type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 type select_row_locking_kind = For_update | For_share [@@deriving show]
 and limit = param list * bool
-and nested = source * (source * Schema.Join.typ located * join_condition) list [@@deriving show]
+and nested = source * (source * Schema.Join.typ located * join_condition) located list [@@deriving show]
 and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
-and source = (source_kind * source_alias option) located (* alias, position *)
+and source = (source_kind * source_alias option) (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;

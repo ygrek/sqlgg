@@ -27,7 +27,7 @@ module Dialect_feature = struct
   let add_feature feature = state := feature :: !state
 
   let set_collation value pos = add_feature @@ Dialect.get_collation value pos
-  let set_join_source e = add_feature @@ Dialect.get_join_source e
+  let set_join_source s e = add_feature @@ Dialect.get_join_source s e
   let set_create_table_as_select pos = add_feature @@ Dialect.get_create_table_as_select pos
 
   let set_on_duplicate_key pos = add_feature @@ Dialect.get_on_duplicate_key pos

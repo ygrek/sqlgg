@@ -864,7 +864,7 @@ and eval_nested env nested =
   let env = { env with schema = [] } in
   (* FIXME resolved table schema depends on join (nullability with left), this is resolving too early *)
   match nested with
-  | Some (t,l) -> join env (resolve_source env t.value, List.map (fun (x,jt,jc) -> resolve_source env x.value, jt.value, jc) l)
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun loc -> let (x,jt,jc) = loc.value in resolve_source env x, jt.value, jc) l)
   | None -> env, []
 
 and eval_select env { columns; from; where; group; having; } =
@@ -947,7 +947,7 @@ and eval_select env { columns; from; where; group; having; } =
     | Some _, _ when group = [] && exists_grouping columns && not (exists_windowing columns) ->
       `One
       (* TODO: analyse join types to determine if cardinality optimization can be done *)
-    | Some ({ value = (`Table t, _); _ }, []), Some w when satisfies_some_relevant_constraint t w env ->
+    | Some ((`Table t, _), []), Some w when satisfies_some_relevant_constraint t w env ->
       `Zero_one
     | Some _, _ ->
       `Nat
