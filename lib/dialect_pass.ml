@@ -87,12 +87,17 @@ and analyze_select { columns; from; where; group; having } =
   columns_features @ from_features @ where_features @ group_features @ having_features
 
 (* Обход select_complete *)
-and analyze_select_complete { select; order; limit = _; _ } =
+and analyze_select_complete { select; order; limit = _; select_row_locking } =
   let (core, others) = select in
   let core_features = analyze_select core in
   let others_features = List.concat_map (fun (_, select) -> analyze_select select) others in
   let order_features = List.concat_map (fun (expr, _) -> analyze_expr expr) order in
-  core_features @ others_features @ order_features
+  let locking_features = match select_row_locking with
+    | Some { value = For_share; pos } -> [Dialect.get_lock_in_share_mode pos]
+    | Some { value = For_update; pos } -> [Dialect.get_row_locking pos]
+    | None -> []
+  in
+  core_features @ others_features @ order_features @ locking_features
 
 (* Обход select_full (с CTE) *)
 and analyze_select_full { select_complete; cte } =
