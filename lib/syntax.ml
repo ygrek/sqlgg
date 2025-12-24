@@ -864,7 +864,7 @@ and eval_nested env nested =
   let env = { env with schema = [] } in
   (* FIXME resolved table schema depends on join (nullability with left), this is resolving too early *)
   match nested with
-  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt.Schema.Join.typ, jc) l)
   | None -> env, []
 
 and eval_select env { columns; from; where; group; having; } =
@@ -947,7 +947,7 @@ and eval_select env { columns; from; where; group; having; } =
     | Some _, _ when group = [] && exists_grouping columns && not (exists_windowing columns) ->
       `One
       (* TODO: analyse join types to determine if cardinality optimization can be done *)
-    | Some ((`Table t, _), []), Some w when satisfies_some_relevant_constraint t w env ->
+    | Some ((`Table t, _, _), []), Some w when satisfies_some_relevant_constraint t w env ->
       `Zero_one
     | Some _, _ ->
       `Nat
@@ -957,7 +957,8 @@ and eval_select env { columns; from; where; group; having; } =
   (final_schema, p1 @ p2 @ p3 @ p4 @ p5, env, cardinality)
 
 (** @return final schema, params and tables that can be referenced by outside scope *)
-and resolve_source env (x, alias) =
+and resolve_source env (x, alias, pos) =
+  let _ = pos in (* позиция может использоваться для диагностики в будущем *)
   let resolve_schema_with_alias schema = begin match alias with 
     | Some { table_name; column_aliases = Some col_schema } -> 
       let schema = Schema.compound ((List.map (fun attr -> Schema.Source.Attr.{sources=[]; attr;})) col_schema) schema in
@@ -998,7 +999,7 @@ and resolve_source env (x, alias) =
       | RowExprList (exprs :: xs) ->
         let unions = List.map (fun exprs -> `Union, dummy_select exprs ) xs in
         let select = dummy_select exprs in
-        let select_complete = { select = select, unions; order=row_order; limit=row_limit; } in
+        let select_complete = { select = select, unions; order=row_order; limit=row_limit; select_row_locking = None } in
         eval_select_full env { select_complete; cte = None }
       | RowParam { id; types; values_start_pos } ->
         List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
@@ -1099,7 +1100,7 @@ let annotate_select select attrs =
   { select with select = (select1', compound') }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
-  | On_conflict (action, attrs) -> 
+  | { conflict_clause_kind = On_conflict { action; attrs; }; _ } -> 
     let names = List.map (fun attr -> attr.cname) attrs in
     let composite_primary_key = Constraint.make_composite_primary names in
     let composite_unique = Constraint.make_composite_unique names in
@@ -1130,7 +1131,7 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
         ) values in
         ss
     end
-  | On_duplicate values -> values
+  | { conflict_clause_kind = On_duplicate { assignments; }; _ } -> assignments
 ) []
 
 let with_constraints attrs constraints : Schema.t =
@@ -1187,11 +1188,11 @@ let rec eval (stmt:Sql.stmt) =
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema (schema, constraints)) ->
+  | Create (name, Schema { schema; constraints; _ }) ->
       let schema = with_constraints schema constraints in
       Tables.add (name, schema);
       ([],[],Create name)
-  | Create (name,`Select select) ->
+  | Create (name, Select { select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
       Tables.add (name, from_schema schema);
       ([],params,Create name)
@@ -1214,7 +1215,7 @@ let rec eval (stmt:Sql.stmt) =
   | CreateIndex (name,table,cols) ->
       Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
       [],[],CreateIndex name
-  | Insert { target=table; action=`Values (names, values); on_conflict_clause; } ->
+  | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
@@ -1278,7 +1279,7 @@ let rec eval (stmt:Sql.stmt) =
       let params2 = params_of_assigns { env with is_update = true; } conflict_assigns in
       [], p1 @ params2, Insert (None, table)
     end
-  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; } ->
+  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; _ } ->
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; } in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
@@ -1287,7 +1288,7 @@ let rec eval (stmt:Sql.stmt) =
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     let params = [ TupleList (param_id, Insertion expect) ] in
     [], params @ params2, Insert (None, table)
-  | Insert { target=table; action=`Select (names, select); on_conflict_clause; } ->
+  | Insert { target=table; action=`Select (names, select); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
@@ -1302,7 +1303,7 @@ let rec eval (stmt:Sql.stmt) =
     List.iter2 (fun a1 a2 -> Hashtbl.add env.insert_resolved_types a2.name a1.attr.domain ) schema expect;
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     [], params @ params2, Insert (None,table)
-  | Insert { target=table; action=`Set ss; on_conflict_clause; } ->
+  | Insert { target=table; action=`Set ss; on_conflict_clause; _ } ->
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
     } in
@@ -1323,7 +1324,7 @@ let rec eval (stmt:Sql.stmt) =
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
     let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
-    let select_complete = { select; order = []; limit = None} in
+    let select_complete = { select; order = []; limit = None; select_row_locking = None } in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
   | Set (vars, stmt) ->
@@ -1347,7 +1348,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update (Some table)
   | UpdateMulti (tables,ss,w,o,lim) ->
     let env = { empty_env with is_update = true } in
-    let sources = List.map (fun src -> resolve_source env ((`Nested src), None)) tables in
+    let sources = List.map (fun src -> resolve_source env ((`Nested src), None, (0, 0))) tables in
     let tables = List.map (fun (_,_,table_list) -> table_list) sources |> List.flatten in
     let params = update_tables ~env sources ss w in
     let p3 = params_of_order o [] { env with schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources; tables } in

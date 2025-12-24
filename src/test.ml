@@ -14,6 +14,19 @@ let cmp_params p1 p2 =
   with
     _ -> false
 
+let cmp_attr a1 a2 =
+  a1.name = a2.name &&
+  Type.equal a1.domain a2.domain &&
+  Constraints.equal a1.extra a2.extra &&
+  Meta.equal a1.meta a2.meta
+  (* игнорируем поле pos *)
+
+let cmp_schema s1 s2 =
+  try
+    List.for_all2 cmp_attr s1 s2
+  with
+    _ -> false
+
 let parse sql =
   let lexbuf = Lexing.from_string sql in
   let tokens = Enum.from (fun () ->
@@ -55,7 +68,7 @@ let assert_params_with_meta stmt meta =
 
 let do_test ?kind sql schema params =
   let stmt = parse sql in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string schema stmt.schema;
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
   (List.map (function Single (p, _) -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false) stmt.vars);
 
@@ -70,10 +83,10 @@ let tt sql ?kind schema params =
 let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
-let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
+let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra) ()
 let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =
   let domain: Type.t = { t = kind; nullability; } in
-  {name;domain;extra=Constraints.of_list extra; meta = Meta.of_list meta; }
+  {name;domain;extra=Constraints.of_list extra; meta = Meta.of_list meta; pos = None }
 
 let named s t = new_param { label = Some s; pos = (0,0) } (Type.strict t)
 let named_nullable s t = new_param { label = Some s; pos = (0,0) } (Type.nullable t)
@@ -177,7 +190,7 @@ let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name ->
     if String.ends_with name ~suffix:"?" then
-      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty() }
+      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty(); pos = None }
     else
       attr name Int)
   in
@@ -233,7 +246,7 @@ let test_left_join = [
   tt "CREATE TABLE users (id INT NOT NULL, user_id INT NOT NULL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT NULL, FOREIGN KEY (account_type_id) REFERENCES account_types(type_id))" [][];
   tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
   [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
-  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty()}] [];
+  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty(); pos = None}] [];
 ]
 
 let test_coalesce = [
@@ -311,7 +324,7 @@ let test_in_clause_with_tuple_sets () =
     SELECT a FROM test17 
     WHERE (a, b, c) IN @abc
   |} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:Nullable "a" Int] stmt.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [attr' ~nullability:Nullable "a" Int] stmt.schema;
   ()
 
 let test_agg_nullable = [
@@ -874,29 +887,29 @@ let test_enum_literal () =
   do_test "CREATE TABLE test36 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
   
   let stmt = parse {|INSERT INTO test36 VALUES('pending')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [] stmt.schema;
 
   let stmt2 = parse {|INSERT INTO test36 VALUES('active')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt2.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [] stmt2.schema;
   
   let stmt3 = parse {|INSERT INTO test36 VALUES('deleted')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt3.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [] stmt3.schema;
 
   let stmt4 = parse {|SELECT * FROM test36 WHERE status = 'active'|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string 
     [attr' ~extra:[NotNull; WithDefault] "status" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"] ); is_closed = true }))]
     stmt4.schema;
 
   let stmt5 = parse {|UPDATE test36 SET status = 'deleted' WHERE status = 'pending'|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt5.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [] stmt5.schema;
 
   let stmt6 = parse {|
     SELECT * FROM test36 
     WHERE status IN ('active', 'pending') 
     AND status != 'deleted'
   |} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string
     [attr' ~extra:[NotNull; WithDefault] "status" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))]
     stmt6.schema;
@@ -905,7 +918,7 @@ let test_enum_literal () =
   ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'a', 'b')))|} ;
 
   let stmt7 = parse {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'active')))|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt7.schema;
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string [] stmt7.schema;
 
   ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'b')))|};
   ignore @@ wrong {|INSERT INTO test36 VALUES(CONCAT(''))|};
@@ -913,7 +926,7 @@ let test_enum_literal () =
   ignore @@ wrong {|SELECT * FROM test36 WHERE status = 'activee'|};
 
   let stmt8 = parse {|SELECT CONCAT(status, 'test') AS named FROM test36 WHERE status = 'active'|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
+  assert_equal ~msg:"schema" ~cmp:cmp_schema ~printer:Sql.Schema.to_string 
     [attr' ~extra:[] "named" Text]
     stmt8.schema
 
@@ -1182,6 +1195,7 @@ let test_type_mapping_params _ =
   let stmt = parse {|SELECT id FROM test39 WHERE id = @id|} in
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
     stmt.schema;
@@ -1191,6 +1205,7 @@ let test_type_mapping_params _ =
   let stmt = parse {|SELECT id FROM test39 WHERE txt = (SELECT txt FROM test39 WHERE id = @id)|} in
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
     stmt.schema;
@@ -1199,6 +1214,7 @@ let test_type_mapping_params _ =
   let stmt = parse {|SELECT id FROM test39 WHERE txt = (SELECT txt FROM test39 WHERE id = @id OR (txt = @txt OR TRUE) )|} in
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
@@ -1221,6 +1237,7 @@ let test_type_mapping_params _ =
   |} in
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
@@ -1239,6 +1256,7 @@ let test_type_mapping_params _ =
   |} in
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
@@ -1358,6 +1376,7 @@ let test_type_mapping_params _ =
   |} in 
   assert_equal 
     ~msg:"schema" 
+    ~cmp:cmp_schema
     ~printer:Sql.Schema.to_string 
     [
       attr' ~extra:[PrimaryKey] ~meta:["module", "Module2"] "a" Text;

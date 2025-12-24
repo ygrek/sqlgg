@@ -4,6 +4,8 @@ open Printf
 open ExtLib
 open Prelude
 
+type pos = (int * int) [@@deriving show]
+
 module Type =
 struct
 
@@ -317,18 +319,18 @@ module Meta = struct
   let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
 end
 
-type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
+type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; pos: pos option }
   [@@deriving show {with_path=false}]
 
-let make_attribute name kind extra ~meta =
+let make_attribute name kind extra ~meta ?(pos=None) () =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
     then Strict else Nullable } in
-  {name;domain;extra;meta=Meta.of_list meta}
+  {name;domain;extra;meta=Meta.of_list meta;pos}
 
-let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta}
+let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta;pos=None}
 
-let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta }
+let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta; pos = None }
 
 module Schema =
 struct
@@ -407,7 +409,8 @@ struct
   module Join = struct
 
     type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
-    type typ = Left | Right | Full | Inner [@@deriving show]
+    type kind = Left | Right | Full | Inner [@@deriving show]
+    type typ = { pos: pos; typ: kind } [@@deriving show]
 
     let cross t1 t2 = t1 @ t2
 
@@ -497,7 +500,6 @@ let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn 
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
 type table = table_name * schema [@@deriving show]
-type pos = (int * int) [@@deriving show]
 
 let print_table out (name,schema) =
   IO.write_line out (show_table_name name);
@@ -558,10 +560,12 @@ type logical_op = And | Or | Xor [@@deriving show]
 type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
+type select_row_locking_kind = For_update | For_share [@@deriving show]
+type select_row_locking = { kind: select_row_locking_kind; pos: pos } [@@deriving show]
 and limit = param list * bool
 and nested = source * (source * Schema.Join.typ * join_condition) list [@@deriving show]
 and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
-and source = source_kind * source_alias option (* alias *)
+and source = source_kind * source_alias option * pos (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {
   columns : column list;
@@ -577,6 +581,7 @@ and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
   limit : limit option;
+  select_row_locking: select_row_locking option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
 and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Type.t list; values_start_pos: int; } 
@@ -664,10 +669,18 @@ type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
 
-type conflict_clause = On_duplicate of assignments | On_conflict of on_conflict * col_name list [@@deriving show]
+type conflict_clause_kind = 
+  | On_duplicate of { assignments: assignments; }
+  | On_conflict of { action: on_conflict; attrs: col_name list; }
+  [@@deriving show]
+
+type conflict_clause = { conflict_clause_kind: conflict_clause_kind; pos: pos } [@@deriving show]
+
+type insert_action_kind = Insert_into | Replace_into of pos [@@deriving show]
 
 type insert_action =
 {
+  insert_action_kind: insert_action_kind;
   target : table_name;
   action : [ `Set of assignments option
            | `Values of (string list option * assignment_expr list list option) (* column names * list of value tuples *)
@@ -678,8 +691,24 @@ type insert_action =
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
 
+type index_kind  = 
+  | Regular_idx
+  | Fulltext
+  | Spatial
+  [@@deriving show {with_path=false}]
+
+type idx = { index_kind: index_kind;  pos: pos } [@@deriving show {with_path=false}]
+
+type create_target_schema = { schema: schema; constraints: table_constraints list; indexes: idx list; }
+  [@@deriving show]
+
+type create_target = 
+  | Schema of create_target_schema
+  | Select of { select: select_full; pos: pos }
+  [@@deriving show {with_path=false}]
+
 type stmt =
-| Create of table_name * [ `Schema of schema * table_constraints list | `Select of select_full ]
+| Create of table_name * create_target
 | Drop of table_name
 | Alter of table_name * alter_action list
 | Rename of (table_name * table_name) list

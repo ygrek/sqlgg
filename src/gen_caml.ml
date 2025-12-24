@@ -230,7 +230,7 @@ let output_schema_binder index schema kind =
     | Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index schema
     | _ -> func, output_schema_binder_labeled index schema
 
-let is_callback stmt =
+let is_callback (stmt : Gen.stmt) =
   match stmt.schema, stmt.kind with
   | [],_ -> false
   | _, Stmt.Select (`Zero_one | `One) -> false
@@ -585,7 +585,7 @@ let gen_tuple_substitution ~is_row label schema =
 
 let make_schema_of_tuple_types label =
   List.mapi (fun idx (domain, meta) -> {
-    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta
+    name=(sprintf "%s_%Ln" label idx); domain; extra = Constraints.empty; meta; pos = None
   })   
 
 let make_sql l =
