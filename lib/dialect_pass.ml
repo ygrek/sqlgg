@@ -1,12 +1,96 @@
 open Sql
 
-(* Проверяет, используется ли unsigned тип *)
+module Internal = struct
+  type attr = {name : string; kind : Type.kind option; extra : Constraint.t located list; meta: (string * string) list; }
+    [@@deriving show {with_path=false}]
+
+  type create_target_schema = { schema: attr list; constraints: table_constraints list; indexes: index_kind located list; }
+    [@@deriving show]
+
+  type create_target = 
+    | Schema of create_target_schema
+    | Select of select_full located
+    [@@deriving show {with_path=false}]
+
+  type alter_action = [
+    | `Add of attr * alter_pos
+    | `RenameTable of table_name
+    | `RenameColumn of string * string
+    | `RenameIndex of string * string
+    | `Drop of string
+    | `Change of string * attr * alter_pos
+    | `None ] [@@deriving show {with_path=false}]
+
+  type stmt =
+  | Create of table_name * create_target
+  | Drop of table_name
+  | Alter of table_name * alter_action list
+  | Rename of (table_name * table_name) list
+  | CreateIndex of string * table_name * string list
+  | Insert of insert_action
+  | Delete of table_name * expr option
+  | DeleteMulti of table_name list * nested * expr option
+  | Set of (string * expr) list * stmt option
+  | Update of table_name * assignments * expr option * order * param list
+  | UpdateMulti of nested list * assignments * expr option * order * param list
+  | Select of select_full
+  | CreateRoutine of table_name * Type.kind option * (string * Type.kind * expr option) list
+  [@@deriving show {with_path=false}]
+end
+
+type result = {
+  ast: Sql.stmt;
+  dialect_features: Dialect.dialect_support list;
+}
+
+let map_attr (attr : Internal.attr) : Sql.attr = 
+  Sql.make_attribute attr.name attr.kind (Constraints.of_list (List.map (fun c -> c.value) attr.extra)) ~meta:attr.meta
+
+let map_create_target_schema (cts : Internal.create_target_schema) : Sql.create_target_schema =
+  { schema = List.map map_attr cts.schema;
+    constraints = cts.constraints;
+    indexes = cts.indexes;
+  }
+
+let map_create_target (ct : Internal.create_target) : Sql.create_target =
+  match ct with
+  | Internal.Schema cts -> Sql.Schema (map_create_target_schema cts)
+  | Internal.Select sf -> Sql.Select sf
+
+let map_alter_action (aa : Internal.alter_action) : Sql.alter_action =
+  match aa with
+  | `Add (attr, pos) -> `Add (map_attr attr, pos)
+  | `Change (name, attr, pos) -> `Change (name, map_attr attr, pos)
+  | `RenameTable tn -> `RenameTable tn
+  | `RenameColumn (s1, s2) -> `RenameColumn (s1, s2)
+  | `RenameIndex (s1, s2) -> `RenameIndex (s1, s2)
+  | `Drop s -> `Drop s
+  | `None -> `None
+
+let rec map_stmt (stmt : Internal.stmt) : Sql.stmt =
+  match stmt with
+  | Internal.Create (tn, ct) -> Sql.Create (tn, map_create_target ct)
+  | Internal.Drop tn -> Sql.Drop tn
+  | Internal.Alter (tn, actions) -> Sql.Alter (tn, List.map map_alter_action actions)
+  | Internal.Rename pairs -> Sql.Rename pairs
+  | Internal.CreateIndex (name, tn, cols) -> Sql.CreateIndex (name, tn, cols)
+  | Internal.Insert ia -> Sql.Insert ia
+  | Internal.Delete (tn, expr) -> Sql.Delete (tn, expr)
+  | Internal.DeleteMulti (tns, nested, expr) -> Sql.DeleteMulti (tns, nested, expr)
+  | Internal.Set (assignments, stmt_opt) -> 
+      Sql.Set (assignments, Option.map map_stmt stmt_opt)
+  | Internal.Update (tn, assigns, where, order, params) ->
+      Sql.Update (tn, assigns, where, order, params)
+  | Internal.UpdateMulti (nesteds, assigns, where, order, params) ->
+      Sql.UpdateMulti (nesteds, assigns, where, order, params)
+  | Internal.Select sf -> Sql.Select sf
+  | Internal.CreateRoutine (tn, kind, params) -> Sql.CreateRoutine (tn, kind, params)
+
 let check_unsigned_type pos = function
   | Type.{ t = UInt64; _ } -> 
       [Dialect.get_unsigned_types pos]
   | _ -> []
 
-(* Обход выражений для поиска dialect-специфичных конструкций *)
 let rec analyze_expr = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ -> []
   | Choices (_, choices) ->
@@ -15,7 +99,6 @@ let rec analyze_expr = function
       ) choices
   | InChoice (_, _, expr) -> analyze_expr expr
   | Fun { parameters; _ } ->
-      (* Анализируем параметры функций *)
       List.concat_map analyze_expr parameters
   | SelectExpr (select_full, _) -> analyze_select_full select_full
   | InTupleList { value = { exprs; _ }; _ } -> List.concat_map analyze_expr exprs
@@ -28,12 +111,10 @@ let rec analyze_expr = function
       let else_features = Option.map_default analyze_expr [] else_ in
       case_features @ branches_features @ else_features
 
-(* Обход column *)
 and analyze_column = function
   | All | AllOf _ -> []
   | Expr (expr, _) -> analyze_expr expr
 
-(* Обход source *)
 and analyze_source src =
   match src with
   | `Table _ -> []
@@ -41,7 +122,6 @@ and analyze_source src =
   | `Nested nested -> analyze_nested nested
   | `ValueRows row_values -> analyze_row_values row_values
 
-(* Обход row_values *)
 and analyze_row_values { row_constructor_list; row_order; row_limit = _ } =
   let constructor_features = match row_constructor_list with
   | RowExprList expr_lists ->
@@ -51,11 +131,9 @@ and analyze_row_values { row_constructor_list; row_order; row_limit = _ } =
   let order_features = List.concat_map (fun (expr, _) -> analyze_expr expr) row_order in
   constructor_features @ order_features
 
-(* Обход nested (joins) *)
 and analyze_nested ((src_kind, _), joins) =
   let src_features = analyze_source src_kind in
   let joins_features = List.concat_map (fun { value = ((join_src_kind, _), join_typ, join_cond); pos } ->
-    (* Проверяем join на subquery *)
     let subquery_features = match join_src_kind with
     | `Select select_full ->
         Dialect.get_join_source join_src_kind pos :: analyze_select_full select_full
@@ -77,7 +155,6 @@ and analyze_nested ((src_kind, _), joins) =
   ) joins in
   src_features @ joins_features
 
-(* Обход select *)
 and analyze_select { columns; from; where; group; having } =
   let columns_features = List.concat_map analyze_column columns in
   let from_features = Option.map_default analyze_nested [] from in
@@ -86,7 +163,6 @@ and analyze_select { columns; from; where; group; having } =
   let having_features = Option.map_default analyze_expr [] having in
   columns_features @ from_features @ where_features @ group_features @ having_features
 
-(* Обход select_complete *)
 and analyze_select_complete { select; order; limit = _; select_row_locking } =
   let (core, others) = select in
   let core_features = analyze_select core in
@@ -99,7 +175,6 @@ and analyze_select_complete { select; order; limit = _; select_row_locking } =
   in
   core_features @ others_features @ order_features @ locking_features
 
-(* Обход select_full (с CTE) *)
 and analyze_select_full { select_complete; cte } =
   let select_features = analyze_select_complete select_complete in
   let cte_features = Option.map_default (fun { cte_items; _ } ->
@@ -111,40 +186,29 @@ and analyze_select_full { select_complete; cte } =
   ) [] cte in
   select_features @ cte_features
 
-(* Обход assignment_expr *)
 and analyze_assignment_expr = function
   | RegularExpr expr -> analyze_expr expr
   | WithDefaultParam (expr, _) -> analyze_expr expr
   | AssignDefault -> []
 
-(* Обход assignments *)
 and analyze_assignments assignments =
   List.concat_map (fun (_, assignment_expr) -> analyze_assignment_expr assignment_expr) assignments
 
-(* Обход column_def для поиска DEFAULT выражений *)
-and analyze_column_def { domain; extra; _ } =
-  (* Проверяем наличие AUTOINCREMENT *)
+and analyze_column_def_internal ({ extra; _ } : Internal.attr) =
   let autoincrement_features = 
-    if Constraints.mem Autoincrement extra then
-      (* [Dialect.get_autoincrement pos] *) 
-      []
-    else []
+    let autoincrement = List.find_opt (fun c -> c.value = Sql.Constraint.Autoincrement) extra in
+    match autoincrement with
+    | Some { pos; _ } ->
+        [Dialect.get_autoincrement pos]
+    | None -> []
   in
-  (* Проверяем unsigned типы *)
-  (* let unsigned_features = check_unsigned_type pos domain in *)
-  (* Note: DEFAULT expressions обрабатываются в парсере через Parser_state.Default,
-     но здесь мы их не можем извлечь из extra, так как они не сохранены в AST.
-     Это одна из причин, почему некоторые features все еще должны обрабатываться
-     в парсере *)
   autoincrement_features @ []
 
-(* Обход alter_action *)
-and analyze_alter_action = function
-  | `Add (col, _) -> analyze_column_def col
-  | `Change (_, col, _) -> analyze_column_def col
+and analyze_alter_action : Internal.alter_action -> Dialect.dialect_support list = function
+  | `Add (col, _) -> analyze_column_def_internal col
+  | `Change (_, col, _) -> analyze_column_def_internal col
   | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `None -> []
 
-(* Обход insert_action *)
 and analyze_insert_action { action; on_conflict_clause; insert_action_kind; _ } =
   let action_features = match action with
   | `Values (_, Some values) ->
@@ -174,13 +238,12 @@ let analyze_schema_index idx = match idx.value with
   | Fulltext -> Some (Dialect.get_fulltext_index idx.pos)
   | Spatial -> None
 
-(* Основная функция обхода statement *)
-let rec analyze = function 
-  | Create (_, Schema { schema; indexes; _ }) ->
-      let schema_idx_features = List.filter_map analyze_schema_index indexes in
-      schema_idx_features @ List.concat_map analyze_column_def schema
-  | Create (_, Select { value = select; pos }) ->
-      Dialect.get_create_table_as_select pos :: analyze_select_full select
+let rec analyze_features : Internal.stmt -> Dialect.dialect_support list = function 
+  | Internal.Create (_, Internal.Schema { schema; indexes; _ }) ->
+    let schema_idx_features = List.filter_map analyze_schema_index indexes in
+    schema_idx_features @ List.concat_map analyze_column_def_internal schema
+  | Create (_, Internal.Select { value = select; pos }) ->
+    Dialect.get_create_table_as_select pos :: analyze_select_full select
   | Drop _ -> []
   | Alter (_, actions) ->
       List.concat_map analyze_alter_action actions
@@ -196,7 +259,7 @@ let rec analyze = function
       nested_features @ where_features
   | Set (assignments, stmt_opt) ->
       let assignments_features = List.concat_map (fun (_, expr) -> analyze_expr expr) assignments in
-      let stmt_features = Option.map_default analyze [] stmt_opt in
+      let stmt_features = Option.map_default analyze_features [] stmt_opt in
       assignments_features @ stmt_features
   | Update (_, assignments, where_opt, order, _) ->
       let assignments_features = analyze_assignments assignments in
@@ -215,3 +278,10 @@ let rec analyze = function
       List.concat_map (fun (_, _, default_expr_opt) ->
         Option.map_default analyze_expr [] default_expr_opt
       ) params
+
+let analyze (stmt : Internal.stmt) : result =
+  let dialect_features = analyze_features stmt in
+  let ast = map_stmt stmt in
+  { ast; dialect_features }
+
+    

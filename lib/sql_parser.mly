@@ -6,6 +6,7 @@
 %{
   open Sql
   open Sql.Type
+  open Dialect_pass.Internal
   open Sql.Constraint
   open ExtLib
 
@@ -86,7 +87,7 @@
 
 %type <Sql.expr> expr
 
-%start <Sql.stmt> input
+%start <Dialect_pass.Internal.stmt> input
 
 %%
 
@@ -221,7 +222,7 @@ table_definition: t=sequence_(column_def1) ignore_after(RPAREN)
                           | `Index i -> { schema; constraints; indexes = i::indexes })
                           t { schema = []; constraints = []; indexes = [] }
                       }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> { schema = attrs; constraints = []; indexes = [] } } (* mysql *)
+                // | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> { schema = attrs; constraints = []; indexes = [] } } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -373,16 +374,16 @@ alter_pos: AFTER col=IDENT { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT kind=sql_type? extra=column_def_extra*
+column_def: name=IDENT kind=sql_type? extra=located(column_def_extra)*
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
-    let extra = Constraints.of_list @@ List.filter_map (Option.map (function
+    let extra = List.filter_map (fun { value; pos } -> Option.map (function
       (* next step is to start infer default expr *)
-      | Parser_state.Default (e, pos) -> Dialect_feature.set_default_expr kind e pos; WithDefault
-      | Other_extra c -> c
-    )) extra in
-    make_attribute name kind extra ~meta
+      | Parser_state.Default (e, pos)  -> { value = WithDefault; pos }
+      | Other_extra c -> { value = c; pos }
+    ) value) extra in
+    { name = name; meta; kind; extra}
   }
 
 column_def1: c=column_def { `Attr c }
