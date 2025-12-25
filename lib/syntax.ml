@@ -208,8 +208,8 @@ let rec merge_meta_into_params ~shallow meta expr =
     let else_ = Option.map (merge_meta_into_params ~shallow meta) else_ in
     Case { case; branches; else_ }
   | InChoice (n, k, e), false -> InChoice (n, k, merge_meta_into_params ~shallow meta e)
-  | InTupleList ({ exprs; _ } as tl), false ->
-    InTupleList { tl with exprs = List.map (merge_meta_into_params ~shallow meta) exprs }
+  | InTupleList ({ value = { exprs; _ } as tl; _ } as tl_loc), false ->
+    InTupleList { tl_loc with value = { tl with exprs = List.map (merge_meta_into_params ~shallow meta) exprs } }
   | Choices (n, l), false ->
     Choices (n, List.map (fun (n, e) -> n, Option.map (merge_meta_into_params ~shallow meta) e) l)
   | (Value _ | Column _ | SelectExpr _ | Of_values _) as e, false -> e
@@ -278,7 +278,7 @@ let rec bool_choice_id = function
   | Param (p, _) -> Some p.id
   | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
   | Choices (p, _)
-  | InTupleList { param_id = p; _ }
+  | InTupleList { value = { param_id = p; _ }; _ }
   | InChoice(p, _, _) -> Some p
   | Case { case; branches; else_ } ->
     List.find_map bool_choice_id 
@@ -298,8 +298,8 @@ let extract_meta_from_col ~env expr =
     | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
       Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
     (* (col_name, ..., any_expr, col_name2) IN @param *)
-    | InTupleList ({ exprs;_ } as in_tuple_list) -> 
-      InTupleList { in_tuple_list with exprs = List.map aux exprs }
+    | InTupleList ({value = { exprs;_ } as in_tuple_list; _ } as in_tuple_list_loc) -> 
+      InTupleList { in_tuple_list_loc with value = { in_tuple_list with exprs = List.map aux exprs } }
     | Fun ({ parameters; _ } as fn) -> 
       Fun { fn with parameters = List.map aux parameters }
     | Case { case; branches; else_ } ->
@@ -385,7 +385,7 @@ let rec resolve_columns env expr =
       in
       ResOptionActions { res_choice = each choice; choice_id; pos; kind }
     | Param (x, m) -> ResParam (x, m)
-    | InTupleList { exprs; param_id; kind; pos } -> 
+    | InTupleList ({ value = { exprs; param_id; kind; }; pos } ) -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
         match res_expr with 
@@ -824,7 +824,7 @@ and get_params_of_res_expr env (e:res_expr) =
     | ResParam (p, m) -> Single (p, m) ::acc
     | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
       OptionActionChoice (choice_id, get_params_of_res_expr env res_choice, pos, kind) :: acc
-    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in (types, kind, pos)) :: acc
+    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in { value = (types, kind); pos }) :: acc
     | ResInparam (p, m) -> SingleIn (p, m)::acc
     | ResFun { parameters; kind; _ } -> 
       let p1 = match kind with
@@ -862,7 +862,7 @@ and ensure_res_expr = function
     ) branches in
     let res_else = Option.map ensure_res_expr else_ in
     ResCase { case = res_case; branches = res_branches; else_ = res_else }
-  | InTupleList { param_id; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
+  | InTupleList { value = { param_id; _ }; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Of_values _ -> failwith "Not a simple expression"
@@ -878,7 +878,7 @@ and eval_nested env nested =
   let env = { env with schema = [] } in
   (* FIXME resolved table schema depends on join (nullability with left), this is resolving too early *)
   match nested with
-  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun loc -> let (x,jt,jc) = loc.value in resolve_source env x, jt.value, jc) l)
   | None -> env, []
 
 (** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE/HAVING
@@ -1099,7 +1099,7 @@ and resolve_source env (x, alias) =
       | RowExprList (exprs :: xs) ->
         let unions = List.map (fun exprs -> `Union, dummy_select exprs ) xs in
         let select = dummy_select exprs in
-        let select_complete = { select = select, unions; order=row_order; limit=row_limit; } in
+        let select_complete = { select = select, unions; order=row_order; limit=row_limit; select_row_locking = None } in
         eval_select_full env { select_complete; cte = None }
       | RowParam { id; types; values_start_pos } ->
         List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
@@ -1146,7 +1146,7 @@ and eval_cte { cte_items; is_recursive } =
           let s1, p1, env, cardinality = eval_select env (fst stmt.select) in
           eval_compound ~env:{ env with tables = env.tables } (p1, s1, cardinality, stmt)
         | CteSharedQuery shared_query_name ->
-          let (_, stmt) = Shared_queries.get shared_query_name.ref_name in
+          let (_, stmt) = Shared_queries.get shared_query_name.value in
           let s1, p1, kind = eval_select_full env stmt in
           s1, [SharedVarsGroup (p1, shared_query_name)], kind
       )
@@ -1200,7 +1200,7 @@ let annotate_select select attrs =
   { select with select = (select1', compound') }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
-  | On_conflict (action, attrs) -> 
+  | {value = On_conflict { action; attrs; }; _ } -> 
     let names = List.map (fun attr -> attr.cname) attrs in
     let composite_primary_key = Constraint.make_composite_primary names in
     let composite_unique = Constraint.make_composite_unique names in
@@ -1231,7 +1231,7 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
         ) values in
         ss
     end
-  | On_duplicate values -> values
+  | { value = On_duplicate { assignments; }; _ } -> assignments
 ) []
 
 let with_constraints attrs constraints : Schema.t =
@@ -1288,11 +1288,11 @@ let rec eval (stmt:Sql.stmt) =
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema (schema, constraints)) ->
+  | Create (name, Schema { schema; constraints; _ }) ->
       let schema = with_constraints schema constraints in
       Tables.add (name, schema);
       ([],[],Create name)
-  | Create (name,`Select select) ->
+  | Create (name, Select { value=select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
       Tables.add (name, from_schema schema);
       ([],params,Create name)
@@ -1315,7 +1315,7 @@ let rec eval (stmt:Sql.stmt) =
   | CreateIndex (name,table,cols) ->
       Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
       [],[],CreateIndex name
-  | Insert { target=table; action=`Values (names, values); on_conflict_clause; } ->
+  | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
@@ -1379,7 +1379,7 @@ let rec eval (stmt:Sql.stmt) =
       let params2 = params_of_assigns { env with is_update = true; } conflict_assigns in
       [], p1 @ params2, Insert (None, table)
     end
-  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; } ->
+  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; _ } ->
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; } in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
@@ -1388,7 +1388,7 @@ let rec eval (stmt:Sql.stmt) =
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     let params = [ TupleList (param_id, Insertion expect) ] in
     [], params @ params2, Insert (None, table)
-  | Insert { target=table; action=`Select (names, select); on_conflict_clause; } ->
+  | Insert { target=table; action=`Select (names, select); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
@@ -1403,7 +1403,7 @@ let rec eval (stmt:Sql.stmt) =
     List.iter2 (fun a1 a2 -> Hashtbl.add env.insert_resolved_types a2.name a1.attr.domain ) schema expect;
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     [], params @ params2, Insert (None,table)
-  | Insert { target=table; action=`Set ss; on_conflict_clause; } ->
+  | Insert { target=table; action=`Set ss; on_conflict_clause; _ } ->
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
     } in
@@ -1424,7 +1424,7 @@ let rec eval (stmt:Sql.stmt) =
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
     let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
-    let select_complete = { select; order = []; limit = None} in
+    let select_complete = { select; order = []; limit = None; select_row_locking = None } in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
   | Set (vars, stmt) ->
@@ -1465,7 +1465,7 @@ let unify_params l =
   let h = Hashtbl.create 10 in
   let h_choices = Hashtbl.create 10 in
   let check_choice_name ~sharing_disabled p =
-    match p.label with
+    match p.value with
     | None -> () (* unique *)
     | Some n when sharing_disabled && Hashtbl.mem h_choices n -> failed ~at:p.pos "sharing choices not implemented"
     | Some n -> Hashtbl.add h_choices n ()
@@ -1485,7 +1485,7 @@ let unify_params l =
   in
   let rec traverse = function
   | Single ({ id; typ; }, _)
-  | SingleIn ({ id; typ; _ }, _) -> remember id.label typ
+  | SingleIn ({ id; typ; _ }, _) -> remember id.value typ
   | SharedVarsGroup (vars, _)
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionActionChoice (_, l, _, _) -> List.iter traverse l
@@ -1494,10 +1494,10 @@ let unify_params l =
   in
   let rec map = function
   | Single ({ id; typ; }, m) ->
-    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    let typ = match id.value with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     Single (new_param id (Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
   | SingleIn ({ id; typ; }, m) ->
-    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    let typ = match id.value with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
     SingleIn (new_param id (Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | SharedVarsGroup (vars, pos) -> SharedVarsGroup (List.map map vars, pos)
@@ -1552,7 +1552,7 @@ let complete_sql kind sql =
       let pos_end = pos_start + String.length attr_ref in
       (* autoincrement is special - nullable on insert, strict otherwise *)
       let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
-      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ, Meta.empty()) in
+      let param = Single (new_param {value=Some attr_name; pos=(pos_start,pos_end)} typ, Meta.empty()) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;

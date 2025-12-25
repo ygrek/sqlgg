@@ -115,7 +115,7 @@ let get_collation collation pos =
   | "nocase" | "rtrim" -> only Collation [SQLite] pos
   | _ -> supported Collation [] pos
 
-let get_join_source (s, _) pos =
+let get_join_source s pos =
   match s with
   | `Select _ -> {
       feature = JoinOnSubquery; pos;

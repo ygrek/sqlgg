@@ -6,6 +6,7 @@
 %{
   open Sql
   open Sql.Type
+  open Dialect_pass.Internal
   open Sql.Constraint
   open ExtLib
 
@@ -15,7 +16,7 @@
   let make_limit l =
     let param = function
       | _, `Const _ -> None
-      | x, `Param { label=None; pos } -> Some (new_param { label = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } (strict Int))
+      | x, `Param { value=None; pos } -> Some (new_param { value = Some (match x with `Limit -> "limit" | `Offset -> "offset"); pos } (strict Int))
       | _, `Param id -> Some (new_param id (strict Int))
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
@@ -86,14 +87,14 @@
 
 %type <Sql.expr> expr
 
-%start <Sql.stmt> input
+%start <Dialect_pass.Internal.stmt> input
 
 %%
 
 input: statement EOF { $1 }
 
 param: 
-  | QSTN { { label=None; pos = ($startofs, $endofs) } }
+  | QSTN { { value=None; pos = ($startofs, $endofs) } }
   | PARAM  { $1 }
 
 if_not_exists: IF NOT EXISTS { }
@@ -116,12 +117,11 @@ cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive
 
 statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_name schema=table_definition
               {
-                Create (name,`Schema schema)
+                Create (name, Schema schema)
               }
-         | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(select_stmt)
+         | CREATE either(TABLE,VIEW) name=table_name AS select=maybe_parenth(located(select_stmt))
               {
-                Dialect_feature.set_create_table_as_select ($startofs, $endofs);
-                Create (name,`Select select)
+                Create (name, Select select)
               }
          | ALTER TABLE name=table_name actions=commas(alter_action)
               {
@@ -137,21 +137,21 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex (name, table, cols)
               }
          | select_stmt { Select $1 }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
               {
-                Insert { target; action=`Values (names, values); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=located(conflict_clause)?
               {
-                Insert { target; action=`Param (names, p); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
               {
-                Insert { target; action=`Select (names, select); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; }
               }
-         | insert_cmd target=table_name SET set=commas(set_column)? ss=conflict_clause?
+         | insert_action_kind=insert_cmd target=table_name SET set=commas(set_column)? ss=located(conflict_clause)?
               {
-                Insert { target; action=`Set set; on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Set set; on_conflict_clause=ss; }
               }
          | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
@@ -216,13 +216,13 @@ index_column: name=IDENT index_prefix? collate? order_type? { name }
 table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
                       { 
                         List.fold_right
-                          (fun x (attrs, constraints) -> match x with
-                          | `Attr a -> a::attrs, constraints
-                          | `Constraint c -> attrs, c::constraints
-                          | `Index _ -> attrs, constraints)
-                          t ([], [])
+                          (fun x { schema; constraints; indexes } -> match x with
+                          | `Attr a -> { schema = a::schema; constraints; indexes }
+                          | `Constraint c -> { schema; constraints = c::constraints; indexes }
+                          | `Index i -> { schema; constraints; indexes = i::indexes })
+                          t { schema = []; constraints = []; indexes = [] }
                       }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> (attrs, []) } (* mysql *)
+                // | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> { schema = attrs; constraints = []; indexes = [] } } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -238,9 +238,9 @@ select_stmt: cte=cte? select_complete=select_stmt_plain
                 { select_complete; cte; }
               }
 
-select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking?
+select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking=located(select_row_locking)?
               {
-                { select = (core, other); order=o; limit=lim; }
+                { select = (core, other); order=o; limit=lim; select_row_locking; }
               }
 
 select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
@@ -248,29 +248,28 @@ select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(
                 { columns=r; from=f; where=w; group=g; having=h; }
               }
 
-table_list: src=source joins=join_source* { (src,joins) }
+table_list: src=source joins=located(join_source)* { (src,joins) }
 
 anyorder(X,Y): x=X y=Y | y=Y x=X { x,y }
 inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
 left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
 right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
 full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
-straight_join: STRAIGHT_JOIN { Dialect_feature.set_straight_join ($startofs, $endofs); Schema.Join.Inner }
+straight_join: STRAIGHT_JOIN { Schema.Join.Straight }
 natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
-cond(join): j=join JOIN src=source c=join_cond { Dialect_feature.set_join_source src ($startofs, $endofs); src, j, c }
+cond(join): j=join JOIN src=source c=join_cond { src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
-join_source: COMMA src=source c=join_cond { src, Schema.Join.Inner, c }
-           | j=natural(left_join)
-           | j=natural(right_join)
-           | j=natural(full_join)
-           | j=natural(inner_join)
-           | j=cond(left_join)
-           | j=cond(right_join)
-           | j=cond(full_join)
-           | j=cond(inner_join) { j }
-           | j=straight_cond(straight_join) { j }
-
+join_source: COMMA src=source c=join_cond { src, { value = Schema.Join.Inner; pos = ($startofs, $endofs) }, c }
+           | j=natural(located(left_join))
+           | j=natural(located(right_join))
+           | j=natural(located(full_join))
+           | j=natural(located(inner_join))
+           | j=cond(located(left_join))
+           | j=cond(located(right_join))
+           | j=cond(located(full_join))
+           | j=cond(located(inner_join)) { j }
+           | j=straight_cond(located(straight_join)) { j }
 join_cond: ON e=expr { On e }
          | USING l=sequence(IDENT) { Using l }
          | (* *) { Default }
@@ -281,16 +280,17 @@ source1: table_name { `Table $1 }
        | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
 source: src=source1 alias=maybe_as_with_detupled? { 
-  src, 
-  Option.map (fun (tbl, cols) -> 
-    let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
-    { table_name = Sql.make_table_name tbl; column_aliases; }
-  ) alias 
+  ( src, 
+    Option.map (fun (tbl, cols) -> 
+      let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any))) cols in
+      { table_name = Sql.make_table_name tbl; column_aliases; }
+    ) alias
+  )
 }
 
-insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { }
-           | INSERT INTO { }
-           | REPLACE INTO { Dialect_feature.set_replace_into ($startofs, $endofs) }
+insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { Insert_into }
+           | INSERT INTO { Insert_into }
+           | REPLACE INTO { Replace_into ($startofs, $endofs) }
 update_cmd: UPDATE | UPDATE OR conflict_algo { }
 conflict_algo: CONFLICT_ALGO | REPLACE { }
 
@@ -300,17 +300,17 @@ on_conflict_action:
 
 conflict_clause: 
   | ON DUPLICATE KEY UPDATE ss=commas(set_column)
-    { Dialect_feature.set_on_duplicate_key ($startofs, $endofs); On_duplicate ss }
+    { On_duplicate { assignments = ss; }; }
   | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO action=on_conflict_action
-    { Dialect_feature.set_on_conflict ($startofs, $endofs); On_conflict (action, attrs) }
+    { On_conflict { action; attrs; }; }
 
 select_type: DISTINCT | ALL { }
 
 select_row_locking:
     for_update_or_share+
-      { Dialect_feature.set_row_locking ($startofs, $endofs) }
+      { For_update }
   | LOCK IN SHARE MODE
-      { Dialect_feature.set_lock_in_share_mode ($startofs, $endofs) }
+      { For_share }
 
 for_update_or_share:
   FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
@@ -374,23 +374,23 @@ alter_pos: AFTER col=IDENT { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT kind=sql_type? extra=column_def_extra*
+column_def: name=IDENT kind=sql_type? extra=located(column_def_extra)*
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
-    let extra = Constraints.of_list @@ List.filter_map (Option.map (function
+    let extra = List.filter_map (fun { value; pos } -> Option.map (function
       (* next step is to start infer default expr *)
-      | Parser_state.Default (e, pos) -> Dialect_feature.set_default_expr kind e pos; WithDefault
-      | Other_extra c -> c
-    )) extra in
-    make_attribute name kind extra ~meta
+      | Parser_state.Default (e, pos)  -> { value = WithDefault; pos }
+      | Other_extra c -> { value = c; pos }
+    ) value) extra in
+    { name = name; meta; kind; extra}
   }
 
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
-           | index_or_key l=table_index { `Index l }
-           | FULLTEXT index_or_key? l=table_index { Dialect_feature.set_fulltext_index ($startofs, $endofs); `Index l }
-           | SPATIAL index_or_key? l=table_index { `Index l }
+           | index_or_key table_index { `Index { value = Regular_idx; pos = ($startofs, $endofs); } }
+           | FULLTEXT index_or_key? table_index { `Index { value = Fulltext; pos = ($startofs, $endofs); } }
+           | SPATIAL index_or_key? table_index { `Index { value = Spatial; pos = ($startofs, $endofs); } }
 
 int_arg: delimited(LPAREN,INTEGER,RPAREN) {}
 
@@ -420,7 +420,7 @@ column_def_extra: PRIMARY? KEY { Some (Parser_state.Other_extra PrimaryKey) }
                 | NOT NULL { Some (Other_extra NotNull) }
                 | NULL { Some (Other_extra Null) }
                 | UNIQUE KEY? { Some (Other_extra Unique) }
-                | AUTOINCREMENT { Dialect_feature.set_autoincrement ($startofs, $endofs); Some (Other_extra Autoincrement) }
+                | AUTOINCREMENT { Some (Other_extra Autoincrement) }
                 | DEFAULT def=default_value { Some (Parser_state.Default (def, ($startofs, $endofs))) }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
@@ -483,16 +483,16 @@ expr:
     | e1=expr k=in_or_not_in p=param
       {
         let e = poly (depends Bool) [ e1; Inparam (new_param p (depends Any), Meta.empty()) ] in
-        InChoice ({ label = p.label; pos = ($startofs, $endofs) }, k, e )
+        InChoice ({ value = p.value; pos = ($startofs, $endofs) }, k, e )
       }
     | LPAREN exprs=commas(expr) RPAREN k=in_or_not_in p=param
       {
-        InTupleList({exprs; param_id = p; kind = k; pos = ($startofs, $endofs); })
+        InTupleList({ value = { exprs; param_id = p; kind = k; }; pos = ($startofs, $endofs)  })
       }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (new_param { p with pos=($startofs, $endofs) } (Option.default (depends Any) t), Meta.empty())  }
     | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
-    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { label; pos=(p1,_p2) } = p in Choices ({ label; pos = (p1,c2+1)},l) }
+    | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { value; pos=(p1,_p2) } = p in Choices ({ value; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
     | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
     | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
@@ -514,7 +514,6 @@ expr:
       }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
     | f=table_name LPAREN p=func_params RPAREN { 
-        Dialect_feature.set_function_name f.tn;
         Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } 
       }
     | e=expr IS NOT NULL { Fun { kind = Comparison Is_not_null; parameters = [e]; is_over_clause = false } }
@@ -570,7 +569,7 @@ case_branch: WHEN w=expr THEN t=expr
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: parser_state_normal label=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ label; pos = (c1+1,c2) },e) }
+choice: parser_state_normal value=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ value; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
@@ -637,7 +636,7 @@ int1:
 int_type:
   | kind=int1 int_arg? u=UNSIGNED? {
       let (signed, unsigned) = kind in
-      Option.map_default (fun _ -> Dialect_feature.set_unsigned_types ($startofs, $endofs); unsigned) signed u
+      Option.map_default (fun _ -> unsigned) signed u
     }
 
 expr_sql_type_flavor:
@@ -664,7 +663,7 @@ text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
 
 cast_as:
     | t=cast_sql_type { (fun e -> Fun { kind = (Ret (depends t)); parameters = [e]; is_over_clause = false }) }
-    | UNSIGNED { Dialect_feature.set_unsigned_types ($startofs, $endofs); (fun e -> Fun { kind = (Ret (depends UInt64)); parameters = [e]; is_over_clause = false }) }
+    | UNSIGNED { (fun e -> Fun { kind = (Ret (depends UInt64)); parameters = [e]; is_over_clause = false }) }
     | SIGNED { (fun e -> Fun { kind = (Ret (depends Int)); parameters = [e]; is_over_clause = false }) }
 
 %inline either(X,Y): X | Y { }
@@ -715,3 +714,5 @@ lock:
  | EXCLUSIVE {}
  | DEFAULT {}
  | SHARED {}
+
+located(X): X { { value = $1; pos = ($startofs, $endofs) } }

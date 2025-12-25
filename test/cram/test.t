@@ -200,7 +200,7 @@ Test TiDB dialect with CREATE TABLE AS SELECT (should fail):
   > CREATE TABLE users (id INT, name TEXT);
   > CREATE TABLE summary AS SELECT id, name FROM users;
   > EOF
-  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at CREATE TABLE summary AS SELECT id, name FROM users
+  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at SELECT id, name FROM users
   Errors encountered, no code generated
   [1]
 
