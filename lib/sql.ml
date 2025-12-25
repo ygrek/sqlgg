@@ -554,7 +554,7 @@ type col_name = {
   tname : table_name option;
 } [@@deriving show]
 type logical_op = And | Or | Xor [@@deriving show]
-type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op [@@deriving eq, show]
+type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 and limit = param list * bool
