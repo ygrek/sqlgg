@@ -374,12 +374,16 @@ alter_pos: AFTER col=IDENT { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT t=sql_type? extra=column_def_extra*
+column_def: name=IDENT kind=sql_type? extra=column_def_extra*
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
-    let extra = Constraints.of_list @@ List.filter_map identity extra in
-    make_attribute name t extra ~meta
+    let extra = Constraints.of_list @@ List.filter_map (Option.map (function
+      (* next step is to start infer default expr *)
+      | Parser_state.Default (e, pos) -> Dialect_feature.set_default_expr kind e pos; WithDefault
+      | Other_extra c -> c
+    )) extra in
+    make_attribute name kind extra ~meta
   }
 
 column_def1: c=column_def { `Attr c }
@@ -412,18 +416,18 @@ reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
 
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
-column_def_extra: PRIMARY? KEY { Some PrimaryKey }
-                | NOT NULL { Some NotNull }
-                | NULL { Some Null }
-                | UNIQUE KEY? { Some Unique }
-                | AUTOINCREMENT { Dialect_feature.set_autoincrement ($startofs, $endofs); Some Autoincrement }
-                | DEFAULT default_value { Some WithDefault }
+column_def_extra: PRIMARY? KEY { Some (Parser_state.Other_extra PrimaryKey) }
+                | NOT NULL { Some (Other_extra NotNull) }
+                | NULL { Some (Other_extra Null) }
+                | UNIQUE KEY? { Some (Other_extra Unique) }
+                | AUTOINCREMENT { Dialect_feature.set_autoincrement ($startofs, $endofs); Some (Other_extra Autoincrement) }
+                | DEFAULT def=default_value { Some (Parser_state.Default (def, ($startofs, $endofs))) }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
                 | COLLATE IDENT { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
 
-default_value: e=single_literal_value 
+default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
@@ -509,7 +513,10 @@ expr:
         Fun { kind = Agg ( With_order({ with_order_kind = Json_arrayagg; order })); parameters = p; is_over_clause = false } 
       }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
-    | f=table_name LPAREN p=func_params RPAREN { Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } }
+    | f=table_name LPAREN p=func_params RPAREN { 
+        Dialect_feature.set_function_name f.tn;
+        Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } 
+      }
     | e=expr IS NOT? NULL { poly (strict Bool) [e] }
     | e1=expr IS NOT? distinct_from? e2=expr { Fun { kind = Comparison Not_distinct_op; parameters = [e1; e2]; is_over_clause = false } }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }

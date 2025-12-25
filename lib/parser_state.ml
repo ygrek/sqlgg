@@ -1,5 +1,10 @@
 
 type mode = Normal | Ignore | Ident
+
+type column_def_extra =
+  | Default of Sql.expr * Sql.pos
+  | Other_extra of Sql.Constraint.t
+
 let mode = ref Normal
 let mode_normal () = mode := Normal
 let mode_ignore () = mode := Ignore
@@ -15,6 +20,9 @@ end
 module Dialect_feature = struct
 
   let state = ref []
+  let function_name = ref None
+
+  let set_function_name name = function_name := Some name
 
   let add_feature feature = state := feature :: !state
 
@@ -32,6 +40,9 @@ module Dialect_feature = struct
   let set_autoincrement pos = add_feature @@ Dialect.get_autoincrement pos
   let set_replace_into pos = add_feature @@ Dialect.get_replace_into pos
   let set_row_locking pos = add_feature @@ Dialect.get_row_locking pos
+  let set_default_expr kind expr pos = add_feature @@ Dialect.get_default_expr ~function_name:!function_name ~kind ~expr pos
 
-  let reset () = state := []
+  let reset () = 
+    state := []; 
+    function_name :=  None
 end
