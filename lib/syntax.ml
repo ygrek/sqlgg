@@ -663,7 +663,10 @@ and assign_types env expr =
           { ret with nullability }, types (* ignoring arguments FIXME *)
         | Comparison Not_distinct_op, _ ->
           let args, ret = convert_args (Typ (strict Bool)) [Var 0; Var 0] in
-          ret, args 
+          ret, args
+        | Comparison (Is_not_null | Is_null), _ ->
+          let args, ret = convert_args (Typ (strict Bool)) [Var 0] in
+          ret, args
         | Comparison _, _ when set_tyvar_strict ->
         (* In this expression, where set_tyvar_strict is set (currently only for WHERE) we treat the parameters as non-null by default. *)
           let args, ret = convert_args (Typ (depends Bool)) [Var 0; Var 0] in
@@ -720,39 +723,50 @@ and resolve_types env expr =
       end;
       raise exn
 
-and infer_schema env columns =
+and infer_schema ~not_null_keys env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let rec propagate_meta ~env = function
-    | Column col -> 
-      let result = resolve_column ~env col in 
+    | Column col ->
+      let result = resolve_column ~env col in
       result.attr.meta
     (* aggregated columns, ie: max, min *)
     | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
      (* null handling functions that preserve metadata from first argument *)
     | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = e :: _; _ } -> propagate_meta ~env e
     (* Or for subselect which always requests only one column, TODO: consider CTE in subselect, perhaps a rare occurrence *)
-    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) -> 
+    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) ->
       let (env,_) = eval_nested env from in
       propagate_meta ~env e
     | Case _
-    | Value _ 
-    (* TODO: implement for custom props *) 
+    | Value _
+    (* TODO: implement for custom props *)
     | Param _ | Inparam _ | Choices _| InChoice _
     | Fun _ | SelectExpr _ | InTupleList _ | Of_values _
     | OptionActions _ -> Meta.empty ()
   in
+  let refine_column (col : table_name Schema.Source.Attr.t) =
+    let key = (col.sources, col.attr.name) in
+    if List.mem key not_null_keys && Type.is_nullable col.attr.domain then
+      { col with
+        attr = { col.attr with
+                 domain = Type.make_strict col.attr.domain } }
+    else
+      col
+  in
   let resolve1 = function
-    | All -> env.schema
-    | AllOf t -> schema_of ~env t
+    | All -> List.map refine_column env.schema
+    | AllOf t -> List.map refine_column (schema_of ~env t)
     | Expr (e,name) ->
       let col =
         match e with
         | Column col -> resolve_column ~env col
-        | e -> { 
+        | e -> {
           attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
-          sources = [] 
+          sources = []
         }
       in
+      (* Refine before applying alias, so we check against original column name *)
+      let col = refine_column col in
       let col = Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name in
       [ col ]
   in
@@ -867,10 +881,97 @@ and eval_nested env nested =
   | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
   | None -> env, []
 
+(** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE/HAVING
+
+    Uses structured nullability analysis with uniform logic rules:
+    - Builds nullability AST: IsNotNull, IsNull, And, Or, Not
+    - Applies De Morgan's laws automatically
+    - Handles all combinations: NOT (A AND B), NOT (A OR B), nested logic
+*)
+and extract_not_null_column_keys env = function
+  | None -> []
+  | Some expr ->
+    let module NullCheck = struct
+      (* Nullability analysis AST *)
+      type t =
+        | IsNotNull of (table_name list * string)
+        | IsNull of (table_name list * string)
+        | And of t list
+        | Or of t list
+        | Unknown
+
+      (* Apply De Morgan's laws uniformly *)
+      let rec negate = function
+        | IsNotNull col -> IsNull col
+        | IsNull col -> IsNotNull col
+        | And checks -> Or (List.map negate checks)
+        | Or checks -> And (List.map negate checks)
+        | Unknown -> Unknown
+    end in
+
+    (* Build nullability AST from expression *)
+    let rec analyze = function
+      | Column _ -> NullCheck.Unknown
+      | Fun { kind = Comparison Is_not_null; parameters = [Column col]; _ } ->
+          let resolved = resolve_column ~env col in
+          NullCheck.IsNotNull (resolved.sources, resolved.attr.name)
+      | Fun { kind = Comparison Is_null; parameters = [Column col]; _ } ->
+          let resolved = resolve_column ~env col in
+          NullCheck.IsNull (resolved.sources, resolved.attr.name)
+      | Fun { kind = Negation; parameters = [e]; _ } ->
+          NullCheck.negate (analyze e)
+      | Fun { kind = Logical And; parameters; _ } ->
+          NullCheck.And (List.map analyze parameters)
+      | Fun { kind = Logical Or; parameters; _ } ->
+          NullCheck.Or (List.map analyze parameters)
+      | Fun _ -> NullCheck.Unknown
+      | Case { case = _; branches; else_ } ->
+          (* CASE in WHERE: all THEN branches + ELSE must be analyzed *)
+          let then_checks = List.map (fun { Sql.then_; _ } -> analyze then_) branches in
+          let else_check = Option.map_default analyze NullCheck.Unknown else_ in
+          begin match else_ with
+          | None -> NullCheck.Unknown  (* No ELSE = can't guarantee all paths *)
+          | Some _ -> NullCheck.Or (then_checks @ [else_check])  (* One of them will be true *)
+          end
+      | Choices (_, choices) ->
+          (* User chooses one branch at runtime *)
+          let branch_checks = List.map (fun (_pid, e_opt) ->
+            Option.map_default analyze NullCheck.Unknown e_opt
+          ) choices in
+          NullCheck.Or branch_checks  (* One of them will be chosen *)
+      | InChoice (_, _, e) -> analyze e
+      | OptionActions { choice; _ } -> analyze choice
+      | SelectExpr _ | Value _ | Param _ | Inparam _
+      | InTupleList _ | Of_values _ -> NullCheck.Unknown
+    in
+
+    (* Extract columns guaranteed to be non-null from nullability AST *)
+    let rec extract = function
+      | NullCheck.IsNotNull col -> [col]
+      | NullCheck.IsNull _ -> []
+      | NullCheck.And checks ->
+          (* All columns that are IsNotNull in ANY branch of AND *)
+          List.concat_map extract checks
+      | NullCheck.Or checks ->
+          (* Only columns that are IsNotNull in ALL branches of OR *)
+          let all_lists = List.map extract checks in
+          let all_cols = List.concat all_lists in
+          List.filter (fun col ->
+            List.for_all (fun branch -> List.mem col branch) all_lists
+          ) (List.sort_uniq compare all_cols)
+      | NullCheck.Unknown -> []
+    in
+
+    expr |> analyze |> extract
+
 and eval_select env { columns; from; where; group; having; } =
   let (env,p2) = eval_nested env from in
   let env = { env with query_has_grouping = List.length group > 0 } in
-  let final_schema = infer_schema env columns in
+  (* Extract IS NOT NULL predicates from WHERE and HAVING *)
+  let not_null_keys_where = extract_not_null_column_keys env where in
+  let not_null_keys_having = extract_not_null_column_keys env having in
+  let not_null_keys = not_null_keys_where @ not_null_keys_having in
+  let final_schema = infer_schema ~not_null_keys env columns in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
   let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then
@@ -976,7 +1077,7 @@ and resolve_source env (x, alias) =
     s, p, tables
   | `Nested from ->
     let (env,p) = eval_nested env (Some from) in
-    let s = infer_schema env [All] in
+    let s = infer_schema ~not_null_keys:[] env [All] in
     if alias <> None then failwith "No alias allowed on nested tables";
     s, p, env.tables
   | `Table s ->

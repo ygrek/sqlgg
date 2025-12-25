@@ -517,7 +517,8 @@ expr:
         Dialect_feature.set_function_name f.tn;
         Fun { kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } 
       }
-    | e=expr IS NOT? NULL { poly (strict Bool) [e] }
+    | e=expr IS NOT NULL { Fun { kind = Comparison Is_not_null; parameters = [e]; is_over_clause = false } }
+    | e=expr IS NULL { Fun { kind = Comparison Is_null; parameters = [e]; is_over_clause = false } }
     | e1=expr IS NOT? distinct_from? e2=expr { Fun { kind = Comparison Not_distinct_op; parameters = [e1; e2]; is_over_clause = false } }
     | e=expr mnot(BETWEEN) a=expr AND b=expr { poly (depends Bool) [e;a;b] }
     | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun { kind = (F (Typ (strict Bool), [Typ (depends Any)])); parameters = [SelectExpr (select,`Exists)]; is_over_clause = false } }

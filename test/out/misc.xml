@@ -14,7 +14,7 @@
  <stmt name="select_2" sql="SELECT * FROM test WHERE x IS NOT NULL" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="x" type="Int" nullable="true"/>
+   <value name="x" type="Int"/>
    <value name="key" type="Text" nullable="true"/>
   </out>
  </stmt>
