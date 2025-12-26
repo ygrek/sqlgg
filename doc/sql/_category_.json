@@ -1,0 +1,9 @@
+{
+  "label": "SQL Reference",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "SQL language features supported by sqlgg"
+  }
+}
+

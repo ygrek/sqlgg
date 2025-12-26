@@ -1,0 +1,103 @@
+/**
+ * sqlgg documentation custom styles
+ */
+
+:root {
+  --ifm-color-primary: #6366f1;
+  --ifm-color-primary-dark: #4f46e5;
+  --ifm-color-primary-darker: #4338ca;
+  --ifm-color-primary-darkest: #3730a3;
+  --ifm-color-primary-light: #818cf8;
+  --ifm-color-primary-lighter: #a5b4fc;
+  --ifm-color-primary-lightest: #c7d2fe;
+  
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  
+  --docusaurus-highlighted-code-line-bg: rgba(99, 102, 241, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #818cf8;
+  --ifm-color-primary-dark: #6366f1;
+  --ifm-color-primary-darker: #4f46e5;
+  --ifm-color-primary-darkest: #4338ca;
+  --ifm-color-primary-light: #a5b4fc;
+  --ifm-color-primary-lighter: #c7d2fe;
+  --ifm-color-primary-lightest: #e0e7ff;
+  
+  --ifm-background-color: #0f0f23;
+  --ifm-background-surface-color: #1a1a2e;
+  --ifm-card-background-color: #1a1a2e;
+  
+  --docusaurus-highlighted-code-line-bg: rgba(129, 140, 248, 0.15);
+}
+
+/* Better code blocks */
+.prism-code {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Admonitions */
+.admonition {
+  border-radius: 8px;
+}
+
+/* Navbar */
+.navbar {
+  backdrop-filter: blur(8px);
+}
+
+[data-theme='dark'] .navbar {
+  background: rgba(15, 15, 35, 0.9);
+}
+
+/* Footer */
+.footer {
+  background: #0f0f23;
+}
+
+[data-theme='light'] .footer {
+  background: #1a1a2e;
+}
+
+/* Tables */
+table {
+  display: table;
+  width: 100%;
+}
+
+th, td {
+  padding: 0.75rem 1rem;
+}
+
+/* Sidebar */
+.menu__link {
+  font-weight: 500;
+}
+
+/* Better inline code */
+code {
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+}
+
+/* SQL syntax highlighting improvements */
+.token.keyword {
+  font-weight: 600;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better focus states */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}

@@ -1,0 +1,102 @@
+.heroBanner {
+  padding: 4rem 0;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+}
+
+[data-theme='light'] .heroBanner {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.heroBanner h1 {
+  color: #fff;
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.heroBanner p {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.5rem;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.buttons .button {
+  font-weight: 600;
+}
+
+.features {
+  padding: 4rem 0;
+}
+
+.codeRow {
+  display: flex;
+  align-items: stretch;
+}
+
+.codeRow > div {
+  display: flex;
+}
+
+.featureCard {
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--ifm-card-background-color);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.featureCard h3 {
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+.featureCard pre {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.featuresGrid {
+  margin-top: 3rem;
+}
+
+.feature {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.feature h3 {
+  font-size: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.feature p {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.6;
+}
+
+@media screen and (max-width: 996px) {
+  .heroBanner h1 {
+    font-size: 2.5rem;
+  }
+  
+  .heroBanner p {
+    font-size: 1.25rem;
+  }
+  
+  .buttons {
+    flex-direction: column;
+  }
+}
