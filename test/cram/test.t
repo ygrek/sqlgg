@@ -123,9 +123,9 @@ Test MySQL dialect with PostgreSQL collations (should fail 3 times, since there 
   >     locale TEXT COLLATE "C.UTF-8"
   > );
   > EOF
-  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C.UTF-8"
-  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "en-US-x-icu"
   Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C"
+  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "en-US-x-icu"
+  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C.UTF-8"
   Errors encountered, no code generated
   [1]
 

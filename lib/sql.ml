@@ -6,7 +6,8 @@ open Prelude
 
 type pos = (int * int) [@@deriving show]
 
-type 'a located = { value : 'a; pos : pos } [@@deriving show]
+type 'a located  = { value : 'a; pos : pos } [@@deriving show]
+type 'a collated = { collated: 'a; collation: string located option } [@@deriving show]
 
 module Type =
 struct
@@ -634,14 +635,14 @@ and case = {
 } [@@deriving show]
 and in_tuple_list = { exprs: expr list; param_id: param_id; kind: in_or_not_in; } [@@deriving show]
 and expr =
-  | Value of Type.t (** literal value *)
+  | Value of Type.t collated (** literal value *)
   | Param of param * Meta.t
   | Inparam of param * Meta.t
   | Choices of param_id * expr choices
   | InChoice of param_id * in_or_not_in * expr
   | Fun of fun_
   | SelectExpr of select_full * [ `AsValue | `Exists ]
-  | Column of col_name
+  | Column of col_name collated
   | InTupleList of in_tuple_list located
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
       to use it during the substitution and to not depend on the magic numbers there.

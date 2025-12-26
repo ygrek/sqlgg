@@ -243,7 +243,8 @@ let resolve_column_assignments ~env l =
         Sql.Type.nullable attr.attr.domain.t 
       else
         attr.attr.domain in
-    if !Config.debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
+    let typ = { collated = typ; collation = None; } in
+    if !Config.debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ.collated);
     (* add equality on param and column type *)
     let equality typ expr = Fun { kind = (Col_assign { ret_t = Var 0; col_t = Var 0; arg_t = Var 0 }); parameters = [Value typ; expr]; is_over_clause = false } in
     let with_default assign = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname else assign in
@@ -292,11 +293,11 @@ let extract_meta_from_col ~env expr =
     | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([Column a; (Inparam _) as b]); _ } as fn) -> 
-      Fun { fn with parameters = [Column a; set_param_meta ~env a b] }
+      Fun { fn with parameters = [Column a; set_param_meta ~env a.collated b] }
     | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
-      Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
+      Fun { fn with parameters = [set_param_meta ~env a.collated b; Column a;] }
     (* (col_name, ..., any_expr, col_name2) IN @param *)
     | InTupleList ({value = { exprs;_ } as in_tuple_list; _ } as in_tuple_list_loc) -> 
       InTupleList { in_tuple_list_loc with value = { in_tuple_list with exprs = List.map aux exprs } }
@@ -332,9 +333,9 @@ let rec resolve_columns env expr =
   let expr = extract_meta_from_col ~env expr in
   let rec each e =
     match e with
-    | Value x -> ResValue x
+    | Value x -> ResValue x.collated
     | Column col ->
-      let attr = (resolve_column ~env col).attr in
+      let attr = (resolve_column ~env col.collated).attr in
       let json_null_kind = Meta.find_opt attr.meta "json_null_kind" in
       let text_as_json = Meta.find_opt attr.meta "text_as_json" in
       let domain = match json_null_kind, text_as_json, attr.domain with
@@ -370,9 +371,9 @@ let rec resolve_columns env expr =
           in
           { Type.t = d.t; nullability; }
         | _, Some _, _ -> 
-          fail "Column %s has text_as_json meta, but its type is not Text" col.cname  
+          fail "Column %s has text_as_json meta, but its type is not Text" col.collated.cname  
         | Some _, _, _ -> 
-          fail "Column %s has json_null_kind meta, but its type is not Json or Text" col.cname
+          fail "Column %s has json_null_kind meta, but its type is not Json or Text" col.collated.cname
         | None, _, _ -> 
           attr.domain
       in
@@ -402,7 +403,7 @@ let rec resolve_columns env expr =
       ) exprs in
       let res_exprs = List.map2 (fun e re ->
         match e with
-        | Column col -> re, (resolve_column ~env col).attr.meta 
+        | Column col -> re, (resolve_column ~env col.collated).attr.meta 
         | _ -> re, Meta.empty ()
       ) exprs res_exprs in
       ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind; pos }
@@ -724,7 +725,7 @@ and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let rec propagate_meta ~env = function
     | Column col -> 
-      let result = resolve_column ~env col in 
+      let result = resolve_column ~env col.collated in 
       result.attr.meta
     (* aggregated columns, ie: max, min *)
     | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
@@ -747,7 +748,7 @@ and infer_schema env columns =
     | Expr (e,name) ->
       let col =
         match e with
-        | Column col -> resolve_column ~env col
+        | Column col -> resolve_column ~env col.collated
         | e -> { 
           attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
           sources = [] 
@@ -838,7 +839,7 @@ and params_of_order order final_schema env =
     order
 
 and ensure_res_expr = function
-  | Value x -> ResValue x
+  | Value x -> ResValue x.collated
   | Param (x, m) -> ResParam (x, m)
   | Inparam (x, m) -> ResInparam (x, m)
   | Case { case; branches; else_ }-> 
@@ -897,7 +898,7 @@ and eval_select env { columns; from; where; group; having; } =
             | Column _, Column _ -> [] (* Columns may refer to each other in foreign
                                           key constraints, so don't add any of them for now. 
                                           TODO: consider foreign key constraints *)
-            | Column c, _ | _, Column c -> [c]
+            | Column c, _ | _, Column c -> [c.collated]
             | _ -> []
             in
             aux (columns_in_eql_check @ acc) expr_list
@@ -1124,8 +1125,8 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
             and to rows proposed for insertion using the special excluded table.
             From our perspective, it is the same as accessing the table into which we write.
           *)
-         | col, RegularExpr (Column { cname ; tname = Some { tn = "excluded"; db }; }) -> 
-          col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
+         | col, RegularExpr (Column { collated = { cname ; tname = Some { tn = "excluded"; db }; }; collation }) -> 
+          col, RegularExpr(Column { collated = { cname; tname = Some { tn = tn'; db }; }; collation })
          | e -> e
         ) values in
         ss

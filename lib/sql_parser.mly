@@ -182,7 +182,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
            AS? routine_body
            routine_extra?
               {
-                Function.add (List.length params) (Ret (depends ret)) name.tn; (* FIXME store function namespace *)
+                Function.add (List.length params) (Ret (depends ret.collated)) name.tn; (* FIXME store function namespace *)
                 CreateRoutine (name, Some ret, params)
               }
          | CREATE or_replace? PROCEDURE name=table_name params=sequence(proc_parameter)
@@ -211,7 +211,7 @@ routine_extra: LANGUAGE IDENT { }
 %inline table_name: name=IDENT { Sql.make_table_name name }
                   | db=IDENT DOT name=IDENT { Sql.make_table_name ~db name }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
-index_column: name=IDENT index_prefix? collate? order_type? { name }
+index_column: name=IDENT index_prefix? c=collate? order_type? {{ collated = name; collation = c }}
 
 table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
                       { 
@@ -366,7 +366,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
             | LOCK EQUAL lock { `None }
-            | either(DEFAULT,pair(CONVERT,TO))? charset collate? { `None }
+            | either(DEFAULT,pair(CONVERT,TO))? charset c=collate? { `Default_or_convert_to c }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
@@ -473,10 +473,10 @@ expr:
     | MINUS e=expr %prec UNARY_MINUS { e }
     | INTERVAL e=expr interval_unit { Fun { kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
-    | a=attr_name collate? { Column a }
+    | a=attr_name c=collate? { Column { collated = a; collation = c; } }
     | VALUES LPAREN n=IDENT RPAREN { Of_values n }
     | v=literal_value | v=datetime_value { v }
-    | INTERVAL_UNIT { Value (strict Datetime) }
+    | INTERVAL_UNIT { Value { collated = (strict Datetime); collation = None; } }
     | e1=expr mnot(IN) l=sequence(expr) { poly (depends Bool) (e1::l) }
     | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly (depends Bool) [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
@@ -501,7 +501,7 @@ expr:
     | TIME LPAREN e=expr RPAREN { Fun { kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
     | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun { kind = Function.lookup f 1; parameters = [e]; is_over_clause = false } }
     | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun { kind = Function.lookup "extract" 1; parameters = [e]; is_over_clause = false } }
-    | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = fun_identity; parameters = [Column a]; is_over_clause = false } }
+    | DEFAULT LPAREN a=attr_name RPAREN { Fun { kind = fun_identity; parameters = [Column { collated = a; collation = None }]; is_over_clause = false } }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA f=cast_as RPAREN { f e }
     | GROUP_CONCAT LPAREN p=func_params order=loption(order) preceded(SEPARATOR, TEXT)? RPAREN
@@ -571,27 +571,24 @@ choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
 choice: parser_state_normal value=IDENT? e=choice_body? { let (c1,e,c2) = Option.default (0,None,0) e in ({ value; pos = (c1+1,c2) },e) }
 choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $1 }
 
-datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value (strict Datetime) }
-
-strict_value:
-    | TEXT { StringLiteral $1 }
-    | BLOB collate? { Blob }
-    | INTEGER { Int }
-    | TRUE
-    | FALSE { Bool }
-    | DATE TEXT
-    | TIME TEXT
-    | TIMESTAMP TEXT { Datetime }
+datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value { collated=(strict Datetime); collation=None; } }
 
 literal_value:
-    | strict_value { Value (strict $1) }
-    | FLOAT { Value (strict (FloatingLiteral $1)) }
-    | NULL { Value (nullable Any) } (* he he *)
+    | TEXT c=collate? { Value { collated=(strict (StringLiteral $1)); collation=c; } }
+    | BLOB c=collate? { Value { collated=(strict Blob); collation=c; } }
+    | INTEGER         { Value { collated=(strict Int);  collation=None; } }
+    | TRUE
+    | FALSE           { Value { collated=(strict Bool); collation=None; } }
+    | DATE TEXT
+    | TIME TEXT
+    | TIMESTAMP TEXT  { Value { collated=(strict Datetime); collation=None; } }
+    | FLOAT           { Value { collated=(strict (FloatingLiteral $1)); collation=None; } }
+    | NULL            { Value { collated=(nullable Any); collation=None; } } (* he he *)
 
 single_literal_value:
     | literal_value { $1 }
-    | MINUS INTEGER { Value (strict Int) }
-    | MINUS FLOAT { Value (strict (FloatingLiteral $2)) }
+    | MINUS INTEGER { Value { collated=(strict Int); collation=None; } }
+    | MINUS FLOAT   { Value { collated=(strict (FloatingLiteral $2)); collation=None; } }
 
 expr_list: l=commas(expr) { l }
 func_params: DISTINCT? l=expr_list { l }
@@ -626,7 +623,7 @@ interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
              | HOUR_MICROSECOND | HOUR_SECOND | HOUR_MINUTE
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
-             | YEAR_MONTH { Value (strict Datetime) }
+             | YEAR_MONTH { Value { collated = (strict Datetime); collation = None; } }
 
 int1:
   | T_INTEGER     { (Int, Int) }
@@ -645,7 +642,7 @@ expr_sql_type_flavor:
                       | None -> Decimal { precision = None; scale = None}
                   }
                  | binary { Blob }
-                 | NATIONAL? text VARYING? charset? collate? { Text }
+                 | NATIONAL? text VARYING? charset? { Text }
                  | T_FLOAT PRECISION? { Float }
                  | T_BOOLEAN { Bool }
                  | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
@@ -655,7 +652,7 @@ expr_sql_type_flavor:
 sql_type_flavor: 
   | t=int_type ZEROFILL? { t }
   | expr_sql_type_flavor { $1 }
-  | ENUM ctors=sequence(TEXT) charset? collate? { make_enum_kind ctors }
+  | ENUM ctors=sequence(TEXT) { make_enum_kind ctors }
 
 binary: T_BLOB | BINARY | BINARY VARYING { }
 text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
@@ -672,11 +669,11 @@ cast_as:
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
 charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
-collate: COLLATE c=IDENT { Dialect_feature.set_collation c ($startofs, $endofs) }
+collate: COLLATE c=IDENT { { value = c; pos = ($startofs, $endofs) } }
 
-sql_type: t=sql_type_flavor
-        | t=sql_type_flavor LPAREN INTEGER RPAREN UNSIGNED?
-        | t=sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
+sql_type: t=collated(sql_type_flavor)
+        | t=collated(sql_type_flavor) LPAREN INTEGER RPAREN UNSIGNED?
+        | t=collated(sql_type_flavor) LPAREN INTEGER COMMA INTEGER RPAREN
         { t }
 
 cast_sql_type: t=expr_sql_type_flavor
@@ -714,4 +711,6 @@ lock:
  | DEFAULT {}
  | SHARED {}
 
-located(X): X { { value = $1; pos = ($startofs, $endofs) } }
+%inline located(X): X { { value = $1; pos = ($startofs, $endofs) } }
+
+collated(X): X c=collate? {{ collated = $1; collation = c; }}
