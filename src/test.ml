@@ -19,7 +19,6 @@ let cmp_attr a1 a2 =
   Type.equal a1.domain a2.domain &&
   Constraints.equal a1.extra a2.extra &&
   Meta.equal a1.meta a2.meta
-  (* игнорируем поле pos *)
 
 let cmp_schema s1 s2 =
   try
