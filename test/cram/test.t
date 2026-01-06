@@ -2538,7 +2538,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
       let invoke_callback stmt =
         callback
           ~str:(T.get_column_Text_nullable stmt 0)
-          ~name:(T.get_column_Text_nullable stmt 1)
+          ~name:(T.get_column_Text stmt 1)
       in
       T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params invoke_callback
   
@@ -2547,7 +2547,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
         let invoke_callback stmt =
           callback
             ~str:(T.get_column_Text_nullable stmt 0)
-            ~name:(T.get_column_Text_nullable stmt 1)
+            ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
@@ -2560,7 +2560,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
         let invoke_callback stmt =
           callback
             ~str:(T.get_column_Text_nullable stmt 0)
-            ~name:(T.get_column_Text_nullable stmt 1)
+            ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
