@@ -44,10 +44,10 @@ type enum_ctor_value_data = { ctor_name: string; pos: pos; } [@@deriving show]
 (* expr with all name references resolved to values or "functions" *)
 type res_expr =
   | ResValue of Type.t (** literal value *)
-  | ResParam of param * Meta.t
+  | ResParam of Type.t param * Meta.t
   | ResSelect of Type.t * vars
   | ResInTupleList of { param_id: param_id; res_in_tuple_list: res_in_tuple_list; kind: in_or_not_in; pos: pos; }
-  | ResInparam of param * Meta.t
+  | ResInparam of Type.t param * Meta.t
   | ResChoices of param_id * res_expr choices
   | ResInChoice of param_id * in_or_not_in * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
@@ -57,7 +57,7 @@ type res_expr =
 
 and case_branch = { when_: res_expr; then_: res_expr; } [@@deriving show]
 
-and res_fun = { kind: func ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
+and res_fun = { kind: Type.t func [@printer pp_func] ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
   
 and res_in_tuple_list = 
   ResTyped of (Type.t * Meta.t) list | Res of (res_expr * Meta.t) list
@@ -208,8 +208,8 @@ let rec merge_meta_into_params ~shallow meta expr =
     let else_ = Option.map (merge_meta_into_params ~shallow meta) else_ in
     Case { case; branches; else_ }
   | InChoice (n, k, e), false -> InChoice (n, k, merge_meta_into_params ~shallow meta e)
-  | InTupleList ({ exprs; _ } as tl), false ->
-    InTupleList { tl with exprs = List.map (merge_meta_into_params ~shallow meta) exprs }
+  | InTupleList ({ value = { exprs; _ } as tl; _ } as tl_loc), false ->
+    InTupleList { tl_loc with value = { tl with exprs = List.map (merge_meta_into_params ~shallow meta) exprs } }
   | Choices (n, l), false ->
     Choices (n, List.map (fun (n, e) -> n, Option.map (merge_meta_into_params ~shallow meta) e) l)
   | (Value _ | Column _ | SelectExpr _ | Of_values _) as e, false -> e
@@ -243,9 +243,10 @@ let resolve_column_assignments ~env l =
         Sql.Type.nullable attr.attr.domain.t 
       else
         attr.attr.domain in
-    if !Config.debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ);
+    let typ = Sql.make_collated ~collated:typ () in
+    if !Config.debug then eprintfn "column assignment %s type %s" col.cname (Type.show typ.collated);
     (* add equality on param and column type *)
-    let equality typ expr = Fun { kind = (Col_assign { ret_t = Var 0; col_t = Var 0; arg_t = Var 0 }); parameters = [Value typ; expr]; is_over_clause = false } in
+    let equality typ expr = Fun { fn_name = "col_assign"; kind = (Col_assign { ret_t = Var 0; col_t = Var 0; arg_t = Var 0 }); parameters = [Value typ; expr]; is_over_clause = false } in
     let with_default assign = if not @@ Constraints.mem WithDefault attr.attr.extra then fail "Column %s doesn't have default value" col.cname else assign in
     match expr with
     | RegularExpr (Choices (n,l)) ->
@@ -278,7 +279,7 @@ let rec bool_choice_id = function
   | Param (p, _) -> Some p.id
   | Fun { parameters; _ } -> List.find_map bool_choice_id parameters
   | Choices (p, _)
-  | InTupleList { param_id = p; _ }
+  | InTupleList { value = { param_id = p; _ }; _ }
   | InChoice(p, _, _) -> Some p
   | Case { case; branches; else_ } ->
     List.find_map bool_choice_id 
@@ -292,14 +293,14 @@ let extract_meta_from_col ~env expr =
     | Sql.Fun ({ parameters = ([Column a; b]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([Column a; (Inparam _) as b]); _ } as fn) -> 
-      Fun { fn with parameters = [Column a; set_param_meta ~env a b] }
+      Fun { fn with parameters = [Column a; set_param_meta ~env a.collated b] }
     | Sql.Fun ({ parameters = ([b; Column a]); kind = Comparison _; _ } as fn)
     (* col_name IN @param *)
     | Fun ({ parameters = ([(Inparam _) as b; Column a;]); _ } as fn) -> 
-      Fun { fn with parameters = [set_param_meta ~env a b; Column a;] }
+      Fun { fn with parameters = [set_param_meta ~env a.collated b; Column a;] }
     (* (col_name, ..., any_expr, col_name2) IN @param *)
-    | InTupleList ({ exprs;_ } as in_tuple_list) -> 
-      InTupleList { in_tuple_list with exprs = List.map aux exprs }
+    | InTupleList ({value = { exprs;_ } as in_tuple_list; _ } as in_tuple_list_loc) -> 
+      InTupleList { in_tuple_list_loc with value = { in_tuple_list with exprs = List.map aux exprs } }
     | Fun ({ parameters; _ } as fn) -> 
       Fun { fn with parameters = List.map aux parameters }
     | Case { case; branches; else_ } ->
@@ -318,8 +319,7 @@ let extract_meta_from_col ~env expr =
     | (Value _ | Param _ | Inparam _
       | SelectExpr (_, _) | Column _  | Of_values _) as e -> e
   in
-  aux expr
-    
+  aux expr    
 
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
@@ -332,9 +332,9 @@ let rec resolve_columns env expr =
   let expr = extract_meta_from_col ~env expr in
   let rec each e =
     match e with
-    | Value x -> ResValue x
+    | Value x -> ResValue x.collated
     | Column col ->
-      let attr = (resolve_column ~env col).attr in
+      let attr = (resolve_column ~env col.collated).attr in
       let json_null_kind = Meta.find_opt attr.meta "json_null_kind" in
       let text_as_json = Meta.find_opt attr.meta "text_as_json" in
       let domain = match json_null_kind, text_as_json, attr.domain with
@@ -370,9 +370,9 @@ let rec resolve_columns env expr =
           in
           { Type.t = d.t; nullability; }
         | _, Some _, _ -> 
-          fail "Column %s has text_as_json meta, but its type is not Text" col.cname  
+          fail "Column %s has text_as_json meta, but its type is not Text" col.collated.cname  
         | Some _, _, _ -> 
-          fail "Column %s has json_null_kind meta, but its type is not Json or Text" col.cname
+          fail "Column %s has json_null_kind meta, but its type is not Json or Text" col.collated.cname
         | None, _, _ -> 
           attr.domain
       in
@@ -384,8 +384,8 @@ let rec resolve_columns env expr =
         fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
       in
       ResOptionActions { res_choice = each choice; choice_id; pos; kind }
-    | Param (x, m) -> ResParam (x, m)
-    | InTupleList { exprs; param_id; kind; pos } -> 
+    | Param (x, m) -> ResParam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
+    | InTupleList ({ value = { exprs; param_id; kind_in_tuple_list; }; pos } ) -> 
       let res_exprs = List.map (fun expr ->
         let res_expr = each expr in
         match res_expr with 
@@ -402,15 +402,15 @@ let rec resolve_columns env expr =
       ) exprs in
       let res_exprs = List.map2 (fun e re ->
         match e with
-        | Column col -> re, (resolve_column ~env col).attr.meta 
+        | Column col -> re, (resolve_column ~env col.collated).attr.meta 
         | _ -> re, Meta.empty ()
       ) exprs res_exprs in
-      ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind; pos }
-    | Inparam (x, m) -> ResInparam (x, m)
+      ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind = kind_in_tuple_list; pos }
+    | Inparam (x, m) -> ResInparam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
     | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
-    | Fun { kind; parameters; is_over_clause } ->
-      ResFun { kind; parameters = List.map each parameters; is_over_clause }  
+    | Fun { kind; parameters; is_over_clause; _ } ->
+      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map each parameters; is_over_clause }  
     | Case { case; branches; else_ } ->
       let case = Option.map each case in
       let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each when_; then_ = each then_ }) branches in
@@ -431,7 +431,7 @@ let rec resolve_columns env expr =
         let rec with_count = function 
             | Case { case = _; branches; else_ } ->
               let then_exprs = List.map (fun b -> b.Sql.then_) branches in
-              let all_results_exprs = then_exprs @ (option_list else_) in 
+              let all_results_exprs = then_exprs @ (option_list else_) in
               List.find_map with_count all_results_exprs
             | Fun { kind = Agg Count; is_over_clause = false; _ }
             | SelectExpr (_, _) -> Some domain
@@ -466,10 +466,9 @@ and assign_types env expr =
   let { set_tyvar_strict; _ } = env in
   let option_split = function None -> None, None | Some (x,y) -> Some x, Some y in
   let assign_params inferred x =
-    let open Type in
     match x with
-    | ResParam ({ id; typ; }, m) when is_any typ -> ResParam (new_param id inferred, m)
-    | ResInparam ({ id; typ; }, m) when is_any typ -> ResInparam (new_param id inferred, m)
+    | ResParam ({ id; typ; }, m) when Type.is_any typ -> ResParam (make_param ~id ~typ:inferred, m)
+    | ResInparam ({ id; typ; }, m) when Type.is_any typ -> ResInparam (make_param ~id ~typ:inferred, m)
     | x -> x
   in
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
@@ -653,7 +652,7 @@ and assign_types env expr =
           let args, ret = convert_args ret args in
           let nullable = common_nullability args in
           undepend ret nullable, args
-        | Ret t, _ when is_any t -> (* lame *)
+        | Ret t, _ when Type.is_any t -> (* lame *)
           begin match common_supertype types with
           | Some t -> t, List.map (fun _ -> t) types
           | None -> { t = Any; nullability = common_nullability types }, types
@@ -726,8 +725,8 @@ and resolve_types env expr =
 and infer_schema ~not_null_keys env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let rec propagate_meta ~env = function
-    | Column col ->
-      let result = resolve_column ~env col in
+    | Column col -> 
+      let result = resolve_column ~env col.collated in 
       result.attr.meta
     (* aggregated columns, ie: max, min *)
     | Fun { kind = Agg Self; parameters = [e]; _ } -> propagate_meta ~env e
@@ -759,8 +758,8 @@ and infer_schema ~not_null_keys env columns =
     | Expr (e,name) ->
       let col =
         match e with
-        | Column col -> resolve_column ~env col
-        | e -> {
+        | Column col -> resolve_column ~env col.collated
+        | e -> { 
           attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
           sources = []
         }
@@ -824,7 +823,7 @@ and get_params_of_res_expr env (e:res_expr) =
     | ResParam (p, m) -> Single (p, m) ::acc
     | ResOptionActions{ choice_id; res_choice; pos; kind} -> 
       OptionActionChoice (choice_id, get_params_of_res_expr env res_choice, pos, kind) :: acc
-    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in (types, kind, pos)) :: acc
+    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } -> TupleList (param_id, Where_in { value = (types, kind); pos }) :: acc
     | ResInparam (p, m) -> SingleIn (p, m)::acc
     | ResFun { parameters; kind; _ } -> 
       let p1 = match kind with
@@ -852,9 +851,9 @@ and params_of_order order final_schema env =
     order
 
 and ensure_res_expr = function
-  | Value x -> ResValue x
-  | Param (x, m) -> ResParam (x, m)
-  | Inparam (x, m) -> ResInparam (x, m)
+  | Value x -> ResValue x.collated
+  | Param (x, m) -> ResParam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
+  | Inparam (x, m) -> ResInparam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
   | Case { case; branches; else_ }-> 
     let res_case = Option.map ensure_res_expr case in
     let res_branches = List.map (fun { Sql.when_; then_ } -> 
@@ -862,13 +861,13 @@ and ensure_res_expr = function
     ) branches in
     let res_else = Option.map ensure_res_expr else_ in
     ResCase { case = res_case; branches = res_branches; else_ = res_else }
-  | InTupleList { param_id; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
+  | InTupleList { value = { param_id; _ }; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
   | Column _ | Of_values _ -> failwith "Not a simple expression"
   | Fun { kind; _ } when Sql.is_grouping kind -> failwith "Grouping function not allowed in simple expression"
-  | Fun { kind; parameters; is_over_clause } ->
-     ResFun { kind; parameters = List.map ensure_res_expr parameters; is_over_clause } (* FIXME *)
+  | Fun { kind; parameters; is_over_clause; _ } ->
+     ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map ensure_res_expr parameters; is_over_clause } (* FIXME *)
   | SelectExpr _ -> failwith "not implemented : ensure_res_expr for SELECT"
   | OptionActions _ -> failwith  "BoolChoice is used in WHERE expr only"
 
@@ -878,7 +877,7 @@ and eval_nested env nested =
   let env = { env with schema = [] } in
   (* FIXME resolved table schema depends on join (nullability with left), this is resolving too early *)
   match nested with
-  | Some (t,l) -> join env (resolve_source env t, List.map (fun (x,jt,jc) -> resolve_source env x, jt, jc) l)
+  | Some (t,l) -> join env (resolve_source env t, List.map (fun loc -> let (x,jt,jc) = loc.value in resolve_source env x, jt.value, jc) l)
   | None -> env, []
 
 (** Extract (sources, name) pairs for columns with IS NOT NULL in WHERE/HAVING
@@ -913,10 +912,10 @@ and extract_not_null_column_keys env = function
     let rec analyze = function
       | Column _ -> NullCheck.Unknown
       | Fun { kind = Comparison Is_not_null; parameters = [Column col]; _ } ->
-          let resolved = resolve_column ~env col in
+          let resolved = resolve_column ~env col.collated in
           NullCheck.IsNotNull (resolved.sources, resolved.attr.name)
       | Fun { kind = Comparison Is_null; parameters = [Column col]; _ } ->
-          let resolved = resolve_column ~env col in
+          let resolved = resolve_column ~env col.collated in
           NullCheck.IsNull (resolved.sources, resolved.attr.name)
       | Fun { kind = Negation; parameters = [e]; _ } ->
           NullCheck.negate (analyze e)
@@ -998,7 +997,7 @@ and eval_select env { columns; from; where; group; having; } =
             | Column _, Column _ -> [] (* Columns may refer to each other in foreign
                                           key constraints, so don't add any of them for now. 
                                           TODO: consider foreign key constraints *)
-            | Column c, _ | _, Column c -> [c]
+            | Column c, _ | _, Column c -> [c.collated]
             | _ -> []
             in
             aux (columns_in_eql_check @ acc) expr_list
@@ -1099,11 +1098,12 @@ and resolve_source env (x, alias) =
       | RowExprList (exprs :: xs) ->
         let unions = List.map (fun exprs -> `Union, dummy_select exprs ) xs in
         let select = dummy_select exprs in
-        let select_complete = { select = select, unions; order=row_order; limit=row_limit; } in
+        let select_complete = { select = select, unions; order=row_order; limit=row_limit; select_row_locking = None } in
         eval_select_full env { select_complete; cte = None }
       | RowParam { id; types; values_start_pos } ->
-        List.map (fun t -> { attr = make_attribute' "" t; Schema.Source.Attr.sources = []}) 
-          types, [ TupleList (id, ValueRows { types; values_start_pos }) ], Stmt.Select `Nat
+        List.map (fun t -> { attr = make_attribute' "" (Source_type.to_infer_type t); Schema.Source.Attr.sources = []}) 
+          types, [ TupleList (id, ValueRows { types = 
+            List.map Source_type.to_infer_type types ; values_start_pos }) ], Stmt.Select `Nat
     in
     let s, tables = resolve_schema_with_alias s in
     s, p, tables
@@ -1146,7 +1146,7 @@ and eval_cte { cte_items; is_recursive } =
           let s1, p1, env, cardinality = eval_select env (fst stmt.select) in
           eval_compound ~env:{ env with tables = env.tables } (p1, s1, cardinality, stmt)
         | CteSharedQuery shared_query_name ->
-          let (_, stmt) = Shared_queries.get shared_query_name.ref_name in
+          let (_, stmt) = Shared_queries.get shared_query_name.value in
           let s1, p1, kind = eval_select_full env stmt in
           s1, [SharedVarsGroup (p1, shared_query_name)], kind
       )
@@ -1164,7 +1164,8 @@ and eval_compound ~env result =
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
   let final_schema = List.fold_left Schema.compound s1 s2l in
   let p3 = params_of_order order final_schema env in
-  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> Single (p, Meta.empty())) p, x | None -> [],false in
+  let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> 
+    Single (make_param ~id:p.id ~typ:(Source_type.to_infer_type p.typ), Meta.empty())) p, x | None -> [],false in
   (* Schema.check_unique schema; *)
   let cardinality =
     if limit1 && cardinality = `Nat then `Zero_one
@@ -1190,7 +1191,7 @@ let annotate_select select attrs =
       | Expr (e,name) :: cols, a :: attrs ->
         let e = merge_meta_into_params ~shallow:false a.meta e in
         let t = a.domain in
-        loop (Expr (Fun { kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
+        loop (Expr (Fun { fn_name = "insert_select"; kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
       | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
     in
     loop [] cols attrs
@@ -1200,7 +1201,7 @@ let annotate_select select attrs =
   { select with select = (select1', compound') }
 
 let resolve_on_conflict_clause ~env tn' = Option.map_default (function
-  | On_conflict (action, attrs) -> 
+  | {value = On_conflict { action; attrs; }; _ } -> 
     let names = List.map (fun attr -> attr.cname) attrs in
     let composite_primary_key = Constraint.make_composite_primary names in
     let composite_unique = Constraint.make_composite_unique names in
@@ -1225,13 +1226,13 @@ let resolve_on_conflict_clause ~env tn' = Option.map_default (function
             and to rows proposed for insertion using the special excluded table.
             From our perspective, it is the same as accessing the table into which we write.
           *)
-         | col, RegularExpr (Column { cname ; tname = Some { tn = "excluded"; db }; }) -> 
-          col, RegularExpr(Column { cname; tname = Some { tn = tn'; db }; })
+         | col, RegularExpr (Column { collated = { cname ; tname = Some { tn = "excluded"; db }; }; collation }) -> 
+          col, RegularExpr(Column { collated = { cname; tname = Some { tn = tn'; db }; }; collation })
          | e -> e
         ) values in
         ss
     end
-  | On_duplicate values -> values
+  | { value = On_duplicate { assignments; }; _ } -> assignments
 ) []
 
 let with_constraints attrs constraints : Schema.t =
@@ -1288,22 +1289,24 @@ let rec eval (stmt:Sql.stmt) =
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name,`Schema (schema, constraints)) ->
+  | Create (name, Schema { schema; constraints; _ }) ->
+      let schema = List.map Alter_action_attr.to_attr schema in
       let schema = with_constraints schema constraints in
       Tables.add (name, schema);
       ([],[],Create name)
-  | Create (name,`Select select) ->
+  | Create (name, Select { value=select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
       Tables.add (name, from_schema schema);
       ([],params,Create name)
   | Alter (name,actions) ->
       List.iter (function
-      | `Add (col,pos) -> Tables.alter_add name col pos
+      | `Add (col,pos) -> Tables.alter_add name (Alter_action_attr.to_attr col) pos
       | `Drop col -> Tables.alter_drop name col
-      | `Change (oldcol,col,pos) -> Tables.alter_change name oldcol col pos
+      | `Change (oldcol,col,pos) -> Tables.alter_change name oldcol (Alter_action_attr.to_attr col) pos
       | `RenameColumn (oldcol,newcol) -> Tables.rename_column name oldcol newcol
       | `RenameTable new_name -> Tables.rename name new_name
       | `RenameIndex _ -> () (* indices are not tracked yet *)
+      | `Default_or_convert_to _
       | `None -> ()) actions;
       ([],[],Alter [name])
   | Rename l ->
@@ -1313,9 +1316,10 @@ let rec eval (stmt:Sql.stmt) =
       Tables.drop name;
       ([],[],Drop name)
   | CreateIndex (name,table,cols) ->
+      let cols = List.map (fun x -> x.collated) cols in
       Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
       [],[],CreateIndex name
-  | Insert { target=table; action=`Values (names, values); on_conflict_clause; } ->
+  | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
@@ -1379,7 +1383,7 @@ let rec eval (stmt:Sql.stmt) =
       let params2 = params_of_assigns { env with is_update = true; } conflict_assigns in
       [], p1 @ params2, Insert (None, table)
     end
-  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; } ->
+  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; _ } ->
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; } in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
@@ -1388,7 +1392,7 @@ let rec eval (stmt:Sql.stmt) =
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     let params = [ TupleList (param_id, Insertion expect) ] in
     [], params @ params2, Insert (None, table)
-  | Insert { target=table; action=`Select (names, select); on_conflict_clause; } ->
+  | Insert { target=table; action=`Select (names, select); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
@@ -1403,7 +1407,7 @@ let rec eval (stmt:Sql.stmt) =
     List.iter2 (fun a1 a2 -> Hashtbl.add env.insert_resolved_types a2.name a1.attr.domain ) schema expect;
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     [], params @ params2, Insert (None,table)
-  | Insert { target=table; action=`Set ss; on_conflict_clause; } ->
+  | Insert { target=table; action=`Set ss; on_conflict_clause; _ } ->
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
     } in
@@ -1424,7 +1428,7 @@ let rec eval (stmt:Sql.stmt) =
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
     let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
-    let select_complete = { select; order = []; limit = None} in
+    let select_complete = { select; order = []; limit = None; select_row_locking = None } in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets
   | Set (vars, stmt) ->
@@ -1445,6 +1449,7 @@ let rec eval (stmt:Sql.stmt) =
     let params = update_tables ~env [r,[],[(f, s)]] ss w in
     let env = { env with schema = update_schema_with_aliases [] r; is_update = true } in
     let p3 = params_of_order o [] { env with tables = [(f, s)] } in
+    let lim = List.map (fun p -> make_param ~id:p.id ~typ:(Source_type.to_infer_type p.typ)) lim in
     [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update (Some table)
   | UpdateMulti (tables,ss,w,o,lim) ->
     let env = { empty_env with is_update = true } in
@@ -1452,6 +1457,7 @@ let rec eval (stmt:Sql.stmt) =
     let tables = List.map (fun (_,_,table_list) -> table_list) sources |> List.flatten in
     let params = update_tables ~env sources ss w in
     let p3 = params_of_order o [] { env with schema = Schema.cross_all @@ List.map (fun (s,_,_) -> s) sources; tables } in
+    let lim = List.map (fun p -> make_param ~id:p.id ~typ:(Source_type.to_infer_type p.typ)) lim in
     [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update None
   | Select select -> 
     let (schema, a, b) = eval_select_full empty_env select in
@@ -1465,7 +1471,7 @@ let unify_params l =
   let h = Hashtbl.create 10 in
   let h_choices = Hashtbl.create 10 in
   let check_choice_name ~sharing_disabled p =
-    match p.label with
+    match p.value with
     | None -> () (* unique *)
     | Some n when sharing_disabled && Hashtbl.mem h_choices n -> failed ~at:p.pos "sharing choices not implemented"
     | Some n -> Hashtbl.add h_choices n ()
@@ -1485,7 +1491,7 @@ let unify_params l =
   in
   let rec traverse = function
   | Single ({ id; typ; }, _)
-  | SingleIn ({ id; typ; _ }, _) -> remember id.label typ
+  | SingleIn ({ id; typ; _ }, _) -> remember id.value typ
   | SharedVarsGroup (vars, _)
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionActionChoice (_, l, _, _) -> List.iter traverse l
@@ -1494,11 +1500,11 @@ let unify_params l =
   in
   let rec map = function
   | Single ({ id; typ; }, m) ->
-    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    Single (new_param id (Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
+    let typ = match id.value with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    Single (make_param ~id ~typ:(Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
   | SingleIn ({ id; typ; }, m) ->
-    let typ = match id.label with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
-    SingleIn (new_param id (Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
+    let typ = match id.value with None -> typ | Some name -> try Hashtbl.find h name with _ -> assert false in
+    SingleIn (make_param ~id ~typ:(Type.undepend typ Strict), m) (* if no other clues - input parameters are strict *)
   | ChoiceIn t -> ChoiceIn { t with vars = List.map map t.vars }
   | SharedVarsGroup (vars, pos) -> SharedVarsGroup (List.map map vars, pos)
   | OptionActionChoice (p, l, pos, kind) -> OptionActionChoice (p, (List.map map l), pos, kind)
@@ -1552,7 +1558,7 @@ let complete_sql kind sql =
       let pos_end = pos_start + String.length attr_ref in
       (* autoincrement is special - nullable on insert, strict otherwise *)
       let typ = if Constraints.mem Autoincrement attr.extra then Sql.Type.nullable attr.domain.t else attr.domain in
-      let param = Single (new_param {label=Some attr_name; pos=(pos_start,pos_end)} typ, Meta.empty()) in
+      let param = Single (make_param ~id:{value=Some attr_name; pos=(pos_start,pos_end)} ~typ, Meta.empty()) in
       B.add_string b attr_ref_prefix;
       B.add_string b attr_ref;
       tuck params param;
