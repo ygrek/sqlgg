@@ -2522,6 +2522,53 @@ Test IS NOT NULL type refinement:
     end (* module List *)
   end (* module Sqlgg *)
 
+Test IS NOT NULL type refinement with explicit NULL column:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE test (id INT, str TEXT, name TEXT NULL);
+  > SELECT str, name FROM test WHERE name IS NOT NULL;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_test db  =
+      T.execute db ("CREATE TABLE test (id INT, str TEXT, name TEXT NULL)") T.no_params
+  
+    let select_1 db  callback =
+      let invoke_callback stmt =
+        callback
+          ~str:(T.get_column_Text_nullable stmt 0)
+          ~name:(T.get_column_Text stmt 1)
+      in
+      T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params invoke_callback
+  
+    module Fold = struct
+      let select_1 db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~str:(T.get_column_Text_nullable stmt 0)
+            ~name:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_1 db  callback =
+        let invoke_callback stmt =
+          callback
+            ~str:(T.get_column_Text_nullable stmt 0)
+            ~name:(T.get_column_Text stmt 1)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT str, name FROM test WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
 Test IS NOT NULL type refinement with IS NULL:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE test (id INT, str TEXT, name TEXT);
