@@ -1,0 +1,9 @@
+{
+  "label": "OCaml",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "OCaml-specific features and examples"
+  }
+}
+

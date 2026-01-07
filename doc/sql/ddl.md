@@ -1,8 +1,10 @@
-# DDL - Data Definition Language
-
-[← Back to Main](./index.md) | [Next: DML →](./dml-dql.md)
-
 ---
+sidebar_position: 1
+title: DDL - Data Definition Language
+description: Schema definition and type inference in sqlgg
+---
+
+# DDL - Data Definition Language
 
 ## Overview
 
@@ -29,11 +31,13 @@ CREATE TABLE table_name (
 );
 ```
 
-**Important:** sqlgg processes DDL statements sequentially. Tables must be declared in dependency order - referenced tables (like `users`) must appear before tables that reference them (like `posts` with foreign keys to `users`):
+:::warning Important
+sqlgg processes DDL statements sequentially. Tables must be declared in dependency order - referenced tables (like `users`) must appear before tables that reference them (like `posts` with foreign keys to `users`):
 
 1. Independent tables first (users, categories)
 2. Dependent tables second (posts, comments)
 3. Junction tables last (post_tags, user_roles)
+:::
 
 This applies whether you use separate files:
 ```bash
@@ -47,18 +51,17 @@ sqlgg single.sql
 
 ### Function Naming
 
-You can explicitly name the generated function using the `-- @create_table_name` comment annotation. For more details on function annotations, see [Function Annotations](./annotations.md).
+You can explicitly name the generated function using the `-- @create_table_name` comment annotation.
 
 Alternatively, you can omit the annotation and sqlgg will auto-generate a function name based on the SQL statement.
 
 ## Data Types and Constraints
 
-The data types and constraints you specify in DDL statements are used by sqlgg for **type inference** in your DML/DQL queries. Column types (INTEGER, TEXT, REAL, BLOB, BOOLEAN, DATETIME, DECIMAL) and constraints directly determine parameter and return types in generated functions.
+The data types and constraints you specify in DDL statements are used by sqlgg for **type inference** in your DML/DQL queries. Column types and constraints directly determine parameter and return types in generated functions.
 
 ### Nullability
 
-sqlgg automatically determines nullability based on column constraints
-(nullability inference for joins and subqueries is covered in DML/DQL sections)::
+sqlgg automatically determines nullability based on column constraints (nullability inference for joins and subqueries is covered in DML/DQL sections):
 
 ```sql
 -- @create_users_with_nullability
@@ -70,12 +73,11 @@ CREATE TABLE users (
 );
 ```
 
-**Nullability rules:**
-- `PRIMARY KEY` or `NOT NULL` constraint → **Strict** (never null)
-- `NULL` constraint or no constraint → **Nullable** (can be null)
-- Cannot have both `NULL` and `NOT NULL` on same column
+sqlgg infers nullability from `PRIMARY KEY` and `NOT NULL` (strict) vs `NULL` or no constraint (nullable). Other constraints (UNIQUE, CHECK, FOREIGN KEY, DEFAULT, AUTOINCREMENT) are parsed but don't affect generated types.
 
-Other SQL constraints (UNIQUE, CHECK, FOREIGN KEY, DEFAULT, AUTOINCREMENT) are recognized syntactically but don't affect the generated types.
+## Metadata
+
+Metadata (`-- [sqlgg] key=value`) can be attached to columns and propagates through DDL/DML/DQL. See [Metadata](./metadata.md) for details.
 
 ## Migration Strategy Recommendations
 
@@ -105,6 +107,3 @@ CREATE TABLE IF NOT EXISTS posts (
 ### Schema Evolution
 Additional migrations can be added manually while maintaining type safety through the established schema. The DDL serves as the "source of truth" for type inference, ensuring your generated code stays synchronized with database changes.
 
----
-
-[← Back to Main](./index.md) | [Next: DML →](./dml-dql.md)
