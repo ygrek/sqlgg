@@ -2694,6 +2694,739 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
       T.execute db ("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " " ^ "?" ^ " " | `Default -> " 'pending' ")) set_params
   
   end (* module Sqlgg *)
+Test DynamicSelect with dynamic_select flag:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @select_ids2
+  > SELECT id, balance, @x { A { @t + 1 } | B { (SELECT 6 + @seven LIMIT 1) } } FROM accounts WHERE id > @t;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Select_ids2_x = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let a t =
+        let _set_a p =
+          T.set_param_Int p t;
+          ()
+        in
+        (`A, {
+          set = _set_a;
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = (" " ^ "?" ^ " + 1 ");
+          count = 1;
+        })
+      let b seven =
+        let _set_b p =
+          T.set_param_Int p seven;
+          ()
+        in
+        (`B, {
+          set = _set_b;
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" (SELECT 6 + " ^ "?" ^ " LIMIT 1) ");
+          count = 1;
+        })
+    end
+  
+  
+    let create_accounts db  =
+      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+  
+    let select_ids2 db ~x ~t callback =
+      let (_, __x_data) = x in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + __x_data.Select_ids2_x.count) in
+        __x_data.Select_ids2_x.set p;
+        T.set_param_Int p t;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT id, balance" ^ (match __x_data.Select_ids2_x.column with "" -> "" | c -> ", " ^ c) ^ " FROM accounts WHERE id > ?")
+      set_params (fun row -> let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Select_ids2_x.read row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x)
+  
+    module Fold = struct
+      let select_ids2 db ~x ~t callback acc =
+        let (_, __x_data) = x in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + __x_data.Select_ids2_x.count) in
+          __x_data.Select_ids2_x.set p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT id, balance" ^ (match __x_data.Select_ids2_x.column with "" -> "" | c -> ", " ^ c) ^ " FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Select_ids2_x.read row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_ids2 db ~x ~t callback =
+        let (_, __x_data) = x in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + __x_data.Select_ids2_x.count) in
+          __x_data.Select_ids2_x.set p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT id, balance" ^ (match __x_data.Select_ids2_x.column with "" -> "" | c -> ", " ^ c) ^ " FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Select_ids2_x.read row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect with two dynamic columns:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @multi_dynamic
+  > SELECT id, @x { A { name } | B { 'default' } }, price, @y { C { price * 2 } | D { @factor :: Text } } FROM items;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Multi_dynamic_x = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let a =
+        (`A, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name ");
+          count = 0;
+        })
+      let b =
+        (`B, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = (" 'default' ");
+          count = 0;
+        })
+    end
+  
+    module Multi_dynamic_y = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let c =
+        (`C, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price * 2 ");
+          count = 0;
+        })
+      let d factor =
+        let _set_d p =
+          T.set_param_Text p factor;
+          ()
+        in
+        (`D, {
+          set = _set_d;
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = (" " ^ "?" ^ " ");
+          count = 1;
+        })
+    end
+  
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let multi_dynamic db ~x ~y callback =
+      let (_, __x_data) = x in
+      let (_, __y_data) = y in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + __x_data.Multi_dynamic_x.count + __y_data.Multi_dynamic_y.count) in
+        __x_data.Multi_dynamic_x.set p;
+        __y_data.Multi_dynamic_y.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT id" ^ (match __x_data.Multi_dynamic_x.column with "" -> "" | c -> ", " ^ c) ^ ", price" ^ (match __y_data.Multi_dynamic_y.column with "" -> "" | c -> ", " ^ c) ^ " FROM items")
+      set_params (fun row -> let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Multi_dynamic_x.read row 1 in let (__sqlgg_r_y, __sqlgg_idx_after_y) = __y_data.Multi_dynamic_y.read row (__sqlgg_idx_after_x + 1) in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~x:__sqlgg_r_x
+            ~price:(T.get_column_Decimal_nullable row __sqlgg_idx_after_x)
+            ~y:__sqlgg_r_y)
+  
+    module Fold = struct
+      let multi_dynamic db ~x ~y callback acc =
+        let (_, __x_data) = x in
+        let (_, __y_data) = y in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __x_data.Multi_dynamic_x.count + __y_data.Multi_dynamic_y.count) in
+          __x_data.Multi_dynamic_x.set p;
+          __y_data.Multi_dynamic_y.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT id" ^ (match __x_data.Multi_dynamic_x.column with "" -> "" | c -> ", " ^ c) ^ ", price" ^ (match __y_data.Multi_dynamic_y.column with "" -> "" | c -> ", " ^ c) ^ " FROM items")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Multi_dynamic_x.read row 1 in let (__sqlgg_r_y, __sqlgg_idx_after_y) = __y_data.Multi_dynamic_y.read row (__sqlgg_idx_after_x + 1) in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~x:__sqlgg_r_x
+            ~price:(T.get_column_Decimal_nullable row __sqlgg_idx_after_x)
+            ~y:__sqlgg_r_y !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let multi_dynamic db ~x ~y callback =
+        let (_, __x_data) = x in
+        let (_, __y_data) = y in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __x_data.Multi_dynamic_x.count + __y_data.Multi_dynamic_y.count) in
+          __x_data.Multi_dynamic_x.set p;
+          __y_data.Multi_dynamic_y.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT id" ^ (match __x_data.Multi_dynamic_x.column with "" -> "" | c -> ", " ^ c) ^ ", price" ^ (match __y_data.Multi_dynamic_y.column with "" -> "" | c -> ", " ^ c) ^ " FROM items")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.Multi_dynamic_x.read row 1 in let (__sqlgg_r_y, __sqlgg_idx_after_y) = __y_data.Multi_dynamic_y.read row (__sqlgg_idx_after_x + 1) in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~x:__sqlgg_r_x
+            ~price:(T.get_column_Decimal_nullable row __sqlgg_idx_after_x)
+            ~y:__sqlgg_r_y) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect with Verbatim branches:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, status TEXT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_verbatim
+  > SELECT id, @col { active { 'active' } | inactive { 'inactive' } | custom { status } } FROM users;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module With_verbatim_col = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let active =
+        (`Active, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = (" 'active' ");
+          count = 0;
+        })
+      let inactive =
+        (`Inactive, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = (" 'inactive' ");
+          count = 0;
+        })
+      let custom =
+        (`Custom, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" status ");
+          count = 0;
+        })
+    end
+  
+  
+    let create_users db  =
+      T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
+  
+    let with_verbatim db ~col callback =
+      let (_, __col_data) = col in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + __col_data.With_verbatim_col.count) in
+        __col_data.With_verbatim_col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT id" ^ (match __col_data.With_verbatim_col.column with "" -> "" | c -> ", " ^ c) ^ " FROM users")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.With_verbatim_col.read row 1 in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~col:__sqlgg_r_col)
+  
+    module Fold = struct
+      let with_verbatim db ~col callback acc =
+        let (_, __col_data) = col in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __col_data.With_verbatim_col.count) in
+          __col_data.With_verbatim_col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT id" ^ (match __col_data.With_verbatim_col.column with "" -> "" | c -> ", " ^ c) ^ " FROM users")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.With_verbatim_col.read row 1 in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~col:__sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let with_verbatim db ~col callback =
+        let (_, __col_data) = col in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __col_data.With_verbatim_col.count) in
+          __col_data.With_verbatim_col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT id" ^ (match __col_data.With_verbatim_col.column with "" -> "" | c -> ", " ^ c) ^ " FROM users")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.With_verbatim_col.read row 1 in callback
+            ~id:(T.get_column_Int_nullable row 0)
+            ~col:__sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect at beginning of SELECT:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE data (a INT, b TEXT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @first_col
+  > SELECT @x { X { a } | Y { b } }, a, b FROM data;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module First_col_x = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let x =
+        (`X, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" a ");
+          count = 0;
+        })
+      let y =
+        (`Y, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" b ");
+          count = 0;
+        })
+    end
+  
+  
+    let create_data db  =
+      T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
+  
+    let first_col db ~x callback =
+      let (_, __x_data) = x in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + __x_data.First_col_x.count) in
+        __x_data.First_col_x.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ __x_data.First_col_x.column ^ ", a, b FROM data")
+      set_params (fun row -> let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.First_col_x.read row 0 in callback
+            ~x:__sqlgg_r_x
+            ~a:(T.get_column_Int_nullable row __sqlgg_idx_after_x)
+            ~b:(T.get_column_Text_nullable row (__sqlgg_idx_after_x + 1)))
+  
+    module Fold = struct
+      let first_col db ~x callback acc =
+        let (_, __x_data) = x in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __x_data.First_col_x.count) in
+          __x_data.First_col_x.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ __x_data.First_col_x.column ^ ", a, b FROM data")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.First_col_x.read row 0 in callback
+            ~x:__sqlgg_r_x
+            ~a:(T.get_column_Int_nullable row __sqlgg_idx_after_x)
+            ~b:(T.get_column_Text_nullable row (__sqlgg_idx_after_x + 1)) !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let first_col db ~x callback =
+        let (_, __x_data) = x in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __x_data.First_col_x.count) in
+          __x_data.First_col_x.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ __x_data.First_col_x.column ^ ", a, b FROM data")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = __x_data.First_col_x.read row 0 in callback
+            ~x:__sqlgg_r_x
+            ~a:(T.get_column_Int_nullable row __sqlgg_idx_after_x)
+            ~b:(T.get_column_Text_nullable row (__sqlgg_idx_after_x + 1))) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect disabled in subquery (fallback to Choice):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
+  > CREATE TABLE t1 (id INT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_subquery
+  > SELECT id, (SELECT @x { A { 1 } | B { 2 } } LIMIT 1) as sub FROM t1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+  
+    let with_subquery db ~x callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(T.get_column_Int_nullable stmt 0)
+          ~sub:(T.get_column_Int_nullable stmt 1)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match x with `A -> 0 | `B -> 0)) in
+        T.finish_params p
+      in
+      T.select db ("SELECT id, (SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1) as sub FROM t1") set_params invoke_callback
+  
+    module Fold = struct
+      let with_subquery db ~x callback acc =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_Int_nullable stmt 0)
+            ~sub:(T.get_column_Int_nullable stmt 1)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match x with `A -> 0 | `B -> 0)) in
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db ("SELECT id, (SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1) as sub FROM t1") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let with_subquery db ~x callback =
+        let invoke_callback stmt =
+          callback
+            ~id:(T.get_column_Int_nullable stmt 0)
+            ~sub:(T.get_column_Int_nullable stmt 1)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match x with `A -> 0 | `B -> 0)) in
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db ("SELECT id, (SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1) as sub FROM t1") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect with module annotation:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE wrapped (
+  >     -- [sqlgg] module=Product_id
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     price DECIMAL(10,2)
+  > );
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_module
+  > SELECT @col { Id { id } | Name { name } } FROM wrapped WHERE id = @id;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module With_module_col = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let id =
+        (`Id, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (Product_id.get_column (T.get_column_int64 row idx), idx + 1));
+          column = (" id ");
+          count = 0;
+        })
+      let name =
+        (`Name, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name ");
+          count = 0;
+        })
+    end
+  
+  
+    let create_wrapped db  =
+      T.execute db ("CREATE TABLE wrapped (\n\
+          id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+      price DECIMAL(10,2)\n\
+  )") T.no_params
+  
+    let with_module db ~col ~id =
+      let (_, __col_data) = col in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + __col_data.With_module_col.count) in
+        __col_data.With_module_col.set p;
+        T.set_param_int64 p (Product_id.set_param id);
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT " ^ __col_data.With_module_col.column ^ " FROM wrapped WHERE id = ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.With_module_col.read row 0 in (__sqlgg_r_col))
+  
+    module Single = struct
+      let with_module db ~col ~id =
+        let (_, __col_data) = col in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + __col_data.With_module_col.count) in
+          __col_data.With_module_col.set p;
+          T.set_param_int64 p (Product_id.set_param id);
+          T.finish_params p
+        in
+        T.select_one_maybe db
+        ("SELECT " ^ __col_data.With_module_col.column ^ " FROM wrapped WHERE id = ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.With_module_col.read row 0 in (__sqlgg_r_col))
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect with LIMIT 1 (select_one):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @select_one_product
+  > SELECT @col { Name { name } | Price { price } } FROM products WHERE id = @id LIMIT 1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Select_one_product_col = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let name =
+        (`Name, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name ");
+          count = 0;
+        })
+      let price =
+        (`Price, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price ");
+          count = 0;
+        })
+    end
+  
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let select_one_product db ~col ~id =
+      let (_, __col_data) = col in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + __col_data.Select_one_product_col.count) in
+        __col_data.Select_one_product_col.set p;
+        T.set_param_Int p id;
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT " ^ __col_data.Select_one_product_col.column ^ " FROM products WHERE id = ? LIMIT 1")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.Select_one_product_col.read row 0 in (__sqlgg_r_col))
+  
+    module Single = struct
+      let select_one_product db ~col ~id =
+        let (_, __col_data) = col in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + __col_data.Select_one_product_col.count) in
+          __col_data.Select_one_product_col.set p;
+          T.set_param_Int p id;
+          T.finish_params p
+        in
+        T.select_one_maybe db
+        ("SELECT " ^ __col_data.Select_one_product_col.column ^ " FROM products WHERE id = ? LIMIT 1")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.Select_one_product_col.read row 0 in (__sqlgg_r_col))
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect comprehensive list:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE products (
+  >  id INT PRIMARY KEY,
+  >  name TEXT,
+  >  price DECIMAL(10,2),
+  >  category TEXT,
+  >  stock INT
+  > );
+  > -- [sqlgg] dynamic_select=true
+  > -- @ultimate_combo_simple2
+  > SELECT 
+  >    id, 
+  >    @col { A { name } | B { price } }, 
+  >    category, stock, 
+  >    @col2 { C { price + @lol { E { 2 } | F { @lol + 23 } } } | D { price } } 
+  > FROM products;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Ultimate_combo_simple2_col = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let a =
+        (`A, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name ");
+          count = 0;
+        })
+      let b =
+        (`B, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price ");
+          count = 0;
+        })
+    end
+  
+    module Ultimate_combo_simple2_col2 = struct
+      include Sqlgg_traits.DynamicSelect
+  
+      let c lol =
+        let _set_c p =
+          begin match lol with
+          | `E -> ()
+          | `F (lol) ->
+            T.set_param_Int p lol;
+          end;
+          ()
+        in
+        (`C, {
+          set = _set_c;
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price + " ^ (match lol with `E -> " 2 " | `F _ -> " " ^ "?" ^ " + 23 ") ^ " ");
+          count = 0 + (match lol with `E -> 0 | `F _ -> 1);
+        })
+      let d =
+        (`D, {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price ");
+          count = 0;
+        })
+    end
+  
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (\n\
+   id INT PRIMARY KEY,\n\
+   name TEXT,\n\
+   price DECIMAL(10,2),\n\
+   category TEXT,\n\
+   stock INT\n\
+  )") T.no_params
+  
+    let ultimate_combo_simple2 db ~col ~col2 callback =
+      let (_, __col_data) = col in
+      let (_, __col2_data) = col2 in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + __col_data.Ultimate_combo_simple2_col.count + __col2_data.Ultimate_combo_simple2_col2.count) in
+        __col_data.Ultimate_combo_simple2_col.set p;
+        __col2_data.Ultimate_combo_simple2_col2.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT \n\
+     id" ^ (match __col_data.Ultimate_combo_simple2_col.column with "" -> "" | c -> ", " ^ c) ^ ", \n\
+     category, stock" ^ (match __col2_data.Ultimate_combo_simple2_col2.column with "" -> "" | c -> ", " ^ c) ^ " \n\
+  FROM products")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.Ultimate_combo_simple2_col.read row 1 in let (__sqlgg_r_col2, __sqlgg_idx_after_col2) = __col2_data.Ultimate_combo_simple2_col2.read row (__sqlgg_idx_after_col + 2) in callback
+            ~id:(T.get_column_Int row 0)
+            ~col:__sqlgg_r_col
+            ~category:(T.get_column_Text_nullable row __sqlgg_idx_after_col)
+            ~stock:(T.get_column_Int_nullable row (__sqlgg_idx_after_col + 1))
+            ~col2:__sqlgg_r_col2)
+  
+    module Fold = struct
+      let ultimate_combo_simple2 db ~col ~col2 callback acc =
+        let (_, __col_data) = col in
+        let (_, __col2_data) = col2 in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __col_data.Ultimate_combo_simple2_col.count + __col2_data.Ultimate_combo_simple2_col2.count) in
+          __col_data.Ultimate_combo_simple2_col.set p;
+          __col2_data.Ultimate_combo_simple2_col2.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT \n\
+     id" ^ (match __col_data.Ultimate_combo_simple2_col.column with "" -> "" | c -> ", " ^ c) ^ ", \n\
+     category, stock" ^ (match __col2_data.Ultimate_combo_simple2_col2.column with "" -> "" | c -> ", " ^ c) ^ " \n\
+  FROM products")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.Ultimate_combo_simple2_col.read row 1 in let (__sqlgg_r_col2, __sqlgg_idx_after_col2) = __col2_data.Ultimate_combo_simple2_col2.read row (__sqlgg_idx_after_col + 2) in callback
+            ~id:(T.get_column_Int row 0)
+            ~col:__sqlgg_r_col
+            ~category:(T.get_column_Text_nullable row __sqlgg_idx_after_col)
+            ~stock:(T.get_column_Int_nullable row (__sqlgg_idx_after_col + 1))
+            ~col2:__sqlgg_r_col2 !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let ultimate_combo_simple2 db ~col ~col2 callback =
+        let (_, __col_data) = col in
+        let (_, __col2_data) = col2 in
+        let set_params stmt =
+          let p = T.start_params stmt (0 + __col_data.Ultimate_combo_simple2_col.count + __col2_data.Ultimate_combo_simple2_col2.count) in
+          __col_data.Ultimate_combo_simple2_col.set p;
+          __col2_data.Ultimate_combo_simple2_col2.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT \n\
+     id" ^ (match __col_data.Ultimate_combo_simple2_col.column with "" -> "" | c -> ", " ^ c) ^ ", \n\
+     category, stock" ^ (match __col2_data.Ultimate_combo_simple2_col2.column with "" -> "" | c -> ", " ^ c) ^ " \n\
+  FROM products")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = __col_data.Ultimate_combo_simple2_col.read row 1 in let (__sqlgg_r_col2, __sqlgg_idx_after_col2) = __col2_data.Ultimate_combo_simple2_col2.read row (__sqlgg_idx_after_col + 2) in callback
+            ~id:(T.get_column_Int row 0)
+            ~col:__sqlgg_r_col
+            ~category:(T.get_column_Text_nullable row __sqlgg_idx_after_col)
+            ~stock:(T.get_column_Int_nullable row (__sqlgg_idx_after_col + 1))
+            ~col2:__sqlgg_r_col2) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
 
 Test ENUM with CHARACTER SET and COLLATE:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null

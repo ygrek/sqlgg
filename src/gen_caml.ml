@@ -127,6 +127,17 @@ let enum_name = Printf.sprintf "Enum_%d"
 
 let get_enum_name ctors = ctors |> enum_get_hash |> Hashtbl.find enums_hash_tbl |> fst |> enum_name
 
+let field_name_of_param_id (p : Sql.param_id) =
+  match p.value with Some s -> String.capitalize_ascii s | None -> failwith "dynamic select branch must have a label"
+
+type dynamic_info = {
+  param_id: Sql.param_id;
+  module_name: string;
+  param_name: string;
+  ctors: Sql.ctor list;
+  schema_fields: (Sql.param_id * Sql.attr) list;
+}
+
 module L = struct
   open Type
 
@@ -168,52 +179,64 @@ module L = struct
   let as_api_type = as_lang_type
 end
 
-let get_column index attr =
-  let nullable_suffix = if is_attr_nullable attr then "_nullable" else "" in
+let format_get_column ~row ~idx attr =
+  let null_suffix = if is_attr_nullable attr then "_nullable" else "" in
   let format_t_get_column type_name =
-    sprintf "(T.get_column_%s%s stmt %u)" type_name nullable_suffix index
+    sprintf "T.get_column_%s%s %s %s" type_name null_suffix row idx
   in
   let rec format_column_expr attr =
     match attr with
     | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
-      sprintf "(%s.get_column%s stmt %u)" (get_enum_name ctors) nullable_suffix index
+      sprintf "%s.get_column%s %s %s" (get_enum_name ctors) null_suffix row idx
     | { domain={ t = Union _; _ }; _ } as c ->
       format_column_expr { c with domain = { c.domain with t = Text } }
     | _ ->
       match Sql.Meta.find_opt attr.meta "module" with
-      | None ->
-        let lang_type_name = L.as_lang_type attr.domain in
-        format_t_get_column lang_type_name
       | Some m ->
-        let runtime_repr_name = L.as_runtime_repr_name attr.domain in
-        let inner_get_column_expr = format_t_get_column runtime_repr_name in
-        let get_column = "get_column" in
-        let get_column_name = get_column |> Sql.Meta.find_opt attr.meta |> Option.default get_column in
-        sprintf "(%s.%s%s %s)" m get_column_name nullable_suffix inner_get_column_expr
+          let runtime_repr_name = L.as_runtime_repr_name attr.domain in
+          let inner_get_column_expr = sprintf "(T.get_column_%s%s %s %s)" runtime_repr_name null_suffix row idx in
+          let get_column = "get_column" in
+          let get_column_name = get_column |> Sql.Meta.find_opt attr.meta |> Option.default get_column in
+          sprintf "%s.%s%s %s" m get_column_name null_suffix inner_get_column_expr
+      | None ->
+          format_t_get_column (L.as_lang_type attr.domain)
   in
   format_column_expr attr
+
+let get_column index attr =
+  sprintf "(%s)" (format_get_column ~row:"stmt" ~idx:(string_of_int index) attr)
 
 module T = Translate(L)
 
 (* open L *)
 open T
 
+let schema_to_attrs schema =
+  List.filter_map (function
+    | Sql.Attr attr -> Some attr
+    | Dynamic _ -> None
+  ) schema
+
+let format_labeled_param name value = sprintf "~%s:%s" name value
+
 let output_schema_binder_labeled _ schema =
+  let attrs = schema_to_attrs schema in
   let name = "invoke_callback" in
   output "let %s stmt =" name;
-  let args = Name.idents ~prefix:"r" (List.map (fun a -> a.name) schema) in
-  let values = List.mapi get_column schema in
+  let args = Name.idents ~prefix:"r" (List.map (fun a -> a.Sql.name) attrs) in
+  let values = List.mapi get_column attrs in
   indented (fun () ->
     output "callback";
-    indented (fun () -> List.iter2 (output "~%s:%s") args values));
+    indented (fun () -> List.iter2 (fun arg value -> output "%s" (format_labeled_param arg value)) args values));
   output "in";
   name
 
 let output_select1_cb _ schema =
+  let attrs = schema_to_attrs schema in
   let name = "get_row" in
   output "let %s stmt =" name;
   indented (fun () ->
-    List.mapi get_column schema |> String.concat ", " |> indent_endline);
+    List.mapi get_column attrs |> String.concat ", " |> indent_endline);
   output "in";
   name
 
@@ -237,12 +260,41 @@ let is_callback (stmt : Gen.stmt) =
   | _, Stmt.Select (`Zero_one | `One) -> false
   | _ -> true
 
-let list_separate f l =
-  let a = ref [] in
-  let b = ref [] in
-  List.iter (fun x -> match f x with `Left x -> tuck a x | `Right x -> tuck b x) l;
-  List.rev !a, List.rev !b
+let should_generate_for_style style stmt =
+  match style with
+  | `List | `Fold -> is_callback stmt
+  | `Single -> (match stmt.kind, stmt.schema with | Stmt.Select (`One | `Zero_one), _ :: _ -> true | _ -> false)
+  | `Direct -> true
 
+let gen_func_signature ~single_needs_callback style stmt index =
+  let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
+  let subst = Props.get_all stmt.props "subst" in
+  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (fun v -> sprintf "~%s" v) |> inline_values in
+  let needs_callback_param = match style with 
+    | `List | `Fold -> true 
+    | `Single -> single_needs_callback
+    | `Direct -> is_callback stmt 
+  in
+  let needs_acc_param = style = `Fold in
+  let all_inputs = inputs ^ (if needs_callback_param then " callback" else "") ^ (if needs_acc_param then " acc" else "") in
+  output "let %s db %s =" name all_inputs;
+  inc_indent ();
+  subst
+
+let output_r_acc_init = function
+  | `Fold -> output "let r_acc = ref acc in"
+  | `List -> output "let r_acc = ref [] in"
+  | `Direct | `Single -> ()
+
+let output_r_acc_return = function
+  | `Fold -> output "(fun () -> IO.return !r_acc)"
+  | `List -> output "(fun () -> IO.return (List.rev !r_acc))"
+  | `Direct | `Single -> ()
+
+let complete_func style =
+  output_r_acc_return style;
+  dec_indent ();
+  empty_line ()
 
 let make_variant_name i name ~is_poly =
   let prefix = if is_poly then "`" else "" in 
@@ -273,11 +325,14 @@ let match_variant_pattern i name args ~is_poly =
           ((seen_wildcards, seen_names, all_wc), Some "_")
         | TupleList ({ value = Some s; _ }, _) 
         | Choice ({ value = Some s; _ }, _)
+        | DynamicSelect ({ value = Some s; _ }, _)
         | OptionActionChoice ({ value = Some s; _ }, _, _, _)
         | ChoiceIn { param = { value = Some s; _ }; _ } ->
             if List.mem s seen_names
             then ((seen_wildcards, seen_names, false), None)
             else ((seen_wildcards, s :: seen_names, false), Some s)
+        | DynamicSelect ({ value = None; _ }, _) ->
+          ((seen_wildcards, seen_names, all_wc), Some "_")
       ) ([], [], true) arg_list
     in
     let patterns = List.filter_map identity patterns in
@@ -310,6 +365,23 @@ let rec set_param ~meta index param =
          set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
       else
         output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
+
+let rec has_set_params vars =
+  List.exists (fun var ->
+    match var with
+    | Single _ -> true
+    | SharedVarsGroup (vars, _) -> has_set_params vars
+    | TupleList (_, Where_in _) -> false
+    | SingleIn _ | TupleList _ -> false
+    | ChoiceIn { vars; _ } -> has_set_params vars
+    | OptionActionChoice (_, vars, _, _) -> has_set_params vars
+    | Choice (_, ctors) -> List.exists (function
+        | Simple (_, Some args) -> has_set_params args
+        | Simple (_, None) -> false
+        | Verbatim _ -> false
+      ) ctors
+    | DynamicSelect _ -> false
+  ) vars
   
 let set_var index var =
   let execute_generators = List.iter (fun f -> f ()) in
@@ -356,7 +428,7 @@ let set_var index var =
                | Some name -> Hashtbl.add seen name (); true  
                | None -> true)
             | ChoiceIn _ | OptionActionChoice _ 
-            | SharedVarsGroup _ | Choice _ -> true
+            | SharedVarsGroup _ | Choice _ | DynamicSelect _ -> true
           in
           if use_var then
             let pattern = match aux index var with
@@ -430,6 +502,7 @@ let set_var index var =
           execute_generators all_generators;
           output "end;"
         )
+    | DynamicSelect _ -> None
   in
   Option.may (fun g -> g ()) (aux index var)
 
@@ -443,6 +516,7 @@ let rec eval_count_params vars =
       | SharedVarsGroup (vars, _) -> `SharedVarsGroup vars
       | OptionActionChoice (param_id, vars, _, _) -> `OptionActionChoice (param_id, vars)
       | Choice (name, c) -> `Choice (name, c)
+      | DynamicSelect _ -> `Static false
     in
     let rec group_vars (static, choices, bool_choices, choices_in) = function
       | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in)
@@ -520,7 +594,9 @@ let rec exclude_in_vars l =
       | TupleList _ -> None
       | ChoiceIn t -> Some (ChoiceIn { t with vars = exclude_in_vars t.vars })
       | Choice (param_id, ctors) ->
-        Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors)))
+        Some (Choice (param_id, List.map exclude_in_vars_in_constructors ctors))
+      | DynamicSelect (param_id, ctors) ->
+        Some (DynamicSelect (param_id, List.map exclude_in_vars_in_constructors ctors)))
     l
 
 and exclude_in_vars_in_constructors = function
@@ -538,11 +614,11 @@ let make_to_literal meta typ =
     | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
     | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
     | t -> match Sql.Meta.find_opt meta "module" with
-      | None -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t)
+      | None -> sprintf "T.Types.%s.to_literal" (L.as_lang_type t)
       | Some m -> 
         let set_param = "set_param" in
         let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
-        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (Sql.Type.type_name t) (L.as_runtime_repr_name t) m set_param_name
+        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (L.as_lang_type t) (L.as_runtime_repr_name t) m set_param_name
   in go typ
 
 let gen_in_substitution meta var =
@@ -647,22 +723,138 @@ let make_sql l =
   Buffer.add_string b ")";
   Buffer.contents b
 
-let generate_stmt style index stmt =
-  let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
-  let subst = Props.get_all stmt.props "subst" in
-  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (fun v -> sprintf "~%s" v) |> inline_values in
-  let should_generate =
-    match style with
-    | `List | `Fold -> is_callback stmt
-    | `Single -> (match stmt.kind, stmt.schema with | Stmt.Select (`One | `Zero_one), _ :: _ -> true | _ -> false)
-    | `Direct -> true
-  in
-  if should_generate then begin
-  let needs_callback_param = match style with | `List | `Single -> true | _ -> is_callback stmt in
-  let needs_acc_param = style = `Fold in
-  let all_inputs = inputs ^ (if needs_callback_param then " callback" else "") ^ (if needs_acc_param then " acc" else "") in
-  output "let %s db %s =" name all_inputs;
+type callback_build_state = {
+  bindings: string list;
+  reads: string list;
+  static_idx: int;
+  attr_n: int;
+  idx_expr: string option;
+}
+
+let generate_stmt_with_dynamic style index stmt dynamic_infos =
+  if not (should_generate_for_style style stmt) then () else
+  let _subst = gen_func_signature ~single_needs_callback:(is_callback stmt) style stmt index in
+  
+  let sql_pieces = get_sql stmt in
+  
+  List.iter (fun di ->
+    output "let (_, __%s_data) = %s in" di.param_name di.param_name
+  ) dynamic_infos;
+  
+  let other_vars = List.filter (function Sql.DynamicSelect _ -> false | _ -> true) stmt.vars in
+  let static_count = eval_count_params other_vars in
+  let dynamic_counts = dynamic_infos |> List.map (fun di -> 
+    sprintf "__%s_data.%s.count" di.param_name di.module_name
+  ) |> String.concat " + " in
+  
+  output "let set_params stmt =";
   inc_indent ();
+  output "let p = T.start_params stmt (%s + %s) in" static_count dynamic_counts;
+  List.iter (fun di ->
+    output "__%s_data.%s.set p;" di.param_name di.module_name
+  ) dynamic_infos;
+  List.iteri set_var other_vars;
+  output "T.finish_params p";
+  dec_indent ();
+  output "in";
+  
+  let find_di_by_pid pid = List.find (fun di -> di.param_id = pid) dynamic_infos in
+  
+  let rec build_parts acc pending_comma = function
+    | [] -> List.rev acc
+    | Gen.Static s :: rest ->
+      let s_trimmed = String.trim s in
+      let ends_with_comma = String.length s_trimmed > 0 && s_trimmed.[String.length s_trimmed - 1] = ',' in
+      if ends_with_comma then
+        let s_no_comma = String.sub s_trimmed 0 (String.length s_trimmed - 1) in
+        build_parts (if s_no_comma = "" then acc else quote s_no_comma :: acc) true rest
+      else
+        build_parts (quote s :: acc) false rest
+    | Gen.Dynamic (pid, _) :: rest ->
+      let di = find_di_by_pid pid in
+      let dyn_expr = 
+        if pending_comma then
+          sprintf "(match __%s_data.%s.column with \"\" -> \"\" | c -> \", \" ^ c)" di.param_name di.module_name
+        else
+          sprintf "__%s_data.%s.column" di.param_name di.module_name
+      in
+      build_parts (dyn_expr :: acc) false rest
+    | _ :: rest -> build_parts acc pending_comma rest
+  in
+  let sql_parts = build_parts [] false sql_pieces in
+  let sql_expr = String.concat " ^ " sql_parts in
+  
+  output_r_acc_init style;
+  
+  let rec split_schema_multi acc current = function
+    | [] -> List.rev ((List.rev current, None) :: acc)
+    | Sql.Dynamic (pid, _) :: rest ->
+      let di = find_di_by_pid pid in
+      split_schema_multi (((List.rev current), Some di) :: acc) [] rest
+    | Attr a :: rest ->
+      split_schema_multi acc (a :: current) rest
+  in
+  let schema_segments = split_schema_multi [] [] stmt.schema in
+  
+  let needs_callback = match style with
+    | `Fold | `List -> true
+    | `Direct | `Single -> is_callback stmt
+  in
+  let format_param = if needs_callback then format_labeled_param else (fun _ v -> v) in
+  let format_result params = 
+    if needs_callback then sprintf "callback\n          %s" (String.concat "\n          " params)
+    else sprintf "(%s)" (String.concat ", " params)
+  in
+  let build_callback_body () =
+    let col_idx_at ~base ~offset = match base with
+      | None -> string_of_int offset
+      | Some var when offset = 0 -> var
+      | Some var -> sprintf "(%s + %d)" var offset
+    in
+    let process_attrs st attrs =
+      List.fold_left (fun (st, i) attr ->
+        let col_idx = col_idx_at ~base:st.idx_expr ~offset:(st.static_idx + i) in
+        let value = sprintf "(%s)" (format_get_column ~row:"row" ~idx:col_idx attr) in
+        let param = format_param (name_of attr st.attr_n) value in
+        ({ st with reads = param :: st.reads; attr_n = st.attr_n + 1 }, i + 1)
+      ) (st, 0) attrs |> fst
+    in
+    let process_dynamic st di =
+      let read_var = sprintf "__sqlgg_r_%s" di.param_name in
+      let next_var = sprintf "__sqlgg_idx_after_%s" di.param_name in
+      let start = col_idx_at ~base:st.idx_expr ~offset:st.static_idx in
+      let binding = sprintf "let (%s, %s) = __%s_data.%s.read row %s in " read_var next_var di.param_name di.module_name start in
+      { bindings = binding :: st.bindings; 
+        reads = format_param di.param_name read_var :: st.reads;
+        static_idx = 0;
+        attr_n = st.attr_n + 1; idx_expr = Some next_var }
+    in
+    let process_segment st (attrs, dyn_opt) =
+      let st = { (process_attrs st attrs) with static_idx = st.static_idx + List.length attrs } in
+      match dyn_opt with None -> st | Some di -> process_dynamic st di
+    in
+    let init = { bindings = []; reads = []; static_idx = 0; attr_n = 0; idx_expr = None } in
+    let final = List.fold_left process_segment init schema_segments in
+    String.concat "" (List.rev final.bindings) ^ format_result (List.rev final.reads)
+  in
+  
+  let callback_body = build_callback_body () in
+  
+  let (bind_start, bind_end, full_callback) =
+    match style with
+    | `Fold -> "IO.(>>=) (", ")", sprintf "(fun row -> r_acc := (%s !r_acc))" callback_body
+    | `List -> "IO.(>>=) (", ")", sprintf "(fun row -> r_acc := (%s) :: !r_acc)" callback_body
+    | `Direct | `Single -> "", "", sprintf "(fun row -> %s)" callback_body
+  in
+  
+  output "%sT.%s db" bind_start (select_func_of_kind stmt.kind);
+  output "  (%s)" sql_expr;
+  output "  set_params %s%s" full_callback bind_end;
+  complete_func style
+
+let generate_stmt style index stmt =
+  if not (should_generate_for_style style stmt) then () else
+  let subst = gen_func_signature ~single_needs_callback:true style stmt index in
   let sql = make_sql @@ get_sql stmt in
   let sql = match subst with
   | [] -> sql
@@ -680,19 +872,18 @@ let generate_stmt style index stmt =
     output "in";
     "__sqlgg_sql"
   in
-  let (func,callback) =
-    match style with
-    | `Single ->
-      (match stmt.schema with
-      | [] -> ("execute", "")
-      | _ ->
-        let func = select_func_of_kind stmt.kind in
-        (func, output_schema_binder_labeled index stmt.schema))
-    | _ -> output_schema_binder index stmt.schema stmt.kind
+  let (func, callback) =
+    match stmt.schema with
+    | [] -> "execute", ""
+    | _ ->
+      let func = select_func_of_kind stmt.kind in
+      match style, stmt.kind with
+      | `Single, _ -> func, output_schema_binder_labeled index stmt.schema
+      | _, Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index stmt.schema
+      | _ -> func, output_schema_binder_labeled index stmt.schema
   in
   let params_binder_name = output_params_binder index stmt.vars in
-  if style = `Fold then output "let r_acc = ref acc in";
-  if style = `List then output "let r_acc = ref [] in";
+  output_r_acc_init style;
   let (bind, callback) =
     match style with
     | `Fold -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x !r_acc))" callback
@@ -716,11 +907,7 @@ let generate_stmt style index stmt =
     | Some value -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> %s)|} value exec
   in
   output "%s%s" bind exec;
-  if style = `Fold then output "(fun () -> IO.return !r_acc)";
-  if style = `List then output "(fun () -> IO.return (List.rev !r_acc))";
-  dec_indent ();
-  empty_line ()
-  end
+  complete_func style
 
 let sanitize_to_variant_name s =
   let normalized =
@@ -745,25 +932,43 @@ let generate_enum_modules stmts =
     | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
-  let schemas_to_enums schemas = schemas |> List.filter_map (fun { domain; _ } -> get_enum domain) in
+  let schemas_to_enums schemas =
+    List.filter_map (fun ({ domain; meta; _ } : Sql.attr) ->
+      if meta_has_module meta then None else get_enum domain
+    ) schemas
+  in
 
-  let rec vars_to_enums vars = List.concat_map (function
-    | Single ({ typ; _ }, _)
-    | SingleIn ({ typ; _ }, _) -> typ |> get_enum |> option_list
-    | SharedVarsGroup (vars, _)
-    | OptionActionChoice (_, vars, _, _)
-    | ChoiceIn { vars; _ } -> vars_to_enums vars
-    | Choice (_, ctor_list) -> 
-      List.concat_map ( function
-        | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
-        | Verbatim _ -> []
-      ) ctor_list
-    | TupleList (_,  ValueRows { types; _ }) -> 
-      List.concat_map (fun typ -> typ |> get_enum |> option_list) types
-    | TupleList (_, Where_in { value = (types, _); pos = _ }) ->
-      List.concat_map (fun (typ, _) -> typ |> get_enum |> option_list) types
-    | TupleList (_, Insertion schema) -> schemas_to_enums schema
-  ) vars in
+  let schema_columns_to_enums schema_cols =
+    let attr_enum attr = 
+      if meta_has_module attr.meta then [] else option_list (get_enum attr.domain)
+    in
+    List.concat_map (function
+      | Sql.Attr attr -> attr_enum attr
+      | Dynamic (_, fields) -> List.concat_map (fun (_, attr) -> attr_enum attr) fields
+    ) schema_cols
+  in
+
+  let rec vars_to_enums vars =
+    let enum_opt typ = typ |> get_enum |> option_list in
+    let enum_opt_with_meta typ meta = if meta_has_module meta then [] else enum_opt typ in
+    List.concat_map (function
+      | Single ({ typ; _ }, meta)
+      | SingleIn ({ typ; _ }, meta) -> enum_opt_with_meta typ meta
+      | SharedVarsGroup (vars, _)
+      | OptionActionChoice (_, vars, _, _)
+      | ChoiceIn { vars; _ } -> vars_to_enums vars
+      | Choice (_, ctor_list)
+      | DynamicSelect (_, ctor_list) -> 
+        List.concat_map ( function
+          | Simple (_, vars) -> Option.map vars_to_enums vars |> option_list |> List.concat
+          | Verbatim _ -> []
+        ) ctor_list
+      | TupleList (_,  ValueRows { types; _ }) -> 
+        List.concat_map enum_opt types
+      | TupleList (_, Where_in { value = (types, _); pos = _ }) ->
+        List.concat_map (fun (typ, meta) -> enum_opt_with_meta typ meta) types
+      | TupleList (_, Insertion schema) -> schemas_to_enums schema
+    ) vars in
 
   Hashtbl.reset enums_hash_tbl;
   
@@ -786,7 +991,7 @@ let generate_enum_modules stmts =
   in
 
   indented (fun () -> 
-    let result = schemas_to_enums schemas @ vars_to_enums vars in
+    let result = schema_columns_to_enums schemas @ vars_to_enums vars in
     let (_: int * unit list) = List.fold_left_map begin fun acc enum -> 
       let hash = enum_get_hash enum in
       if Hashtbl.mem enums_hash_tbl hash then acc, ()
@@ -800,6 +1005,106 @@ let generate_enum_modules stmts =
 
 let generate_enum_modules stmts = if !Sqlgg_config.enum_as_poly_variant then generate_enum_modules stmts
   
+let get_all_dynamic_select_infos index stmt =
+  let query_name = Gen.choose_name stmt.Gen.props stmt.Gen.kind index in
+  let ds_from_vars = stmt.Gen.vars |> List.filter_map (function Sql.DynamicSelect (param_id, ctors) -> Some (param_id, ctors) | _ -> None) in
+  let ds_from_schema = stmt.Gen.schema |> List.filter_map (function Sql.Dynamic (param_id, fields) -> Some (param_id, fields) | _ -> None) in
+  List.mapi (fun i ((param_id, ctors), (_, schema_fields)) ->
+    let param_name = Gen.make_param_name i param_id in
+    let module_name = sprintf "%s_%s" (String.capitalize_ascii query_name) param_name in
+    { param_id; module_name; param_name; ctors; schema_fields }
+  ) (List.combine ds_from_vars ds_from_schema)
+
+let generate_dynamic_select_modules stmts =
+  List.iteri (fun index stmt ->
+    get_all_dynamic_select_infos index stmt |> List.iter (fun di ->
+      let module_name = di.module_name in
+      let sql_pieces = get_sql stmt in
+      
+      let field_sqls = List.find_map (function
+        | Gen.Dynamic (pid, ctors) when pid = di.param_id -> 
+          Some (List.map (fun c -> c.Gen.ctor, c.Gen.sql) ctors)
+        | _ -> None
+      ) sql_pieces |> Option.default [] in
+      
+      let fields = List.map2 (fun ctor (_field_param_id, attr) ->
+        match ctor with
+        | Sql.Simple (ctor_param_id, args) ->
+          let args_list = Option.default [] args in
+          let all_param_names = names_of_vars args_list in
+          let simple_params = args_list |> List.filter_map (function Sql.Single (p, m) -> Some (p, m) | _ -> None) in
+          let param_name = match ctor_param_id.Sql.value with Some s -> String.lowercase_ascii s | None -> "v" in
+          (field_name_of_param_id ctor_param_id, param_name, all_param_names, simple_params, args_list, attr, ctor)
+        | Sql.Verbatim (name, _) ->
+          (String.capitalize_ascii name, String.lowercase_ascii name, [], [], [], attr, ctor)
+      ) di.ctors di.schema_fields in
+      
+      output "module %s = struct" module_name;
+      inc_indent ();
+      
+      output "include Sqlgg_traits.DynamicSelect";
+      empty_line ();
+      
+      List.iter2 (fun (field_name, _param_name, all_param_names, _simple_params, args_list, attr, ctor) (_, sql) ->
+        let field_name_lower = 
+          let name = String.lowercase_ascii field_name in
+          if List.mem name Name.reserved then name ^ "_" else name
+        in
+        let tag = sprintf "`%s" field_name in
+        
+        let read_body = sprintf "(fun row idx -> (%s, idx + 1))" (format_get_column ~row:"row" ~idx:"idx" attr) in
+
+        let column_body = match ctor with 
+          | Sql.Verbatim (_, v) -> quote v 
+          | _ -> make_sql sql 
+        in
+        
+        let count_expr = eval_count_params args_list in
+        
+        let has_params = args_list <> [] in
+        let set_helper_name = sprintf "_set_%s" field_name_lower in
+        
+        (match all_param_names with
+        | [] -> output "let %s =" field_name_lower
+        | _ -> output "let %s %s =" field_name_lower (String.concat " " all_param_names));
+        inc_indent ();
+        
+        let set_ref = 
+          if has_params && has_set_params args_list then begin
+            output "let %s p =" set_helper_name;
+            inc_indent ();
+            List.iteri set_var args_list;
+            output "()";
+            dec_indent ();
+            output "in";
+            set_helper_name
+          end else
+            "(fun _p -> ())"
+        in
+        
+        output "(%s, {" tag;
+        inc_indent ();
+        output "set = %s;" set_ref;
+        output "read = %s;" read_body;
+        output "column = %s;" column_body;
+        output "count = %s;" count_expr;
+        dec_indent ();
+        output "})";
+        dec_indent ()
+      ) fields field_sqls;
+      
+      dec_indent ();
+      output "end";
+      empty_line ()
+    )
+  ) stmts
+
+let generate_stmt_wrapper style index stmt =
+  let dynamic_infos = get_all_dynamic_select_infos index stmt in
+  match dynamic_infos with
+  | [] -> generate_stmt style index stmt
+  | _ -> generate_stmt_with_dynamic style index stmt dynamic_infos
+
 let generate ~gen_io name stmts =
 (*
   let types =
@@ -816,8 +1121,9 @@ let generate ~gen_io name stmts =
   inc_indent ();
   output "module IO = %s" io;
   generate_enum_modules stmts;
+  generate_dynamic_select_modules stmts;
   empty_line ();
-  List.iteri (generate_stmt `Direct) stmts;
+  List.iteri (generate_stmt_wrapper `Direct) stmts;
   let has_fold = List.exists is_callback stmts in
   let has_list = has_fold in
   let has_single = List.exists (fun stmt ->
@@ -834,7 +1140,7 @@ let generate ~gen_io name stmts =
     if i > 0 then output "";
     output "module %s = struct" name;
     inc_indent ();
-    List.iteri (generate_stmt style) stmts;
+    List.iteri (generate_stmt_wrapper style) stmts;
     dec_indent ();
     output "end (* module %s *)" name
   );

@@ -269,6 +269,44 @@ module type M_control_io = sig
 
 end
 
+module DynamicSelect = struct
+  type ('a, 'row, 'params) field_data = {
+    set: 'params -> unit;
+    read: 'row -> int -> 'a * int;
+    column: string;
+    count: int;
+  }
+
+  let return x = (`Return, {
+    set = (fun _p -> ());
+    read = (fun _row idx -> (x, idx));
+    column = "";
+    count = 0;
+  })
+
+  let map f (tag, a) = (`Map tag, {
+    set = a.set;
+    read = (fun row idx -> let (v, i) = a.read row idx in (f v, i));
+    column = a.column;
+    count = a.count;
+  })
+
+  let both (tag_a, a) (tag_b, b) = (`Both (tag_a, tag_b), {
+    set = (fun p -> a.set p; b.set p);
+    read = (fun row idx ->
+      let (va, i1) = a.read row idx in
+      let (vb, i2) = b.read row i1 in
+      ((va, vb), i2));
+    column = (match a.column, b.column with
+      | "", c | c, "" -> c
+      | c1, c2 -> c1 ^ ", " ^ c2);
+    count = a.count + b.count;
+  })
+
+  let (let+) t f = map f t
+  let (and+) = both
+end
+
 module type M_default_types = M with type Types.Bool.t = bool
   and type Types.Int.t = int64
   and type Types.Float.t = float
@@ -292,5 +330,4 @@ module type M_io_default_types = sig
     with type row := row
     with type execute_response := execute_response
 end
-
 
