@@ -6,6 +6,12 @@ open Sql
 (* open Sql.Type *)
 open Stmt
 
+let schema_to_attrs schema =
+  List.filter_map (function
+    | Syntax.Attr attr -> Some attr
+    | Syntax.Dynamic _ -> None
+  ) schema
+
 let cmp_param p1 p2 = p1.id.label = p2.id.label && Type.equal p1.typ p2.typ && p1.id.pos = (0,0) && snd p2.id.pos > fst p2.id.pos
 
 let cmp_params p1 p2 =
@@ -50,14 +56,15 @@ let assert_params_with_meta stmt meta =
           | ChoiceIn _
           | SharedVarsGroup _ | OptionActionChoice _ 
           | Choice _   | TupleList _ -> assert false
+          | DynamicSelect _ -> failwith "dynamic selects not supported for this host language"
           ) 
         stmt.Gen.vars)
 
 let do_test ?kind sql schema params =
   let stmt = parse sql in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
-  (List.map (function Single (p, _) -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false) stmt.vars);
+  (List.map (function Single (p, _) -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false | DynamicSelect _ -> failwith "dynamic selects not supported for this host language") stmt.vars);
 
   match kind with
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
@@ -71,7 +78,7 @@ let tt sql ?kind schema params =
 let tt_schema_only sql ?kind schema =
   let test () =
     let stmt = parse sql in
-    assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema stmt.schema;
+    assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
     match kind with
     | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
     | None -> ()
@@ -478,7 +485,7 @@ let test_in_clause_with_tuple_sets () =
     SELECT a FROM test17 
     WHERE (a, b, c) IN @abc
   |} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:Nullable "a" Int] stmt.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [attr' ~nullability:Nullable "a" Int] (schema_to_attrs stmt.schema);
   ()
 
 let test_agg_nullable = [
@@ -1041,22 +1048,22 @@ let test_enum_literal () =
   do_test "CREATE TABLE test36 (status enum('active','pending','deleted') NOT NULL DEFAULT 'pending')" [] [];
   
   let stmt = parse {|INSERT INTO test36 VALUES('pending')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] (schema_to_attrs stmt.schema);
 
   let stmt2 = parse {|INSERT INTO test36 VALUES('active')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt2.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] (schema_to_attrs stmt2.schema);
   
   let stmt3 = parse {|INSERT INTO test36 VALUES('deleted')|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt3.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] (schema_to_attrs stmt3.schema);
 
   let stmt4 = parse {|SELECT * FROM test36 WHERE status = 'active'|} in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
     [attr' ~extra:[NotNull; WithDefault] "status" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"] ); is_closed = true }))]
-    stmt4.schema;
+    (schema_to_attrs stmt4.schema);
 
   let stmt5 = parse {|UPDATE test36 SET status = 'deleted' WHERE status = 'pending'|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt5.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] (schema_to_attrs stmt5.schema);
 
   let stmt6 = parse {|
     SELECT * FROM test36 
@@ -1066,13 +1073,13 @@ let test_enum_literal () =
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string
     [attr' ~extra:[NotNull; WithDefault] "status" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["active"; "pending"; "deleted"]); is_closed = true }))]
-    stmt6.schema;
+    (schema_to_attrs stmt6.schema);
 
   ignore @@ wrong {|INSERT INTO test36 VALUES('deleteddd')|} ;
   ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'a', 'b')))|} ;
 
   let stmt7 = parse {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'active')))|} in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] stmt7.schema;
+  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string [] (schema_to_attrs stmt7.schema);
 
   ignore @@ wrong {|INSERT INTO test36 VALUES((IF(TRUE, 'pending', 'b')))|};
   ignore @@ wrong {|INSERT INTO test36 VALUES(CONCAT(''))|};
@@ -1082,7 +1089,7 @@ let test_enum_literal () =
   let stmt8 = parse {|SELECT CONCAT(status, 'test') AS named FROM test36 WHERE status = 'active'|} in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string 
     [attr' ~extra:[] "named" Text]
-    stmt8.schema
+    (schema_to_attrs stmt8.schema)
 
 let test_add_with_window_function = [
   (* Most aggregate functions also can be used as window functions *)
@@ -1351,7 +1358,7 @@ let test_type_mapping_params _ =
     ~msg:"schema" 
     ~printer:Sql.Schema.to_string 
     [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
   assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"])];
 
   (* test in subqery *)
@@ -1360,7 +1367,7 @@ let test_type_mapping_params _ =
     ~msg:"schema" 
     ~printer:Sql.Schema.to_string 
     [attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
   assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"])];
 
   let stmt = parse {|SELECT id FROM test39 WHERE txt = (SELECT txt FROM test39 WHERE id = @id OR (txt = @txt OR TRUE) )|} in
@@ -1370,7 +1377,7 @@ let test_type_mapping_params _ =
     [
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
     ] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
   assert_params_with_meta stmt [(named "id" Int, ["module", "HelloWorld"]); (named "txt" Text, [])];
 
   do_test {| 
@@ -1393,7 +1400,7 @@ let test_type_mapping_params _ =
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
       attr' ~extra:[NotNull] ~meta:["module", "Txt_module_name"] "txt2" Text;
     ] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
   assert_params_with_meta stmt [
     (named "id" Int, ["module", "HelloWorld"]); 
     (named "txt2" Text, ["module", "Txt_module_name"])
@@ -1411,7 +1418,7 @@ let test_type_mapping_params _ =
       attr' ~extra:[PrimaryKey] ~meta:["module", "HelloWorld"] "id" Int;
       attr' ~extra:[NotNull] ~meta:["module", "Txt_module_name"] "txt2" Text;
     ] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
   assert_params_with_meta stmt [
     (named "txt2" Text, ["module", "Txt_module_name"])
   ];
@@ -1457,7 +1464,7 @@ let test_type_mapping_params _ =
     [
       attr' "booo" Bool;
     ] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
 
   (* not only in WHERE expr *)
   assert_params_with_meta stmt [
@@ -1534,7 +1541,7 @@ let test_type_mapping_params _ =
       attr' ~extra:[] ~meta:["module", "Module3"] "d" (Decimal { precision = Some 10; scale = Some 2; });
       attr' "e" Int;
     ] 
-    stmt.schema;
+    (schema_to_attrs stmt.schema);
 
   assert_params_with_meta stmt [
     (named "param_1" Datetime, []);

@@ -105,7 +105,10 @@ let generate_code index stmt =
    let sql = quote (get_sql_string_only stmt) in
    output "PreparedStatement pstmt_%s;" name;
    empty_line ();
-   let schema_binder_name = output_schema_binder name index stmt.schema in
+   let schema = List.concat_map (function
+    | Syntax.Attr attr -> [attr]
+    | Syntax.Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
+   let schema_binder_name = output_schema_binder name index schema in
    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
    let all_params = values @ result in
    G.func "public int" name all_params ~tail:"throws SQLException" (fun () ->
@@ -116,7 +119,10 @@ let generate_code index stmt =
       | None -> output "return pstmt_%s.executeUpdate();" name
       | Some _ ->
          output "ResultSet res = pstmt_%s.executeQuery();" name;
-         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
+         let schema = List.concat_map (function
+          | Syntax.Attr attr -> [attr]
+          | Syntax.Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
+         let args = List.mapi (fun index attr -> get_column attr index) schema in
          let args = String.concat "," args in
          output "int count = 0;";
          output "while (res.next())";

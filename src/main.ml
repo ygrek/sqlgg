@@ -13,6 +13,10 @@ let () = Printexc.(register_printer begin function
   | _ -> None
 end)
 
+let set_dynamic_select_prop props = match Props.get props "dynamic_select" with
+  | Some s -> String.lowercase_ascii s = "true"
+  | None -> false
+
 (** Handle parsing error and format a helpful error message *)
 let handle_parsing_error sql exn (line, cnum, tok, tail) =
   let extra = match exn with
@@ -79,7 +83,10 @@ let check_dialect sql dialect_features =
           (show_feature ds.feature) (show !selected) (position_info ds) (feature_to_string ds.feature))
 
 let get_statement_error stmt sql =
-  if not (Sql.Schema.is_unique stmt.Gen.schema) then
+  let schema = List.concat_map (function
+    | Syntax.Attr attr -> [attr]
+    | Syntax.Dynamic (_, l) -> List.map snd l) stmt.Gen.schema in
+  if not (Sql.Schema.is_unique schema) then
     Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql;
   match stmt.kind with
   | Insert (Some _, _) when !Gen.params_mode = None ->
@@ -89,6 +96,7 @@ let get_statement_error stmt sql =
 
 let parse_one' (sql, props) =
     if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
+    Syntax.Config.dynamic_select := set_dynamic_select_prop props;
     let (sql, schema, vars, kind, dialect_features) = Syntax.parse sql in
     check_dialect sql dialect_features;
     begin match kind, !Gen.params_mode with

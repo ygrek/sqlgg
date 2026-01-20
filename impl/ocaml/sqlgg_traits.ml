@@ -269,6 +269,22 @@ module type M_control_io = sig
 
 end
 
+module Dynamic (F : sig type _ t end) = struct
+  type a_field = Any_field : 'a F.t -> a_field
+
+  type _ t =
+    | V : 'a F.t -> 'a t
+    | Return : 'a -> 'a t
+    | Map : 'a t * ('a -> 'b) -> 'b t
+    | Both : 'a t * 'b t -> ('a * 'b) t
+
+  let return x = Return x
+  let map f t = Map (t, f)
+  let both a b = Both (a, b)
+  let (let+) t f = Map (t, f)
+  let (and+) a b = Both (a, b)
+end
+
 module type M_default_types = M with type Types.Bool.t = bool
   and type Types.Int.t = int64
   and type Types.Float.t = float

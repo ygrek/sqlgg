@@ -3517,3 +3517,575 @@ Test IS NOT NULL type refinement with IS NULL:
   
     end (* module List *)
   end (* module Sqlgg *)
+
+Test DynamicSelect with dynamic_select flag:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @select_ids2
+  > SELECT id, balance, @x { A { @t + 1 } | B { (SELECT 6 + @seven LIMIT 1) } } FROM accounts WHERE id > @t;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Select_ids2_x = struct
+      type _ field =
+        | A : T.Types.Int.t -> T.Types.Int.t field
+        | B : T.Types.Int.t -> T.Types.Int.t option field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let a a = V (A a)
+      let b b = V (B b)
+    end
+  
+  
+    let create_accounts db  =
+      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+  
+    let select_ids2 db ~x ~t callback =
+      let rec params_count_x : type a. a Select_ids2_x.t -> int = function
+        | Select_ids2_x.V (A _) -> 1
+        | Select_ids2_x.V (B _) -> 1
+        | Return _ -> 0
+        | Map (t, _) -> params_count_x t
+        | Both (a, b) -> params_count_x a + params_count_x b
+      in
+      let field_set_x : type a. a Select_ids2_x.field -> T.params -> unit = function
+        | A x -> fun p -> T.set_param_Int p x
+        | B x -> fun p -> T.set_param_Int p x
+      in
+      let rec set_x : type a. a Select_ids2_x.t -> T.params -> unit = function
+        | Select_ids2_x.V f -> fun p -> field_set_x f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_x t p
+        | Both (a, b) -> fun p -> set_x a p; set_x b p
+      in
+      let field_to_column_x : type a. a Select_ids2_x.field -> string = function
+        | A _ -> (" " ^ "?" ^ " + 1 ")
+        | B _ -> (" (SELECT 6 + " ^ "?" ^ " LIMIT 1) ")
+      in
+      let rec to_a_field_list_x : type a. a Select_ids2_x.t -> Select_ids2_x.a_field list = function
+        | Select_ids2_x.V f -> [Any_field f]
+        | Return _ -> []
+        | Map (t, _) -> to_a_field_list_x t
+        | Both (a, b) -> to_a_field_list_x a @ to_a_field_list_x b
+      in
+      let field_read_x : type a. a Select_ids2_x.field -> T.row -> int -> a = function
+        | A _ -> fun row idx -> T.get_column_Int row idx
+        | B _ -> fun row idx -> T.get_column_Int_nullable row idx
+      in
+      let rec read_x : type a. a Select_ids2_x.t -> T.row -> int -> a * int = function
+        | Select_ids2_x.V f -> fun row idx -> (field_read_x f row idx, idx + 1)
+        | Return x -> fun _row idx -> (x, idx)
+        | Map (t, f) -> fun row idx -> let (v, idx') = read_x t row idx in (f v, idx')
+        | Both (a, b) -> fun row idx -> let (va, i1) = read_x a row idx in let (vb, i2) = read_x b row i1 in ((va, vb), i2)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + params_count_x x) in
+        set_x x p;
+        T.set_param_Int p t;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT id, balance" ^ (match (x |> to_a_field_list_x |> List.map (fun (Select_ids2_x.Any_field f) -> field_to_column_x f)) with [] -> "" | l -> ", " ^ String.concat ", " l) ^ " FROM accounts WHERE id > ?")
+      set_params (fun row -> let (__sqlgg_r_x, __sqlgg_idx_after_x) = read_x x row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x)
+  
+    module Fold = struct
+      let select_ids2 db ~x ~t callback acc =
+        let rec params_count_x : type a. a Select_ids2_x.t -> int = function
+          | Select_ids2_x.V (A _) -> 1
+          | Select_ids2_x.V (B _) -> 1
+          | Return _ -> 0
+          | Map (t, _) -> params_count_x t
+          | Both (a, b) -> params_count_x a + params_count_x b
+        in
+        let field_set_x : type a. a Select_ids2_x.field -> T.params -> unit = function
+          | A x -> fun p -> T.set_param_Int p x
+          | B x -> fun p -> T.set_param_Int p x
+        in
+        let rec set_x : type a. a Select_ids2_x.t -> T.params -> unit = function
+          | Select_ids2_x.V f -> fun p -> field_set_x f p
+          | Return _ -> fun _p -> ()
+          | Map (t, _) -> fun p -> set_x t p
+          | Both (a, b) -> fun p -> set_x a p; set_x b p
+        in
+        let field_to_column_x : type a. a Select_ids2_x.field -> string = function
+          | A _ -> (" " ^ "?" ^ " + 1 ")
+          | B _ -> (" (SELECT 6 + " ^ "?" ^ " LIMIT 1) ")
+        in
+        let rec to_a_field_list_x : type a. a Select_ids2_x.t -> Select_ids2_x.a_field list = function
+          | Select_ids2_x.V f -> [Any_field f]
+          | Return _ -> []
+          | Map (t, _) -> to_a_field_list_x t
+          | Both (a, b) -> to_a_field_list_x a @ to_a_field_list_x b
+        in
+        let field_read_x : type a. a Select_ids2_x.field -> T.row -> int -> a = function
+          | A _ -> fun row idx -> T.get_column_Int row idx
+          | B _ -> fun row idx -> T.get_column_Int_nullable row idx
+        in
+        let rec read_x : type a. a Select_ids2_x.t -> T.row -> int -> a * int = function
+          | Select_ids2_x.V f -> fun row idx -> (field_read_x f row idx, idx + 1)
+          | Return x -> fun _row idx -> (x, idx)
+          | Map (t, f) -> fun row idx -> let (v, idx') = read_x t row idx in (f v, idx')
+          | Both (a, b) -> fun row idx -> let (va, i1) = read_x a row idx in let (vb, i2) = read_x b row i1 in ((va, vb), i2)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + params_count_x x) in
+          set_x x p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT id, balance" ^ (match (x |> to_a_field_list_x |> List.map (fun (Select_ids2_x.Any_field f) -> field_to_column_x f)) with [] -> "" | l -> ", " ^ String.concat ", " l) ^ " FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = read_x x row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_ids2 db ~x ~t callback =
+        let rec params_count_x : type a. a Select_ids2_x.t -> int = function
+          | Select_ids2_x.V (A _) -> 1
+          | Select_ids2_x.V (B _) -> 1
+          | Return _ -> 0
+          | Map (t, _) -> params_count_x t
+          | Both (a, b) -> params_count_x a + params_count_x b
+        in
+        let field_set_x : type a. a Select_ids2_x.field -> T.params -> unit = function
+          | A x -> fun p -> T.set_param_Int p x
+          | B x -> fun p -> T.set_param_Int p x
+        in
+        let rec set_x : type a. a Select_ids2_x.t -> T.params -> unit = function
+          | Select_ids2_x.V f -> fun p -> field_set_x f p
+          | Return _ -> fun _p -> ()
+          | Map (t, _) -> fun p -> set_x t p
+          | Both (a, b) -> fun p -> set_x a p; set_x b p
+        in
+        let field_to_column_x : type a. a Select_ids2_x.field -> string = function
+          | A _ -> (" " ^ "?" ^ " + 1 ")
+          | B _ -> (" (SELECT 6 + " ^ "?" ^ " LIMIT 1) ")
+        in
+        let rec to_a_field_list_x : type a. a Select_ids2_x.t -> Select_ids2_x.a_field list = function
+          | Select_ids2_x.V f -> [Any_field f]
+          | Return _ -> []
+          | Map (t, _) -> to_a_field_list_x t
+          | Both (a, b) -> to_a_field_list_x a @ to_a_field_list_x b
+        in
+        let field_read_x : type a. a Select_ids2_x.field -> T.row -> int -> a = function
+          | A _ -> fun row idx -> T.get_column_Int row idx
+          | B _ -> fun row idx -> T.get_column_Int_nullable row idx
+        in
+        let rec read_x : type a. a Select_ids2_x.t -> T.row -> int -> a * int = function
+          | Select_ids2_x.V f -> fun row idx -> (field_read_x f row idx, idx + 1)
+          | Return x -> fun _row idx -> (x, idx)
+          | Map (t, f) -> fun row idx -> let (v, idx') = read_x t row idx in (f v, idx')
+          | Both (a, b) -> fun row idx -> let (va, i1) = read_x a row idx in let (vb, i2) = read_x b row i1 in ((va, vb), i2)
+        in
+        let set_params stmt =
+          let p = T.start_params stmt (1 + params_count_x x) in
+          set_x x p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT id, balance" ^ (match (x |> to_a_field_list_x |> List.map (fun (Select_ids2_x.Any_field f) -> field_to_column_x f)) with [] -> "" | l -> ", " ^ String.concat ", " l) ^ " FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_x, __sqlgg_idx_after_x) = read_x x row 2 in callback
+            ~id:(T.get_column_Int row 0)
+            ~balance:(T.get_column_Decimal_nullable row 1)
+            ~x:__sqlgg_r_x) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
+Test DynamicSelect with two dynamic columns:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -80
+  > CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @multi_dynamic
+  > SELECT id, @x { A { name } | B { 'default' } }, price, @y { C { price * 2 } | D { @factor :: Text } } FROM items;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Multi_dynamic_x = struct
+      type _ field =
+        | A : T.Types.Text.t option field
+        | B : T.Types.Text.t field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let a = V A
+      let b = V B
+    end
+  
+    module Multi_dynamic_y = struct
+      type _ field =
+        | C : T.Types.Decimal.t option field
+        | D : T.Types.Text.t -> T.Types.Text.t field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let c = V C
+      let d d = V (D d)
+    end
+  
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let multi_dynamic db ~x ~y callback =
+      let rec params_count_x : type a. a Multi_dynamic_x.t -> int = function
+        | Multi_dynamic_x.V A -> 0
+        | Multi_dynamic_x.V B -> 0
+        | Return _ -> 0
+        | Map (t, _) -> params_count_x t
+        | Both (a, b) -> params_count_x a + params_count_x b
+      in
+      let field_set_x : type a. a Multi_dynamic_x.field -> T.params -> unit = function
+        | A -> fun _p -> ()
+        | B -> fun _p -> ()
+      in
+      let rec set_x : type a. a Multi_dynamic_x.t -> T.params -> unit = function
+        | Multi_dynamic_x.V f -> fun p -> field_set_x f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_x t p
+        | Both (a, b) -> fun p -> set_x a p; set_x b p
+      in
+      let field_to_column_x : type a. a Multi_dynamic_x.field -> string = function
+        | A -> (" name ")
+        | B -> (" 'default' ")
+      in
+      let rec to_a_field_list_x : type a. a Multi_dynamic_x.t -> Multi_dynamic_x.a_field list = function
+        | Multi_dynamic_x.V f -> [Any_field f]
+        | Return _ -> []
+        | Map (t, _) -> to_a_field_list_x t
+        | Both (a, b) -> to_a_field_list_x a @ to_a_field_list_x b
+      in
+      let field_read_x : type a. a Multi_dynamic_x.field -> T.row -> int -> a = function
+        | A -> fun row idx -> T.get_column_Text_nullable row idx
+        | B -> fun row idx -> T.get_column_Text row idx
+      in
+      let rec read_x : type a. a Multi_dynamic_x.t -> T.row -> int -> a * int = function
+        | Multi_dynamic_x.V f -> fun row idx -> (field_read_x f row idx, idx + 1)
+        | Return x -> fun _row idx -> (x, idx)
+        | Map (t, f) -> fun row idx -> let (v, idx') = read_x t row idx in (f v, idx')
+        | Both (a, b) -> fun row idx -> let (va, i1) = read_x a row idx in let (vb, i2) = read_x b row i1 in ((va, vb), i2)
+      in
+      let rec params_count_y : type a. a Multi_dynamic_y.t -> int = function
+        | Multi_dynamic_y.V C -> 0
+        | Multi_dynamic_y.V (D _) -> 1
+        | Return _ -> 0
+        | Map (t, _) -> params_count_y t
+        | Both (a, b) -> params_count_y a + params_count_y b
+      in
+      let field_set_y : type a. a Multi_dynamic_y.field -> T.params -> unit = function
+        | C -> fun _p -> ()
+        | D x -> fun p -> T.set_param_Text p x
+      in
+      let rec set_y : type a. a Multi_dynamic_y.t -> T.params -> unit = function
+        | Multi_dynamic_y.V f -> fun p -> field_set_y f p
+
+Test DynamicSelect with Verbatim branches:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -50
+  > CREATE TABLE users (id INT, status TEXT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_verbatim
+  > SELECT id, @col { active { 'active' } | inactive { 'inactive' } | custom { status } } FROM users;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module With_verbatim_col = struct
+      type _ field =
+        | Active : T.Types.Text.t field
+        | Inactive : T.Types.Text.t field
+        | Custom : T.Types.Text.t option field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let active = V Active
+      let inactive = V Inactive
+      let custom = V Custom
+    end
+  
+  
+    let create_users db  =
+      T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
+  
+    let with_verbatim db ~col callback =
+      let rec params_count_col : type a. a With_verbatim_col.t -> int = function
+        | With_verbatim_col.V Active -> 0
+        | With_verbatim_col.V Inactive -> 0
+        | With_verbatim_col.V Custom -> 0
+        | Return _ -> 0
+        | Map (t, _) -> params_count_col t
+        | Both (a, b) -> params_count_col a + params_count_col b
+      in
+      let field_set_col : type a. a With_verbatim_col.field -> T.params -> unit = function
+        | Active -> fun _p -> ()
+        | Inactive -> fun _p -> ()
+        | Custom -> fun _p -> ()
+      in
+      let rec set_col : type a. a With_verbatim_col.t -> T.params -> unit = function
+        | With_verbatim_col.V f -> fun p -> field_set_col f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_col t p
+        | Both (a, b) -> fun p -> set_col a p; set_col b p
+      in
+      let field_to_column_col : type a. a With_verbatim_col.field -> string = function
+        | Active -> (" 'active' ")
+        | Inactive -> (" 'inactive' ")
+        | Custom -> (" status ")
+      in
+      let rec to_a_field_list_col : type a. a With_verbatim_col.t -> With_verbatim_col.a_field list = function
+        | With_verbatim_col.V f -> [Any_field f]
+        | Return _ -> []
+        | Map (t, _) -> to_a_field_list_col t
+        | Both (a, b) -> to_a_field_list_col a @ to_a_field_list_col b
+
+Test DynamicSelect at beginning of SELECT:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -40
+  > CREATE TABLE data (a INT, b TEXT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @first_col
+  > SELECT @x { X { a } | Y { b } }, a, b FROM data;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module First_col_x = struct
+      type _ field =
+        | X : T.Types.Int.t option field
+        | Y : T.Types.Text.t option field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let x = V X
+      let y = V Y
+    end
+  
+  
+    let create_data db  =
+      T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
+  
+    let first_col db ~x callback =
+      let rec params_count_x : type a. a First_col_x.t -> int = function
+        | First_col_x.V X -> 0
+        | First_col_x.V Y -> 0
+        | Return _ -> 0
+        | Map (t, _) -> params_count_x t
+        | Both (a, b) -> params_count_x a + params_count_x b
+      in
+      let field_set_x : type a. a First_col_x.field -> T.params -> unit = function
+        | X -> fun _p -> ()
+        | Y -> fun _p -> ()
+      in
+      let rec set_x : type a. a First_col_x.t -> T.params -> unit = function
+        | First_col_x.V f -> fun p -> field_set_x f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_x t p
+        | Both (a, b) -> fun p -> set_x a p; set_x b p
+      in
+      let field_to_column_x : type a. a First_col_x.field -> string = function
+        | X -> (" a ")
+        | Y -> (" b ")
+      in
+
+Test DynamicSelect disabled in subquery (fallback to Choice):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -20
+  > CREATE TABLE t1 (id INT);
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_subquery
+  > SELECT id, (SELECT @x { A { 1 } | B { 2 } } LIMIT 1) as sub FROM t1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_t1 db  =
+      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+  
+    let with_subquery db ~x callback =
+      let invoke_callback stmt =
+        callback
+          ~id:(T.get_column_Int_nullable stmt 0)
+          ~sub:(T.get_column_Int_nullable stmt 1)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match x with `A -> 0 | `B -> 0)) in
+        T.finish_params p
+      in
+      T.select db ("SELECT id, (SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1) as sub FROM t1") set_params invoke_callback
+  
+    module Fold = struct
+
+Test DynamicSelect with module annotation:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -70
+  > CREATE TABLE wrapped (
+  >     -- [sqlgg] module=Product_id
+  >     id INT PRIMARY KEY,
+  >     name TEXT,
+  >     price DECIMAL(10,2)
+  > );
+  > -- [sqlgg] dynamic_select=true
+  > -- @with_module
+  > SELECT @col { Id { id } | Name { name } } FROM wrapped WHERE id = @id;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module With_module_col = struct
+      type _ field =
+        | Id : Product_id.t field
+        | Name : T.Types.Text.t option field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let id = V Id
+      let name = V Name
+    end
+  
+  
+    let create_wrapped db  =
+      T.execute db ("CREATE TABLE wrapped (\n\
+          id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+      price DECIMAL(10,2)\n\
+  )") T.no_params
+  
+    let with_module db ~col ~id =
+      let rec params_count_col : type a. a With_module_col.t -> int = function
+        | With_module_col.V Id -> 0
+        | With_module_col.V Name -> 0
+        | Return _ -> 0
+        | Map (t, _) -> params_count_col t
+        | Both (a, b) -> params_count_col a + params_count_col b
+      in
+      let field_set_col : type a. a With_module_col.field -> T.params -> unit = function
+        | Id -> fun _p -> ()
+        | Name -> fun _p -> ()
+      in
+      let rec set_col : type a. a With_module_col.t -> T.params -> unit = function
+        | With_module_col.V f -> fun p -> field_set_col f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_col t p
+        | Both (a, b) -> fun p -> set_col a p; set_col b p
+      in
+      let field_to_column_col : type a. a With_module_col.field -> string = function
+        | Id -> (" id ")
+        | Name -> (" name ")
+      in
+      let rec to_a_field_list_col : type a. a With_module_col.t -> With_module_col.a_field list = function
+        | With_module_col.V f -> [Any_field f]
+        | Return _ -> []
+        | Map (t, _) -> to_a_field_list_col t
+        | Both (a, b) -> to_a_field_list_col a @ to_a_field_list_col b
+      in
+      let field_read_col : type a. a With_module_col.field -> T.row -> int -> a = function
+        | Id -> fun row idx -> Product_id.get_column (T.get_column_int64 row idx)
+        | Name -> fun row idx -> T.get_column_Text_nullable row idx
+      in
+      let rec read_col : type a. a With_module_col.t -> T.row -> int -> a * int = function
+        | With_module_col.V f -> fun row idx -> (field_read_col f row idx, idx + 1)
+        | Return x -> fun _row idx -> (x, idx)
+        | Map (t, f) -> fun row idx -> let (v, idx') = read_col t row idx in (f v, idx')
+        | Both (a, b) -> fun row idx -> let (va, i1) = read_col a row idx in let (vb, i2) = read_col b row i1 in ((va, vb), i2)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + params_count_col col) in
+        set_col col p;
+        T.set_param_int64 p (Product_id.set_param id);
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT " ^ (String.concat ", " (col |> to_a_field_list_col |> List.map (fun (With_module_col.Any_field f) -> field_to_column_col f))) ^ " FROM wrapped WHERE id = ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = read_col col row 0 in (__sqlgg_r_col))
+  
+
+Test DynamicSelect with LIMIT 1 (select_one):
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 | head -70
+  > CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2));
+  > -- [sqlgg] dynamic_select=true
+  > -- @select_one_product
+  > SELECT @col { Name { name } | Price { price } } FROM products WHERE id = @id LIMIT 1;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+    module Select_one_product_col = struct
+      type _ field =
+        | Name : T.Types.Text.t option field
+        | Price : T.Types.Decimal.t option field
+  
+      include Sqlgg_traits.Dynamic(struct type nonrec 'a t = 'a field end)
+  
+      let name = V Name
+      let price = V Price
+    end
+  
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let select_one_product db ~col ~id =
+      let rec params_count_col : type a. a Select_one_product_col.t -> int = function
+        | Select_one_product_col.V Name -> 0
+        | Select_one_product_col.V Price -> 0
+        | Return _ -> 0
+        | Map (t, _) -> params_count_col t
+        | Both (a, b) -> params_count_col a + params_count_col b
+      in
+      let field_set_col : type a. a Select_one_product_col.field -> T.params -> unit = function
+        | Name -> fun _p -> ()
+        | Price -> fun _p -> ()
+      in
+      let rec set_col : type a. a Select_one_product_col.t -> T.params -> unit = function
+        | Select_one_product_col.V f -> fun p -> field_set_col f p
+        | Return _ -> fun _p -> ()
+        | Map (t, _) -> fun p -> set_col t p
+        | Both (a, b) -> fun p -> set_col a p; set_col b p
+      in
+      let field_to_column_col : type a. a Select_one_product_col.field -> string = function
+        | Name -> (" name ")
+        | Price -> (" price ")
+      in
+      let rec to_a_field_list_col : type a. a Select_one_product_col.t -> Select_one_product_col.a_field list = function
+        | Select_one_product_col.V f -> [Any_field f]
+        | Return _ -> []
+        | Map (t, _) -> to_a_field_list_col t
+        | Both (a, b) -> to_a_field_list_col a @ to_a_field_list_col b
+      in
+      let field_read_col : type a. a Select_one_product_col.field -> T.row -> int -> a = function
+        | Name -> fun row idx -> T.get_column_Text_nullable row idx
+        | Price -> fun row idx -> T.get_column_Decimal_nullable row idx
+      in
+      let rec read_col : type a. a Select_one_product_col.t -> T.row -> int -> a * int = function
+        | Select_one_product_col.V f -> fun row idx -> (field_read_col f row idx, idx + 1)
+        | Return x -> fun _row idx -> (x, idx)
+        | Map (t, f) -> fun row idx -> let (v, idx') = read_col t row idx in (f v, idx')
+        | Both (a, b) -> fun row idx -> let (va, i1) = read_col a row idx in let (vb, i2) = read_col b row i1 in ((va, vb), i2)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (1 + params_count_col col) in
+        set_col col p;
+        T.set_param_Int p id;
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT " ^ (String.concat ", " (col |> to_a_field_list_col |> List.map (fun (Select_one_product_col.Any_field f) -> field_to_column_col f))) ^ " FROM products WHERE id = ? LIMIT 1")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = read_col col row 0 in (__sqlgg_r_col))
+  
+    module Single = struct
+      let select_one_product db ~col ~id =
+        let rec params_count_col : type a. a Select_one_product_col.t -> int = function
+          | Select_one_product_col.V Name -> 0
