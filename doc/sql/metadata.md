@@ -165,6 +165,10 @@ UPDATE non_nullifiable SET updated_at = @updated_at WHERE id = @id;
 
 In this mode sqlgg treats the assignment target as strict for updates (so `@updated_at` must be non-nullable and `SET updated_at = NULL` is rejected).
 
+## `dynamic_select=true`
+
+Enables runtime-composable SELECT columns with applicative combinators. See [Dynamic Select](./dynamic-select.md) for full documentation.
+
 ## `json_null_kind=<true|false|auto>`
 
 Controls whether **JSON literal `null`** is treated as an allowed value for JSON-typed columns (and for `TEXT` columns when `text_as_json=true`).

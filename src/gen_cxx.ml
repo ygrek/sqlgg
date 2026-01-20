@@ -168,7 +168,10 @@ let make_stmt index stmt =
    let params = params_only stmt.vars in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) identity;
-   let schema_binder_name = output_schema_binder index stmt.schema in
+   let schema = List.concat_map (function
+    | Sql.Attr attr -> [attr]
+    | Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
+   let schema_binder_name = output_schema_binder index schema in
    let params_binder_name = output_params_binder index params in
 (*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
    out_public ();
