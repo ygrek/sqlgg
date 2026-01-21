@@ -809,7 +809,6 @@ and get_params_of_columns env =
   let get = function
   | All | AllOf _ -> []
   | Expr (Choices (p, choices), _) when not env.is_subquery && !Config.dynamic_select ->
-    (* For DynamicSelect, get params from each branch separately *)
     [DynamicSelect (p, List.map (fun (n, e) -> 
       Simple (n, Option.map (fun e -> e |> resolve_types env |> fst |> get_params_of_res_expr env) e)
     ) choices)]
