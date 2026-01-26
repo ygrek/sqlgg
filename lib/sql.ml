@@ -317,7 +317,7 @@ module Meta = struct
   let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
 end
 
-type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
+type attr = { name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t }
   [@@deriving show {with_path=false}]
 
 let make_attribute name kind extra ~meta =
@@ -526,6 +526,8 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
+| DynamicSelect of param_id * ctor list
+[@@deriving show]
 and tuple_list_kind = Insertion of schema | Where_in of (Type.t * Meta.t) list * in_or_not_in * pos | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
@@ -703,6 +705,20 @@ let () = print (project ["b";"c";"b"] test)
 let () = print (project ["b";"d"] test)
 let () = print (rename test "a" "new_a")
 *)
+
+type schema_column_with_sources =
+  | AttrWithSources of table_name Schema.Source.Attr.t
+  | DynamicWithSources of param_id * (param_id * table_name Schema.Source.Attr.t) list
+  [@@deriving show]
+
+type schema_column =
+  | Attr of attr
+  | Dynamic of param_id * (param_id * attr) list
+  [@@deriving show]
+
+let drop_sources : schema_column_with_sources -> schema_column = function
+  | AttrWithSources { attr; _ } -> Attr attr
+  | DynamicWithSources (p, l) -> Dynamic (p, List.map (fun (p, { Schema.Source.Attr.attr; _ }) -> p, attr) l)
 
 let monomorphic ret args = F (Typ ret, List.map (fun t -> Type.Typ t) args)
 let fixed ret args = monomorphic (Type.depends ret) (List.map Type.depends args)

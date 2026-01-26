@@ -8,6 +8,12 @@ open Prelude
 open Gen
 open Sql
 
+let schema_to_attrs schema =
+  List.filter_map (function
+    | Sql.Attr attr -> Some attr
+    | Dynamic _ -> None
+  ) schema
+
 module G = Gen_cxx
 module J = Gen_java
 module Values = G.Values
@@ -96,9 +102,10 @@ let start () = ()
 let func_execute index stmt =
     let params = params_only stmt.vars in
     let values = G.Values.inject @@ values_of_params params in
-    let schema_binder_name = output_schema_binder index stmt.schema in
+    let schema = schema_to_attrs stmt.schema in
+    let schema_binder_name = output_schema_binder index schema in
     let is_select = Option.is_some schema_binder_name in
-    let doc = if is_select then ["result", schema_to_string stmt.schema] else [] in
+    let doc = if is_select then ["result", schema_to_string schema] else [] in
     comment_xml "execute query" doc;
     let func_name = if is_select then "execute_reader" else "execute" in
     let result = "public " ^ if is_select then "IEnumerable<IDataReader>" else "int" in
@@ -129,7 +136,7 @@ let func_execute index stmt =
       let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
       let all_params = values @ result in
       G.func "public int" "execute" all_params (fun () ->
-         let args = List.mapi (fun index attr -> get_column attr index) stmt.schema in
+         let args = List.mapi (fun index attr -> get_column attr index) schema in
          output "int count = 0;";
          output "foreach (var reader in execute_reader(%s))" (Values.inline values);
          G.open_curly ();
@@ -139,7 +146,7 @@ let func_execute index stmt =
          output "return count;"
       );
       empty_line ();
-      match stmt.schema with
+      match schema with
       | [attr] ->
         let t = as_lang_type attr.domain in
         G.func ("public IEnumerable<" ^ t ^ ">") "rows" values (fun () ->
@@ -154,10 +161,10 @@ let func_execute index stmt =
         output "public readonly %s %s;"
           (as_lang_type attr.domain)
           (name_of attr index)
-      ) stmt.schema;
+      ) schema;
       empty_line ();
       G.func "public" "row" ["reader","IDataReader"] (fun () ->
-        List.iteri (fun i attr -> output "%s = %s;" (name_of attr i) (get_column attr i)) stmt.schema;
+        List.iteri (fun i attr -> output "%s = %s;" (name_of attr i) (get_column attr i)) schema;
       );
       end_class "row";
       G.func "public IEnumerable<row>" "rows" values (fun () ->
