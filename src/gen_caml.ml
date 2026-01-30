@@ -932,6 +932,8 @@ let generate_enum_modules stmts =
     | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
+  let meta_has_module m = Sql.Meta.mem m "module" in
+
   let schemas_to_enums schemas =
     List.filter_map (fun ({ domain; meta; _ } : Sql.attr) ->
       if meta_has_module meta then None else get_enum domain

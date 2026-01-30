@@ -292,6 +292,8 @@ module Meta = struct
   let empty () = StringMap.empty
   
   let find_opt k map = StringMap.find_opt map k
+  
+  let mem k map = StringMap.mem map k
   let pp fmt t =
     if StringMap.is_empty t then
       Format.fprintf fmt "{}"

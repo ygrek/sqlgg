@@ -171,9 +171,9 @@ module Make_with_clock (Clock : Clock) (Config : Cache_config) (Impl : Cached_m)
     type value = cache_entry
     let on_evict (entry : cache_entry) =
       let open Impl.IO in
-      async (fun () ->
-        catch (fun () -> Impl.close_stmt entry.stmt) (fun _ -> return ()));
-      return ()
+      catch
+        (fun () -> Impl.close_stmt entry.stmt)
+        (fun _ -> return ())
   end
 
   module LRU = Async_lru.Make(Impl.IO)(Evict)
@@ -227,8 +227,7 @@ module Make_with_clock (Clock : Clock) (Config : Cache_config) (Impl : Cached_m)
     | Some entry ->
         with_stmt_cleanup
           ~on_success:(fun () ->
-            async (fun () -> LRU.remove sql state.cache >>= fun _ -> return ());
-            return ())
+            LRU.remove sql state.cache >>= fun _ -> return ())
           entry.stmt
     | None -> 
         Impl.prepare cached_conn.original sql >>= fun stmt ->
