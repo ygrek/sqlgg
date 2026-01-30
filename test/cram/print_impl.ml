@@ -246,7 +246,10 @@ module IO = struct
       succ_handler x
     with exn -> exc_handler exn
 
-  let async f = ignore (f ())
+  let async_calls = ref 0
+  let async f = incr async_calls; ignore (f ())
+  let reset_async_calls () = async_calls := 0
+  let get_async_calls () = !async_calls
 
   module List = struct
     let rec iter_s f = function

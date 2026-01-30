@@ -396,6 +396,42 @@ let () =
 
   Print_impl.restore_stats snapshot;
 
+  printf "\n=== TEST: Eviction does not use async (sync close fix) ===\n";
+  (* This test verifies that close_stmt is NOT called via async (fire-and-forget).
+     The fix removes async to avoid "Commands out of sync" errors on MySQL. *)
+  let module Sync_Config = struct let max_cache_size = 1 let ttl_seconds = None end in
+  let module Sync_Cache = Sqlgg_stmt_cache.Make(Sync_Config)(Print_impl) in
+  let sync_conn = Sync_Cache.create_cached_connection () in
+  let snapshot_sync = Print_impl.snapshot_stats () in
+  Print_impl.reset_mock_stats ();
+  Print_impl.clear_mock_responses ();
+  Print_impl.IO.reset_async_calls ();
+
+  (* Fill the cache *)
+  setup_mock_responses 1;
+  Sync_Cache.select sync_conn "SELECT 1"
+    (fun stmt -> Sync_Cache.finish_params (Sync_Cache.start_params stmt 0))
+    (fun _ -> ());
+  
+  let async_before = Print_impl.IO.get_async_calls () in
+  
+  (* Trigger eviction by adding second entry *)
+  setup_mock_responses 1;
+  Sync_Cache.select sync_conn "SELECT 2"
+    (fun stmt -> Sync_Cache.finish_params (Sync_Cache.start_params stmt 0))
+    (fun _ -> ());
+  
+  let async_after = Print_impl.IO.get_async_calls () in
+  printf "Async calls before eviction: %d, after: %d\n" async_before async_after;
+  
+  if async_after = async_before then
+    printf "Eviction does NOT use async - OK (sync close)\n"
+  else
+    failwith (sprintf "Eviction uses async! Before: %d, After: %d. This causes 'Commands out of sync' on MySQL."
+      async_before async_after);
+
+  printf "Sync close test passed!\n";
+  Print_impl.restore_stats snapshot_sync;
   
   printf "Error handling test completed!\n";
   printf "Final mock statistics:\n";
