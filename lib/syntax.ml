@@ -10,6 +10,7 @@ module Config = struct
   let debug = ref false
   (* If strict mode is not enabled, some dbs allow this. *)
   let allow_write_notnull_null = ref false
+  let dynamic_select = ref false
 end
 
 type env = {
@@ -28,6 +29,7 @@ type env = {
   (* Check if the current query is an UPDATE statement *)
   is_update: bool;
   insert_resolved_types: (string, Type.t) Hashtbl.t; (* for INSERT .. VALUES *)
+  is_subquery: bool;  (* whether we are inside a subquery *)
 }
 
 (* Merge global tables with ctes during resolving sources in SELECT .. FROM sources, JOIN *)
@@ -57,10 +59,10 @@ type res_expr =
 
 and case_branch = { when_: res_expr; then_: res_expr; } [@@deriving show]
 
-and res_fun = { kind: Type.t func [@printer pp_func] ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]  
-  
-and res_in_tuple_list = 
-  ResTyped of (Type.t * Meta.t) list | Res of (res_expr * Meta.t) list
+and res_fun = { kind: Type.t func [@printer pp_func] ; parameters: res_expr list; is_over_clause: bool; } [@@deriving show]
+
+and res_in_tuple_list =
+  ResTyped of (Type.t * Meta.t) list | Res of (res_expr * Meta.t) list [@@deriving show]
 
 let empty_env = { query_has_grouping = false; 
   tables = []; schema = []; 
@@ -68,7 +70,8 @@ let empty_env = { query_has_grouping = false;
   ctes = [];
   is_order_by = false;
   is_update = false;
-  insert_resolved_types = Hashtbl.create 16
+  insert_resolved_types = Hashtbl.create 16;
+  is_subquery = false;
 }
 
 let flat_map f l = List.flatten (List.map f l)
@@ -408,9 +411,9 @@ let rec resolve_columns env expr =
       ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind = kind_in_tuple_list; pos }
     | Inparam (x, m) -> ResInparam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
     | InChoice (n, k, x) -> ResInChoice (n, k, each x)
-    | Choices (n,l) -> ResChoices (n, List.map (fun (n,e) -> n, Option.map each e) l)
+    | Choices (n, l) -> ResChoices (n, List.map (fun (n, e) -> n, Option.map each e) l)
     | Fun { kind; parameters; is_over_clause; _ } ->
-      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map each parameters; is_over_clause }  
+      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map each parameters; is_over_clause }
     | Case { case; branches; else_ } ->
       let case = Option.map each case in
       let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each when_; then_ = each then_ }) branches in
@@ -422,11 +425,16 @@ let rec resolve_columns env expr =
       end
     (* nested select *)
     | SelectExpr (select, usage) ->
-      let (schema,p,_) = eval_select_full env select in
-      let schema = Schema.Source.from_schema schema in
+      let (schema, p, _) = eval_select_full { env with is_subquery = true } select in
+      let schema = List.map (function
+        | AttrWithSources a -> a
+        | DynamicWithSources _ -> fail "nested select cannot have dynamic attributes"
+      ) schema
+      in
+      let schema' = Schema.Source.from_schema schema in
       (* represet nested selects as functions with sql parameters as function arguments, some hack *)
       match schema, usage with
-      | [ {domain; _} ], `AsValue -> 
+      | [ { attr = {domain; _}; _ } ], `AsValue -> 
         (* This function should be raised? *)
         let rec with_count = function 
             | Case { case = _; branches; else_ } ->
@@ -453,10 +461,10 @@ let rec resolve_columns env expr =
         | ({ having = Some _; _ }, _) -> Type.nullable domain.t
         | ({ columns = [Expr(c, _)]; _ }, _) -> c |> with_count |> Option.default default_null
         | ({ columns = [_]; _ }, _) -> default_null
-        | _ -> raise (Schema.Error (schema, "nested sub-select used as an expression returns more than one column"))
+        | _ -> raise (Schema.Error (schema', "nested sub-select used as an expression returns more than one column"))
         in
         ResSelect (typ, p)
-      | s, `AsValue -> raise (Schema.Error (s, "only one column allowed for SELECT operator in this expression"))
+      | _, `AsValue -> raise (Schema.Error (schema', "only one column allowed for SELECT operator in this expression"))
       | _, `Exists -> ResSelect (Type.depends Any, p)
   in
   each expr
@@ -753,20 +761,32 @@ and infer_schema ~not_null_keys env columns =
       col
   in
   let resolve1 = function
-    | All -> List.map refine_column env.schema
-    | AllOf t -> List.map refine_column (schema_of ~env t)
+    | All -> List.map (fun x -> AttrWithSources (refine_column x)) env.schema
+    | AllOf t -> List.map (fun x -> AttrWithSources (refine_column x)) (schema_of ~env t)
     | Expr (e,name) ->
+      let make_col expr =
+        let _, t = resolve_types env expr in
+        let col = {
+          Schema.Source.Attr.attr = unnamed_attribute ~meta:(propagate_meta ~env expr) (get_or_failwith t);
+          sources = []
+        } in 
+        let col = refine_column col in
+        Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name
+      in
       let col =
         match e with
-        | Column col -> resolve_column ~env col.collated
-        | e -> { 
-          attr = unnamed_attribute ~meta:(propagate_meta ~env e) (resolve_types env e |> snd |> get_or_failwith);
-          sources = []
-        }
+        | Column col -> 
+          let col = resolve_column ~env col.collated in
+          let col = refine_column col in
+          AttrWithSources (Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name)
+        | Choices (p, choices) when not env.is_subquery && !Config.dynamic_select ->
+          let dynamic = choices |> List.filter_map (fun (choice_p, e_opt) -> 
+            Option.map (fun choice_e -> choice_p, make_col choice_e) e_opt
+          ) in 
+          DynamicWithSources (p, dynamic)
+        | e -> AttrWithSources (make_col e)
       in
       (* Refine before applying alias, so we check against original column name *)
-      let col = refine_column col in
-      let col = Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name in
       [ col ]
   in
   flat_map resolve1 columns
@@ -782,7 +802,11 @@ let _ =
 and get_params_of_columns env =
   let get = function
   | All | AllOf _ -> []
-  | Expr (e,_) -> get_params env e
+  | Expr (Choices (p, choices), _) when not env.is_subquery && !Config.dynamic_select ->
+    [DynamicSelect (p, List.map (fun (n, e) -> 
+      Simple (n, Option.map (fun e -> e |> resolve_types env |> fst |> get_params_of_res_expr env) e)
+    ) choices)]
+  | Expr (e, _) -> get_params env e
   in
   flat_map get
 
@@ -812,7 +836,7 @@ and params_of_assigns env ss =
   let exprs = resolve_column_assignments ~env ss in
   get_params_l env exprs
 
-and get_params_of_res_expr env (e:res_expr) =
+and get_params_of_res_expr env e =
   let rec loop acc e =
     match e with
     | ResSelect (_, p) -> (List.rev p) @ acc
@@ -833,7 +857,7 @@ and get_params_of_res_expr env (e:res_expr) =
     | ResInTupleList _
     | ResValue _ -> acc
     | ResInChoice (param, kind, e) -> ChoiceIn { param; kind; vars = get_params_of_res_expr env e } :: acc
-    | ResChoices (p,l) -> Choice (p, List.map (fun (n,e) -> Simple (n, Option.map (get_params_of_res_expr env) e)) l) :: acc
+    | ResChoices (p, l) -> Choice (p, List.map (fun (n, e) -> Simple (n, Option.map (get_params_of_res_expr env) e)) l) :: acc
   in
   loop [] e |> List.rev
 
@@ -971,10 +995,14 @@ and eval_select env { columns; from; where; group; having; } =
   let not_null_keys_having = extract_not_null_column_keys env having in
   let not_null_keys = not_null_keys_where @ not_null_keys_having in
   let final_schema = infer_schema ~not_null_keys env columns in
+  let final_schema' = List.concat_map (function
+    | AttrWithSources attr -> [attr]
+    | DynamicWithSources (_, l) -> List.map snd l
+  ) final_schema in
   (* use schema without aliases here *)
   let p1 = get_params_of_columns env columns in
-  let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then
-    let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema) } in
+  let env, p3 = if Dialect.Semantic.is_where_aliases_dialect () then 
+    let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema') } in
     env, get_params_opt { env with set_tyvar_strict = true; } where
   else
     let p3 = get_params_opt { env with set_tyvar_strict = true; 
@@ -983,7 +1011,7 @@ and eval_select env { columns; from; where; group; having; } =
     env, p3
   in
   (* ORDER BY, HAVING, GROUP BY allow have column without explicit referring to source if it's specified in SELECT *)
-  let env = { env with schema = update_schema_with_aliases env.schema final_schema } in
+  let env = { env with schema = update_schema_with_aliases env.schema final_schema' } in
   let satisfies_some_relevant_constraint table where env =
     let get_all_eql_checks expr = 
       let rec aux acc expr_list =
@@ -1069,8 +1097,12 @@ and resolve_source env (x, alias) =
   end in
   match x with
   | `Select select ->
-    let (s,p,_) = eval_select_full env select in
+    let (s,p,_) = eval_select_full { env with is_subquery = true } select in
     let tbl_alias = Option.map (fun { table_name; _ } -> table_name) alias in
+    let s = List.map (function
+      | AttrWithSources a -> a
+      | DynamicWithSources _ -> failwith "nested select cannot have dynamic attributes"
+    ) s in
     let s = List.map (fun i -> { i with Schema.Source.Attr.sources = List.concat [option_list tbl_alias; i.Schema.Source.Attr.sources] }) s in
     let s, tables = resolve_schema_with_alias s in
     s, p, tables
@@ -1078,6 +1110,11 @@ and resolve_source env (x, alias) =
     let (env,p) = eval_nested env (Some from) in
     let s = infer_schema ~not_null_keys:[] env [All] in
     if alias <> None then failwith "No alias allowed on nested tables";
+    let s = List.map (function 
+      | AttrWithSources attr -> attr
+       (* TODO: next step optimize it *)
+      | DynamicWithSources _ -> failwith "Nested source cannot have dynamic columns"
+    ) s in
     s, p, env.tables
   | `Table s ->
     let (name,s) = Tables_with_derived.get ~env s in
@@ -1099,14 +1136,19 @@ and resolve_source env (x, alias) =
         let unions = List.map (fun exprs -> `Union, dummy_select exprs ) xs in
         let select = dummy_select exprs in
         let select_complete = { select = select, unions; order=row_order; limit=row_limit; select_row_locking = None } in
-        eval_select_full env { select_complete; cte = None }
+        let (s, p, v) = eval_select_full env { select_complete; cte = None } in 
+        let s = List.map (function 
+          | AttrWithSources attr -> attr 
+          | DynamicWithSources _ -> failwith "VALUES cannot have dynamic columns"
+        ) s in
+        (s, p, v)
       | RowParam { id; types; values_start_pos } ->
-        List.map (fun t -> { attr = make_attribute' "" (Source_type.to_infer_type t); Schema.Source.Attr.sources = []}) 
-          types, [ TupleList (id, ValueRows { types = 
-            List.map Source_type.to_infer_type types ; values_start_pos }) ], Stmt.Select `Nat
+        List.map (fun t -> { attr = make_attribute' "" (Source_type.to_infer_type t); Schema.Source.Attr.sources = []}) types, 
+          [ TupleList (id, ValueRows { types = List.map Source_type.to_infer_type types; values_start_pos }) ], Stmt.Select `Nat
     in
     let s, tables = resolve_schema_with_alias s in
     s, p, tables
+
 
 and eval_select_full env { select_complete; cte } =
   let ctes, p1 = Option.map_default eval_cte ([], []) cte in
@@ -1134,8 +1176,13 @@ and eval_cte { cte_items; is_recursive } =
           in
           let stmt = { stmt_ with select = select, other } in
           let s1, p1, env, cardinality = eval_select env (fst stmt.select) in
+          let s1' = List.map (function 
+            | AttrWithSources attr -> attr
+            (* TODO: next step is to support it for CTEs *)
+            | DynamicWithSources _ -> failwith "Recursive CTEs cannot have dynamic columns"
+          ) s1 in
           (* UNIONed fields access by alias to itself cte *)
-          let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
+          let s2 = Schema.compound (Option.map_default a1 s1' cte.cols) s1' in
           let a2 = from_schema s2 in
           eval_compound ~env:{ env with ctes = (tbl_name, a2) :: env.ctes } (p1, s1, cardinality, stmt) 
         | CteSharedQuery _ -> failwith "Recursive CTEs with shared query currently are not supported"
@@ -1150,20 +1197,42 @@ and eval_cte { cte_items; is_recursive } =
           let s1, p1, kind = eval_select_full env stmt in
           s1, [SharedVarsGroup (p1, shared_query_name)], kind
       )
-    in  
+    in
+    let s1 = List.map (function 
+      | AttrWithSources attr -> attr
+        (* TODO: next step is to support it for CTEs *)
+      | DynamicWithSources _ -> failwith "Recursive CTEs cannot have dynamic columns"
+    ) s1 in
     let s2 = Schema.compound (Option.map_default a1 s1 cte.cols) s1 in
     (tbl_name, from_schema s2) :: acc_ctes, acc_vars @ p1 end
   ([], []) cte_items  
 
-and eval_compound ~env result = 
+and eval_compound ~env result =
   let (p1, s1, cardinality, stmt) = result in
   let { select=(_select, other); order; limit; _; } = stmt in
   let other = List.map snd other in
   let (s2l, p2l) = List.split (List.map (fun (s,p,_,_) -> s,p) @@ List.map (eval_select env) other) in
   let cardinality = if other = [] then cardinality else `Nat in
   (* ignoring tables in compound statements - they cannot be used in ORDER BY *)
-  let final_schema = List.fold_left Schema.compound s1 s2l in
-  let p3 = params_of_order order final_schema env in
+  let final_schema = 
+    if other = [] then s1
+    else (
+      (* TODO: next step is to support it for UNIONS (but if it's possible to control it) *)
+      let unwrap_attr = function 
+        | AttrWithSources attr -> attr
+        | DynamicWithSources _ -> failwith "Union/Except/Intersect doesn't support dynamic columns"
+      in
+      let s1' = List.map unwrap_attr s1 in
+      let s2l' = List.map (List.map unwrap_attr) s2l in
+      List.map (fun x -> AttrWithSources x) @@ List.fold_left Schema.compound s1' s2l'
+    )
+  in
+  let p3 = 
+    let schema = List.concat_map (function 
+      | AttrWithSources attr -> [attr]
+      | DynamicWithSources (_, a) -> List.map snd a
+    ) final_schema in
+    params_of_order order schema env in
   let (p4,limit1) = match limit with Some (p,x) -> List.map (fun p -> 
     Single (make_param ~id:p.id ~typ:(Source_type.to_infer_type p.typ), Meta.empty())) p, x | None -> [],false in
   (* Schema.check_unique schema; *)
@@ -1296,6 +1365,10 @@ let rec eval (stmt:Sql.stmt) =
       ([],[],Create name)
   | Create (name, Select { value=select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
+      let schema = List.map (function 
+        | AttrWithSources attr -> attr 
+        | DynamicWithSources _ -> failwith "CREATE TABLE AS SELECT cannot have dynamic columns"
+      ) schema in
       Tables.add (name, from_schema schema);
       ([],params,Create name)
   | Alter (name,actions) ->
@@ -1400,6 +1473,10 @@ let rec eval (stmt:Sql.stmt) =
     let select_complete = annotate_select select.select_complete expect in
     let select = { select with select_complete } in
     let (schema,params,_) = eval_select_full env select in
+    let schema = List.map (function 
+      | AttrWithSources attr -> attr 
+      | DynamicWithSources _ -> failwith "INSERT ... SELECT cannot have dynamic columns"
+    ) schema in
     ignore (Schema.compound
       ((List.map (fun attr -> {sources=[]; attr;})) expect)
       (List.map (fun {attr; _} -> {sources=[]; attr}) schema)); (* test equal types once more (not really needed) *)
@@ -1461,7 +1538,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update None
   | Select select -> 
     let (schema, a, b) = eval_select_full empty_env select in
-    from_schema schema , a ,b
+    List.map drop_sources schema, a, b
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name
 
@@ -1495,7 +1572,7 @@ let unify_params l =
   | SharedVarsGroup (vars, _)
   | ChoiceIn { vars; _ } -> List.iter traverse vars
   | OptionActionChoice (_, l, _, _) -> List.iter traverse l
-  | Choice (p,l) -> check_choice_name ~sharing_disabled:true p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
+  | Choice (p,l) | DynamicSelect (p, l) -> check_choice_name ~sharing_disabled:true p; List.iter (function Simple (_,l) -> Option.may (List.iter traverse) l | Verbatim _ -> ()) l
   | TupleList _ -> ()
   in
   let rec map = function
@@ -1509,6 +1586,7 @@ let unify_params l =
   | SharedVarsGroup (vars, pos) -> SharedVarsGroup (List.map map vars, pos)
   | OptionActionChoice (p, l, pos, kind) -> OptionActionChoice (p, (List.map map l), pos, kind)
   | Choice (p, l) -> Choice (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
+  | DynamicSelect (p, l) -> DynamicSelect (p, List.map (function Simple (n,l) -> Simple (n, Option.map (List.map map) l) | Verbatim _ as v -> v) l)
   | TupleList _ as x -> x
   in
   List.iter traverse l;

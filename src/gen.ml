@@ -8,7 +8,7 @@ open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
-type stmt = { schema : Sql.Schema.t; vars : Sql.var list; kind : kind; props : Props.t; }
+type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t; }
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -117,23 +117,7 @@ let substitute_vars s vars subst_param =
       in
       loop s acc i2 parami tl
     | Choice (name,ctors) :: tl ->
-      let dyn = ctors |> List.map begin function
-        | Sql.Simple (ctor,args) ->
-          let (c1,c2) = ctor.pos in
-          assert ((c2 = 0 && c1 = 1) || c2 > c1);
-          assert (c1 > i);
-          let sql =
-            match args with
-            | None -> [Static ""]
-            | Some l ->
-              let (acc,last) = loop s [] c1 0 l in
-              List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
-          in
-          { ctor; sql; args; is_poly=true }
-        | Verbatim (n,v) ->
-          { ctor = Sql.make_located ~value:(Some n) ~pos:(0,0); args=Some []; sql=[Static v]; is_poly=true }
-        end
-      in
+      let dyn = process_ctors ~is_poly:true s i ctors in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);
@@ -146,7 +130,7 @@ let substitute_vars s vars subst_param =
       assert (j2 > j1);
       assert (j1 > i); 
       let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in { value = (types, in_not_in); pos = (j1, j2) })] in
-      let acc =  DynamicIn (id, in_not_in, sub) :: acc @ [Static (String.slice ~first:i ~last:j1 s)] in
+      let acc = DynamicIn (id, in_not_in, sub) :: Static (String.slice ~first:i ~last:j1 s) :: acc in
       loop s acc i2 parami tl
     | TupleList (id, ValueRows x) :: tl ->
       let (i1,i2) = id.pos in
@@ -188,6 +172,30 @@ let substitute_vars s vars subst_param =
         let raw_processed = loop_and_squash shared_sql shared_vars in
         let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
         loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl
+    | DynamicSelect (name,ctors) :: tl ->
+      let dyn = process_ctors ~is_poly:false s i ctors in
+      let (i1,i2) = name.pos in
+      assert (i2 > i1);
+      assert (i1 > i);
+      let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
+      loop s acc i2 parami tl
+  and process_ctors ~is_poly s i ctors =
+    ctors |> List.map begin function
+      | Sql.Simple (ctor, args) ->
+        let (c1, c2) = ctor.pos in
+        assert ((c2 = 0 && c1 = 1) || c2 > c1);
+        assert (c1 > i);
+        let sql =
+          match args with
+          | None -> [Static ""]
+          | Some l ->
+            let (acc, last) = loop s [] c1 0 l in
+            List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
+        in
+        { ctor; sql; args; is_poly }
+      | Verbatim (n, v) ->
+        { ctor = { value = Some n; pos = (0,0) }; args = Some []; sql = [Static v]; is_poly }
+    end
   and loop_and_squash sql vars =
     let acc, last = loop sql [] 0 0 vars in
     let acc = List.rev (Static (String.slice ~first:last sql) :: acc) in
@@ -266,7 +274,8 @@ let rec find_param_ids l =
       | OptionActionChoice (id, _, _, _) -> [id]
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | SharedVarsGroup (vars, _) -> find_param_ids vars
-      | TupleList (id, _) -> [ id ])
+      | TupleList (id, _) -> [ id ]
+      | DynamicSelect (id, _) -> [ id ])
     l
 
 let names_of_vars l =
@@ -284,7 +293,8 @@ let rec params_only l =
       | ChoiceIn { vars; _ } -> params_only vars
       | OptionActionChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
-      | TupleList _ -> [])
+      | TupleList _ -> []
+      | DynamicSelect _ -> fail "dynamic selects not supported for this host language (params_only)")
     l
 
 let rec inparams_only l =

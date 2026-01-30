@@ -8,6 +8,12 @@ open Prelude
 open Stmt
 open Gen
 
+let schema_to_attrs schema =
+  List.filter_map (function
+    | Sql.Attr attr -> Some attr
+    | Dynamic _ -> None
+  ) schema
+
 type xml = | Node of (string * (string * string) list * xml list)
            | Comment of string
 
@@ -58,7 +64,7 @@ let value ?(inparam=false) v =
   Node ("value", attrs, [])
 
 let tuplelist_value_of_param = function
-  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionActionChoice _ | SharedVarsGroup _ -> None
+  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionActionChoice _ | SharedVarsGroup _ | DynamicSelect _ -> None
   | TupleList ({ value = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ value = Some name; _ }, kind) ->
     let schema = match kind with 
@@ -105,7 +111,8 @@ let rec params_only l =
       | SingleIn _ -> []
       | SharedVarsGroup (vars, _)
       | ChoiceIn { vars; _ } -> params_only vars
-      | Choice (_,choices) ->
+      | Choice (_,choices)
+      | DynamicSelect (_, choices) ->
         choices
         |> List.map (function Sql.Verbatim _ | Simple (_,None) -> [] | Simple (_name,Some vars) -> params_only vars) (* TODO prefix names *)
         |> List.concat
@@ -120,7 +127,7 @@ let generate_code (x,_) index stmt =
           @ (params_to_values @@ params_only stmt.vars)
           @ (inparams_to_values @@ inparams_only stmt.vars))
   in
-  let output = Node ("out",[],schema_to_values stmt.schema) in
+  let output = Node ("out",[],schema_to_values (schema_to_attrs stmt.schema)) in
   let sql = get_sql_string stmt in
   let attrs =
     match stmt.kind with
