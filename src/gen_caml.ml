@@ -614,11 +614,11 @@ let make_to_literal meta typ =
     | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
     | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
     | t -> match Sql.Meta.find_opt meta "module" with
-      | None -> sprintf "T.Types.%s.to_literal" (L.as_lang_type t)
+      | None -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t)
       | Some m -> 
         let set_param = "set_param" in
         let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
-        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (L.as_lang_type t) (L.as_runtime_repr_name t) m set_param_name
+        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (Sql.Type.type_name t) (L.as_runtime_repr_name t) m set_param_name
   in go typ
 
 let gen_in_substitution meta var =

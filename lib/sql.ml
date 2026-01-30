@@ -50,13 +50,20 @@ struct
     [@@deriving eq, show{with_path=false}]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
+    (* Simple type names for code generation *)
     let show_kind = function
       | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
+      | StringLiteral _ -> "Text"
+      | FloatingLiteral _ -> "Float"
+      | Decimal _ -> "Decimal"
+      | k -> show_kind k
+
+    (* Detailed type names for debugging/error messages *)
+    let show_kind_full = function
       | StringLiteral l -> sprintf "StringLiteral (%s)" l
       | FloatingLiteral f -> sprintf "FloatingLiteral (%g)" f
       | Decimal { precision = Some p; scale = Some s } -> sprintf "Decimal(%d,%d)" p s
       | Decimal { precision = Some p; scale = None } -> sprintf "Decimal(%d)" p
-      | Decimal _ -> "Decimal"
       | k -> show_kind k
 
   type nullability =
@@ -83,7 +90,7 @@ struct
 
   let (=) : t -> t -> bool = equal
 
-  let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
+  let show { t; nullability; } = show_kind_full t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
   let _ = pp
   let pp pf t = Format.pp_print_string pf (show t)
 
@@ -534,7 +541,7 @@ module Source_type = struct
 
   let show { t; nullability; } = 
     let kind_str = match t with
-      | Infer ty -> Type.show_kind ty
+      | Infer ty -> Type.show_kind_full ty
       | UInt32 -> "UInt32"
     in
     kind_str ^ (match nullability with Type.Nullable -> "?" | Type.Depends -> "??" | Type.Strict -> "")
