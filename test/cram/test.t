@@ -123,9 +123,9 @@ Test MySQL dialect with PostgreSQL collations (should fail 3 times, since there 
   >     locale TEXT COLLATE "C.UTF-8"
   > );
   > EOF
-  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C.UTF-8"
-  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "en-US-x-icu"
   Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C"
+  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "en-US-x-icu"
+  Feature Collation is not supported for dialect MySQL (supported by: PostgreSQL) at COLLATE "C.UTF-8"
   Errors encountered, no code generated
   [1]
 
@@ -200,7 +200,7 @@ Test TiDB dialect with CREATE TABLE AS SELECT (should fail):
   > CREATE TABLE users (id INT, name TEXT);
   > CREATE TABLE summary AS SELECT id, name FROM users;
   > EOF
-  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at CREATE TABLE summary AS SELECT id, name FROM users
+  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at  SELECT id, name FROM users
   Errors encountered, no code generated
   [1]
 
@@ -686,8 +686,7 @@ Test PostgreSQL dialect with UNSIGNED (should fail):
   Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
   Errors encountered, no code generated
   [1]
-Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
-Errors encountered, no code generated
+
 
 
 
@@ -3517,3 +3516,13 @@ Test IS NOT NULL type refinement with IS NULL:
   
     end (* module List *)
   end (* module Sqlgg *)
+
+Test ENUM with CHARACTER SET and COLLATE:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE test (
+  >   id INT PRIMARY KEY AUTO_INCREMENT,
+  >   username VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  >   email VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
+  >   status ENUM('active', 'inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL
+  > ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+  > EOF

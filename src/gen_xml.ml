@@ -59,14 +59,16 @@ let value ?(inparam=false) v =
 
 let tuplelist_value_of_param = function
   | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionActionChoice _ | SharedVarsGroup _ -> None
-  | TupleList ({ label = None; _ }, _) -> failwith "empty label in tuple subst"
-  | TupleList ({ label = Some name; _ }, kind) ->
+  | TupleList ({ value = None; _ }, _) -> failwith "empty label in tuple subst"
+  | TupleList ({ value = Some name; _ }, kind) ->
     let schema = match kind with 
     | Insertion schema -> schema 
     | ValueRows { types; _ } -> 
       let types = List.map (fun t -> t, Sql.Meta.empty()) types in
       Gen_caml.make_schema_of_tuple_types name types
-    | Where_in (types, _, _) -> Gen_caml.make_schema_of_tuple_types name types
+    | Where_in { value = (types, _); _ } -> 
+      let types = List.map (fun (t, m) -> t, m) types in
+      Gen_caml.make_schema_of_tuple_types name types
     in
     let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in

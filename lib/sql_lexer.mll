@@ -341,8 +341,8 @@ ruleMain = parse
 
   | "?"   { QSTN }
   | "??"  { TWO_QSTN }
-  | [':' '@'] (ident as str) { PARAM { label = Some str; pos = pos lexbuf } }
-  | '&' (ident as ref_name) { SHARED_QUERY_REF { ref_name; pos = pos lexbuf } }
+  | [':' '@'] (ident as str) { PARAM (Sql.make_located ~value:(Some str) ~pos:(pos lexbuf)) }
+  | '&' (ident as value) { SHARED_QUERY_REF { value; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
   | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
