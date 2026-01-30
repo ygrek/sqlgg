@@ -1146,6 +1146,20 @@ Cache prepared statements:
     6. SELECT_WITH_STMT[2]
   ---
   TTL immediate expiry test passed!
+  
+  === TEST: Eviction does not use async (sync close fix) ===
+  [MOCK] PREPARE[1]: SELECT 1
+  [MOCK] SELECT_WITH_STMT[1]
+  [MOCK] Processing 1 rows in select_with_stmt
+    Row 0: col0=1 
+  [MOCK] PREPARE[2]: SELECT 2
+  [MOCK] CLOSE[1]: SELECT 1
+  [MOCK] SELECT_WITH_STMT[2]
+  [MOCK] Processing 1 rows in select_with_stmt
+    Row 0: col0=1 
+  Async calls before eviction: 0, after: 0
+  Eviction does NOT use async - OK (sync close)
+  Sync close test passed!
   Error handling test completed!
   Final mock statistics:
   
