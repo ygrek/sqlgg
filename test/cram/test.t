@@ -3468,6 +3468,6 @@ optional parameter in UPDATE:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE products SET stock = " ^ (match stock with Some _ -> " ( " ^ " " ^ "?" ^ " " ^ " ) " | None -> " TRUE ") ^ " WHERE id = ?") set_params
+      T.execute db ("UPDATE products SET stock = " ^ (match stock with Some _ -> " ( " ^ " " ^ "?" ^ " " ^ " ) " | None -> " stock ") ^ " WHERE id = ?") set_params
   
   end (* module Sqlgg *)
