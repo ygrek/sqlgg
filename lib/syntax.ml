@@ -257,7 +257,7 @@ let resolve_column_assignments ~env l =
       let l_with_meta = List.map (fun (n,e) -> n, Option.map (set_param_meta ~env col) e) l in
       Choices (n, List.map (fun (n,e) -> n, Option.map (equality typ) e) l_with_meta)
     | RegularExpr (OptionActions ch) ->
-      OptionActions { ch with choice = (equality typ) ch.choice }  (* FIXME hack, should propagate properly *)
+      OptionActions { ch with choice = (equality typ) ch.choice; kind = SetSelf col.cname }
     | RegularExpr expr -> equality typ (set_param_meta ~env col expr)
     | WithDefaultParam (e, pos) -> with_default @@ OptionActions { choice = equality typ (set_param_meta ~env col e); pos; kind = SetDefault }
     | AssignDefault -> with_default @@ (Value typ)

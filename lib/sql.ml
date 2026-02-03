@@ -548,7 +548,7 @@ module Source_type = struct
 end
 
 type 't param = { id : param_id; typ : 't; } [@@deriving show, make]
-type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
+type option_actions_kind = BoolChoices | SetDefault | SetSelf of string [@@deriving show]
 type params = Type.t param list [@@deriving show]
 type in_or_not_in = [`In | `NotIn] [@@deriving show]
 type ctor =
