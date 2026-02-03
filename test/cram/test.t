@@ -3437,3 +3437,37 @@ Test ENUM with CHARACTER SET and COLLATE:
   >   status ENUM('active', 'inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL
   > ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
   > EOF
+
+optional parameter in UPDATE:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE products (
+  >  id INT PRIMARY KEY,
+  >  stock INT NOT NULL
+  > );
+  > 
+  > UPDATE products SET stock = { @stock }? WHERE id = @id;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (\n\
+   id INT PRIMARY KEY,\n\
+   stock INT NOT NULL\n\
+  )") T.no_params
+  
+    let update_products_1 db ~stock ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + (match stock with Some _ -> 1 | None -> 0)) in
+        begin match stock with
+        | None -> ()
+        | Some stock ->
+          T.set_param_Int p stock;
+        end;
+        T.set_param_Int p id;
+        T.finish_params p
+      in
+      T.execute db ("UPDATE products SET stock = " ^ (match stock with Some _ -> " ( " ^ " " ^ "?" ^ " " ^ " ) " | None -> " TRUE ") ^ " WHERE id = ?") set_params
+  
+  end (* module Sqlgg *)
