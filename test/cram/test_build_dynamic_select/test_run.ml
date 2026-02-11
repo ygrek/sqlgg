@@ -9,6 +9,7 @@ module M (T: Sqlgg_traits.M with
   type Types.Any.t = string) = struct
 
   module Sql = Output.Sqlgg(T)
+  open Sql
 
   (* === Test 1: Basic select_one_maybe === *)
   module Test1 = struct
@@ -89,7 +90,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L]
       ));
-      let constant = return "constant_value" in
+      let constant = pure "constant_value" in
       let _ = Sql.select_product connection ~col:constant ~id:6L in
       printf "[TEST 1.6] Completed\n\n"
 

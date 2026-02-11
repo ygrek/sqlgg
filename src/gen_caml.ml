@@ -737,21 +737,17 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
   
   let sql_pieces = get_sql stmt in
   
-  List.iter (fun di ->
-    output "let (_, __%s_data) = %s in" di.param_name di.param_name
-  ) dynamic_infos;
-  
   let other_vars = List.filter (function Sql.DynamicSelect _ -> false | _ -> true) stmt.vars in
   let static_count = eval_count_params other_vars in
   let dynamic_counts = dynamic_infos |> List.map (fun di -> 
-    sprintf "__%s_data.%s.count" di.param_name di.module_name
+    sprintf "%s.count" di.param_name
   ) |> String.concat " + " in
   
   output "let set_params stmt =";
   inc_indent ();
   output "let p = T.start_params stmt (%s + %s) in" static_count dynamic_counts;
   List.iter (fun di ->
-    output "__%s_data.%s.set p;" di.param_name di.module_name
+    output "%s.set p;" di.param_name
   ) dynamic_infos;
   List.iteri set_var other_vars;
   output "T.finish_params p";
@@ -774,9 +770,9 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
       let di = find_di_by_pid pid in
       let dyn_expr = 
         if pending_comma then
-          sprintf "(match __%s_data.%s.column with \"\" -> \"\" | c -> \", \" ^ c)" di.param_name di.module_name
+          sprintf {|(match %s.column with "" -> "" | c -> ", " ^ c)|} di.param_name
         else
-          sprintf "__%s_data.%s.column" di.param_name di.module_name
+          sprintf "%s.column" di.param_name
       in
       build_parts (dyn_expr :: acc) false rest
     | _ :: rest -> build_parts acc pending_comma rest
@@ -823,7 +819,7 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
       let read_var = sprintf "__sqlgg_r_%s" di.param_name in
       let next_var = sprintf "__sqlgg_idx_after_%s" di.param_name in
       let start = col_idx_at ~base:st.idx_expr ~offset:st.static_idx in
-      let binding = sprintf "let (%s, %s) = __%s_data.%s.read row %s in " read_var next_var di.param_name di.module_name start in
+      let binding = sprintf "let (%s, %s) = %s.read row %s in " read_var next_var di.param_name start in
       { bindings = binding :: st.bindings; 
         reads = format_param di.param_name read_var :: st.reads;
         static_idx = 0;
@@ -1006,6 +1002,48 @@ let generate_enum_modules stmts =
     ()
   )
   
+let generate_dynamic_select_preamble stmts =
+  let has_dynamic = List.exists (fun stmt ->
+    List.exists (function Sql.DynamicSelect _ -> true | _ -> false) stmt.Gen.vars
+  ) stmts in
+  if has_dynamic then begin
+    empty_line ();
+    let ind = make_indent () in
+    String.split_on_char '\n' {|type 'a field_data = {
+  set: T.params -> unit;
+  read: T.row -> int -> 'a * int;
+  column: string;
+  count: int;
+}
+
+let pure x = {
+  set = (fun _p -> ());
+  read = (fun _row idx -> (x, idx));
+  column = "";
+  count = 0;
+}
+
+let apply f a = {
+  set = (fun p -> f.set p; a.set p);
+  read = (fun row idx ->
+    let (vf, i1) = f.read row idx in
+    let (va, i2) = a.read row i1 in
+    (vf va, i2));
+  column = (match f.column, a.column with
+    | "", c | c, "" -> c
+    | c1, c2 -> c1 ^ ", " ^ c2);
+  count = f.count + a.count;
+}
+
+let map f a = apply (pure f) a
+
+let (let+) t f = map f t
+let (and+) a b = apply (map (fun a b -> (a, b)) a) b|}
+    |> List.iter (fun line ->
+      if line = "" then print_newline ()
+      else Printf.printf "%s%s\n" ind line)
+  end
+
 let get_all_dynamic_select_infos index stmt =
   let query_name = Gen.choose_name stmt.Gen.props stmt.Gen.kind index in
   let ds_from_vars = stmt.Gen.vars |> List.filter_map (function Sql.DynamicSelect (param_id, ctors) -> Some (param_id, ctors) | _ -> None) in
@@ -1043,16 +1081,11 @@ let generate_dynamic_select_modules stmts =
       output "module %s = struct" module_name;
       inc_indent ();
       
-      output "include Sqlgg_traits.DynamicSelect";
-      empty_line ();
-      
       List.iter2 (fun (field_name, _param_name, all_param_names, _simple_params, args_list, attr, ctor) (_, sql) ->
         let field_name_lower = 
           let name = String.lowercase_ascii field_name in
           if List.mem name Name.reserved then name ^ "_" else name
         in
-        let tag = sprintf "`%s" field_name in
-        
         let read_body = sprintf "(fun row idx -> (%s, idx + 1))" (format_get_column ~row:"row" ~idx:"idx" attr) in
 
         let column_body = match ctor with 
@@ -1083,14 +1116,14 @@ let generate_dynamic_select_modules stmts =
             "(fun _p -> ())"
         in
         
-        output "(%s, {" tag;
+        output "{";
         inc_indent ();
         output "set = %s;" set_ref;
         output "read = %s;" read_body;
         output "column = %s;" column_body;
         output "count = %s;" count_expr;
         dec_indent ();
-        output "})";
+        output "}";
         dec_indent ()
       ) fields field_sqls;
       
@@ -1122,6 +1155,7 @@ let generate ~gen_io name stmts =
   inc_indent ();
   output "module IO = %s" io;
   generate_enum_modules stmts;
+  generate_dynamic_select_preamble stmts;
   generate_dynamic_select_modules stmts;
   empty_line ();
   List.iteri (generate_stmt_wrapper `Direct) stmts;
