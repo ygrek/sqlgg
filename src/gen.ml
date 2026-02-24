@@ -173,7 +173,23 @@ let substitute_vars s vars subst_param =
         let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
         loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl
     | DynamicSelect (name,ctors) :: tl ->
-      let dyn = process_ctors ~is_poly:false s i ctors in
+      let dyn = ctors |> List.map begin function
+        | Sql.Simple (ctor, args) ->
+          let (c1, c2) = ctor.pos in
+          let sql = match args with
+            | None | Some [] -> [Static (String.slice ~first:c1 ~last:c2 s)]
+            | Some l ->
+              let (acc, last) = loop s [] (c1 - 1) 0 l in
+              let pieces = List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc) in
+              begin match pieces with
+              | Static hd :: rest -> Static (String.slice ~first:1 hd) :: rest
+              | _ -> pieces
+              end
+          in
+          { ctor; sql; args; is_poly = false }
+        | Verbatim (n, v) ->
+          { ctor = { value = Some n; pos = (0,0) }; args = Some []; sql = [Static v]; is_poly = false }
+      end in
       let (i1,i2) = name.pos in
       assert (i2 > i1);
       assert (i1 > i);

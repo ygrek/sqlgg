@@ -150,10 +150,16 @@ let rec is_windowing = function
 | Fun { is_over_clause; _ } -> is_over_clause
 
 let exists_grouping columns =
-  List.exists (function Expr (e,_) -> is_grouping e | All | AllOf _ -> false) columns
+  List.exists (function
+    | { value = Expr ({ value; _ }, _); _ } -> is_grouping value
+    | { value = (All | AllOf _); _ } -> false
+  ) columns
 
 let exists_windowing columns =
-  List.exists (function Expr (e,_) -> is_windowing e | All | AllOf _ -> false) columns  
+  List.exists (function
+    | { value = Expr ({ value; _ }, _); _ } -> is_windowing value
+    | { value = (All | AllOf _); _ } -> false
+  ) columns  
 
 (* all columns from tables, without duplicates *)
 (* FIXME check type of duplicates *)
@@ -324,6 +330,61 @@ let extract_meta_from_col ~env expr =
   in
   aux expr    
 
+let make_dynamic_select ~env ~is_subquery columns =
+  if not !Config.dynamic_select || is_subquery then
+    columns
+  else
+    let module S = Set.Make(String) in
+    let dynamic_col_param_name = "col" in
+    let unique_name used base =
+      if not (S.mem base used) then
+        base
+      else
+        let rec aux n =
+          let candidate = base ^ "_" ^ string_of_int n in
+          if S.mem candidate used then aux (n + 1) else candidate
+        in
+        aux 1
+    in
+    let use_expanded_choices ~used ~idx ~column_pos ~schema =
+      let rev_choices, used, idx =
+        List.fold_left (fun (choices, used, idx) { Schema.Source.Attr.attr = { name; _ }; sources } ->
+          let source = match sources with s :: _ -> Some s | [] -> None in
+          let col_name = unique_name used name in
+          let expr = Column { collated = { cname = name; tname = source }; collation = None } in
+          let choice = ({ value = Some col_name; pos = Sql.dummy_pos }, Some expr), column_pos in
+          choice :: choices, S.add col_name used, idx + 1
+        ) ([], used, idx) schema
+      in
+      (used, idx, snd column_pos), List.rev rev_choices
+    in
+    let (_, _, last_col_end), choices_chunks =
+      List.fold_left_map (fun (used, idx, _last_end) column ->
+        match column.value with
+        | Expr ({ value = e; pos = ep_start, ep_end }, alias) ->
+          let base_name = Option.default begin match e with
+            | Column { collated = { cname; _ }; _ } -> cname
+            | _ -> dynamic_col_param_name ^ string_of_int (idx + 1)
+            end alias
+          in
+          let col_name = unique_name used base_name in
+          let choice = (({ value = Some col_name; pos = (ep_start, ep_end) }, Some e), column.pos) in
+          ((S.add col_name used, idx + 1, snd column.pos), [choice])
+        | All ->
+          use_expanded_choices ~used ~idx ~column_pos:column.pos ~schema:env.schema
+        | AllOf t ->
+          use_expanded_choices ~used ~idx ~column_pos:column.pos ~schema:(schema_of ~env t)
+      ) (S.empty, 0, 0) columns
+    in
+    let all_choices = List.concat choices_chunks in
+    match all_choices with
+    | [] -> columns
+    | (_, (first_pos, _)) :: _ ->
+      let outer_pos = (first_pos, last_col_end) in
+      let choices = List.map fst all_choices in
+      [{ value = Expr ({ value = Choices ({ value = Some dynamic_col_param_name; pos = outer_pos }, choices); pos = outer_pos }, None); pos = outer_pos }]
+  
+
 (** resolve each name reference (Column, Inserted, etc) into ResValue or ResFun of corresponding type *)
 let rec resolve_columns env expr =
   if !Config.debug then
@@ -459,7 +520,7 @@ let rec resolve_columns env expr =
            Any other expression could possibly return no rows. *)
         let typ = match select.select_complete.select with 
         | ({ having = Some _; _ }, _) -> Type.nullable domain.t
-        | ({ columns = [Expr(c, _)]; _ }, _) -> c |> with_count |> Option.default default_null
+        | ({ columns = [{ value = Expr ({ value = c; _ }, _); _ }]; _ }, _) -> c |> with_count |> Option.default default_null
         | ({ columns = [_]; _ }, _) -> default_null
         | _ -> raise (Schema.Error (schema', "nested sub-select used as an expression returns more than one column"))
         in
@@ -741,9 +802,9 @@ and infer_schema ~not_null_keys env columns =
      (* null handling functions that preserve metadata from first argument *)
     | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = e :: _; _ } -> propagate_meta ~env e
     (* Or for subselect which always requests only one column, TODO: consider CTE in subselect, perhaps a rare occurrence *)
-    | SelectExpr ({ select_complete = { select = ({columns = [Expr(e, _)]; from; _}, _); _ }; _ }, _) ->
+    | SelectExpr ({ select_complete = { select = ({columns = [{ value = Expr ({ value; _ }, _); _ }]; from; _}, _); _ }; _ }, _) ->
       let (env,_) = eval_nested env from in
-      propagate_meta ~env e
+      propagate_meta ~env value
     | Case _
     | Value _
     (* TODO: implement for custom props *)
@@ -761,24 +822,24 @@ and infer_schema ~not_null_keys env columns =
       col
   in
   let resolve1 = function
-    | All -> List.map (fun x -> AttrWithSources (refine_column x)) env.schema
-    | AllOf t -> List.map (fun x -> AttrWithSources (refine_column x)) (schema_of ~env t)
-    | Expr (e,name) ->
-      let make_col expr =
-        let _, t = resolve_types env expr in
+    | { value = All; _ } -> List.map (fun x -> AttrWithSources (refine_column x)) env.schema
+    | { value = AllOf t; _ } -> List.map (fun x -> AttrWithSources (refine_column x)) (schema_of ~env t)
+    | { value = Expr ({ value = expr; _ }, alias); _ } ->
+      let make_col e =
+        let _, t = resolve_types env e in
         let col = {
-          Schema.Source.Attr.attr = unnamed_attribute ~meta:(propagate_meta ~env expr) (get_or_failwith t);
+          Schema.Source.Attr.attr = unnamed_attribute ~meta:(propagate_meta ~env e) (get_or_failwith t);
           sources = []
         } in 
         let col = refine_column col in
-        Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name
+        Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col alias
       in
       let col =
-        match e with
+        match expr with
         | Column col -> 
           let col = resolve_column ~env col.collated in
           let col = refine_column col in
-          AttrWithSources (Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col name)
+          AttrWithSources (Option.map_default (fun n -> {col with attr = { col.attr with name = n }}) col alias)
         | Choices (p, choices) when not env.is_subquery && !Config.dynamic_select ->
           let dynamic = choices |> List.filter_map (fun (choice_p, e_opt) -> 
             Option.map (fun choice_e -> choice_p, make_col choice_e) e_opt
@@ -786,7 +847,6 @@ and infer_schema ~not_null_keys env columns =
           DynamicWithSources (p, dynamic)
         | e -> AttrWithSources (make_col e)
       in
-      (* Refine before applying alias, so we check against original column name *)
       [ col ]
   in
   flat_map resolve1 columns
@@ -801,12 +861,21 @@ let _ =
 
 and get_params_of_columns env =
   let get = function
-  | All | AllOf _ -> []
-  | Expr (Choices (p, choices), _) when not env.is_subquery && !Config.dynamic_select ->
-    [DynamicSelect (p, List.map (fun (n, e) -> 
-      Simple (n, Option.map (fun e -> e |> resolve_types env |> fst |> get_params_of_res_expr env) e)
+  | { value = (All | AllOf _); _ } -> []
+  | { value = Expr ({ value = Choices (p, choices); _ }, _); _ } when not env.is_subquery && !Config.dynamic_select ->
+    [DynamicSelect (p, List.map (fun ((n : param_id), e) -> 
+      match e with
+      | Some (Column { collated = { cname; tname }; _ }) when n.pos = dummy_pos ->
+        let sql =
+          match tname with
+          | Some t -> Printf.sprintf "%s.%s" (show_table_name t) cname
+          | None -> cname
+        in
+        Verbatim (Option.default cname n.value, sql)
+      | _ ->
+        Simple (n, Option.map (fun e -> e |> resolve_types env |> fst |> get_params_of_res_expr env) e)
     ) choices)]
-  | Expr (e, _) -> get_params env e
+  | { value = Expr ({ value; _ }, _); _ } -> get_params env value
   in
   flat_map get
 
@@ -994,6 +1063,7 @@ and eval_select env { columns; from; where; group; having; } =
   let not_null_keys_where = extract_not_null_column_keys env where in
   let not_null_keys_having = extract_not_null_column_keys env having in
   let not_null_keys = not_null_keys_where @ not_null_keys_having in
+  let columns = make_dynamic_select ~env ~is_subquery:env.is_subquery columns in
   let final_schema = infer_schema ~not_null_keys env columns in
   let final_schema' = List.concat_map (function
     | AttrWithSources attr -> [attr]
@@ -1108,7 +1178,7 @@ and resolve_source env (x, alias) =
     s, p, tables
   | `Nested from ->
     let (env,p) = eval_nested env (Some from) in
-    let s = infer_schema ~not_null_keys:[] env [All] in
+    let s = infer_schema ~not_null_keys:[] env [dummy_loc All] in
     if alias <> None then failwith "No alias allowed on nested tables";
     let s = List.map (function 
       | AttrWithSources attr -> attr
@@ -1128,7 +1198,11 @@ and resolve_source env (x, alias) =
       named columns column_0, column_1, column_2, and so on
       https://dev.mysql.com/doc/refman/8.4/en/values.html
     *)
-    let exprs_to_cols = List.mapi (fun idx expr -> Expr (expr, Some (Printf.sprintf "column_%d" idx))) in
+    let exprs_to_cols =
+      List.mapi (fun idx e ->
+        dummy_loc (Expr (dummy_loc e, Some (Printf.sprintf "column_%d" idx)))
+      )
+    in
     let dummy_select exprs = { columns = exprs_to_cols exprs; from = None; where = None; group = []; having = None } in
     let (s, p, _) = match row_constructor_list with
       | RowExprList [] -> failwith "Each row of a VALUES clause must have at least one column"
@@ -1256,11 +1330,11 @@ let annotate_select select attrs =
     let rec loop acc cols attrs =
       match cols, attrs with
       | [], [] -> List.rev acc
-      | (All | AllOf _) :: _, _ -> failwith "Asterisk not supported"
-      | Expr (e,name) :: cols, a :: attrs ->
-        let e = merge_meta_into_params ~shallow:false a.meta e in
+      | ({ value = (All | AllOf _); _ }) :: _, _ -> failwith "Asterisk not supported"
+      | { value = Expr (loc, name); pos = col_pos } :: cols, a :: attrs ->
+        let e = merge_meta_into_params ~shallow:false a.meta loc.value in
         let t = a.domain in
-        loop (Expr (Fun { fn_name = "insert_select"; kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false}, name) :: acc) cols attrs
+        loop ({ value = Expr ({ loc with value = Fun { fn_name = "insert_select"; kind = (F (Typ t, [Typ t])); parameters = [e]; is_over_clause = false} }, name); pos = col_pos } :: acc) cols attrs
       | _, [] | [], _ -> failwith "Select cardinality doesn't match Insert"
     in
     loop [] cols attrs
@@ -1504,7 +1578,7 @@ let rec eval (stmt:Sql.stmt) =
     [], p, Delete [table]
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
-    let select = ({ columns = [All]; from = Some tables; where; group = []; having = None }, []) in
+    let select = ({ columns = [dummy_loc All]; from = Some tables; where; group = []; having = None }, []) in
     let select_complete = { select; order = []; limit = None; select_row_locking = None } in
     let _attrs, params, _ = eval_select_full empty_env {select_complete; cte=None } in
     [], params, Delete targets

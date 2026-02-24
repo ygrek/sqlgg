@@ -9,6 +9,9 @@ type pos = (int * int) [@@deriving show]
 type 'a located  = { value : 'a; pos : pos } [@@deriving show, make]
 type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make]
 
+let dummy_pos : pos = (0, 0)
+let dummy_loc value = { value; pos = dummy_pos }
+
 module Type =
 struct
 
@@ -667,11 +670,11 @@ and expr =
   | OptionActions of { choice: expr; pos: (pos * pos); kind: option_actions_kind }
   | Case of case
   | Of_values of string (** VALUES(col_name) *)
-and column =
+and column = column_kind located [@@deriving show {with_path=false}]
+and column_kind =
   | All
   | AllOf of table_name
-  | Expr of expr * string option (** name *)
-  [@@deriving show {with_path=false}]
+  | Expr of expr located * string option
 
 type columns = column list [@@deriving show]
 
