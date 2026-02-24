@@ -336,9 +336,12 @@ group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
 
 column1:
-       | table_name DOT ASTERISK { Sql.AllOf $1 }
+       | c=located(column1_kind) { c }
+
+column1_kind:
+       | t=table_name DOT ASTERISK { Sql.AllOf t }
        | ASTERISK { Sql.All }
-       | e=expr m=maybe_as { Sql.Expr (e,m) }
+       | c=pair(located(expr), maybe_as) { let (e, m) = c in Sql.Expr (e, m) }
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }

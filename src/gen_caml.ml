@@ -266,10 +266,16 @@ let should_generate_for_style style stmt =
   | `Single -> (match stmt.kind, stmt.schema with | Stmt.Select (`One | `Zero_one), _ :: _ -> true | _ -> false)
   | `Direct -> true
 
-let gen_func_signature ~single_needs_callback style stmt index =
+let gen_func_signature ~single_needs_callback ?(dynamic_infos=[]) style stmt index =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
-  let inputs = (subst @ names_of_vars stmt.vars) |> List.map (fun v -> sprintf "~%s" v) |> inline_values in
+  let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
+  let format_input v =
+    match List.assoc_opt v dynamic_map with
+    | Some module_name -> sprintf "~(%s : _ %s.t)" v module_name
+    | None -> sprintf "~%s" v
+  in
+  let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
   let needs_callback_param = match style with 
     | `List | `Fold -> true 
     | `Single -> single_needs_callback
@@ -733,7 +739,7 @@ type callback_build_state = {
 
 let generate_stmt_with_dynamic style index stmt dynamic_infos =
   if not (should_generate_for_style style stmt) then () else
-  let _subst = gen_func_signature ~single_needs_callback:(is_callback stmt) style stmt index in
+  let _subst = gen_func_signature ~single_needs_callback:(is_callback stmt) ~dynamic_infos style stmt index in
   
   let sql_pieces = get_sql stmt in
   
@@ -1003,47 +1009,7 @@ let generate_enum_modules stmts =
 
 let generate_enum_modules stmts = if !Sqlgg_config.enum_as_poly_variant then generate_enum_modules stmts
   
-let generate_dynamic_select_preamble stmts =
-  let has_dynamic = List.exists (fun stmt ->
-    List.exists (function Sql.DynamicSelect _ -> true | _ -> false) stmt.Gen.vars
-  ) stmts in
-  if has_dynamic then begin
-    empty_line ();
-    let ind = make_indent () in
-    String.split_on_char '\n' {|type 'a field_data = {
-  set: T.params -> unit;
-  read: T.row -> int -> 'a * int;
-  column: string;
-  count: int;
-}
-
-let pure x = {
-  set = (fun _p -> ());
-  read = (fun _row idx -> (x, idx));
-  column = "";
-  count = 0;
-}
-
-let apply f a = {
-  set = (fun p -> f.set p; a.set p);
-  read = (fun row idx ->
-    let (vf, i1) = f.read row idx in
-    let (va, i2) = a.read row i1 in
-    (vf va, i2));
-  column = (match f.column, a.column with
-    | "", c | c, "" -> c
-    | c1, c2 -> c1 ^ ", " ^ c2);
-  count = f.count + a.count;
-}
-
-let map f a = apply (pure f) a
-
-let (let+) t f = map f t
-let (and+) a b = apply (map (fun a b -> (a, b)) a) b|}
-    |> List.iter (fun line ->
-      if line = "" then print_newline ()
-      else Printf.printf "%s%s\n" ind line)
-  end
+let generate_dynamic_select_preamble _stmts = ()
 
 let get_all_dynamic_select_infos index stmt =
   let query_name = Gen.choose_name stmt.Gen.props stmt.Gen.kind index in
@@ -1081,7 +1047,42 @@ let generate_dynamic_select_modules stmts =
       
       output "module %s = struct" module_name;
       inc_indent ();
-      
+
+      let ind = make_indent () in
+      String.split_on_char '\n' {|type 'a t = {
+  set: T.params -> unit;
+  read: T.row -> int -> 'a * int;
+  column: string;
+  count: int;
+}
+
+let pure x = {
+  set = (fun _p -> ());
+  read = (fun _row idx -> (x, idx));
+  column = "";
+  count = 0;
+}
+
+let apply f a = {
+  set = (fun p -> f.set p; a.set p);
+  read = (fun row idx ->
+    let (vf, i1) = f.read row idx in
+    let (va, i2) = a.read row i1 in
+    (vf va, i2));
+  column = (match f.column, a.column with
+    | "", c | c, "" -> c
+    | c1, c2 -> c1 ^ ", " ^ c2);
+  count = f.count + a.count;
+}
+
+let map f a = apply (pure f) a
+
+let (let+) t f = map f t
+let (and+) a b = apply (map (fun a b -> (a, b)) a) b|}
+      |> List.iter (fun line ->
+        if line = "" then print_newline ()
+        else Printf.printf "%s%s\n" ind line);
+
       List.iter2 (fun (field_name, _param_name, all_param_names, _simple_params, args_list, attr, ctor) (_, sql) ->
         let field_name_lower = 
           let name = String.lowercase_ascii field_name in
