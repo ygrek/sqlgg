@@ -3522,44 +3522,470 @@ Test DynamicSelect with dynamic_select flag:
   > CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2));
   > -- [sqlgg] dynamic_select=true
   > -- @select_ids2
-  > SELECT id, balance, @x { A { @t + 1 } | B { (SELECT 6 + @seven LIMIT 1) } } FROM accounts WHERE id > @t;
+  > SELECT id, balance, @t + 1 AS t_plus_one, (SELECT 6 + @seven LIMIT 1) AS sub_result FROM accounts WHERE id > @t;
   > EOF
-  Failed select_ids2: SELECT id, balance, @x { A { @t + 1 } | B { (SELECT 6 + @seven LIMIT 1) } } FROM accounts WHERE id > @t
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module Select_ids2_col = struct
+      let id =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = (" id");
+          count = 0;
+        }
+      let balance =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" balance");
+          count = 0;
+        }
+      let t_plus_one t =
+        let _set_t_plus_one p =
+          T.set_param_Int p t;
+          ()
+        in
+        {
+          set = _set_t_plus_one;
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = (" " ^ "?" ^ " + 1");
+          count = 1;
+        }
+      let sub_result seven =
+        let _set_sub_result p =
+          T.set_param_Int p seven;
+          ()
+        in
+        {
+          set = _set_sub_result;
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" (SELECT 6 + " ^ "?" ^ " LIMIT 1)");
+          count = 1;
+        }
+    end
+  
+  
+    let create_accounts db  =
+      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+  
+    let select_ids2 db ~col ~t callback =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + col.count) in
+        col.set p;
+        T.set_param_Int p t;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT" ^ col.column ^ " AS sub_result FROM accounts WHERE id > ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col)
+  
+    module Fold = struct
+      let select_ids2 db ~col ~t callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS sub_result FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let select_ids2 db ~col ~t callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS sub_result FROM accounts WHERE id > ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect with two dynamic columns:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2));
   > -- [sqlgg] dynamic_select=true
   > -- @multi_dynamic
-  > SELECT id, @x { A { name } | B { 'default' } }, price, @y { C { price * 2 } | D { @factor :: Text } } FROM items;
+  > SELECT id, name, price, price * 2 AS doubled_price FROM items;
   > EOF
-  Failed multi_dynamic: SELECT id, @x { A { name } | B { 'default' } }, price, @y { C { price * 2 } | D { @factor :: Text } } FROM items
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module Multi_dynamic_col = struct
+      let id =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" id");
+          count = 0;
+        }
+      let name =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name");
+          count = 0;
+        }
+      let price =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price");
+          count = 0;
+        }
+      let doubled_price =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price * 2");
+          count = 0;
+        }
+    end
+  
+  
+    let create_items db  =
+      T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let multi_dynamic db ~col callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT" ^ col.column ^ " AS doubled_price FROM items")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col)
+  
+    module Fold = struct
+      let multi_dynamic db ~col callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS doubled_price FROM items")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let multi_dynamic db ~col callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS doubled_price FROM items")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect with Verbatim branches:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE users (id INT, status TEXT);
   > -- [sqlgg] dynamic_select=true
   > -- @with_verbatim
-  > SELECT id, @col { active { 'active' } | inactive { 'inactive' } | custom { status } } FROM users;
+  > SELECT id, status, 'active' AS literal_status FROM users;
   > EOF
-  Failed with_verbatim: SELECT id, @col { active { 'active' } | inactive { 'inactive' } | custom { status } } FROM users
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module With_verbatim_col = struct
+      let id =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" id");
+          count = 0;
+        }
+      let status =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" status");
+          count = 0;
+        }
+      let literal_status =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = (" 'active'");
+          count = 0;
+        }
+    end
+  
+  
+    let create_users db  =
+      T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
+  
+    let with_verbatim db ~col callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT" ^ col.column ^ " AS literal_status FROM users")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col)
+  
+    module Fold = struct
+      let with_verbatim db ~col callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS literal_status FROM users")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let with_verbatim db ~col callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " AS literal_status FROM users")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect at beginning of SELECT:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE data (a INT, b TEXT);
   > -- [sqlgg] dynamic_select=true
   > -- @first_col
-  > SELECT @x { X { a } | Y { b } }, a, b FROM data;
+  > SELECT a, b FROM data;
   > EOF
-  Failed first_col: SELECT @x { X { a } | Y { b } }, a, b FROM data
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module First_col_col = struct
+      let a =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          column = (" a");
+          count = 0;
+        }
+      let b =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" b");
+          count = 0;
+        }
+    end
+  
+  
+    let create_data db  =
+      T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
+  
+    let first_col db ~col callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT" ^ col.column ^ " FROM data")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col)
+  
+    module Fold = struct
+      let first_col db ~col callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " FROM data")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let first_col db ~col callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT" ^ col.column ^ " FROM data")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            ~col:__sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect disabled in subquery (fallback to Choice):
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
@@ -3677,22 +4103,187 @@ Test DynamicSelect with module annotation:
   > );
   > -- [sqlgg] dynamic_select=true
   > -- @with_module
-  > SELECT @col { Id { id } | Name { name } } FROM wrapped WHERE id = @id;
+  > SELECT id, name, price FROM wrapped WHERE id = @id;
   > EOF
-  Failed with_module: SELECT @col { Id { id } | Name { name } } FROM wrapped WHERE id = @id
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module With_module_col = struct
+      let id =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (Product_id.get_column (T.get_column_int64 row idx), idx + 1));
+          column = (" id");
+          count = 0;
+        }
+      let name =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name");
+          count = 0;
+        }
+      let price =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price");
+          count = 0;
+        }
+    end
+  
+  
+    let create_wrapped db  =
+      T.execute db ("CREATE TABLE wrapped (\n\
+          id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+      price DECIMAL(10,2)\n\
+  )") T.no_params
+  
+    let with_module db ~col ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + col.count) in
+        col.set p;
+        T.set_param_int64 p (Product_id.set_param id);
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT" ^ col.column ^ " FROM wrapped WHERE id = ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
+  
+    module Single = struct
+      let with_module db ~col ~id =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_int64 p (Product_id.set_param id);
+          T.finish_params p
+        in
+        T.select_one_maybe db
+        ("SELECT" ^ col.column ^ " FROM wrapped WHERE id = ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect with LIMIT 1 (select_one):
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2));
   > -- [sqlgg] dynamic_select=true
   > -- @select_one_product
-  > SELECT @col { Name { name } | Price { price } } FROM products WHERE id = @id LIMIT 1;
+  > SELECT name, price FROM products WHERE id = @id LIMIT 1;
   > EOF
-  Failed select_one_product: SELECT @col { Name { name } | Price { price } } FROM products WHERE id = @id LIMIT 1
-  Fatal error: exception Failure("dynamic_select: explicit @choices requires AS alias")
-  [2]
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    type 'a field_data = {
+      set: T.params -> unit;
+      read: T.row -> int -> 'a * int;
+      column: string;
+      count: int;
+    }
+  
+    let pure x = {
+      set = (fun _p -> ());
+      read = (fun _row idx -> (x, idx));
+      column = "";
+      count = 0;
+    }
+  
+    let apply f a = {
+      set = (fun p -> f.set p; a.set p);
+      read = (fun row idx ->
+        let (vf, i1) = f.read row idx in
+        let (va, i2) = a.read row i1 in
+        (vf va, i2));
+      column = (match f.column, a.column with
+        | "", c | c, "" -> c
+        | c1, c2 -> c1 ^ ", " ^ c2);
+      count = f.count + a.count;
+    }
+  
+    let map f a = apply (pure f) a
+  
+    let (let+) t f = map f t
+    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
+    module Select_one_product_col = struct
+      let name =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = (" name");
+          count = 0;
+        }
+      let price =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+          column = (" price");
+          count = 0;
+        }
+    end
+  
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    let select_one_product db ~col ~id =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + col.count) in
+        col.set p;
+        T.set_param_Int p id;
+        T.finish_params p
+      in
+      T.select_one_maybe db
+      ("SELECT" ^ col.column ^ " FROM products WHERE id = ? LIMIT 1")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
+  
+    module Single = struct
+      let select_one_product db ~col ~id =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p id;
+          T.finish_params p
+        in
+        T.select_one_maybe db
+        ("SELECT" ^ col.column ^ " FROM products WHERE id = ? LIMIT 1")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
+  
+    end (* module Single *)
+  end (* module Sqlgg *)
 
 Test DynamicSelect comprehensive list:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
