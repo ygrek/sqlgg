@@ -338,7 +338,7 @@ having: HAVING e=expr { e }
 column1:
        | table_name DOT ASTERISK { Sql.AllOf $1 }
        | ASTERISK { Sql.All }
-       | e=expr m=maybe_as { Sql.Expr (e,m) }
+       | e=expr m=maybe_as { Sql.Expr (e, m, ($startofs(e), $endofs(e))) }
 
 maybe_as: AS? name=IDENT { Some name }
         | { None }

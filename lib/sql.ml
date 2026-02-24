@@ -670,7 +670,7 @@ and expr =
 and column =
   | All
   | AllOf of table_name
-  | Expr of expr * string option (** name *)
+  | Expr of expr * string option * pos (** name, pos of expr in source SQL *)
   [@@deriving show {with_path=false}]
 
 type columns = column list [@@deriving show]

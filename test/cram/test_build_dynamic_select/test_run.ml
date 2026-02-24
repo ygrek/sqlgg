@@ -12,6 +12,7 @@ module M (T: Sqlgg_traits.M with
   open Sql
 
   (* === Test 1: Basic select_one_maybe === *)
+  (* Now all columns (id, name, price, category) are dynamic *)
   module Test1 = struct
     open Sql.Select_product_col
 
@@ -19,7 +20,7 @@ module M (T: Sqlgg_traits.M with
       printf "[TEST 1.1] Single field: Name\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Widget"]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
       let _ = Sql.select_product connection ~col:name ~id:1L in
       printf "[TEST 1.1] Completed\n\n"
@@ -28,7 +29,7 @@ module M (T: Sqlgg_traits.M with
       printf "[TEST 1.2] Single field: Price\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_float 99.99]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_float 99.99]
       ));
       let _ = Sql.select_product connection ~col:price ~id:2L in
       printf "[TEST 1.2] Completed\n\n"
@@ -38,7 +39,6 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L; 
           Print_ocaml_impl.mock_text "Gadget";
           Print_ocaml_impl.mock_float 149.99
         ]
@@ -56,7 +56,6 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L; 
           Print_ocaml_impl.mock_text "Phone";
           Print_ocaml_impl.mock_float 599.99;
           Print_ocaml_impl.mock_text "Electronics"
@@ -75,7 +74,7 @@ module M (T: Sqlgg_traits.M with
       printf "[TEST 1.5] Mapped field: Price with transformation\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_float 100.0]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_float 100.0]
       ));
       let doubled_price = 
         let+ p = price in
@@ -88,7 +87,7 @@ module M (T: Sqlgg_traits.M with
       printf "[TEST 1.6] Return constructor (constant value)\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L]
+        Print_ocaml_impl.make_mock_row []
       ));
       let constant = pure "constant_value" in
       let _ = Sql.select_product connection ~col:constant ~id:6L in
@@ -104,6 +103,7 @@ module M (T: Sqlgg_traits.M with
   end
 
   (* === Test 2: select with callback (multiple rows) === *)
+  (* Now all columns (id, name, price) are dynamic - callback is (fun ~col -> ...) *)
   module Test2 = struct
     open Sql.List_products_col
 
@@ -111,29 +111,30 @@ module M (T: Sqlgg_traits.M with
       printf "[TEST 2.1] List with single field: Name\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_response [
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Widget"];
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 2L; Print_ocaml_impl.mock_text "Gadget"];
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"];
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Gadget"];
       ];
-      Sql.list_products connection ~col:name ~min_stock:10L (fun ~id ~col ->
-        printf "  Row: id=%Ld, col=%s\n" id (match col with Some s -> s | None -> "NULL")
+      Sql.list_products connection ~col:name ~min_stock:10L (fun ~col ->
+        printf "  Row: col=%s\n" (match col with Some s -> s | None -> "NULL")
       );
       printf "[TEST 2.1] Completed\n\n"
 
     let combined_fields connection =
-      printf "[TEST 2.2] List with combined fields: Name and Price\n";
+      printf "[TEST 2.2] List with combined fields: Id, Name and Price\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_response [
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Widget"; Print_ocaml_impl.mock_float 19.99];
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 2L; Print_ocaml_impl.mock_text "Gadget"; Print_ocaml_impl.mock_float 29.99];
       ];
       let combined = 
-        let+ n = name
+        let+ i = id
+        and+ n = name
         and+ p = price in
-        (n, p)
+        (i, n, p)
       in
-      Sql.list_products connection ~col:combined ~min_stock:5L (fun ~id ~col ->
-        let (n, p) = col in
-        printf "  Row: id=%Ld, name=%s, price=%s\n" id 
+      Sql.list_products connection ~col:combined ~min_stock:5L (fun ~col ->
+        let (i, n, p) = col in
+        printf "  Row: id=%Ld, name=%s, price=%s\n" i 
           (match n with Some s -> s | None -> "NULL")
           (match p with Some f -> sprintf "%.2f" f | None -> "NULL")
       );
@@ -144,112 +145,131 @@ module M (T: Sqlgg_traits.M with
       combined_fields connection
   end
 
-  (* === Test 3: Multiple dynamic selects === *)
+  (* === Test 3: Dynamic select with aliased expressions === *)
   module Test3 = struct
-    open Sql
+    open Sql.Multi_dynamic_col
 
-    let two_dynamic_selects connection =
-      printf "[TEST 3.1] Two dynamic selects: x=A(name), y=C(price)\n";
+    let single_field connection =
+      printf "[TEST 3.1] Single field: label\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_text "Widget";
-          Print_ocaml_impl.mock_float 99.99
+          Print_ocaml_impl.mock_text "Widget - Electronics"
         ]
       ));
-      let _ = Sql.multi_dynamic connection 
-        ~x:Multi_dynamic_x.a 
-        ~y:Multi_dynamic_y.c 
-        ~id:1L in
+      let _ = Sql.multi_dynamic connection ~col:label ~id:1L in
       printf "[TEST 3.1] Completed\n\n"
 
-    let combined_both connection =
-      printf "[TEST 3.2] Two dynamic selects with combinators\n";
+    let combined connection =
+      printf "[TEST 3.2] Combined: label and total_value\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_text "Widget";
-          Print_ocaml_impl.mock_text "Electronics";
-          Print_ocaml_impl.mock_float 99.99;
-          Print_ocaml_impl.mock_int 50L
+          Print_ocaml_impl.mock_text "Widget - Electronics";
+          Print_ocaml_impl.mock_float 999.50
         ]
       ));
-      let x_combined = 
-        let open Multi_dynamic_x in
-        let+ n = a
-        and+ c = b in
-        (n, c)
+      let combined =
+        let+ l = label
+        and+ tv = total_value in
+        (l, tv)
       in
-      let y_combined = 
-        let open Multi_dynamic_y in
-        let+ p = c
-        and+ s = d in
-        (p, s)
-      in
-      let _ = Sql.multi_dynamic connection ~x:x_combined ~y:y_combined ~id:2L in
+      let _ = Sql.multi_dynamic connection ~col:combined ~id:2L in
       printf "[TEST 3.2] Completed\n\n"
 
     let run connection =
-      two_dynamic_selects connection;
-      combined_both connection
+      single_field connection;
+      combined connection
   end
 
-  (* === Test 4: Verbatim branches === *)
+  (* === Test 4: Literal value column === *)
   module Test4 = struct
     open Sql.With_verbatim_col
 
-    let verbatim_branch connection =
-      printf "[TEST 4.1] Verbatim branch: Default\n";
+    let single_field connection =
+      printf "[TEST 4.1] Fallback literal field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "N/A"]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "N/A"]
       ));
-      let _ = Sql.with_verbatim connection ~col:default ~id:1L in
+      let _ = Sql.with_verbatim connection ~col:fallback ~id:1L in
       printf "[TEST 4.1] Completed\n\n"
 
-    let regular_branch connection =
-      printf "[TEST 4.2] Regular branch after Verbatim: Name\n";
+    let combined connection =
+      printf "[TEST 4.2] Combined: id, name, fallback, category\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Widget"]
+        Print_ocaml_impl.make_mock_row [
+          Print_ocaml_impl.mock_int 1L;
+          Print_ocaml_impl.mock_text "Widget";
+          Print_ocaml_impl.mock_text "N/A";
+          Print_ocaml_impl.mock_text "Electronics"
+        ]
       ));
-      let _ = Sql.with_verbatim connection ~col:name ~id:2L in
+      let combined =
+        let+ i = id
+        and+ n = name
+        and+ f = fallback
+        and+ c = category in
+        (i, n, f, c)
+      in
+      let _ = Sql.with_verbatim connection ~col:combined ~id:2L in
       printf "[TEST 4.2] Completed\n\n"
 
     let run connection =
-      verbatim_branch connection;
-      regular_branch connection
+      single_field connection;
+      combined connection
   end
 
-  (* === Test 5: Parameter in branch === *)
+  (* === Test 5: Typed parameter column === *)
   module Test5 = struct
     open Sql.With_param_col
 
-    let static_branch connection =
-      printf "[TEST 5.1] Static branch (no param)\n";
+    let name_field connection =
+      printf "[TEST 5.1] Name field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Widget"]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
-      let _ = Sql.with_param connection ~col:static ~id:1L in
+      let _ = Sql.with_param connection ~col:name ~id:1L in
       printf "[TEST 5.1] Completed\n\n"
 
-    let dynamic_branch connection =
-      printf "[TEST 5.2] Dynamic branch (with param)\n";
+    let custom_param connection =
+      printf "[TEST 5.2] Custom param field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 1L; Print_ocaml_impl.mock_text "Custom Value"]
+        Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Custom Value"]
       ));
-      let _ = Sql.with_param connection ~col:(dynamic "Custom Value") ~id:2L in
+      let _ = Sql.with_param connection ~col:(custom "Custom Value") ~id:2L in
       printf "[TEST 5.2] Completed\n\n"
 
+    let combined connection =
+      printf "[TEST 5.3] Combined: id, name, custom\n";
+      Print_ocaml_impl.clear_mock_responses ();
+      Print_ocaml_impl.setup_select_one_response (Some (
+        Print_ocaml_impl.make_mock_row [
+          Print_ocaml_impl.mock_int 1L;
+          Print_ocaml_impl.mock_text "Widget";
+          Print_ocaml_impl.mock_text "Hello"
+        ]
+      ));
+      let combined =
+        let+ i = id
+        and+ n = name
+        and+ c = custom "Hello" in
+        (i, n, c)
+      in
+      let _ = Sql.with_param connection ~col:combined ~id:3L in
+      printf "[TEST 5.3] Completed\n\n"
+
     let run connection =
-      static_branch connection;
-      dynamic_branch connection
+      name_field connection;
+      custom_param connection;
+      combined connection
   end
 
 
-  (* === Test 6: Dynamic at first position === *)
+  (* === Test 6: All columns dynamic, different order === *)
   module Test6 = struct
     open Sql.First_position_col
 
@@ -258,9 +278,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_text "Widget";
-          Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 100L
+          Print_ocaml_impl.mock_text "Widget"
         ]
       ));
       let _ = Sql.first_position connection ~col:name ~id:1L in
@@ -272,9 +290,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
           Print_ocaml_impl.mock_text "Widget";
-          Print_ocaml_impl.mock_float 99.99;
-          Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 100L
+          Print_ocaml_impl.mock_float 99.99
         ]
       ));
       let combined = 
@@ -354,6 +370,7 @@ module M (T: Sqlgg_traits.M with
   
 
   (* === Test 9: IN @list inside subquery branch === *)
+  (* Now all columns (id, name, filtered) are dynamic *)
   module Test9 = struct
     open Sql.With_in_subquery_col
 
@@ -363,10 +380,17 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
           Print_ocaml_impl.mock_int 1L;
+          Print_ocaml_impl.mock_text "Widget";
           Print_ocaml_impl.mock_int 1L
         ]
       ));
-      let _ = Sql.with_in_subquery connection ~col:(filtered [1.0; 2.0]) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ n = name
+        and+ f = filtered [1.0; 2.0] in
+        (i, n, f)
+      in
+      let _ = Sql.with_in_subquery connection ~col:combined ~id:1L in
       printf "[TEST 9.1] Completed\n\n"
 
     let run connection =
@@ -374,6 +398,7 @@ module M (T: Sqlgg_traits.M with
   end
 
   (* === Test 10: arithmetic param inside branch === *)
+  (* Now all columns (id, add_tax) are dynamic *)
   module Test10 = struct
     open Sql.With_arith_param_col
 
@@ -386,7 +411,12 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_float 120.0
         ]
       ));
-      let _ = Sql.with_arith_param connection ~col:(addtax (Some 20.0)) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ at = add_tax (Some 20.0) in
+        (i, at)
+      in
+      let _ = Sql.with_arith_param connection ~col:combined ~id:1L in
       printf "[TEST 10.1] Completed\n\n"
 
     let run connection =
@@ -397,7 +427,7 @@ module M (T: Sqlgg_traits.M with
   module Test11 = struct
     open Sql.With_two_params_col
 
-    let in_range connection =
+    let test_in_range connection =
       printf "[TEST 11.1] Two params in branch (range)\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
@@ -406,11 +436,16 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_bool true
         ]
       ));
-      let _ = Sql.with_two_params connection ~col:(inrange (Some 10.0) (Some 20.0)) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ r = in_range (Some 10.0) (Some 20.0) in
+        (i, r)
+      in
+      let _ = Sql.with_two_params connection ~col:combined ~id:1L in
       printf "[TEST 11.1] Completed\n\n"
 
     let run connection =
-      in_range connection
+      test_in_range connection
   end
 
   (* === Test 12: normal param + IN @list inside one branch === *)
@@ -426,7 +461,12 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_bool true
         ]
       ));
-      let _ = Sql.with_param_and_in connection ~col:(match_ "_x" ["a_x"; "b_x"]) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ m = match_ "_x" ["a_x"; "b_x"] in
+        (i, m)
+      in
+      let _ = Sql.with_param_and_in connection ~col:combined ~id:1L in
       printf "[TEST 12.1] Completed\n\n"
 
     let run connection =
@@ -446,7 +486,12 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 1L
         ]
       ));
-      let _ = Sql.with_option_actions_in_subquery connection ~col:(opt None) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ o = opt None in
+        (i, o)
+      in
+      let _ = Sql.with_option_actions_in_subquery connection ~col:combined ~id:1L in
       printf "[TEST 13.1] Completed\n\n"
 
     let opt_some connection =
@@ -458,7 +503,12 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 1L
         ]
       ));
-      let _ = Sql.with_option_actions_in_subquery connection ~col:(opt (Some 10.0)) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ o = opt (Some 10.0) in
+        (i, o)
+      in
+      let _ = Sql.with_option_actions_in_subquery connection ~col:combined ~id:2L in
       printf "[TEST 13.2] Completed\n\n"
 
     let run connection =
@@ -470,7 +520,7 @@ module M (T: Sqlgg_traits.M with
   module Test14 = struct
     open Sql.With_tuple_list_in_subquery_col
 
-    let pairs connection =
+    let test_pairs connection =
       printf "[TEST 14.1] Tuple list IN inside subquery\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
@@ -479,18 +529,23 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 1L
         ]
       ));
-      let _ = Sql.with_tuple_list_in_subquery connection ~col:(pairs [ (1L, Some 10L) ]) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ p = pairs [ (1L, Some 10L) ] in
+        (i, p)
+      in
+      let _ = Sql.with_tuple_list_in_subquery connection ~col:combined ~id:1L in
       printf "[TEST 14.1] Completed\n\n"
 
     let run connection =
-      pairs connection
+      test_pairs connection
   end
 
   (* === Test 15: CASE expression inside branch === *)
   module Test15 = struct
     open Sql.With_case_expr_col
 
-    let casey connection =
+    let test_casey connection =
       printf "[TEST 15.1] CASE expression inside branch\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
@@ -499,18 +554,23 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 123L
         ]
       ));
-      let _ = Sql.with_case_expr connection ~col:(casey 2L 123L) ~id:1L in
+      let combined =
+        let+ i = id
+        and+ c = casey 2L 123L in
+        (i, c)
+      in
+      let _ = Sql.with_case_expr connection ~col:combined ~id:1L in
       printf "[TEST 15.1] Completed\n\n"
 
     let run connection =
-      casey connection
+      test_casey connection
   end
 
   (* === Test 16: typed param inside branch === *)
   module Test16 = struct
     open Sql.With_typed_param_col
 
-    let typed connection =
+    let test_typed connection =
       printf "[TEST 16.1] Typed param inside branch\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
@@ -519,19 +579,36 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_text "hello"
         ]
       ));
-      let _ = Sql.with_typed_param connection ~col:(typed "hello") ~id:1L in
+      let combined =
+        let+ i = id
+        and+ t = typed "hello" in
+        (i, t)
+      in
+      let _ = Sql.with_typed_param connection ~col:combined ~id:1L in
       printf "[TEST 16.1] Completed\n\n"
 
     let run connection =
-      typed connection
+      test_typed connection
   end
 
-  (* === Test 17: monster nested scenario === *)
+  (* === Test 17: Complex subquery as plain dynamic column === *)
   module Test17 = struct
     open Sql.Monster_nested_col
 
-    let monster_nested connection =
-      printf "[TEST 17.1] Monster nested (all nested expr kinds)\n";
+    let monster_field connection =
+      printf "[TEST 17.1] Monster subquery field\n";
+      Print_ocaml_impl.clear_mock_responses ();
+      Print_ocaml_impl.setup_select_one_response (Some (
+        Print_ocaml_impl.make_mock_row [
+          Print_ocaml_impl.mock_int 42L
+        ]
+      ));
+      let col = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
+      let _ = Sql.monster_nested connection ~col ~id:1L in
+      printf "[TEST 17.1] Completed\n\n"
+
+    let combined connection =
+      printf "[TEST 17.2] Combined: id + monster\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
@@ -539,181 +616,131 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 42L
         ]
       ));
-      let col =
-        monster (`Eq 2L) `One "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)]
+      let combined =
+        let+ i = id
+        and+ m = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
+        (i, m)
       in
-      let _ = Sql.monster_nested connection ~col ~id:1L in
-      printf "[TEST 17.1] Completed\n\n"
+      let _ = Sql.monster_nested connection ~col:combined ~id:1L in
+      printf "[TEST 17.2] Completed\n\n"
 
     let run connection =
-      monster_nested connection
+      monster_field connection;
+      combined connection
   end
 
-  (* === Test 18: ultimate combo - multiple branches with different nested constructs === *)
-  (* All branches return INT for type compatibility *)
+  (* === Test 18: Various SQL constructs as plain dynamic columns === *)
   module Test18 = struct
     open Sql.Ultimate_combo_col
 
-    (* 18.1: Plain branch - just column (stock) *)
     let test_plain connection =
-      printf "[TEST 18.1] Ultimate combo: Plain branch (stock)\n";
+      printf "[TEST 18.1] Plain stock field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
           Print_ocaml_impl.mock_int 100L
         ]
       ));
       let _ = Sql.ultimate_combo connection ~col:plain ~id:1L in
       printf "[TEST 18.1] Completed\n\n"
 
-    (* 18.2: WithInList branch - IN @ids in subquery *)
     let test_with_in_list connection =
-      printf "[TEST 18.2] Ultimate combo: WithInList branch\n";
+      printf "[TEST 18.2] IN list subquery field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
           Print_ocaml_impl.mock_int 3L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:(withinlist [1L; 2L; 3L]) ~id:1L in
+      let _ = Sql.ultimate_combo connection ~col:(with_in_list [1L; 2L; 3L]) ~id:1L in
       printf "[TEST 18.2] Completed\n\n"
 
-    (* 18.3: WithOptional branch - option-actions { }? *)
-    let test_with_optional_none connection =
-      printf "[TEST 18.3] Ultimate combo: WithOptional branch (None)\n";
+    let test_with_optional connection =
+      printf "[TEST 18.3] Optional subquery field (None)\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
           Print_ocaml_impl.mock_int 50L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:(withoptional None) ~id:1L in
+      let _ = Sql.ultimate_combo connection ~col:(with_optional None) ~id:1L in
       printf "[TEST 18.3] Completed\n\n"
 
-    let test_with_optional_some connection =
-      printf "[TEST 18.4] Ultimate combo: WithOptional branch (Some)\n";
+    let test_with_case connection =
+      printf "[TEST 18.4] CASE expression field\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 75L
-        ]
-      ));
-      let _ = Sql.ultimate_combo connection ~col:(withoptional (Some 5L)) ~id:1L in
-      printf "[TEST 18.4] Completed\n\n"
-
-    (* 18.5: WithChoiceAndList branch - choice + IN @list *)
-    let test_with_choice_sum connection =
-      printf "[TEST 18.5] Ultimate combo: WithChoiceAndList branch (UseSum)\n";
-      Print_ocaml_impl.clear_mock_responses ();
-      Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
           Print_ocaml_impl.mock_int 5L
         ]
       ));
-      let _ = Sql.ultimate_combo connection
-        ~col:(withchoiceandlist `UseSum ["foo"; "bar"])
-        ~id:1L in
-      printf "[TEST 18.5] Completed\n\n"
+      let _ = Sql.ultimate_combo connection ~col:(with_case 1L ["foo"; "bar"]) ~id:1L in
+      printf "[TEST 18.4] Completed\n\n"
 
-    let test_with_choice_avg connection =
-      printf "[TEST 18.6] Ultimate combo: WithChoiceAndList branch (UseAvg)\n";
-      Print_ocaml_impl.clear_mock_responses ();
-      Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 3L
-        ]
-      ));
-      let _ = Sql.ultimate_combo connection
-        ~col:(withchoiceandlist `UseAvg ["baz"])
-        ~id:1L in
-      printf "[TEST 18.6] Completed\n\n"
-
-    (* 18.7: WithTupleList branch - tuple list IN *)
-    let test_with_tuple_list connection =
-      printf "[TEST 18.7] Ultimate combo: WithTupleList branch\n";
-      Print_ocaml_impl.clear_mock_responses ();
-      Print_ocaml_impl.setup_select_one_response (Some (
-        Print_ocaml_impl.make_mock_row [
-          Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 1L
-        ]
-      ));
-      let _ = Sql.ultimate_combo connection
-        ~col:(withtuplelist [(1L, Some 10L); (2L, Some 20L)])
-        ~id:1L in
-      printf "[TEST 18.7] Completed\n\n"
-
-    (* 18.8: FullCombo branch - option-actions + IN list + param *)
     let test_full_combo connection =
-      printf "[TEST 18.8] Ultimate combo: FullCombo branch (opt + IN + param)\n";
+      printf "[TEST 18.5] Full combo: all fields combined\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [
+          Print_ocaml_impl.mock_int 1L;
+          Print_ocaml_impl.mock_int 100L;
+          Print_ocaml_impl.mock_int 3L;
+          Print_ocaml_impl.mock_int 50L;
+          Print_ocaml_impl.mock_int 5L;
           Print_ocaml_impl.mock_int 1L;
           Print_ocaml_impl.mock_int 42L
         ]
       ));
-      let _ = Sql.ultimate_combo connection
-        ~col:(fullcombo (Some 5L) ["x"; "y"] 100.0)
-        ~id:1L in
-      printf "[TEST 18.8] Completed\n\n"
-
+      let combined =
+        let+ i = id
+        and+ p = plain
+        and+ il = with_in_list [1L; 2L]
+        and+ wo = with_optional (Some 5L)
+        and+ wc = with_case 1L ["foo"]
+        and+ wt = with_tuple_list [(1L, Some 10L)]
+        and+ fc = full_combo (Some 5L) ["x"] 100.0 in
+        (i, p, il, wo, wc, wt, fc)
+      in
+      let _ = Sql.ultimate_combo connection ~col:combined ~id:1L in
+      printf "[TEST 18.5] Completed\n\n"
 
     let run connection =
       test_plain connection;
       test_with_in_list connection;
-      test_with_optional_none connection;
-      test_with_optional_some connection;
-      test_with_choice_sum connection;
-      test_with_choice_avg connection;
-      test_with_tuple_list connection;
+      test_with_optional connection;
+      test_with_case connection;
       test_full_combo connection
   end
 
+  (* === Test 19: Mixed columns with arithmetic expression === *)
   module Test19 = struct
+    open Sql.Ultimate_combo_simple2_col
 
-    (* 19 *)
-    let test_everytinh_in_a_row connection =
-      printf "[TEST 19] everything in a row\n";
+    let test_all_fields connection =
+      printf "[TEST 19] All fields combined\n";
       Print_ocaml_impl.clear_mock_responses ();
       Print_ocaml_impl.setup_select_response [
         Print_ocaml_impl.make_mock_row [
           Print_ocaml_impl.mock_int 1L;
-          Print_ocaml_impl.mock_int 42L
+          Print_ocaml_impl.mock_text "Widget";
+          Print_ocaml_impl.mock_text "Electronics";
+          Print_ocaml_impl.mock_int 50L;
+          Print_ocaml_impl.mock_float 119.99
         ]
       ];
-      let col2 = Sql.Ultimate_combo_simple2_col2.(
-        let+ c = c `E
-        and+ _ = c (`F 2L)
-        and+ _ = c (`F 3L)
-        and+ _ = c (`F 4L)
-        and+ d = d in
-        (c, d)
-      ) in
-      let col = Sql.Ultimate_combo_simple2_col.(
-        let+ a = a 
-        and+ b = b
-        and+ _ = b 
-        and+ _ = b
-        and+ _ = b
-        and+ _ = a
-        and+ _ = a
-        and+ _ = a
-        and+ _ = a
-        and+ _ = a in
-        (a, b)
-      ) in
-
-      let _ = Sql.List.ultimate_combo_simple2 connection ~col ~col2 (fun ~id ~col ~category ~stock ~col2 -> (id, col, category, stock, col2) )  in
+      let combined =
+        let+ i = id
+        and+ n = name
+        and+ c = category
+        and+ s = stock
+        and+ p = price_with_tax 10L in
+        (i, n, c, s, p)
+      in
+      let _ = Sql.List.ultimate_combo_simple2 connection ~col:combined
+        (fun ~col -> ignore col) in
       printf "[TEST 19] Completed\n\n"
 
-    let run connection = test_everytinh_in_a_row connection
+    let run connection = test_all_fields connection
   end
  
 
