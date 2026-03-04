@@ -99,7 +99,10 @@ module type M = sig
       include Value
       val string_to_literal : string -> string
     end
-    module Blob : Value
+    module Blob : sig
+      include Value
+      val string_to_literal : string -> string
+    end
     module Decimal : sig
       include Value
       val float_to_literal : float -> string

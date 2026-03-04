@@ -259,8 +259,8 @@ and analyze_column acc cols k = match cols with
   | [] -> k acc
   | col :: rest ->
     match col with
-    | All | AllOf _ -> analyze_column acc rest k
-    | Expr (expr, _) -> analyze_expr acc [expr] (fun acc -> analyze_column acc rest k)
+    | { value = (All | AllOf _); _ } -> analyze_column acc rest k
+    | { value = Expr ({ value = expr; _ }, _); _ } -> analyze_expr acc [expr] (fun acc -> analyze_column acc rest k)
 
 and analyze_source acc srcs k = match srcs with
   | [] -> k acc
