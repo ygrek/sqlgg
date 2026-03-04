@@ -156,7 +156,7 @@ let substitute_vars s vars subst_param =
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
         let n = 
-          let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT ") in
+          let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT " | SetSelf col -> " " ^ col ^ " ") in
           let ctor = Sql.{ value=Some("None"); pos=(0, 0); } in
           let args = None in
           {ctor; args; sql=[sql]; is_poly=false} in
