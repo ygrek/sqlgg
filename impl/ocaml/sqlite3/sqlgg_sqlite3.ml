@@ -74,6 +74,7 @@ module Types = struct
       done;
       Buffer.add_string b "'";
       Buffer.contents b
+    let string_to_literal = to_literal
   end
   module Float = struct 
     type t = float 

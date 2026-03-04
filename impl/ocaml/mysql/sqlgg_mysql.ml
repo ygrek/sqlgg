@@ -64,6 +64,7 @@ module type Types = sig
   module Blob : sig
     include Value
     val get_string : string -> string
+    val string_to_literal : string -> string
   end
   module Datetime : sig 
     include Value
@@ -178,6 +179,7 @@ module Default_types = struct
       Buffer.contents b
 
     let get_string = of_string
+    let string_to_literal = to_literal
   end
   module Float = struct
     type t = float
