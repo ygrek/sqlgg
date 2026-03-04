@@ -113,12 +113,13 @@ module Types = struct
   end
   module Blob = struct
     type t = string
-    let to_literal s = 
-      let hex = String.to_seq s 
+    let to_literal s =
+      let hex = String.to_seq s
                |> Seq.map (fun c -> sprintf "%02X" (Char.code c))
-               |> List.of_seq 
+               |> List.of_seq
                |> String.concat "" in
       sprintf "X'%s'" hex
+    let string_to_literal = to_literal
   end
   module Float = struct 
     type t = float 

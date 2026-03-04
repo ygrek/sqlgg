@@ -74,6 +74,7 @@ module type Types = sig
   module Blob : sig
     include Value
     val get_string : field -> string
+    val string_to_literal : string -> string
   end
   module Datetime : sig 
     include Value
@@ -286,6 +287,7 @@ struct
         Buffer.contents b
     end)
     let get_string = of_field
+    let string_to_literal = to_literal
   end
 
   module Datetime = struct 
