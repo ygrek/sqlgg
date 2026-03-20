@@ -153,8 +153,10 @@ let generate_table (x,_) (name,schema) =
 
 let start_output (x,pre) = pre := !x; x := []
 
+let xml_declaration = "<?xml version=\"1.0\"?>"
+
 let finish_output (x,pre) =
-  print_endline "<?xml version=\"1.0\"?>";
+  print_endline xml_declaration;
   List.iter (fun z -> z |> xml_to_string |> print_endline) (List.rev !pre);
   Node ("sqlgg",[],List.rev !x) |> xml_to_string |> print_endline;
   x := [];
@@ -165,3 +167,11 @@ let generate out _ stmts =
   List.iteri (generate_code out) stmts;
   List.iter (generate_table out) (Tables.all ());
   finish_output out
+
+let generate_migrations _name migrations =
+  let nodes = List.map (fun (m : Gen_migrations.migration) ->
+    Node ("migration", ["name", m.name; "apply", m.apply; "revert", m.revert], [])
+  ) migrations in
+  let root = Node ("migrations", [], nodes) in
+  print_endline xml_declaration;
+  print_endline (xml_to_string root)

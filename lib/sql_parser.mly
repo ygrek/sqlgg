@@ -52,7 +52,10 @@
 %token JSON_ARRAYAGG
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
-%token T_INTEGER T_BIG_INTEGER T_BLOB T_TEXT T_FLOAT T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
+%token <Sql.int_size option> T_INTEGER
+%token <Sql.lob_size option> T_BLOB
+%token <Sql.lob_size option> T_TEXT
+%token T_FLOAT T_DOUBLE T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
 
 (*
 %left COMMA_JOIN
@@ -351,22 +354,22 @@ maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
-            | ADD index_type IDENT? sequence(IDENT) { `None }
-            | ADD pair(CONSTRAINT,IDENT?)? table_constraint_1 index_options { `None }
+            | ADD index_type name=IDENT? cols=sequence(IDENT) { `AddIndex (name, cols) }
+            | ADD CONSTRAINT name=IDENT? table_constraint_1 index_options { `AddConstraint name }
             | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
             | RENAME COLUMN old_name=IDENT TO new_name=IDENT { `RenameColumn (old_name, new_name) }
             | RENAME index_or_key old_name=IDENT TO new_name=IDENT { `RenameIndex (old_name, new_name) }
-            | DROP INDEX IDENT { `None }
-            | DROP PRIMARY KEY { `None }
+            | DROP INDEX name=IDENT { `DropIndex name }
+            | DROP PRIMARY KEY { `DropPrimaryKey }
             | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
-            | DROP FOREIGN KEY IDENT { `None }
-            | DROP CHECK IDENT { `None }
+            | DROP FOREIGN KEY name=IDENT { `DropConstraint name }
+            | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
             | LOCK EQUAL lock { `None }
-            | either(DEFAULT,pair(CONVERT,TO))? charset c=collate? { `Default_or_convert_to c }
+            | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (Some cs, c) }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
@@ -622,13 +625,9 @@ interval_unit: INTERVAL_UNIT
              | DAY_MICROSECOND | DAY_SECOND | DAY_MINUTE | DAY_HOUR
              | YEAR_MONTH { Value (make_collated ~collated:(strict Datetime) ()) }
 
-(* int_type returns Source_type.kind to preserve UInt32 for dialect checks *)
 int_type:
-  | T_INTEGER int_arg? u=UNSIGNED? {
-      Option.map_default (fun _ -> Source_type.UInt32) (Source_type.Infer Int) u
-    }
-  | T_BIG_INTEGER int_arg? u=UNSIGNED? {
-      Option.map_default (fun _ -> Source_type.Infer UInt64) (Source_type.Infer Int) u
+  | s=T_INTEGER int_arg? u=UNSIGNED? {
+      Sql.Source_type.Int (s, Option.map_default (Fun.const Sql.Unsigned) Sql.Signed u)
     }
 
 (* expr_sql_type_flavor returns Type.kind for use in CAST *)
@@ -640,7 +639,6 @@ expr_sql_type_flavor:
                   }
                  | binary { Blob }
                  | NATIONAL? text VARYING? charset? { Text }
-                 | T_FLOAT PRECISION? { Float }
                  | T_BOOLEAN { Bool }
                  | T_DATETIME | DATE | TIME | TIMESTAMP { Datetime }
                  | T_UUID { Blob }
@@ -649,11 +647,15 @@ expr_sql_type_flavor:
 (* sql_type_flavor returns Source_type.kind *)
 sql_type_flavor: 
   | t=int_type ZEROFILL? { t }
+  | T_FLOAT { Source_type.Float Single }
+  | T_DOUBLE PRECISION? { Source_type.Float Double }
+  | s=T_BLOB { Source_type.Blob s }
+  | NATIONAL? s=T_TEXT int_arg? VARYING? charset? { Source_type.Text s }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
 
-binary: T_BLOB | BINARY | BINARY VARYING { }
-text: T_TEXT | T_TEXT LPAREN INTEGER RPAREN | CHARACTER { }
+binary: BINARY | BINARY VARYING { }
+text: CHARACTER { }
 
 cast_as:
     | t=cast_sql_type { (fun e -> Fun { fn_name = "cast"; kind = (Ret (Source_type.depends t)); parameters = [e]; is_over_clause = false }) }
@@ -666,7 +668,12 @@ cast_as:
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
-charset: CHARSET either(IDENT,BINARY) | CHARACTER SET either(IDENT,BINARY) | ASCII | UNICODE { }
+charset: CHARSET c=IDENT { Named c }
+       | CHARSET BINARY { Binary }
+       | CHARACTER SET c=IDENT { Named c }
+       | CHARACTER SET BINARY { Binary }
+       | ASCII { Ascii }
+       | UNICODE { Unicode }
 collate: COLLATE c=IDENT { make_located ~value:c ~pos:($startofs, $endofs) }
 
 sql_type: t=collated(sql_type_flavor)
@@ -676,10 +683,14 @@ sql_type: t=collated(sql_type_flavor)
 
 located_sql_type: t=sql_type { make_located ~value:t ~pos:($startofs, $endofs) }
 
-cast_sql_type: t=expr_sql_type_flavor
-        | t=expr_sql_type_flavor LPAREN INTEGER RPAREN
-        | t=expr_sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN
-        { t }
+cast_sql_type:
+        | t=expr_sql_type_flavor { t }
+        | t=expr_sql_type_flavor LPAREN INTEGER RPAREN { t }
+        | t=expr_sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN { t }
+        | T_FLOAT { Float }
+        | T_DOUBLE PRECISION? { Float }
+        | T_BLOB { Blob }
+        | T_TEXT int_arg? { Text }
 
 compound_op:
   | UNION { `Union }
@@ -689,18 +700,20 @@ compound_op:
 
 (* manual_type returns Source_type.t for parameter type annotations *)
 manual_type:
-    | T_TEXT                 { Source_type.strict Text }
+    | s=T_TEXT               { { Source_type.t = Text s; nullability = Type.Strict } }
     | T_JSON                 { Source_type.strict Json }
-    | T_BLOB                 { Source_type.strict Blob }
+    | s=T_BLOB               { { Source_type.t = Blob s; nullability = Type.Strict } }
     | t=int_type             { { Source_type.t; nullability = Type.Strict } }
-    | T_FLOAT                { Source_type.strict Float }
+    | T_FLOAT                { { Source_type.t = Float Single; nullability = Type.Strict } }
+    | T_DOUBLE               { { Source_type.t = Float Double; nullability = Type.Strict } }
     | T_BOOLEAN              { Source_type.strict Bool }
     | T_DATETIME             { Source_type.strict Datetime }
-    | T_TEXT NULL            { Source_type.nullable Text }
+    | s=T_TEXT NULL          { { Source_type.t = Text s; nullability = Type.Nullable } }
     | T_JSON NULL            { Source_type.nullable Json }
-    | T_BLOB NULL            { Source_type.nullable Blob }
+    | s=T_BLOB NULL          { { Source_type.t = Blob s; nullability = Type.Nullable } }
     | t=int_type NULL        { { Source_type.t; nullability = Type.Nullable } }
-    | T_FLOAT NULL           { Source_type.nullable Float }
+    | T_FLOAT NULL           { { Source_type.t = Float Single; nullability = Type.Nullable } }
+    | T_DOUBLE NULL          { { Source_type.t = Float Double; nullability = Type.Nullable } }
     | T_BOOLEAN NULL         { Source_type.nullable Bool }
     | T_DATETIME NULL        { Source_type.nullable Datetime }
 
