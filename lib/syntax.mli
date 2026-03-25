@@ -7,4 +7,5 @@ module Config: sig
 end
 
 val parse : string -> string * Sql.schema_column list * var list * Stmt.kind * Dialect.dialect_support list
+val eval_parsed : string -> Parser.parse_result -> string * Sql.schema_column list * var list * Stmt.kind * Dialect.dialect_support list
 val eval_select: select_full -> Sql.schema_column list * var list * Stmt.kind

@@ -1433,9 +1433,12 @@ let rec eval (stmt:Sql.stmt) =
   let open Attr in
   match stmt with
   | Create (name, Schema { schema; constraints; _ }) ->
-      let schema = List.map Alter_action_attr.to_attr schema in
-      let schema = with_constraints schema constraints in
-      Tables.add (name, schema);
+      let attrs = List.map Alter_action_attr.to_attr schema in
+      let attrs = with_constraints attrs constraints in
+      let columns = List.map2 (fun (col : Alter_action_attr.t) attr ->
+        { Tables.attr; source_kind = Option.map (fun k -> k.value.collated) col.kind }
+      ) schema attrs in
+      Tables.add_columns (name, columns);
       ([],[],Create name)
   | Create (name, Select { value=select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
@@ -1447,13 +1450,30 @@ let rec eval (stmt:Sql.stmt) =
       ([],params,Create name)
   | Alter (name,actions) ->
       List.iter (function
-      | `Add (col,pos) -> Tables.alter_add name (Alter_action_attr.to_attr col) pos
-      | `Drop col -> Tables.alter_drop name col
-      | `Change (oldcol,col,pos) -> Tables.alter_change name oldcol (Alter_action_attr.to_attr col) pos
-      | `RenameColumn (oldcol,newcol) -> Tables.rename_column name oldcol newcol
-      | `RenameTable new_name -> Tables.rename name new_name
-      | `RenameIndex _ -> () (* indices are not tracked yet *)
-      | `Default_or_convert_to _
+      | `Add (col,pos) ->
+        let source_kind = Option.map (fun k -> k.value.collated) col.Alter_action_attr.kind in
+        Tables.alter_add name ~col:{ attr = Alter_action_attr.to_attr col; source_kind } ~pos
+      | `Drop col ->
+        Tables.alter_drop name ~col
+      | `Change (oldcol,col,pos) ->
+        let source_kind = Option.map (fun k -> k.value.collated) col.Alter_action_attr.kind in
+        Tables.alter_change name ~oldcol ~col:{ attr = Alter_action_attr.to_attr col; source_kind } ~pos
+      | `RenameColumn (oldcol,newcol) ->
+        Tables.rename_column name ~old_name:oldcol ~new_name:newcol
+      | `RenameTable new_name ->
+        Tables.rename name new_name
+      | `DropPrimaryKey ->
+        Tables.drop_primary_key name
+      | `AddPrimaryKey cols ->
+        Tables.add_primary_key name ~cols
+      | `RenameIndex _  | `AddIndex _ | `DropIndex _ | `AddConstraint _ | `DropConstraint _ -> () (* indices are not tracked yet *)
+      | `Default_or_convert_to (cs, collation) ->
+        let old = Tables.get_charset name in
+        let or_else fallback opt = match opt with Some _ -> opt | None -> fallback in
+        Tables.set_charset name {
+          charset = cs |> or_else (Option.map_default (fun o -> o.Tables.charset) None old);
+          collation = Option.map (fun c -> c.value) collation |> or_else (Option.map_default (fun o -> o.Tables.collation) None old);
+        }
       | `None -> ()) actions;
       ([],[],Alter [name])
   | Rename l ->
@@ -1719,13 +1739,14 @@ let complete_sql kind sql =
     (B.contents b, List.rev !params)
   | _ -> (sql,[])
 
-let parse sql =
-  let open Parser in
-  let { statement; dialect_features } = parse_stmt sql in
+let eval_parsed sql ({ Parser.statement; dialect_features } : Parser.parse_result) =
   let (schema,p1,kind) = eval statement in
   let (sql,p2) = complete_sql kind sql in
   (sql, schema, unify_params (p1 @ p2), kind, dialect_features)
-  
+
+let parse sql =
+  eval_parsed sql (Parser.parse_stmt sql)
+
 let eval_select select_full =
   let (schema, p1, kind) = eval @@ Select select_full in
   (schema, unify_params p1, kind)

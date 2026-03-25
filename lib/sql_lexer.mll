@@ -210,16 +210,27 @@ let keywords =
       BOOLEAN,
       DATE, TIME, TIMESTAMP, INTERVAL
     *)
-  all T_INTEGER ["integer";"int";"smallint";"tinyint";"mediumint";"middleint";"serial";"identity"];
-  all T_BIG_INTEGER ["bigint"];
+  let open Sql in
+  all (T_INTEGER None) ["integer";"int";"serial";"identity"];
+  all (T_INTEGER (Some Tiny)) ["tinyint"];
+  all (T_INTEGER (Some Small)) ["smallint"];
+  all (T_INTEGER (Some Medium)) ["mediumint";"middleint"];
+  all (T_INTEGER (Some Big)) ["bigint"];
   all T_DECIMAL ["numeric";"decimal";"dec";"fixed"];
-  all T_INTEGER ["number"]; (* oracle *)
+  all (T_INTEGER None) ["number"]; (* oracle *)
   all T_BOOLEAN ["bool";"boolean"];
-  all T_FLOAT ["float";"real";"double";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
-  all T_BLOB ["blob";"varbinary";"tinyblob";"mediumblob";"longblob"];
-  all T_TEXT ["text";"char";"varchar";"tinytext";"mediumtext";"longtext";];
+  all T_FLOAT ["float";"real";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
+  all T_DOUBLE ["double"];
+  all (T_BLOB None) ["blob";"varbinary"];
+  all (T_BLOB (Some Tiny)) ["tinyblob"];
+  all (T_BLOB (Some Medium)) ["mediumblob"];
+  all (T_BLOB (Some Long)) ["longblob"];
+  all (T_TEXT None) ["text";"char";"varchar"];
+  all (T_TEXT (Some Tiny)) ["tinytext"];
+  all (T_TEXT (Some Medium)) ["mediumtext"];
+  all (T_TEXT (Some Long)) ["longtext"];
   all T_JSON ["json"];
-  all T_TEXT ["varchar2"]; (* oracle *)
+  all (T_TEXT None) ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime"];
   all T_UUID ["uuid"]; (* http://www.postgresql.org/docs/9.4/static/datatype-uuid.html *)
   !k

@@ -1140,7 +1140,7 @@ let generate_stmt_wrapper style index stmt =
   | [] -> generate_stmt style index stmt
   | _ -> generate_stmt_with_dynamic style index stmt dynamic_infos
 
-let generate ~gen_io name stmts =
+let generate ~gen_io ~migration_names name stmts =
 (*
   let types =
     String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
@@ -1180,6 +1180,16 @@ let generate ~gen_io name stmts =
     dec_indent ();
     output "end (* module %s *)" name
   );
+  Option.may (fun names ->
+    output "let migrations = [";
+    inc_indent ();
+    List.iter (fun n ->
+      output "(%s, [(apply_%s, revert_%s)]);" (quote n) n n;
+    ) names;
+    dec_indent ();
+    output "]";
+    empty_line ()
+  ) migration_names;
   dec_indent ();
   output "end (* module %s *)" (String.capitalize_ascii name)
 
@@ -1196,10 +1206,25 @@ end
 
 module Generator = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:false name stmts
+  let generate () name stmts = generate ~gen_io:false ~migration_names:None name stmts
 end
 
 module Generator_io = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:true name stmts
+  let generate () name stmts = generate ~gen_io:true ~migration_names:None name stmts
 end
+
+module Header = Gen.Make(Generator_io)
+
+let generate_migrations name migrations =
+  let migration_names = List.map (fun (m : Gen_migrations.migration) -> m.name) migrations in
+  let make_stmt fn_name sql =
+    { Gen.schema = []; vars = []; kind = Stmt.Other;
+      props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
+  in
+  let stmts = List.concat_map (fun (m : Gen_migrations.migration) ->
+    [make_stmt ("apply_" ^ m.name) m.apply;
+     make_stmt ("revert_" ^ m.name) m.revert]
+  ) migrations in
+  Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
+  generate ~gen_io:true ~migration_names:(Some migration_names) name stmts
