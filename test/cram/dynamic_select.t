@@ -479,53 +479,60 @@ Test DynamicSelect edge: single column:
           column = ("id");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let single_col db ~(col : _ Single_col_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let single_col db ~(col : _ Single_col_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let single_col db ~(col : _ Single_col_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -584,53 +591,60 @@ DynamicSelect: SELECT * remains static select:
           column = "t.name";
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let all_cols db ~(col : _ All_cols_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let all_cols db ~(col : _ All_cols_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let all_cols db ~(col : _ All_cols_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -696,53 +710,60 @@ DynamicSelect: SELECT * with expression in same list:
           column = ("id + 2");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let all_cols_plus_expr db ~(col : _ All_cols_plus_expr_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let all_cols_plus_expr db ~(col : _ All_cols_plus_expr_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let all_cols_plus_expr db ~(col : _ All_cols_plus_expr_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -808,53 +829,60 @@ DynamicSelect: auto names for expressions without alias:
           column = ("name");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let auto_names db ~(col : _ Auto_names_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let auto_names db ~(col : _ Auto_names_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let auto_names db ~(col : _ Auto_names_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -906,53 +934,60 @@ Test DynamicSelect edge: expression at first position:
           column = ("id + 1");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let expr_first db ~(col : _ Expr_first_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let expr_first db ~(col : _ Expr_first_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let expr_first db ~(col : _ Expr_first_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1011,53 +1046,60 @@ Test DynamicSelect edge: literal only:
           column = ("42");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT)") T.no_params
   
-    let literal_only db ~(col : _ Literal_only_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let literal_only db ~(col : _ Literal_only_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let literal_only db ~(col : _ Literal_only_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1137,53 +1179,60 @@ Test DynamicSelect edge: many columns:
           column = ("e");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (a INT, b TEXT, c DECIMAL(10,2), d INT, e TEXT)") T.no_params
   
-    let many_cols db ~(col : _ Many_cols_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let many_cols db ~(col : _ Many_cols_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let many_cols db ~(col : _ Many_cols_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1249,53 +1298,60 @@ Test DynamicSelect edge: no space after commas:
           column = ("price");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
   
-    let no_space db ~(col : _ No_space_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let no_space db ~(col : _ No_space_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let no_space db ~(col : _ No_space_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1354,53 +1410,60 @@ Test DynamicSelect edge: minimal spacing:
           column = ("b");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (a INT, b INT)") T.no_params
   
-    let tight db ~(col : _ Tight_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let tight db ~(col : _ Tight_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let tight db ~(col : _ Tight_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1452,53 +1515,60 @@ Test DynamicSelect edge: column without alias gets auto name:
           column = ("id + 1");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT)") T.no_params
   
-    let no_alias db ~(col : _ No_alias_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let no_alias db ~(col : _ No_alias_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let no_alias db ~(col : _ No_alias_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1579,56 +1649,63 @@ Test DynamicSelect with dynamic_select flag:
           column = ("(SELECT 6 + " ^ "?" ^ " LIMIT 1)");
           count = 1;
         }
+  
+      let select db (col : _ t) ~t callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p t;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) ~t callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p t;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) ~t callback =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p t;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_accounts db  =
       T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
   
-    let select_ids2 db ~(col : _ Select_ids2_col.t) ~t callback =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_Int p t;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let select_ids2 db ~(col : _ Select_ids2_col.t) ~t callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p t;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let select_ids2 db ~(col : _ Select_ids2_col.t) ~t callback =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p t;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1701,53 +1778,60 @@ Test DynamicSelect with two dynamic columns:
           column = ("price * 2");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM items")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM items")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM items")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_items db  =
       T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
   
-    let multi_dynamic db ~(col : _ Multi_dynamic_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM items")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let multi_dynamic db ~(col : _ Multi_dynamic_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let multi_dynamic db ~(col : _ Multi_dynamic_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1813,53 +1897,60 @@ Test DynamicSelect with Verbatim branches:
           column = ("'active'");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM users")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM users")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM users")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_users db  =
       T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
   
-    let with_verbatim db ~(col : _ With_verbatim_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM users")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let with_verbatim db ~(col : _ With_verbatim_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let with_verbatim db ~(col : _ With_verbatim_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -1918,53 +2009,60 @@ Test DynamicSelect at beginning of SELECT:
           column = ("b");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM data")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM data")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM data")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_data db  =
       T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
   
-    let first_col db ~(col : _ First_col_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM data")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let first_col db ~(col : _ First_col_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM data")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let first_col db ~(col : _ First_col_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM data")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2023,53 +2121,60 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           column = ("(SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1)");
           count = 0 + (match x with `A -> 0 | `B -> 0);
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t1")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t1")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t1")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t1 db  =
       T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
   
-    let with_subquery db ~(col : _ With_subquery_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t1")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let with_subquery db ~(col : _ With_subquery_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t1")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let with_subquery db ~(col : _ With_subquery_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t1")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2140,29 +2245,8 @@ Test DynamicSelect with module annotation:
           column = ("price");
           count = 0;
         }
-    end
   
-  
-    let create_wrapped db  =
-      T.execute db ("CREATE TABLE wrapped (\n\
-          id INT PRIMARY KEY,\n\
-      name TEXT,\n\
-      price DECIMAL(10,2)\n\
-  )") T.no_params
-  
-    let with_module db ~(col : _ With_module_col.t) ~id =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_int64 p (Product_id.set_param id);
-        T.finish_params p
-      in
-      T.select_one_maybe db
-      ("SELECT " ^ col.column ^ " FROM wrapped WHERE id = ?")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
-  
-    module Single = struct
-      let with_module db ~(col : _ With_module_col.t) ~id =
+      let select db (col : _ t) ~id =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           col.set p;
@@ -2173,6 +2257,17 @@ Test DynamicSelect with module annotation:
         ("SELECT " ^ col.column ^ " FROM wrapped WHERE id = ?")
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
   
+    end
+  
+  
+    let create_wrapped db  =
+      T.execute db ("CREATE TABLE wrapped (\n\
+          id INT PRIMARY KEY,\n\
+      name TEXT,\n\
+      price DECIMAL(10,2)\n\
+  )") T.no_params
+  
+    module Single = struct
     end (* module Single *)
   end (* module Sqlgg *)
 
@@ -2231,25 +2326,8 @@ Test DynamicSelect with LIMIT 1 (select_one):
           column = ("price");
           count = 0;
         }
-    end
   
-  
-    let create_products db  =
-      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
-  
-    let select_one_product db ~(col : _ Select_one_product_col.t) ~id =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_Int p id;
-        T.finish_params p
-      in
-      T.select_one_maybe db
-      ("SELECT " ^ col.column ^ " FROM products WHERE id = ? LIMIT 1")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
-  
-    module Single = struct
-      let select_one_product db ~(col : _ Select_one_product_col.t) ~id =
+      let select db (col : _ t) ~id =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           col.set p;
@@ -2260,6 +2338,13 @@ Test DynamicSelect with LIMIT 1 (select_one):
         ("SELECT " ^ col.column ^ " FROM products WHERE id = ? LIMIT 1")
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
   
+    end
+  
+  
+    let create_products db  =
+      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+  
+    module Single = struct
     end (* module Single *)
   end (* module Sqlgg *)
 
@@ -2354,6 +2439,56 @@ Test DynamicSelect comprehensive list:
           column = ("price * (1 + " ^ "?" ^ ")");
           count = 1;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT\n\
+     " ^ col.column ^ "\n\
+  FROM products")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT\n\
+     " ^ col.column ^ "\n\
+  FROM products")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT\n\
+     " ^ col.column ^ "\n\
+  FROM products")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
@@ -2366,53 +2501,10 @@ Test DynamicSelect comprehensive list:
    stock INT\n\
   )") T.no_params
   
-    let ultimate_combo_simple2 db ~(col : _ Ultimate_combo_simple2_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT\n\
-     " ^ col.column ^ "\n\
-  FROM products")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let ultimate_combo_simple2 db ~(col : _ Ultimate_combo_simple2_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT\n\
-     " ^ col.column ^ "\n\
-  FROM products")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let ultimate_combo_simple2 db ~(col : _ Ultimate_combo_simple2_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT\n\
-     " ^ col.column ^ "\n\
-  FROM products")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2475,56 +2567,63 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
           column = ("" ^ "?");
           count = 1;
         }
+  
+      let select db (col : _ t) ~id callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p id;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) ~id callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) ~id callback =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, val TEXT)") T.no_params
   
-    let bare_param db ~(col : _ Bare_param_col.t) ~id callback =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_Int p id;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let bare_param db ~(col : _ Bare_param_col.t) ~id callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let bare_param db ~(col : _ Bare_param_col.t) ~id callback =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2591,53 +2690,60 @@ Virtual select: consecutive params as columns:
           column = ("" ^ "?");
           count = 1;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT)") T.no_params
   
-    let multi_param db ~(col : _ Multi_param_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let multi_param db ~(col : _ Multi_param_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let multi_param db ~(col : _ Multi_param_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2714,56 +2820,63 @@ Virtual select: mixed columns and params without spaces after commas:
           column = ("" ^ "?");
           count = 1;
         }
+  
+      let select db (col : _ t) ~id callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p id;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) ~id callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) ~id callback =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
   
-    let tight_commas db ~(col : _ Tight_commas_col.t) ~id callback =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_Int p id;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let tight_commas db ~(col : _ Tight_commas_col.t) ~id callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let tight_commas db ~(col : _ Tight_commas_col.t) ~id callback =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2822,53 +2935,60 @@ Virtual select: subquery expression as dynamic column:
           column = ("(SELECT COUNT(*) FROM t t2 WHERE t2.id <= t.id)");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
   
-    let subquery_col db ~(col : _ Subquery_col_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let subquery_col db ~(col : _ Subquery_col_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let subquery_col db ~(col : _ Subquery_col_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -2933,53 +3053,60 @@ Virtual select: CASE WHEN as dynamic column:
           column = ("CASE WHEN status = 1 THEN 'active' ELSE 'inactive' END");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, status INT)") T.no_params
   
-    let case_col db ~(col : _ Case_col_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let case_col db ~(col : _ Case_col_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let case_col db ~(col : _ Case_col_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -3038,53 +3165,60 @@ Virtual select: function call with multiple args as column:
           column = ("CONCAT(first_name, ' ', last_name)");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, first_name TEXT, last_name TEXT)") T.no_params
   
-    let func_col db ~(col : _ Func_col_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let func_col db ~(col : _ Func_col_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let func_col db ~(col : _ Func_col_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -3147,56 +3281,63 @@ Virtual select: arithmetic with param at expression start:
           column = ("" ^ "?" ^ " * price");
           count = 1;
         }
+  
+      let select db (col : _ t) ~id callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p id;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) ~id callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) ~id callback =
+          let set_params stmt =
+            let p = T.start_params stmt (1 + col.count) in
+            col.set p;
+            T.set_param_Int p id;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (id INT, price DECIMAL(10,2))") T.no_params
   
-    let param_start_expr db ~(col : _ Param_start_expr_col.t) ~id callback =
-      let set_params stmt =
-        let p = T.start_params stmt (1 + col.count) in
-        col.set p;
-        T.set_param_Int p id;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let param_start_expr db ~(col : _ Param_start_expr_col.t) ~id callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let param_start_expr db ~(col : _ Param_start_expr_col.t) ~id callback =
-        let set_params stmt =
-          let p = T.start_params stmt (1 + col.count) in
-          col.set p;
-          T.set_param_Int p id;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
@@ -3262,53 +3403,60 @@ Virtual select: tab-separated columns (non-space whitespace):
           column = ("b");
           count = 0;
         }
+  
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        T.select db
+        ("SELECT " ^ col.column ^ " FROM t")
+        set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col)
+  
+      module Fold = struct
+        let select db (col : _ t) callback acc =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref acc in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col !r_acc)))
+          (fun () -> IO.return !r_acc)
+  
+      end (* module Fold *)
+  
+      module List = struct
+        let select db (col : _ t) callback =
+          let set_params stmt =
+            let p = T.start_params stmt (0 + col.count) in
+            col.set p;
+            T.finish_params p
+          in
+          let r_acc = ref [] in
+          IO.(>>=) (T.select db
+          ("SELECT " ^ col.column ^ " FROM t")
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+            __sqlgg_r_col) :: !r_acc))
+          (fun () -> IO.return (List.rev !r_acc))
+  
+      end (* module List *)
+  
     end
   
   
     let create_t db  =
       T.execute db ("CREATE TABLE t (a INT, b TEXT)") T.no_params
   
-    let tab_sep db ~(col : _ Tab_sep_col.t) callback =
-      let set_params stmt =
-        let p = T.start_params stmt (0 + col.count) in
-        col.set p;
-        T.finish_params p
-      in
-      T.select db
-      ("SELECT " ^ col.column ^ " FROM t")
-      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col)
-  
     module Fold = struct
-      let tab_sep db ~(col : _ Tab_sep_col.t) callback acc =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref acc in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col !r_acc)))
-        (fun () -> IO.return !r_acc)
-  
     end (* module Fold *)
     
     module List = struct
-      let tab_sep db ~(col : _ Tab_sep_col.t) callback =
-        let set_params stmt =
-          let p = T.start_params stmt (0 + col.count) in
-          col.set p;
-          T.finish_params p
-        in
-        let r_acc = ref [] in
-        IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            ~col:__sqlgg_r_col) :: !r_acc))
-        (fun () -> IO.return (List.rev !r_acc))
-  
     end (* module List *)
   end (* module Sqlgg *)
 
