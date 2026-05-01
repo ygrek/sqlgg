@@ -403,8 +403,8 @@ and analyze_alter_action acc actions k = match actions with
     | `TtlOptions (_, pos) | `RemoveTtl pos ->
         let acc = get_ttl pos :: acc in
         analyze_alter_action acc rest k
-    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _ ->
-
+    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _
+    | `AlterColumnPG _ ->
         analyze_alter_action acc rest k
 
 and analyze_insert_action acc ias k = match ias with

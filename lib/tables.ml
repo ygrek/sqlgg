@@ -237,6 +237,53 @@ let add_primary_key name ~cols =
   let pk = grouped_constraint cols ~single:Sql.Constraint.PrimaryKey ~composite:Sql.Constraint.make_composite_primary in
   alter_columns name (fun columns -> add_constraint_to_columns columns ~cols pk)
 
+let alter_column_type name ~col_name ~new_kind =
+  alter_columns name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        let new_t = Sql.Source_type.kind_to_type_kind new_kind.Sql.collated in
+        { c with
+          attr = { c.attr with domain = { c.attr.domain with Sql.Type.t = new_t } };
+          source_kind = Some new_kind }
+      else c
+    ) cols)
+
+let alter_column_set_not_null name ~col_name =
+  alter_columns name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with
+            domain = { c.attr.domain with Sql.Type.nullability = Strict };
+            extra = Sql.Constraints.add NotNull c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_drop_not_null name ~col_name =
+  alter_columns name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with
+            domain = { c.attr.domain with Sql.Type.nullability = Nullable };
+            extra = Sql.Constraints.remove NotNull c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_set_default name ~col_name =
+  alter_columns name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with extra = Sql.Constraints.add WithDefault c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_drop_default name ~col_name =
+  alter_columns name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with extra = Sql.Constraints.remove WithDefault c.attr.extra } }
+      else c
+    ) cols)
+
 let print ch tables = let out = IO.output_channel ch in List.iter (Sql.print_table out) tables; IO.flush out
 
 let all () = List.map to_table !store
