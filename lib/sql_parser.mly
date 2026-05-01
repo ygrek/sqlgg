@@ -369,6 +369,19 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
+            (* TYPE is not a reserved word (columns may be named `type`), so match it as IDENT *)
+            | ALTER COLUMN? col=IDENT kw=IDENT t=located_sql_type
+                { if String.lowercase_ascii kw <> "type" then failwith ("expected TYPE after ALTER COLUMN, got " ^ kw);
+                  `AlterColumnPG (col, { Alter_column_pg.typ = Some t; not_null = None; default = None }) }
+            | ALTER COLUMN? col=IDENT SET NOT NULL
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = Some true; default = None }) }
+            | ALTER COLUMN? col=IDENT DROP NOT NULL
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = Some false; default = None }) }
+            | ALTER COLUMN? col=IDENT SET DEFAULT e=default_value
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = None;
+                    default = Some (Some (make_located ~value:e ~pos:($startofs, $endofs))) }) }
+            | ALTER COLUMN? col=IDENT DROP DEFAULT
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = None; default = Some None }) }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }

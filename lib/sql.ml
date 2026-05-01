@@ -857,6 +857,16 @@ type ttl_option =
   [ `TtlSet of string * int * string
   | `TtlEnable of string ] [@@deriving show {with_path=false}]
 
+module Alter_column_pg = struct
+  (* Each field is optional: [None] means "don't change this property".
+     [Some x] means "set this property to [x]". *)
+  type t = {
+    typ : Source_type.kind collated located option;
+    not_null : bool option;
+    default : expr located option option;
+  } [@@deriving show {with_path=false}]
+end
+
 type alter_action = [
     | `Add of Alter_action_attr.t * alter_pos
     | `RenameTable of table_name
@@ -872,7 +882,8 @@ type alter_action = [
     | `DropConstraint of string
     | `Default_or_convert_to of (charset_name * string located option)
     | `TtlOptions of ttl_option list * pos
-    | `RemoveTtl of pos ] [@@deriving show {with_path=false}]
+    | `RemoveTtl of pos
+    | `AlterColumnPG of string * Alter_column_pg.t ] [@@deriving show {with_path=false}]
 
 type stmt =
   | Create of table_name * create_target
