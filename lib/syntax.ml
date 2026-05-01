@@ -1466,6 +1466,18 @@ let rec eval (stmt:Sql.stmt) =
         Tables.drop_primary_key name
       | `AddPrimaryKey cols ->
         Tables.add_primary_key name ~cols
+      | `AlterColumnPG (col_name, changes) ->
+        Option.may (fun new_type ->
+          Tables.alter_column_type name ~col_name ~new_kind:new_type.value.collated
+        ) changes.Alter_column_pg.typ;
+        Option.may (fun not_null ->
+          if not_null then Tables.alter_column_set_not_null name ~col_name
+          else Tables.alter_column_drop_not_null name ~col_name
+        ) changes.not_null;
+        Option.may (function
+          | Some _ -> Tables.alter_column_set_default name ~col_name
+          | None -> Tables.alter_column_drop_default name ~col_name
+        ) changes.default
       | `RenameIndex _  | `AddIndex _ | `DropIndex _ | `AddConstraint _ | `DropConstraint _ -> () (* indices are not tracked yet *)
       | `TtlOptions _ | `RemoveTtl _ -> () (* TTL is a TiDB-specific table property, not tracked in schema *)
       | `Default_or_convert_to (cs, collation) ->
