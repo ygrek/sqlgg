@@ -194,6 +194,9 @@ let keywords =
    "algorithm", ALGORITHM;
    "copy", COPY;
    "recursive", RECURSIVE;
+   "ttl", TTL;
+   "ttl_enable", TTL_ENABLE;
+   "remove", REMOVE;
   ] in (* more *)
   k := !k @ List.map (fun s -> s, INTERVAL_UNIT s) [ "microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ];
   let all token l = k := !k @ List.map (fun x -> x,token) l in

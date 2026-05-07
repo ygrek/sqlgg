@@ -1467,6 +1467,7 @@ let rec eval (stmt:Sql.stmt) =
       | `AddPrimaryKey cols ->
         Tables.add_primary_key name ~cols
       | `RenameIndex _  | `AddIndex _ | `DropIndex _ | `AddConstraint _ | `DropConstraint _ -> () (* indices are not tracked yet *)
+      | `TtlOptions _ | `RemoveTtl _ -> () (* TTL is a TiDB-specific table property, not tracked in schema *)
       | `Default_or_convert_to (cs, collation) ->
         let old = Tables.get_charset name in
         let or_else fallback opt = match opt with Some _ -> opt | None -> fallback in
