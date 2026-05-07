@@ -3526,3 +3526,14 @@ Test ENUM with CHARACTER SET and COLLATE:
   >   status ENUM('active', 'inactive') CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL
   > ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
   > EOF
+
+Test TiDB TTL in migration (currently unsupported - parser error):
+  $ sqlgg -gen caml -no-header -migrations -name mig -dialect=tidb - <<'EOF' 2>&1
+  > CREATE TABLE smm_synced_comments (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
+  > ALTER TABLE smm_synced_comments TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON';
+  > EOF
+  ==> ALTER TABLE smm_synced_comments TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'
+  Position 1:35 Tokens: TTL = `created_at` + INTERVAL 6 MON
+  Error: Sqlgg.Sql_parser.MenhirBasics.Error
+  Errors encountered, no code generated
+  [1]
