@@ -1,0 +1,1 @@
+CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);

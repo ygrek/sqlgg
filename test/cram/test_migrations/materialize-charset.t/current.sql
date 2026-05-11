@@ -1,0 +1,2 @@
+CREATE TABLE `t` (`id` INT NOT NULL, `name` TEXT);
+ALTER TABLE `t` DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;

@@ -169,8 +169,9 @@ let generate out _ stmts =
   finish_output out
 
 let generate_migrations _name migrations =
-  let nodes = List.map (fun (m : Gen_migrations.migration) ->
-    Node ("migration", ["name", m.name; "apply", m.apply; "revert", m.revert], [])
+  let nodes = List.mapi (fun index (m : Gen_migrations.migration) ->
+    let name = Gen.choose_name m.props m.kind index in
+    Node ("migration", ["name", name; "apply", String.concat ";\n" m.apply; "revert", String.concat ";\n" m.revert], [])
   ) migrations in
   let root = Node ("migrations", [], nodes) in
   print_endline xml_declaration;

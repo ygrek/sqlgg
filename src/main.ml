@@ -101,32 +101,6 @@ let parse_one' (sql, props) =
     let props = Props.set props "sql" sql in
     { Gen.schema; vars; kind; props }
 
-type migration_info = Auto_revert of string | Needs_explicit_revert | Create_table | Non_migration_stmt of string
-
-let parse_one_migration' (sql, props) =
-    if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
-    Syntax.Config.dynamic_select := set_dynamic_select_prop props;
-    let parsed = Parser.parse_stmt sql in
-    let migration = match parsed.Parser.statement with
-      | Sql.Alter (table_name, actions) ->
-        let columns = Tables.get_columns table_name in
-        Gen_migrations.inverse table_name columns actions
-        |> Option.map_default (fun revert -> Auto_revert revert) Needs_explicit_revert
-      | Sql.CreateIndex (index_name, table_name, _cols) ->
-        Auto_revert (Gen_migrations.drop_index_sql index_name table_name)
-      | Sql.Rename pairs ->
-        Auto_revert (Gen_migrations.rename_inverse_sql pairs)
-      | Sql.Drop _ -> Needs_explicit_revert
-      | Sql.Create _ -> Create_table
-      | Sql.Insert _ | Sql.Delete _ | Sql.DeleteMulti _ | Sql.Update _ | Sql.UpdateMulti _ -> Needs_explicit_revert
-      | stmt -> Non_migration_stmt (Sql.show_stmt stmt)
-    in
-    let (sql, schema, vars, kind, dialect_features) = Syntax.eval_parsed sql parsed in
-    check_dialect sql dialect_features;
-    let props = Props.set props "sql" sql in
-    let stmt = { Gen.schema; vars; kind; props } in
-    (stmt, migration)
-
 (** @return parsed statement or [None] in case of parsing failure.
     @raise exn for other errors (typing etc)
 *)
@@ -143,11 +117,6 @@ let parse_one (sql, props as x) =
   match Props.get props "noparse" with
   | Some _ -> Some { Gen.schema=[]; vars=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
   | None -> try_parse parse_one' x
-
-let parse_one_migration (_sql, props as x) =
-  match Props.get props "noparse" with
-  | Some _ -> None
-  | None -> try_parse parse_one_migration' x
 
 (** Parse a select statement for sharing *)
 let parse_select_one (sql, props) =
@@ -254,47 +223,60 @@ let get_statements ch =
         check_statement stmt buffer; stmt)
   ) |> List.of_enum
 
-let read_explicit_revert tokens name =
-  let r = extract_statement' tokens |> Option.map (fun (buffer, _) -> String.trim buffer) in
-  if Option.is_none r then Error.log "migrations mode: down=explicit but no following statement for %s" name;
-  r
+let replay_sql sql = ignore (try_parse parse_one' (sql, Props.empty))
 
-let get_migrations ch =
+let collect_blocks ch =
   let lexbuf = Lexing.from_channel ch in
   let tokens = lex_tokens lexbuf in
-  let rec aux acc index =
+  let rec aux acc =
     match extract_statement' tokens with
     | None -> List.rev acc
     | Some (buffer, props) ->
-      let revert_explicit = Props.get props "down" = Some "explicit" in
-      let next_index = index + 1 in
-      match parse_one_migration (buffer, props) with
-      | None -> aux acc next_index
-      | Some (stmt, migration) ->
-        let name = Gen.choose_name stmt.props stmt.kind index in
-        let apply = String.trim buffer in
-        let add revert = aux ({ Gen_migrations.name; apply; revert } :: acc) next_index in
-        match migration with
-        | Auto_revert revert ->
-          let revert =
-            if revert_explicit then Option.default revert (read_explicit_revert tokens name)
-            else Option.default revert (Props.get props "down")
-          in
-          add revert
-        | Needs_explicit_revert ->
-          if not revert_explicit then begin
-            Error.log "migrations mode: %s contains non-invertible actions (index/constraint ops), use -- [sqlgg] down=explicit" name;
-            aux acc next_index
-          end else begin match read_explicit_revert tokens name with
-            | Some revert -> add revert
-            | None -> aux acc next_index
-          end
-        | Create_table -> aux acc next_index
-        | Non_migration_stmt _ ->
-          Error.log "migrations mode: unsupported statement type: %s" apply;
-          aux acc next_index
+      let b = String.trim buffer in
+      if b = "" then aux acc else aux ((b, props) :: acc)
   in
-  aux [] 0
+  aux []
+
+let glue_downs blocks =
+  let has prop props = Props.get props prop <> None in
+  let rec aux = function
+    | (sql, props) :: (down_sql, down_props) :: rest
+      when has "id" props && not (has "down" props) && not (has "irreversible" props)
+           && not (has "id" down_props) ->
+      (sql, Props.set props "down" down_sql) :: aux rest
+    | b :: rest -> b :: aux rest
+    | [] -> []
+  in
+  aux blocks
+
+let raw_blocks ch = glue_downs (collect_blocks ch)
+
+let replay_schema ch =
+  collect_blocks ch
+  |> glue_downs
+  |> List.iter (fun (sql, props) ->
+    match Props.get props "noparse" with
+    | Some _ -> ()
+    | None -> ignore (try_parse parse_one' (sql, props)))
+
+let migration_of_block (sql, props) =
+  try_parse parse_one' (sql, props) |> Option.map (fun (stmt : Gen.stmt) ->
+    let apply = String.trim sql in
+    let revert =
+      match Props.get props "irreversible", Props.get props "down" with
+      | Some _, _ -> []
+      | None, Some d -> [d]
+      | None, None -> Error.log "migration has no `down`:\n%s" apply; [""]
+    in
+    let props =
+      match Props.get stmt.props "name", Props.get props "id" with
+      | None, Some raw ->
+        (match Migration_id.parse raw with
+         | Some ({ name = Some _; _ } as id) -> Props.set stmt.props "name" (Migration_id.to_string id)
+         | _ -> stmt.props)
+      | _ -> stmt.props
+    in
+    { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert })
 
 let with_channel filename f =
   match try Some (open_in filename) with _ -> None with

@@ -1,0 +1,2 @@
+CREATE TABLE users (id INT NOT NULL);
+CREATE TABLE posts (id INT NOT NULL);

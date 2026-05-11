@@ -3364,27 +3364,6 @@ Test ENUM with CHARACTER SET and COLLATE:
   > ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
   > EOF
 
-Test TiDB TTL in migration:
-  $ sqlgg -gen caml -no-header -migrations -name mig -dialect=tidb - <<'EOF' 2>&1
-  > CREATE TABLE smm_synced_comments (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
-  > ALTER TABLE smm_synced_comments TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON';
-  > EOF
-  module Mig (T : Sqlgg_traits.M_io) = struct
-  
-    module IO = T.IO
-  
-    let apply_alter_smm_synced_comments_1 db  =
-      T.execute db ("ALTER TABLE smm_synced_comments TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'") T.no_params
-  
-    let revert_alter_smm_synced_comments_1 db  =
-      T.execute db ("ALTER TABLE `smm_synced_comments` REMOVE TTL") T.no_params
-  
-    let migrations = [
-      ("alter_smm_synced_comments_1", [(apply_alter_smm_synced_comments_1, revert_alter_smm_synced_comments_1)]);
-    ]
-  
-  end (* module Mig *)
-
 TTL is rejected on non-TiDB dialects:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
   > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
@@ -3393,36 +3372,6 @@ TTL is rejected on non-TiDB dialects:
   Feature Ttl is not supported for dialect MySQL (supported by: TiDB) at TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'
   Errors encountered, no code generated
   [1]
-
-ALTER TABLE REMOVE TTL is supported on TiDB:
-  $ sqlgg -gen caml -no-header -migrations -name mig -dialect=tidb - <<'EOF' 2>&1
-  > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
-  > ALTER TABLE foo REMOVE TTL;
-  > EOF
-  migrations mode: alter_foo_1 contains non-invertible actions (index/constraint ops), use -- [sqlgg] down=explicit
-  Errors encountered, no code generated
-  [1]
-
-Standalone TTL_ENABLE toggle:
-  $ sqlgg -gen caml -no-header -migrations -name mig -dialect=tidb - <<'EOF' 2>&1
-  > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
-  > ALTER TABLE foo TTL_ENABLE = 'OFF';
-  > EOF
-  module Mig (T : Sqlgg_traits.M_io) = struct
-  
-    module IO = T.IO
-  
-    let apply_alter_foo_1 db  =
-      T.execute db ("ALTER TABLE foo TTL_ENABLE = 'OFF'") T.no_params
-  
-    let revert_alter_foo_1 db  =
-      T.execute db ("ALTER TABLE `foo` REMOVE TTL") T.no_params
-  
-    let migrations = [
-      ("alter_foo_1", [(apply_alter_foo_1, revert_alter_foo_1)]);
-    ]
-  
-  end (* module Mig *)
 
 Composite: a choice nested inside another choice — every level is wrapped
 independently, so precedence is protected at each depth:
