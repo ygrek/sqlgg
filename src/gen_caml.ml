@@ -254,36 +254,45 @@ let output_schema_binder index schema kind =
     | Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index schema
     | _ -> func, output_schema_binder_labeled index schema
 
-let is_callback (stmt : Gen.stmt) =
-  match stmt.schema, stmt.kind with
-  | [],_ -> false
+let is_single_row_select stmt =
+  match stmt.Gen.kind, stmt.Gen.schema with
+  | Stmt.Select (`One | `Zero_one), _ :: _ -> true
+  | _ -> false
+
+let has_row_callback stmt =
+  match stmt.Gen.schema, stmt.Gen.kind with
+  | [], _ -> false
   | _, Stmt.Select (`Zero_one | `One) -> false
   | _ -> true
 
-let should_generate_for_style style stmt =
-  match style with
-  | `List | `Fold -> is_callback stmt
-  | `Single -> (match stmt.kind, stmt.schema with | Stmt.Select (`One | `Zero_one), _ :: _ -> true | _ -> false)
+let module_kind_name = function
+  | `Direct -> "Direct"
+  | `Single -> "Single"
+  | `Fold -> "Fold"
+  | `List -> "List"
+
+let supports_module_kind module_kind stmt =
+  match module_kind with
+  | `List | `Fold -> has_row_callback stmt
+  | `Single -> is_single_row_select stmt
   | `Direct -> true
 
-let gen_func_signature ~single_needs_callback ?(dynamic_infos=[]) style stmt index =
+let append_func_params ~has_callback ~module_kind inputs =
+  inputs
+  ^ (if has_callback then " callback" else "")
+  ^ (if module_kind = `Fold then " acc" else "")
+
+let gen_func_signature ~dynamic_infos ~module_kind ~index stmt =
   let name = choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii in
   let subst = Props.get_all stmt.props "subst" in
   let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
-  let format_input v =
-    match List.assoc_opt v dynamic_map with
-    | Some module_name -> sprintf "~(%s : _ %s.t)" v module_name
+  let format_input v = match List.assoc_opt v dynamic_map with
+    | Some module_name -> sprintf "(%s : _ %s.t)" v module_name
     | None -> sprintf "~%s" v
   in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
-  let needs_callback_param = match style with 
-    | `List | `Fold -> true 
-    | `Single -> single_needs_callback
-    | `Direct -> is_callback stmt 
-  in
-  let needs_acc_param = style = `Fold in
-  let all_inputs = inputs ^ (if needs_callback_param then " callback" else "") ^ (if needs_acc_param then " acc" else "") in
-  output "let %s db %s =" name all_inputs;
+  let has_callback = has_row_callback stmt || (module_kind = `Single && dynamic_infos = []) in
+  output "let %s db %s =" name (append_func_params ~has_callback ~module_kind inputs);
   inc_indent ();
   subst
 
@@ -297,8 +306,8 @@ let output_r_acc_return = function
   | `List -> output "(fun () -> IO.return (List.rev !r_acc))"
   | `Direct | `Single -> ()
 
-let complete_func style =
-  output_r_acc_return style;
+let complete_func module_kind =
+  output_r_acc_return module_kind;
   dec_indent ();
   empty_line ()
 
@@ -737,18 +746,15 @@ type callback_build_state = {
   idx_expr: string option;
 }
 
-let generate_stmt_with_dynamic style index stmt dynamic_infos =
-  if not (should_generate_for_style style stmt) then () else
-  let _subst = gen_func_signature ~single_needs_callback:(is_callback stmt) ~dynamic_infos style stmt index in
-  
+let emit_dynamic_select_body ~module_kind ~dynamic_infos stmt =
   let sql_pieces = get_sql stmt in
-  
+
   let other_vars = List.filter (function Sql.DynamicSelect _ -> false | _ -> true) stmt.vars in
   let static_count = eval_count_params other_vars in
-  let dynamic_counts = dynamic_infos |> List.map (fun di -> 
+  let dynamic_counts = dynamic_infos |> List.map (fun di ->
     sprintf "%s.count" di.param_name
   ) |> String.concat " + " in
-  
+
   output "let set_params stmt =";
   inc_indent ();
   output "let p = T.start_params stmt (%s + %s) in" static_count dynamic_counts;
@@ -759,9 +765,9 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
   output "T.finish_params p";
   dec_indent ();
   output "in";
-  
+
   let find_di_by_pid pid = List.find (fun di -> di.param_id = pid) dynamic_infos in
-  
+
   let rec build_parts acc pending_comma = function
     | [] -> List.rev acc
     | Gen.Static s :: rest ->
@@ -774,7 +780,7 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
         build_parts (quote s :: acc) false rest
     | Gen.Dynamic (pid, _) :: rest ->
       let di = find_di_by_pid pid in
-      let dyn_expr = 
+      let dyn_expr =
         if pending_comma then
           sprintf {|(match %s.column with "" -> "" | c -> ", " ^ c)|} di.param_name
         else
@@ -785,9 +791,9 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
   in
   let sql_parts = build_parts [] false sql_pieces in
   let sql_expr = String.concat " ^ " sql_parts in
-  
-  output_r_acc_init style;
-  
+
+  output_r_acc_init module_kind;
+
   let rec split_schema_multi acc current = function
     | [] -> List.rev ((List.rev current, None) :: acc)
     | Sql.Dynamic (pid, _) :: rest ->
@@ -797,16 +803,8 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
       split_schema_multi acc (a :: current) rest
   in
   let schema_segments = split_schema_multi [] [] stmt.schema in
-  
-  let needs_callback = match style with
-    | `Fold | `List -> true
-    | `Direct | `Single -> is_callback stmt
-  in
-  let format_param = if needs_callback then format_labeled_param else (fun _ v -> v) in
-  let format_result params = 
-    if needs_callback then sprintf "callback\n          %s" (String.concat "\n          " params)
-    else sprintf "(%s)" (String.concat ", " params)
-  in
+
+  let labeled = has_row_callback stmt in
   let build_callback_body () =
     let col_idx_at ~base ~offset = match base with
       | None -> string_of_int offset
@@ -817,8 +815,8 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
       List.fold_left (fun (st, i) attr ->
         let col_idx = col_idx_at ~base:st.idx_expr ~offset:(st.static_idx + i) in
         let value = sprintf "(%s)" (format_get_column ~row:"row" ~idx:col_idx attr) in
-        let param = format_param (name_of attr st.attr_n) value in
-        ({ st with reads = param :: st.reads; attr_n = st.attr_n + 1 }, i + 1)
+        let read = if labeled then format_labeled_param (name_of attr st.attr_n) value else value in
+        ({ st with reads = read :: st.reads; attr_n = st.attr_n + 1 }, i + 1)
       ) (st, 0) attrs |> fst
     in
     let process_dynamic st di =
@@ -826,8 +824,8 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
       let next_var = sprintf "__sqlgg_idx_after_%s" di.param_name in
       let start = col_idx_at ~base:st.idx_expr ~offset:st.static_idx in
       let binding = sprintf "let (%s, %s) = %s.read row %s in " read_var next_var di.param_name start in
-      { bindings = binding :: st.bindings; 
-        reads = format_param di.param_name read_var :: st.reads;
+      { bindings = binding :: st.bindings;
+        reads = read_var :: st.reads;
         static_idx = 0;
         attr_n = st.attr_n + 1; idx_expr = Some next_var }
     in
@@ -837,26 +835,44 @@ let generate_stmt_with_dynamic style index stmt dynamic_infos =
     in
     let init = { bindings = []; reads = []; static_idx = 0; attr_n = 0; idx_expr = None } in
     let final = List.fold_left process_segment init schema_segments in
-    String.concat "" (List.rev final.bindings) ^ format_result (List.rev final.reads)
+    let reads = List.rev final.reads in
+    String.concat "" (List.rev final.bindings) ^
+    if labeled then
+      sprintf "callback\n          %s" (String.concat "\n          " reads)
+    else
+      sprintf "(%s)" (String.concat ", " reads)
   in
-  
+
   let callback_body = build_callback_body () in
-  
+
   let (bind_start, bind_end, full_callback) =
-    match style with
+    match module_kind with
     | `Fold -> "IO.(>>=) (", ")", sprintf "(fun row -> r_acc := (%s !r_acc))" callback_body
     | `List -> "IO.(>>=) (", ")", sprintf "(fun row -> r_acc := (%s) :: !r_acc)" callback_body
     | `Direct | `Single -> "", "", sprintf "(fun row -> %s)" callback_body
   in
-  
+
   output "%sT.%s db" bind_start (select_func_of_kind stmt.kind);
   output "  (%s)" sql_expr;
   output "  set_params %s%s" full_callback bind_end;
-  complete_func style
+  complete_func module_kind
 
-let generate_stmt style index stmt =
-  if not (should_generate_for_style style stmt) then () else
-  let subst = gen_func_signature ~single_needs_callback:true style stmt index in
+let emit_dynamic_module_select ~module_kind ~dynamic_infos stmt =
+  if not (supports_module_kind module_kind stmt) then () else
+  let dynamic_names = List.map (fun di -> di.param_name) dynamic_infos in
+  let format_input v =
+    if List.mem v dynamic_names then sprintf "(%s : _ t)" v
+    else sprintf "~%s" v
+  in
+  let inputs = (Props.get_all stmt.props "subst" @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
+  let params = append_func_params ~has_callback:(has_row_callback stmt) ~module_kind inputs in
+  output "let select db %s =" params;
+  inc_indent ();
+  emit_dynamic_select_body ~module_kind ~dynamic_infos stmt
+
+let generate_stmt ~module_kind index stmt =
+  if not (supports_module_kind module_kind stmt) then () else
+  let subst = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
   let sql = make_sql @@ get_sql stmt in
   let sql = match subst with
   | [] -> sql
@@ -879,15 +895,15 @@ let generate_stmt style index stmt =
     | [] -> "execute", ""
     | _ ->
       let func = select_func_of_kind stmt.kind in
-      match style, stmt.kind with
+      match module_kind, stmt.kind with
       | `Single, _ -> func, output_schema_binder_labeled index stmt.schema
       | _, Stmt.Select (`Zero_one | `One) -> func, output_select1_cb index stmt.schema
       | _ -> func, output_schema_binder_labeled index stmt.schema
   in
   let params_binder_name = output_params_binder index stmt.vars in
-  output_r_acc_init style;
+  output_r_acc_init module_kind;
   let (bind, callback) =
-    match style with
+    match module_kind with
     | `Fold -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x !r_acc))" callback
     | `List -> "IO.(>>=) (", sprintf "(fun x -> r_acc := %s x :: !r_acc))" callback
     | `Single | `Direct -> "", callback (* or empty string *)
@@ -909,7 +925,7 @@ let generate_stmt style index stmt =
     | Some value -> sprintf {|( match %s with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> %s)|} value exec
   in
   output "%s%s" bind exec;
-  complete_func style
+  complete_func module_kind
 
 let sanitize_to_variant_name s =
   let normalized =
@@ -1023,7 +1039,9 @@ let get_all_dynamic_select_infos index stmt =
 
 let generate_dynamic_select_modules stmts =
   List.iteri (fun index stmt ->
-    get_all_dynamic_select_infos index stmt |> List.iter (fun di ->
+    let all_dis = get_all_dynamic_select_infos index stmt in
+    let single_di = List.length all_dis = 1 in
+    all_dis |> List.iter (fun di ->
       let module_name = di.module_name in
       let sql_pieces = get_sql stmt in
       
@@ -1128,6 +1146,22 @@ let (and+) a b = apply (map (fun a b -> (a, b)) a) b|}
         output "}";
         dec_indent ()
       ) fields field_sqls;
+
+      if single_di then begin
+        empty_line ();
+        emit_dynamic_module_select ~module_kind:`Direct ~dynamic_infos:[di] stmt;
+        [`Fold; `List]
+        |> List.iter (fun module_kind ->
+          if supports_module_kind module_kind stmt then begin
+            let name = module_kind_name module_kind in
+            output "module %s = struct" name;
+            inc_indent ();
+            emit_dynamic_module_select ~module_kind ~dynamic_infos:[di] stmt;
+            dec_indent ();
+            output "end (* module %s *)" name;
+            empty_line ()
+          end)
+      end;
       
       dec_indent ();
       output "end";
@@ -1135,13 +1169,18 @@ let (and+) a b = apply (map (fun a b -> (a, b)) a) b|}
     )
   ) stmts
 
-let generate_stmt_wrapper style index stmt =
+let generate_stmt_wrapper ~module_kind index stmt =
   let dynamic_infos = get_all_dynamic_select_infos index stmt in
   match dynamic_infos with
-  | [] -> generate_stmt style index stmt
-  | _ -> generate_stmt_with_dynamic style index stmt dynamic_infos
+  | [] -> generate_stmt ~module_kind index stmt
+  | [_] -> () (* single dynamic select — generated inside *_col module *)
+  | _ :: _ :: _ ->
+    if supports_module_kind module_kind stmt then begin
+      let _subst = gen_func_signature ~dynamic_infos ~module_kind ~index stmt in
+      emit_dynamic_select_body ~module_kind ~dynamic_infos stmt
+    end
 
-let generate ~gen_io name stmts =
+let generate ~gen_io ~migration_names name stmts =
 (*
   let types =
     String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
@@ -1160,27 +1199,30 @@ let generate ~gen_io name stmts =
   generate_dynamic_select_preamble stmts;
   generate_dynamic_select_modules stmts;
   empty_line ();
-  List.iteri (generate_stmt_wrapper `Direct) stmts;
-  let has_fold = List.exists is_callback stmts in
-  let has_list = has_fold in
-  let has_single = List.exists (fun stmt ->
-    match stmt.Gen.kind, stmt.Gen.schema with
-    | Stmt.Select (`One | `Zero_one), _ :: _ -> true
-    | _ -> false) stmts in
-  [ 
-    has_single, "Single", `Single;
-    has_fold,   "Fold",   `Fold;
-    has_list,   "List",   `List;
-  ]
-  |> List.filter_map (fun (cond, name, style) -> if cond then Some (name, style) else None)
-  |> List.iteri (fun i (name, style) ->
+  List.iteri (generate_stmt_wrapper ~module_kind:`Direct) stmts;
+  let has_row_cb = List.exists has_row_callback stmts in
+  let has_single = List.exists is_single_row_select stmts in
+  [`Single, has_single; `Fold, has_row_cb; `List, has_row_cb]
+  |> List.filter_map (fun (module_kind, cond) -> if cond then Some module_kind else None)
+  |> List.iteri (fun i module_kind ->
+    let name = module_kind_name module_kind in
     if i > 0 then output "";
     output "module %s = struct" name;
     inc_indent ();
-    List.iteri (generate_stmt_wrapper style) stmts;
+    List.iteri (generate_stmt_wrapper ~module_kind) stmts;
     dec_indent ();
     output "end (* module %s *)" name
   );
+  Option.may (fun names ->
+    output "let migrations = [";
+    inc_indent ();
+    List.iter (fun n ->
+      output "(%s, [(apply_%s, revert_%s)]);" (quote n) n n;
+    ) names;
+    dec_indent ();
+    output "]";
+    empty_line ()
+  ) migration_names;
   dec_indent ();
   output "end (* module %s *)" (String.capitalize_ascii name)
 
@@ -1197,10 +1239,25 @@ end
 
 module Generator = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:false name stmts
+  let generate () name stmts = generate ~gen_io:false ~migration_names:None name stmts
 end
 
 module Generator_io = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:true name stmts
+  let generate () name stmts = generate ~gen_io:true ~migration_names:None name stmts
 end
+
+module Header = Gen.Make(Generator_io)
+
+let generate_migrations name migrations =
+  let migration_names = List.map (fun (m : Gen_migrations.migration) -> m.name) migrations in
+  let make_stmt fn_name sql =
+    { Gen.schema = []; vars = []; kind = Stmt.Other;
+      props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
+  in
+  let stmts = List.concat_map (fun (m : Gen_migrations.migration) ->
+    [make_stmt ("apply_" ^ m.name) m.apply;
+     make_stmt ("revert_" ^ m.name) m.revert]
+  ) migrations in
+  Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
+  generate ~gen_io:true ~migration_names:(Some migration_names) name stmts

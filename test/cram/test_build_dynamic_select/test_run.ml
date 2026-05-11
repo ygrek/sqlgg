@@ -22,7 +22,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
-      let _ = Sql.select_product connection ~col:name ~id:1L in
+      let _ = select connection name ~id:1L in
       printf "[TEST 1.1] Completed\n\n"
 
     let single_field_price connection =
@@ -31,7 +31,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_float 99.99]
       ));
-      let _ = Sql.select_product connection ~col:price ~id:2L in
+      let _ = select connection price ~id:2L in
       printf "[TEST 1.2] Completed\n\n"
 
     let combined_name_and_price connection =
@@ -48,7 +48,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = price in
         (n, p)
       in
-      let _ = Sql.select_product connection ~col:combined ~id:3L in
+      let _ = select connection combined ~id:3L in
       printf "[TEST 1.3] Completed\n\n"
 
     let three_fields connection =
@@ -67,7 +67,7 @@ module M (T: Sqlgg_traits.M with
         and+ c = category in
         (n, p, c)
       in
-      let _ = Sql.select_product connection ~col:all_three ~id:4L in
+      let _ = select connection all_three ~id:4L in
       printf "[TEST 1.4] Completed\n\n"
 
     let mapped_field connection =
@@ -80,7 +80,7 @@ module M (T: Sqlgg_traits.M with
         let+ p = price in
         Option.map (fun x -> x *. 2.0) p
       in
-      let _ = Sql.select_product connection ~col:doubled_price ~id:5L in
+      let _ = select connection doubled_price ~id:5L in
       printf "[TEST 1.5] Completed\n\n"
 
     let with_return connection =
@@ -90,7 +90,7 @@ module M (T: Sqlgg_traits.M with
         Print_ocaml_impl.make_mock_row []
       ));
       let constant = pure "constant_value" in
-      let _ = Sql.select_product connection ~col:constant ~id:6L in
+      let _ = select connection constant ~id:6L in
       printf "[TEST 1.6] Completed\n\n"
 
     let run connection =
@@ -103,7 +103,7 @@ module M (T: Sqlgg_traits.M with
   end
 
   (* === Test 2: select with callback (multiple rows) === *)
-  (* Now all columns (id, name, price) are dynamic - callback is (fun ~col -> ...) *)
+  (* Now all columns (id, name, price) are dynamic - callback is (fun col -> ...) *)
   module Test2 = struct
     open Sql.List_products_col
 
@@ -114,7 +114,7 @@ module M (T: Sqlgg_traits.M with
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"];
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Gadget"];
       ];
-      Sql.list_products connection ~col:name ~min_stock:10L (fun ~col ->
+      select connection name ~min_stock:10L (fun col ->
         printf "  Row: col=%s\n" (match col with Some s -> s | None -> "NULL")
       );
       printf "[TEST 2.1] Completed\n\n"
@@ -132,7 +132,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = price in
         (i, n, p)
       in
-      Sql.list_products connection ~col:combined ~min_stock:5L (fun ~col ->
+      select connection combined ~min_stock:5L (fun col ->
         let (i, n, p) = col in
         printf "  Row: id=%Ld, name=%s, price=%s\n" i 
           (match n with Some s -> s | None -> "NULL")
@@ -157,7 +157,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_text "Widget - Electronics"
         ]
       ));
-      let _ = Sql.multi_dynamic connection ~col:label ~id:1L in
+      let _ = select connection label ~id:1L in
       printf "[TEST 3.1] Completed\n\n"
 
     let combined connection =
@@ -174,7 +174,7 @@ module M (T: Sqlgg_traits.M with
         and+ tv = total_value in
         (l, tv)
       in
-      let _ = Sql.multi_dynamic connection ~col:combined ~id:2L in
+      let _ = select connection combined ~id:2L in
       printf "[TEST 3.2] Completed\n\n"
 
     let run connection =
@@ -192,7 +192,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "N/A"]
       ));
-      let _ = Sql.with_verbatim connection ~col:fallback ~id:1L in
+      let _ = select connection fallback ~id:1L in
       printf "[TEST 4.1] Completed\n\n"
 
     let combined connection =
@@ -213,7 +213,7 @@ module M (T: Sqlgg_traits.M with
         and+ c = category in
         (i, n, f, c)
       in
-      let _ = Sql.with_verbatim connection ~col:combined ~id:2L in
+      let _ = select connection combined ~id:2L in
       printf "[TEST 4.2] Completed\n\n"
 
     let run connection =
@@ -231,7 +231,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
-      let _ = Sql.with_param connection ~col:name ~id:1L in
+      let _ = select connection name ~id:1L in
       printf "[TEST 5.1] Completed\n\n"
 
     let custom_param connection =
@@ -240,7 +240,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Custom Value"]
       ));
-      let _ = Sql.with_param connection ~col:(custom "Custom Value") ~id:2L in
+      let _ = select connection (custom "Custom Value") ~id:2L in
       printf "[TEST 5.2] Completed\n\n"
 
     let combined connection =
@@ -259,7 +259,7 @@ module M (T: Sqlgg_traits.M with
         and+ c = custom "Hello" in
         (i, n, c)
       in
-      let _ = Sql.with_param connection ~col:combined ~id:3L in
+      let _ = select connection combined ~id:3L in
       printf "[TEST 5.3] Completed\n\n"
 
     let run connection =
@@ -281,7 +281,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_text "Widget"
         ]
       ));
-      let _ = Sql.first_position connection ~col:name ~id:1L in
+      let _ = select connection name ~id:1L in
       printf "[TEST 6.1] Completed\n\n"
 
     let first_combined connection =
@@ -298,7 +298,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = price in
         (n, p)
       in
-      let _ = Sql.first_position connection ~col:combined ~id:2L in
+      let _ = select connection combined ~id:2L in
       printf "[TEST 6.2] Completed\n\n"
 
     let run connection =
@@ -316,7 +316,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
-      let _ = Sql.select_one_product connection ~col:name ~id:1L in
+      let _ = select connection name ~id:1L in
       printf "[TEST 7.1] Completed\n\n"
 
     let select_one_combined connection =
@@ -333,7 +333,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = price in
         (n, p)
       in
-      let _ = Sql.select_one_product connection ~col:combined ~id:2L in
+      let _ = select connection combined ~id:2L in
       printf "[TEST 7.2] Completed\n\n"
 
     let run connection =
@@ -351,7 +351,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_int 42L]
       ));
-      let _ = Sql.with_module connection ~col:id ~id:1L in
+      let _ = select connection id ~id:1L in
       printf "[TEST 8.1] Completed\n\n"
 
     let with_module_name connection =
@@ -360,7 +360,7 @@ module M (T: Sqlgg_traits.M with
       Print_ocaml_impl.setup_select_one_response (Some (
         Print_ocaml_impl.make_mock_row [Print_ocaml_impl.mock_text "Widget"]
       ));
-      let _ = Sql.with_module connection ~col:name ~id:2L in
+      let _ = select connection name ~id:2L in
       printf "[TEST 8.2] Completed\n\n"
 
     let run connection =
@@ -390,7 +390,7 @@ module M (T: Sqlgg_traits.M with
         and+ f = filtered [1.0; 2.0] in
         (i, n, f)
       in
-      let _ = Sql.with_in_subquery connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 9.1] Completed\n\n"
 
     let run connection =
@@ -416,7 +416,7 @@ module M (T: Sqlgg_traits.M with
         and+ at = add_tax (Some 20.0) in
         (i, at)
       in
-      let _ = Sql.with_arith_param connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 10.1] Completed\n\n"
 
     let run connection =
@@ -441,7 +441,7 @@ module M (T: Sqlgg_traits.M with
         and+ r = in_range (Some 10.0) (Some 20.0) in
         (i, r)
       in
-      let _ = Sql.with_two_params connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 11.1] Completed\n\n"
 
     let run connection =
@@ -466,7 +466,7 @@ module M (T: Sqlgg_traits.M with
         and+ m = match_ "_x" ["a_x"; "b_x"] in
         (i, m)
       in
-      let _ = Sql.with_param_and_in connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 12.1] Completed\n\n"
 
     let run connection =
@@ -491,7 +491,7 @@ module M (T: Sqlgg_traits.M with
         and+ o = opt None in
         (i, o)
       in
-      let _ = Sql.with_option_actions_in_subquery connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 13.1] Completed\n\n"
 
     let opt_some connection =
@@ -508,7 +508,7 @@ module M (T: Sqlgg_traits.M with
         and+ o = opt (Some 10.0) in
         (i, o)
       in
-      let _ = Sql.with_option_actions_in_subquery connection ~col:combined ~id:2L in
+      let _ = select connection combined ~id:2L in
       printf "[TEST 13.2] Completed\n\n"
 
     let run connection =
@@ -534,7 +534,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = pairs [ (1L, Some 10L) ] in
         (i, p)
       in
-      let _ = Sql.with_tuple_list_in_subquery connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 14.1] Completed\n\n"
 
     let run connection =
@@ -559,7 +559,7 @@ module M (T: Sqlgg_traits.M with
         and+ c = casey 2L 123L in
         (i, c)
       in
-      let _ = Sql.with_case_expr connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 15.1] Completed\n\n"
 
     let run connection =
@@ -584,7 +584,7 @@ module M (T: Sqlgg_traits.M with
         and+ t = typed "hello" in
         (i, t)
       in
-      let _ = Sql.with_typed_param connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 16.1] Completed\n\n"
 
     let run connection =
@@ -604,7 +604,7 @@ module M (T: Sqlgg_traits.M with
         ]
       ));
       let col = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
-      let _ = Sql.monster_nested connection ~col ~id:1L in
+      let _ = select connection col ~id:1L in
       printf "[TEST 17.1] Completed\n\n"
 
     let combined connection =
@@ -621,7 +621,7 @@ module M (T: Sqlgg_traits.M with
         and+ m = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
         (i, m)
       in
-      let _ = Sql.monster_nested connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 17.2] Completed\n\n"
 
     let run connection =
@@ -641,7 +641,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 100L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:plain ~id:1L in
+      let _ = select connection plain ~id:1L in
       printf "[TEST 18.1] Completed\n\n"
 
     let test_with_in_list connection =
@@ -652,7 +652,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 3L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:(with_in_list [1L; 2L; 3L]) ~id:1L in
+      let _ = select connection (with_in_list [1L; 2L; 3L]) ~id:1L in
       printf "[TEST 18.2] Completed\n\n"
 
     let test_with_optional connection =
@@ -663,7 +663,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 50L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:(with_optional None) ~id:1L in
+      let _ = select connection (with_optional None) ~id:1L in
       printf "[TEST 18.3] Completed\n\n"
 
     let test_with_case connection =
@@ -674,7 +674,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 5L
         ]
       ));
-      let _ = Sql.ultimate_combo connection ~col:(with_case 1L ["foo"; "bar"]) ~id:1L in
+      let _ = select connection (with_case 1L ["foo"; "bar"]) ~id:1L in
       printf "[TEST 18.4] Completed\n\n"
 
     let test_full_combo connection =
@@ -701,7 +701,7 @@ module M (T: Sqlgg_traits.M with
         and+ fc = full_combo (Some 5L) ["x"] 100.0 in
         (i, p, il, wo, wc, wt, fc)
       in
-      let _ = Sql.ultimate_combo connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 18.5] Completed\n\n"
 
     let run connection =
@@ -736,8 +736,8 @@ module M (T: Sqlgg_traits.M with
         and+ p = price_with_tax 10L in
         (i, n, c, s, p)
       in
-      let _ = Sql.List.ultimate_combo_simple2 connection ~col:combined
-        (fun ~col -> ignore col) in
+      let _ = List.select connection combined
+        (fun col -> ignore col) in
       printf "[TEST 19] Completed\n\n"
 
     let run connection = test_all_fields connection
@@ -767,7 +767,7 @@ module M (T: Sqlgg_traits.M with
         and+ s = stock in
         (i, n, p, c, s)
       in
-      let _ = Sql.all_cols_runtime connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 20.1] Completed\n\n"
   end
 
@@ -796,7 +796,7 @@ module M (T: Sqlgg_traits.M with
         and+ ip = id_plus in
         (i, n, p, c, s, ip)
       in
-      let _ = Sql.all_cols_plus_expr_runtime connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 21.1] Completed\n\n"
 
     let run connection =
@@ -824,7 +824,7 @@ module M (T: Sqlgg_traits.M with
         and+ c = category in
         (i, n, p, c)
       in
-      let _ = Sql.multiline_cols_runtime connection ~col:combined ~id:1L in
+      let _ = select connection combined ~id:1L in
       printf "[TEST 22.1] Completed\n\n"
 
     let run connection =

@@ -20,6 +20,7 @@ type feature =
   | ReplaceInto
   | RowLocking
   | DefaultExpr
+  | Ttl
 [@@deriving show { with_path = false }]
 
 let show_feature x = 
@@ -41,6 +42,7 @@ let feature_to_string = function
   | ReplaceInto -> "replace_into"
   | RowLocking -> "row_locking"
   | DefaultExpr -> "default_expr"
+  | Ttl -> "ttl"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
@@ -57,6 +59,7 @@ let feature_of_string s =
   | "replace_into" -> ReplaceInto
   | "row_locking" -> RowLocking
   | "default_expr" -> DefaultExpr
+  | "ttl" -> Ttl
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -146,6 +149,8 @@ let get_replace_into pos = only ReplaceInto [MySQL; TiDB] pos
 
 let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
 
+let get_ttl pos = only Ttl [TiDB] pos
+
 let get_default_expr ~kind ~expr pos =
   let open Sql in
   let tidb_only_functions =
@@ -219,7 +224,7 @@ open Sql
 
 let check_unsigned_type pos = function
   | Source_type.Infer Type.UInt64 -> [get_unsigned_types pos]
-  | UInt32 -> [get_unsigned_types pos]
+  | Source_type.Int (_, Unsigned) -> [get_unsigned_types pos]
   | _ -> []
 
 let check_collation_opt (collation : string located option) =
@@ -391,10 +396,14 @@ and analyze_alter_action acc actions k = match actions with
     match action with
     | `Add (col, _) -> analyze_column_def_internal acc [col] (fun acc -> analyze_alter_action acc rest k)
     | `Change (_, col, _) -> analyze_column_def_internal acc [col] (fun acc -> analyze_alter_action acc rest k)
-    | `Default_or_convert_to collation -> 
+    | `Default_or_convert_to (_, collation) -> 
         let acc = check_collation_opt collation @ acc in
         analyze_alter_action acc rest k
-    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `None -> 
+    | `TtlOptions (_, pos) | `RemoveTtl pos ->
+        let acc = get_ttl pos :: acc in
+        analyze_alter_action acc rest k
+    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _ | `None ->
+
         analyze_alter_action acc rest k
 
 and analyze_insert_action acc ias k = match ias with

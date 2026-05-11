@@ -15,20 +15,22 @@ module CSharp = Gen.Make(Gen_csharp)
   common usecase:
      sqlgg [-gen none] ddl.sql -gen cxx dml.sql
 *)
-let generate = ref None
-let name = ref "sqlgg"
 
-let set_out s =
-  generate :=
-  match (String.lowercase_ascii s) with
-  | "cxx" | "c++" | "cpp" -> Some Cxx.process
-  | "caml" | "ocaml" | "ml" -> Some Caml.process
-  | "caml_io" -> Some Caml_io.process
-  | "xml" -> Some Xml_gen.process
-  | "java" -> Some Java.process
-  | "csharp" | "c#" | "cs" -> Some CSharp.process
-  | "none" -> None
-  | _ -> failwith (sprintf "Unknown output language: %s" s)
+type lang = Cxx | Caml | Caml_io | Xml | Java | CSharp
+
+let process_stmts = function
+  | Cxx -> Cxx.process
+  | Caml -> Caml.process
+  | Caml_io -> Caml_io.process
+  | Xml -> Xml_gen.process
+  | Java -> Java.process
+  | CSharp -> CSharp.process
+
+let process_migrations = function
+  | Caml | Caml_io -> Gen_caml.generate_migrations
+  | Xml -> Gen_xml.generate_migrations
+  | l -> failwith (sprintf "Migrations not supported for %s"
+    (match l with Cxx -> "C++" | Java -> "Java" | CSharp -> "C#" | _ -> "this language"))
 
 let set_params_mode s =
   Gen.params_mode :=
@@ -61,21 +63,45 @@ let filter_category cat =
   | `Only l -> List.mem cat l
   | `Except l -> not (List.mem cat l)
 
-let each_input =
+type input_result = Stmts of Gen.stmt list | Migrations_result of Gen_migrations.migration list
+
+let parse_lang s =
+  match (String.lowercase_ascii s) with
+  | "cxx" | "c++" | "cpp" -> Some Cxx
+  | "caml" | "ocaml" | "ml" -> Some Caml
+  | "caml_io" -> Some Caml_io
+  | "xml" -> Some Xml
+  | "java" -> Some Java
+  | "csharp" | "c#" | "cs" -> Some CSharp
+  | "none" -> None
+  | _ -> failwith (sprintf "Unknown output language: %s" s)
+
+let each_input ~lang ~migrations =
   let run input =
-    let l = match input with Some ch -> Main.get_statements ch | None -> [] in
-    match !generate with
-    | None -> []
-    | Some _ -> List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind)) l
+    match !lang with
+    | None ->
+      let (_: Gen.stmt list) = match input with Some ch -> Main.get_statements ch | None -> [] in
+      Stmts []
+    | Some _ when !migrations ->
+      let l = match input with Some ch -> Main.get_migrations ch | None -> [] in
+      Migrations_result l
+    | Some _ ->
+      let l = match input with Some ch -> Main.get_statements ch | None -> [] in
+      Stmts (List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind)) l)
   in
   function
   | "-" -> run (Some stdin)
   | filename -> Main.with_channel filename run
 
-let generate l =
-  match !generate with
+let generate ~lang ~migrations ~name results =
+  match !lang with
   | None -> ()
-  | Some f -> f !name l
+  | Some l when !migrations ->
+    let migs = List.concat_map (function Migrations_result l -> l | Stmts _ -> []) results in
+    process_migrations l !name migs
+  | Some l ->
+    let stmts = List.concat_map (function Stmts l -> l | Migrations_result _ -> []) results in
+    process_stmts l !name stmts
 
 let usage_msg =
   let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Sqlgg_config.version in
@@ -109,13 +135,17 @@ let set_no_check =
     Sqlgg_config.set_no_check_features features
 
 let main () =
+  let lang = ref None in
+  let migrations_mode = ref false in
+  let name = ref "sqlgg" in
   let l = ref [] in
-  let work s = l := each_input s :: !l in
+  let work s = l := each_input ~lang ~migrations:migrations_mode s :: !l in
   let args = Arg.align
   [
     "-version", Arg.Unit show_version, " Show version";
     "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
-    "-gen", Arg.String set_out, "cxx|caml|caml_io|java|xml|csharp|none Set output language (default: none)";
+    "-gen", Arg.String (fun s -> lang := parse_lang s), "cxx|caml|caml_io|java|xml|csharp|none Set output language (default: none)";
+    "-migrations", Arg.Set migrations_mode, " Generate migration code instead of regular code";
     "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
     "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
     "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> set debug level";
@@ -141,6 +171,6 @@ let main () =
     if !Error.errors then
       begin Error.log "Errors encountered, no code generated"; 1 end
     else
-      begin generate @@ List.concat @@ List.rev l; 0 end
+      begin generate ~lang ~migrations:migrations_mode ~name @@ List.rev l; 0 end
 
 let () = exit @@ main ()

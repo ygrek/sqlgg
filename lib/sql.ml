@@ -525,8 +525,24 @@ let print_table out (name,schema) =
 type param_id = string option located [@@deriving show]
 type shared_query_ref_id = string located [@@deriving show]
 
+type int_size = Tiny | Small | Medium | Big
+  [@@deriving show {with_path=false}, eq]
+
+type lob_size = Tiny | Medium | Long
+  [@@deriving show {with_path=false}, eq]
+
+type signedness = Signed | Unsigned
+  [@@deriving show {with_path=false}, eq]
+
+type float_precision = Single | Double
+  [@@deriving show {with_path=false}, eq]
+
 module Source_type = struct
-  type kind = Infer of Type.kind | UInt32 [@@deriving show, eq]
+  type kind = Infer of Type.kind
+    | Int of int_size option * signedness
+    | Float of float_precision
+    | Blob of lob_size option | Text of lob_size option
+    [@@deriving show, eq]
 
   type t = { t : kind; nullability : Type.nullability; } [@@deriving eq, show{with_path=false}, make]
 
@@ -538,16 +554,14 @@ module Source_type = struct
   let to_infer_type { t; nullability; } =
     let t = match t with
       | Infer ty -> ty
-      | UInt32 -> Type.Int 
+      | Int (Some Big, Unsigned) -> Type.UInt64
+      | Int _ -> Type.Int
+      | Float _ -> Type.Float
+      | Blob _ -> Type.Blob
+      | Text _ -> Type.Text
     in
     { Type.t; nullability }
 
-  let show { t; nullability; } = 
-    let kind_str = match t with
-      | Infer ty -> Type.show_kind_full ty
-      | UInt32 -> "UInt32"
-    in
-    kind_str ^ (match nullability with Type.Nullable -> "?" | Type.Depends -> "??" | Type.Strict -> "")
 end
 
 type 't param = { id : param_id; typ : 't; } [@@deriving show, make]
@@ -754,7 +768,11 @@ module Alter_action_attr = struct
 
   let kind_to_type_kind = function
     | Source_type.Infer k -> k
-    | Source_type.UInt32 -> Type.Int
+    | Source_type.Int (Some Big, Unsigned) -> Type.UInt64
+    | Source_type.Int _ -> Type.Int
+    | Source_type.Float _ -> Type.Float
+    | Source_type.Blob _ -> Type.Blob
+    | Source_type.Text _ -> Type.Text
 
   let to_attr (x: t): attr = make_attribute x.name 
     (Option.map_default (fun k -> Some (kind_to_type_kind k.value.collated)) None x.kind)
@@ -790,6 +808,13 @@ type create_target =
   | Select of select_full located
 [@@deriving show {with_path=false}]
 
+type charset_name = Named of string | Binary | Ascii | Unicode
+  [@@deriving show {with_path=false}]
+
+type ttl_option =
+  [ `TtlSet of string * int * string
+  | `TtlEnable of string ] [@@deriving show {with_path=false}]
+
 type alter_action = [
     | `Add of Alter_action_attr.t * alter_pos
     | `RenameTable of table_name
@@ -797,7 +822,15 @@ type alter_action = [
     | `RenameIndex of string * string
     | `Drop of string
     | `Change of string * Alter_action_attr.t * alter_pos
-    | `Default_or_convert_to of string located option
+    | `AddIndex of string option * string list
+    | `DropIndex of string
+    | `AddPrimaryKey of string list
+    | `DropPrimaryKey
+    | `AddConstraint of string option
+    | `DropConstraint of string
+    | `Default_or_convert_to of (charset_name option * string located option)
+    | `TtlOptions of ttl_option list * pos
+    | `RemoveTtl of pos
     | `None ] [@@deriving show {with_path=false}]
 
 type stmt =

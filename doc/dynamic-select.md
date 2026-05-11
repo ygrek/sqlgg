@@ -14,6 +14,8 @@ Dynamic Select is currently supported **only in OCaml** code generation (`-gen c
 
 Dynamic Select allows you to choose which columns to SELECT at runtime while maintaining full type safety. Just write a regular `SELECT` query and add the `dynamic_select=true` metadata flag — every column in the select list becomes a composable field that can be picked or combined at runtime using applicative combinators.
 
+Unlike simply ignoring unwanted columns in the callback, Dynamic Select builds the SQL query with only the selected columns. This means the database server processes and transfers less data — unused column expressions (subqueries, function calls, etc.) are never evaluated.
+
 ## Basic Syntax
 
 Add a metadata comment before a regular SELECT query:
@@ -40,43 +42,39 @@ module Select_product_col : sig
 end
 ```
 
-The generated query function takes a `~col` parameter:
-
-```ocaml
-val select_product : db -> col:'a Select_product_col.t -> id:int64 -> 'a option IO.m
-```
-
 ## Usage with Combinators
+
+The query function `select` is generated inside the `*_col` module — no need to open an extra module:
 
 ### Single Field
 
 ```ocaml
-let* result = Db.select_product conn ~col:Select_product_col.name ~id:1L
+let* result = Db.Select_product_col.(select conn name ~id:1L)
 (* result : string option *)
 ```
 
 ### Combined Fields with `let+` / `and+`
 
+Compose fields inline:
+
 ```ocaml
-open Select_product_col
-
-let combined =
-  let+ n = name
-  and+ p = price in
-  (n, p)
-
-let* result = Db.select_product conn ~col:combined ~id:1L
+let* result = Db.Select_product_col.(select conn (let+ n = name and+ p = price in (n, p)) ~id:1L)
 (* result : (string * float) option *)
 ```
 
-### Three or More Fields
+Or bind the selector separately when it gets longer:
 
 ```ocaml
-let all_fields =
+open Db.Select_product_col
+
+let combined =
   let+ n = name
   and+ p = price
   and+ c = category in
   (n, p, c)
+
+let* result = select conn combined ~id:1L
+(* result : (string * float * string) option *)
 ```
 
 ### With Transformation
@@ -98,7 +96,7 @@ let with_constant =
 
 ## Multiple Rows (Callback)
 
-Dynamic select works the same for queries returning multiple rows. The callback receives `~col`:
+For queries returning multiple rows, pass a callback after the fields:
 
 ```sql
 -- [sqlgg] dynamic_select=true
@@ -106,8 +104,19 @@ Dynamic select works the same for queries returning multiple rows. The callback 
 SELECT id, name, price FROM products WHERE stock > @min_stock;
 ```
 
+Inline style:
+
 ```ocaml
-open List_products_col
+Db.List_products_col.(select conn
+  (let+ i = id and+ n = name and+ p = price in (i, n, p))
+  ~min_stock:5L
+  (fun (i, n, p) -> printf "id=%Ld, name=%s, price=%.2f\n" i n p))
+```
+
+Or with a separate binding:
+
+```ocaml
+open Db.List_products_col
 
 let combined =
   let+ i = id
@@ -115,8 +124,7 @@ let combined =
   and+ p = price in
   (i, n, p)
 
-let () = Db.list_products conn ~col:combined ~min_stock:5L (fun ~col ->
-  let (i, n, p) = col in
+let () = select conn combined ~min_stock:5L (fun (i, n, p) ->
   printf "id=%Ld, name=%s, price=%.2f\n" i n p
 )
 ```
@@ -173,14 +181,12 @@ module With_param_col : sig
 end
 
 (* Usage *)
-let* r = Db.with_param conn ~col:(With_param_col.custom "Hello") ~id:1L
+let* r = Db.With_param_col.(select conn (custom "Hello") ~id:1L)
 
 (* Combine with other fields *)
-let combined =
-  let+ i = id
-  and+ n = name
-  and+ c = custom "Hello" in
-  (i, n, c)
+let* r = Db.With_param_col.(select conn
+  (let+ i = id and+ n = name and+ c = custom "Hello" in (i, n, c))
+  ~id:1L)
 ```
 
 ### Arithmetic Parameters
@@ -364,13 +370,9 @@ You don't have to return tuples — use records:
 ```ocaml
 type product_info = { name: string; price: float }
 
-let info_col =
-  let open Select_product_col in
-  let+ n = name
-  and+ p = price in
-  { name = n; price = p }
-
-let* result = Db.select_product conn ~col:info_col ~id:1L
+let* result = Db.Select_product_col.(select conn
+  (let+ n = name and+ p = price in { name = n; price = p })
+  ~id:1L)
 (* result : product_info option *)
 ```
 
