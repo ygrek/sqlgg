@@ -54,8 +54,8 @@
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 %token <Sql.int_size option> T_INTEGER
-%token <Sql.lob_size option> T_BLOB
-%token <Sql.lob_size option> T_TEXT
+%token T_TEXT T_TINYTEXT T_MEDIUMTEXT T_LONGTEXT T_CHAR T_VARCHAR T_VARCHAR2
+%token T_BLOB T_TINYBLOB T_MEDIUMBLOB T_LONGBLOB T_VARBINARY
 %token T_FLOAT T_DOUBLE T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
 
 (*
@@ -124,18 +124,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Create (name, Select select)
               }
-         | ALTER TABLE name=table_name actions=commas(alter_action)
+         | ALTER TABLE name=table_name actions=commas(alter_action_or_ignored)
               {
-                Alter (name,actions)
+                Alter (name, List.filter_map (fun x -> x) actions)
               }
          | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(table_name,TO,table_name)) { Rename l }
          | DROP either(TABLE,VIEW) if_exists? name=table_name
               {
                 Drop name
               }
-         | CREATE UNIQUE? INDEX if_not_exists? name=IDENT ON table=table_name cols=sequence(index_column)
+         | CREATE u=boption(UNIQUE) INDEX if_not_exists? name=IDENT ON table=table_name cols=sequence(index_column)
               {
-                CreateIndex (name, table, cols)
+                let ci_kind = if u then Sql.Unique_idx else Sql.Plain_idx in
+                CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind }
               }
          | select_stmt { Select $1 }
          | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
@@ -355,7 +356,8 @@ maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
-            | ADD index_type name=IDENT? cols=sequence(IDENT) { `AddIndex (name, cols) }
+            | ADD PRIMARY KEY cols=sequence(IDENT) { `AddPrimaryKey cols }
+            | ADD k=index_type name=IDENT? cols=sequence(IDENT) { `AddIndex { add_idx_name = name; add_idx_kind = k; add_idx_cols = cols } }
             | ADD CONSTRAINT name=IDENT? table_constraint_1 index_options { `AddConstraint name }
             | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
             | RENAME COLUMN old_name=IDENT TO new_name=IDENT { `RenameColumn (old_name, new_name) }
@@ -367,18 +369,25 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
-            | SET IDENT IDENT { `None }
-            | ALGORITHM EQUAL algorithm { `None }
-            | LOCK EQUAL lock { `None }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
-            | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (Some cs, c) }
+            | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }
+
+(* clauses sqlgg parses but does not act on: kept out of the action list *)
+alter_action_or_ignored: a=alter_action { Some a }
+            | SET IDENT IDENT { None }
+            | ALGORITHM EQUAL algorithm { None }
+            | LOCK EQUAL lock { None }
 
 ttl_option: TTL EQUAL col=IDENT PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
               { `TtlSet (col, n, unit) }
           | TTL_ENABLE EQUAL v=TEXT { `TtlEnable v }
 index_or_key: INDEX | KEY { }
-index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
+index_type:
+  | index_or_key { Sql.Plain_idx }
+  | UNIQUE index_or_key? { Sql.Unique_idx }
+  | FULLTEXT index_or_key? { Sql.Fulltext_idx }
+  | SPATIAL index_or_key? { Sql.Spatial_idx }
 alter_pos: AFTER col=IDENT { `After col }
          | FIRST { `First }
          | { `Default }
@@ -392,24 +401,27 @@ column_def: name=IDENT sql_kind=located_sql_type? extra=located(column_def_extra
     { Alter_action_attr.name = name; meta; kind = sql_kind; extra; }
   }
 
+inline_idx_kind:
+  | index_or_key           { Sql.Regular_idx }
+  | FULLTEXT index_or_key? { Sql.Fulltext }
+  | SPATIAL index_or_key?  { Sql.Spatial }
+
 column_def1: c=column_def { `Attr c }
            | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
-           | index_or_key table_index { `Index (make_located ~value:Regular_idx ~pos:($startofs, $endofs)) }
-           | FULLTEXT index_or_key? table_index { `Index (make_located ~value:Fulltext ~pos:($startofs, $endofs)) }
-           | SPATIAL index_or_key? table_index { `Index (make_located ~value:Spatial ~pos:($startofs, $endofs)) }
+           | kind=inline_idx_kind t=table_index { let (idx_name, idx_cols) = t in `Index (make_located ~value:{ idx_kind = kind; idx_name; idx_cols; idx_unique = false } ~pos:($startofs, $endofs)) }
 
-int_arg: delimited(LPAREN,INTEGER,RPAREN) {}
+int_arg: LPAREN n=INTEGER RPAREN { n }
 
 key_part: n=IDENT int_arg? either(ASC,DESC)? { n }
 
 index_options: list(IDENT)? { }
 
-table_index: IDENT? l=sequence(key_part) index_options { l }
+table_index: name=IDENT? l=sequence(key_part) index_options { (name, l) }
 
 (* FIXME check columns *)
 table_constraint_1:
       | PRIMARY KEY l=sequence(key_part) { `Primary l }
-      | UNIQUE index_or_key? IDENT? l=sequence(key_part) { `Unique l }
+      | UNIQUE index_or_key? name=IDENT? l=sequence(key_part) { `Unique (name, l) }
       | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
         reference_action_clause*
           { `Ignore }
@@ -427,7 +439,13 @@ column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint Prima
                 | NULL { Some (Alter_action_attr.Syntax_constraint Null) }
                 | UNIQUE KEY? { Some (Alter_action_attr.Syntax_constraint Unique) }
                 | AUTOINCREMENT { Some (Alter_action_attr.Syntax_constraint Autoincrement) }
-                | DEFAULT def=default_value { Some (Alter_action_attr.Default (make_located ~value:def ~pos:($startofs, $endofs))) }
+                | DEFAULT def=default_value {
+                    let pos = ($startofs(def), $endofs(def)) in
+                    Some (Alter_action_attr.Default {
+                      expr = make_located ~value:def ~pos;
+                      sql = Parser_state.extract_source pos;
+                    })
+                  }
                 | on_conflict { None }
                 | CHECK LPAREN expr RPAREN { None }
                 | COLLATE IDENT { None }
@@ -633,8 +651,12 @@ interval_unit: INTERVAL_UNIT
              | YEAR_MONTH { Value (make_collated ~collated:(strict Datetime) ()) }
 
 int_type:
-  | s=T_INTEGER int_arg? u=UNSIGNED? {
-      Sql.Source_type.Int (s, Option.map_default (Fun.const Sql.Unsigned) Sql.Signed u)
+  | s=T_INTEGER n=int_arg? u=boption(UNSIGNED) {
+      Sql.Source_type.Int {
+        size = s;
+        sign = if u then Sql.Unsigned else Sql.Signed;
+        display_width = n;
+      }
     }
 
 (* expr_sql_type_flavor returns Type.kind for use in CAST *)
@@ -651,13 +673,29 @@ expr_sql_type_flavor:
                  | T_UUID { Blob }
                  | T_JSON { Json }
 
+%inline lob_size(PLAIN, TINY, MEDIUM, LONG):
+  | PLAIN  { None }
+  | TINY   { Some Sql.Tiny }
+  | MEDIUM { Some Sql.Medium }
+  | LONG   { Some Sql.Long }
+
+%inline text_plain: s=lob_size(T_TEXT, T_TINYTEXT, T_MEDIUMTEXT, T_LONGTEXT) { Source_type.PlainText s }
+%inline blob_plain: s=lob_size(T_BLOB, T_TINYBLOB, T_MEDIUMBLOB, T_LONGBLOB) { Source_type.PlainBlob s }
+
+%inline text_var:
+  | T_CHAR n=int_arg?     { Source_type.Char n }
+  | T_VARCHAR n=int_arg?  { Source_type.Varchar n }
+  | T_VARCHAR2 n=int_arg? { Source_type.Varchar2 n }
+
 (* sql_type_flavor returns Source_type.kind *)
 sql_type_flavor: 
   | t=int_type ZEROFILL? { t }
   | T_FLOAT { Source_type.Float Single }
   | T_DOUBLE PRECISION? { Source_type.Float Double }
-  | s=T_BLOB { Source_type.Blob s }
-  | NATIONAL? s=T_TEXT int_arg? VARYING? charset? { Source_type.Text s }
+  | f=blob_plain                                        { Source_type.Blob f }
+  | T_VARBINARY n=int_arg?                              { Source_type.Blob (Varbinary n) }
+  | NATIONAL? f=text_plain charset?                     { Source_type.Text f }
+  | NATIONAL? f=text_var VARYING? charset?              { Source_type.Text f }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
 
@@ -675,12 +713,11 @@ cast_as:
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
-charset: CHARSET c=IDENT { Named c }
-       | CHARSET BINARY { Binary }
-       | CHARACTER SET c=IDENT { Named c }
-       | CHARACTER SET BINARY { Binary }
-       | ASCII { Ascii }
-       | UNICODE { Unicode }
+%inline charset_kw: CHARSET {} | CHARACTER SET {}
+charset: charset_kw c=IDENT { Named c }
+       | charset_kw BINARY { Binary }
+       | charset_kw? ASCII { Ascii }
+       | charset_kw? UNICODE { Unicode }
 collate: COLLATE c=IDENT { make_located ~value:c ~pos:($startofs, $endofs) }
 
 sql_type: t=collated(sql_type_flavor)
@@ -696,8 +733,8 @@ cast_sql_type:
         | t=expr_sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN { t }
         | T_FLOAT { Float }
         | T_DOUBLE PRECISION? { Float }
-        | T_BLOB { Blob }
-        | T_TEXT int_arg? { Text }
+        | blob_plain | T_VARBINARY int_arg? { Blob }
+        | text_plain | text_var { Text }
 
 compound_op:
   | UNION { `Union }
@@ -707,17 +744,21 @@ compound_op:
 
 (* manual_type returns Source_type.t for parameter type annotations *)
 manual_type:
-    | s=T_TEXT               { { Source_type.t = Text s; nullability = Type.Strict } }
+    | f=text_plain           { { Source_type.t = Text f; nullability = Type.Strict } }
+    | f=text_var             { { Source_type.t = Text f; nullability = Type.Strict } }
     | T_JSON                 { Source_type.strict Json }
-    | s=T_BLOB               { { Source_type.t = Blob s; nullability = Type.Strict } }
+    | f=blob_plain           { { Source_type.t = Blob f; nullability = Type.Strict } }
+    | T_VARBINARY n=int_arg? { { Source_type.t = Blob (Varbinary n); nullability = Type.Strict } }
     | t=int_type             { { Source_type.t; nullability = Type.Strict } }
     | T_FLOAT                { { Source_type.t = Float Single; nullability = Type.Strict } }
     | T_DOUBLE               { { Source_type.t = Float Double; nullability = Type.Strict } }
     | T_BOOLEAN              { Source_type.strict Bool }
     | T_DATETIME             { Source_type.strict Datetime }
-    | s=T_TEXT NULL          { { Source_type.t = Text s; nullability = Type.Nullable } }
-    | T_JSON NULL            { Source_type.nullable Json }
-    | s=T_BLOB NULL          { { Source_type.t = Blob s; nullability = Type.Nullable } }
+    | f=text_plain NULL           { { Source_type.t = Text f; nullability = Type.Nullable } }
+    | f=text_var NULL             { { Source_type.t = Text f; nullability = Type.Nullable } }
+    | T_JSON NULL                 { Source_type.nullable Json }
+    | f=blob_plain NULL           { { Source_type.t = Blob f; nullability = Type.Nullable } }
+    | T_VARBINARY n=int_arg? NULL { { Source_type.t = Blob (Varbinary n); nullability = Type.Nullable } }
     | t=int_type NULL        { { Source_type.t; nullability = Type.Nullable } }
     | T_FLOAT NULL           { { Source_type.t = Float Single; nullability = Type.Nullable } }
     | T_DOUBLE NULL          { { Source_type.t = Float Double; nullability = Type.Nullable } }

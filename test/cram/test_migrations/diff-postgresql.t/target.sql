@@ -1,0 +1,1 @@
+CREATE TABLE users (id INT NOT NULL, name TEXT, email TEXT NOT NULL);
