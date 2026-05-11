@@ -224,16 +224,19 @@ let keywords =
   all T_BOOLEAN ["bool";"boolean"];
   all T_FLOAT ["float";"real";"float4";"float8";"int1";"int2";"int3";"int4";"int8"];
   all T_DOUBLE ["double"];
-  all (T_BLOB None) ["blob";"varbinary"];
-  all (T_BLOB (Some Tiny)) ["tinyblob"];
-  all (T_BLOB (Some Medium)) ["mediumblob"];
-  all (T_BLOB (Some Long)) ["longblob"];
-  all (T_TEXT None) ["text";"char";"varchar"];
-  all (T_TEXT (Some Tiny)) ["tinytext"];
-  all (T_TEXT (Some Medium)) ["mediumtext"];
-  all (T_TEXT (Some Long)) ["longtext"];
+  all T_BLOB ["blob"];
+  all T_TINYBLOB ["tinyblob"];
+  all T_MEDIUMBLOB ["mediumblob"];
+  all T_LONGBLOB ["longblob"];
+  all T_VARBINARY ["varbinary"];
+  all T_TEXT ["text"];
+  all T_TINYTEXT ["tinytext"];
+  all T_MEDIUMTEXT ["mediumtext"];
+  all T_LONGTEXT ["longtext"];
+  all T_CHAR ["char"];
+  all T_VARCHAR ["varchar"];
+  all T_VARCHAR2 ["varchar2"]; (* oracle *)
   all T_JSON ["json"];
-  all (T_TEXT None) ["varchar2"]; (* oracle *)
   all T_DATETIME ["datetime"];
   all T_UUID ["uuid"]; (* http://www.postgresql.org/docs/9.4/static/datatype-uuid.html *)
   !k

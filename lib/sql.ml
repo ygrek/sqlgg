@@ -530,10 +530,23 @@ type float_precision = Single | Double
   [@@deriving show {with_path=false}, eq]
 
 module Source_type = struct
+  type text_flavor =
+    | PlainText of lob_size option   (* TEXT/TINYTEXT/MEDIUMTEXT/LONGTEXT *)
+    | Char of int option
+    | Varchar of int option
+    | Varchar2 of int option
+    [@@deriving show, eq]
+
+  type blob_flavor =
+    | PlainBlob of lob_size option   (* BLOB/TINYBLOB/MEDIUMBLOB/LONGBLOB *)
+    | Varbinary of int option
+    [@@deriving show, eq]
+
   type kind = Infer of Type.kind
-    | Int of int_size option * signedness
+    | Int of { size : int_size option; sign : signedness; display_width : int option }
     | Float of float_precision
-    | Blob of lob_size option | Text of lob_size option
+    | Blob of blob_flavor
+    | Text of text_flavor
     [@@deriving show, eq]
 
   type t = { t : kind; nullability : Type.nullability; } [@@deriving eq, show{with_path=false}, make]
@@ -546,7 +559,7 @@ module Source_type = struct
   let to_infer_type { t; nullability; } =
     let t = match t with
       | Infer ty -> ty
-      | Int (Some Big, Unsigned) -> Type.UInt64
+      | Int { size = Some Big; sign = Unsigned; _ } -> Type.UInt64
       | Int _ -> Type.Int
       | Float _ -> Type.Float
       | Blob _ -> Type.Blob
@@ -733,7 +746,7 @@ type insert_action =
   on_conflict_clause : conflict_clause located option;
 } [@@deriving show {with_path=false}]
 
-type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
+type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list ] [@@deriving show {with_path=false}]
 
 type index_kind  = 
   | Regular_idx
@@ -743,7 +756,10 @@ type index_kind  =
 
 module Alter_action_attr = struct
 
-  type constraint_ = Syntax_constraint of Constraint.t | Default of expr located
+  type default = { expr : expr located; sql : string option }
+    [@@deriving show {with_path=false}]
+
+  type constraint_ = Syntax_constraint of Constraint.t | Default of default
     [@@deriving show {with_path=false}]
 
   type t = {  
@@ -758,9 +774,16 @@ module Alter_action_attr = struct
     | Syntax_constraint c -> c
     | Default _ -> WithDefault
 
+  let default_sql (col : t) =
+    List.find_map (fun (c : constraint_ located) ->
+      match c.value with
+      | Default { sql; _ } -> sql
+      | Syntax_constraint _ -> None
+    ) col.extra
+
   let kind_to_type_kind = function
     | Source_type.Infer k -> k
-    | Source_type.Int (Some Big, Unsigned) -> Type.UInt64
+    | Source_type.Int { size = Some Big; sign = Unsigned; _ } -> Type.UInt64
     | Source_type.Int _ -> Type.Int
     | Source_type.Float _ -> Type.Float
     | Source_type.Blob _ -> Type.Blob
@@ -777,8 +800,10 @@ module Alter_action_attr = struct
   let from_attr (attr: attr): t =
     let extra = attr.extra |> Constraints.elements |> List.map (fun c -> 
       let c = match c with
-      | Constraint.WithDefault -> Default (make_located ~pos:(0,0) ~value:(Value 
-        (make_collated ~collated:(Type.depends Any) ()))) 
+      | Constraint.WithDefault -> Default {
+          expr = make_located ~pos:(0,0) ~value:(Value (make_collated ~collated:(Type.depends Any) ()));
+          sql = None;
+        }
       | x -> Syntax_constraint x
       in
       make_located ~pos:(0,0) ~value:c
@@ -788,10 +813,36 @@ module Alter_action_attr = struct
     { name = attr.name; kind; extra; meta }
 end
 
+type index_op_kind =
+  | Plain_idx
+  | Unique_idx
+  | Fulltext_idx
+  | Spatial_idx
+  [@@deriving show {with_path=false}, eq]
+
+type table_inline_index = {
+  idx_kind : index_kind;
+  idx_name : string option;
+  idx_cols : string list;
+  idx_unique : bool;
+}
+[@@deriving show {with_path=false}]
+
+type add_index = { add_idx_name : string option; add_idx_kind : index_op_kind; add_idx_cols : string list }
+  [@@deriving show {with_path=false}]
+
+type create_index_def = {
+  ci_name : string;
+  ci_table : table_name;
+  ci_cols : string collated list;
+  ci_kind : index_op_kind;
+}
+[@@deriving show {with_path=false}]
+
 type create_target_schema = { 
   schema: Alter_action_attr.t list; 
   constraints: table_constraints list; 
-  indexes: index_kind located list; 
+  indexes: table_inline_index located list; 
 }
 [@@deriving show]
 
@@ -814,7 +865,7 @@ type alter_action = [
     | `RenameIndex of string * string
     | `Drop of string
     | `Change of string * Alter_action_attr.t * alter_pos
-    | `AddIndex of string option * string list
+    | `AddIndex of add_index
     | `DropIndex of string
     | `AddPrimaryKey of string list
     | `DropPrimaryKey
@@ -830,7 +881,7 @@ type stmt =
   | Drop of table_name
   | Alter of table_name * alter_action list
   | Rename of (table_name * table_name) list
-  | CreateIndex of string * table_name * string collated list (* index name, table name, columns *)
+  | CreateIndex of create_index_def
   | Insert of insert_action
   | Delete of table_name * expr option
   | DeleteMulti of table_name list * nested * expr option

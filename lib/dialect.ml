@@ -224,7 +224,7 @@ open Sql
 
 let check_unsigned_type pos = function
   | Source_type.Infer Type.UInt64 -> [get_unsigned_types pos]
-  | Source_type.Int (_, Unsigned) -> [get_unsigned_types pos]
+  | Source_type.Int { sign = Unsigned; _ } -> [get_unsigned_types pos]
   | _ -> []
 
 let check_collation_opt (collation : string located option) =
@@ -376,10 +376,11 @@ and analyze_column_def_internal acc cds k = match cds with
       | None -> acc
     in
     let acc = extra
-      |> List.find_map (function
-          | { value = Alter_action_attr.Default { value = expr; pos }; _ } ->
+      |> List.find_map (fun c ->
+          match c.value with
+          | Alter_action_attr.Default { expr = { value = expr; _ }; _ } ->
               let col_kind = Option.map (fun k -> k.value.collated) kind in
-              Some (get_default_expr ~kind:col_kind ~expr pos)
+              Some (get_default_expr ~kind:col_kind ~expr c.pos)
           | _ -> None)
       |> Option.map_default (fun f -> f :: acc) acc
     in
@@ -437,7 +438,7 @@ and analyze_insert_action acc ias k = match ias with
       analyze_assignment_expr acc conflict_aes (fun acc ->
         analyze_insert_action acc rest k))
 
-let analyze_schema_index idx = match idx.value with
+let analyze_schema_index idx = match idx.value.Sql.idx_kind with
   | Regular_idx -> None
   | Fulltext -> Some (get_fulltext_index idx.pos)
   | Spatial -> None
@@ -455,7 +456,7 @@ let rec analyze stmt =
   | Alter (_, actions) ->
       analyze_alter_action acc actions List.rev
   | Rename _ -> []
-  | CreateIndex (_, _, cols) -> List.concat_map check_collated cols
+  | CreateIndex { ci_cols; _ } -> List.concat_map check_collated ci_cols
   | Insert insert_action ->
       analyze_insert_action acc [insert_action] List.rev
   | Delete (_, where_opt) ->

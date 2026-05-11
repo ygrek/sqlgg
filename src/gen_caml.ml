@@ -1249,14 +1249,17 @@ end
 module Header = Gen.Make(Generator_io)
 
 let generate_migrations name migrations =
-  let migration_names = List.map (fun (m : Gen_migrations.migration) -> m.name) migrations in
+  let named = List.mapi (fun index (m : Gen_migrations.migration) ->
+    Gen.choose_name m.props m.kind index, m
+  ) migrations in
+  let migration_names = List.map fst named in
   let make_stmt fn_name sql =
     { Gen.schema = []; vars = []; kind = Stmt.Other;
       props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
   in
-  let stmts = List.concat_map (fun (m : Gen_migrations.migration) ->
-    [make_stmt ("apply_" ^ m.name) m.apply;
-     make_stmt ("revert_" ^ m.name) m.revert]
-  ) migrations in
+  let stmts = List.concat_map (fun (name, (m : Gen_migrations.migration)) ->
+    [make_stmt ("apply_" ^ name) m.apply;
+     make_stmt ("revert_" ^ name) m.revert]
+  ) named in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
   generate ~gen_io:true ~migration_names:(Some migration_names) name stmts

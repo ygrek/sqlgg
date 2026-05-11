@@ -1386,7 +1386,7 @@ let with_constraints attrs constraints : Schema.t =
   List.iter (fun constr ->
     match constr with
     | `Primary [] -> fail "Schema Error: PRIMARY KEY must have at least one column"
-    | `Unique [] -> fail "Schema Error: UNIQUE constraint must have at least one column"
+    | `Unique (_, []) -> fail "Schema Error: UNIQUE constraint must have at least one column"
     | `Primary [ col_name ] -> begin
       match Hashtbl.find_opt constraints_table col_name with
       | None -> fail "Schema Error: no such column: %s" col_name
@@ -1394,7 +1394,7 @@ let with_constraints attrs constraints : Schema.t =
         let new_constraints = Constraints.add PrimaryKey constraints in
         Hashtbl.replace constraints_table col_name new_constraints
       end
-    | `Unique [ col_name ] -> begin
+    | `Unique (_, [ col_name ]) -> begin
       match Hashtbl.find_opt constraints_table col_name with
       | None -> fail "Schema Error: no such column: %s" col_name
       | Some constraints ->
@@ -1410,7 +1410,7 @@ let with_constraints attrs constraints : Schema.t =
           Hashtbl.replace constraints_table col new_constraints
       ) cols
     end
-    | `Unique cols -> begin
+    | `Unique (_, cols) -> begin
       List.iter (fun col ->
         match Hashtbl.find_opt constraints_table col with
         | None -> fail "Schema Error: no such column: %s" col
@@ -1427,18 +1427,24 @@ let with_constraints attrs constraints : Schema.t =
     | None -> attr
   ) attrs
 
+
 let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
   let open Attr in
   match stmt with
-  | Create (name, Schema { schema; constraints; _ }) ->
+  | Create (name, Schema { schema; constraints; indexes }) ->
       let attrs = List.map Alter_action_attr.to_attr schema in
       let attrs = with_constraints attrs constraints in
       let columns = List.map2 (fun (col : Alter_action_attr.t) attr ->
-        { Tables.attr; source_kind = Option.map (fun k -> k.value.collated) col.kind }
+        {
+          Tables.attr;
+          source_kind = Option.map (fun k -> k.value) col.kind;
+          default_sql = Alter_action_attr.default_sql col;
+        }
       ) schema attrs in
       Tables.add_columns (name, columns);
+      Tables.add_inline_indexes name ~indexes ~constraints;
       ([],[],Create name)
   | Create (name, Select { value=select; _ }) ->
       let (schema,params,_) = eval_select_full empty_env select in
@@ -1451,13 +1457,15 @@ let rec eval (stmt:Sql.stmt) =
   | Alter (name,actions) ->
       List.iter (function
       | `Add (col,pos) ->
-        let source_kind = Option.map (fun k -> k.value.collated) col.Alter_action_attr.kind in
-        Tables.alter_add name ~col:{ attr = Alter_action_attr.to_attr col; source_kind } ~pos
+        let source_kind = Option.map (fun k -> k.value) col.Alter_action_attr.kind in
+        let default_sql = Alter_action_attr.default_sql col in
+        Tables.alter_add name ~col:{ attr = Alter_action_attr.to_attr col; source_kind; default_sql } ~pos
       | `Drop col ->
         Tables.alter_drop name ~col
       | `Change (oldcol,col,pos) ->
-        let source_kind = Option.map (fun k -> k.value.collated) col.Alter_action_attr.kind in
-        Tables.alter_change name ~oldcol ~col:{ attr = Alter_action_attr.to_attr col; source_kind } ~pos
+        let source_kind = Option.map (fun k -> k.value) col.Alter_action_attr.kind in
+        let default_sql = Alter_action_attr.default_sql col in
+        Tables.alter_change name ~oldcol ~col:{ attr = Alter_action_attr.to_attr col; source_kind; default_sql } ~pos
       | `RenameColumn (oldcol,newcol) ->
         Tables.rename_column name ~old_name:oldcol ~new_name:newcol
       | `RenameTable new_name ->
@@ -1466,7 +1474,14 @@ let rec eval (stmt:Sql.stmt) =
         Tables.drop_primary_key name
       | `AddPrimaryKey cols ->
         Tables.add_primary_key name ~cols
-      | `RenameIndex _  | `AddIndex _ | `DropIndex _ | `AddConstraint _ | `DropConstraint _ -> () (* indices are not tracked yet *)
+      | `AddIndex { add_idx_name = Some index_name; add_idx_kind = kind; add_idx_cols = cols } ->
+        Tables.index_add name ~index_name ~kind ~cols
+      | `AddIndex { add_idx_name = None; _ } -> ()
+      | `DropIndex index_name ->
+        Tables.index_drop name ~index_name
+      | `RenameIndex (old_name, new_name) ->
+        Tables.index_rename name ~old_name ~new_name
+      | `AddConstraint _ | `DropConstraint _ -> () (* constraints are not tracked yet *)
       | `TtlOptions _ | `RemoveTtl _ -> () (* TTL is a TiDB-specific table property, not tracked in schema *)
       | `Default_or_convert_to (cs, collation) ->
         let old = Tables.get_charset name in
@@ -1483,10 +1498,11 @@ let rec eval (stmt:Sql.stmt) =
   | Drop name ->
       Tables.drop name;
       ([],[],Drop name)
-  | CreateIndex (name,table,cols) ->
-      let cols = List.map (fun x -> x.collated) cols in
-      Sql.Schema.project cols (Tables.get_schema table) |> ignore; (* just check *)
-      [],[],CreateIndex name
+  | CreateIndex { ci_name; ci_table; ci_cols; ci_kind } ->
+      let cols = List.map (fun x -> x.collated) ci_cols in
+      Sql.Schema.project cols (Tables.get_schema ci_table) |> ignore; (* just check *)
+      Tables.index_add ci_table ~index_name:ci_name ~kind:ci_kind ~cols;
+      [],[],CreateIndex ci_name
   | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in

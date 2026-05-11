@@ -3536,14 +3536,14 @@ Test TiDB TTL in migration:
   
     module IO = T.IO
   
-    let apply_alter_smm_synced_comments_1 db  =
+    let apply_alter_smm_synced_comments_0 db  =
       T.execute db ("ALTER TABLE smm_synced_comments TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'") T.no_params
   
-    let revert_alter_smm_synced_comments_1 db  =
+    let revert_alter_smm_synced_comments_0 db  =
       T.execute db ("ALTER TABLE `smm_synced_comments` REMOVE TTL") T.no_params
   
     let migrations = [
-      ("alter_smm_synced_comments_1", [(apply_alter_smm_synced_comments_1, revert_alter_smm_synced_comments_1)]);
+      ("alter_smm_synced_comments_0", [(apply_alter_smm_synced_comments_0, revert_alter_smm_synced_comments_0)]);
     ]
   
   end (* module Mig *)
@@ -3562,8 +3562,10 @@ ALTER TABLE REMOVE TTL is supported on TiDB:
   > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
   > ALTER TABLE foo REMOVE TTL;
   > EOF
-  migrations mode: alter_foo_1 contains non-invertible actions (index/constraint ops), use -- [sqlgg] down=explicit
-  Errors encountered, no code generated
+  cannot auto-generate revert: table `foo`:
+    REMOVE TTL: previous TTL parameters are not tracked in schema, cannot restore on revert
+    ALTER TABLE foo REMOVE TTL
+    Add `-- [sqlgg] down=explicit` before the statement and write the revert SQL manually.
   [1]
 
 Standalone TTL_ENABLE toggle:
@@ -3575,14 +3577,14 @@ Standalone TTL_ENABLE toggle:
   
     module IO = T.IO
   
-    let apply_alter_foo_1 db  =
+    let apply_alter_foo_0 db  =
       T.execute db ("ALTER TABLE foo TTL_ENABLE = 'OFF'") T.no_params
   
-    let revert_alter_foo_1 db  =
+    let revert_alter_foo_0 db  =
       T.execute db ("ALTER TABLE `foo` REMOVE TTL") T.no_params
   
     let migrations = [
-      ("alter_foo_1", [(apply_alter_foo_1, revert_alter_foo_1)]);
+      ("alter_foo_0", [(apply_alter_foo_0, revert_alter_foo_0)]);
     ]
   
   end (* module Mig *)

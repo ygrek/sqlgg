@@ -101,7 +101,11 @@ let parse_one' (sql, props) =
     let props = Props.set props "sql" sql in
     { Gen.schema; vars; kind; props }
 
-type migration_info = Auto_revert of string | Needs_explicit_revert | Create_table | Non_migration_stmt of string
+type migration_info =
+  | Auto_revert of string
+  | Needs_explicit_revert of string option
+  | Create_table
+  | Non_migration_stmt of string
 
 let parse_one_migration' (sql, props) =
     if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
@@ -110,15 +114,18 @@ let parse_one_migration' (sql, props) =
     let migration = match parsed.Parser.statement with
       | Sql.Alter (table_name, actions) ->
         let columns = Tables.get_columns table_name in
-        Gen_migrations.inverse table_name columns actions
-        |> Option.map_default (fun revert -> Auto_revert revert) Needs_explicit_revert
-      | Sql.CreateIndex (index_name, table_name, _cols) ->
-        Auto_revert (Gen_migrations.drop_index_sql index_name table_name)
+        (match Gen_migrations.inverse table_name columns actions with
+         | Ok revert -> Auto_revert revert
+         | Error reason -> Needs_explicit_revert (Some reason))
+      | Sql.CreateIndex { ci_name; ci_table; _ } ->
+        Auto_revert (Gen_migrations.drop_index_sql ci_name ci_table)
       | Sql.Rename pairs ->
-        Auto_revert (Gen_migrations.rename_inverse_sql pairs)
-      | Sql.Drop _ -> Needs_explicit_revert
+        (match Gen_migrations.rename_inverse_sql pairs with
+         | Some sql -> Auto_revert sql
+         | None -> Needs_explicit_revert (Some "RENAME TABLE without targets is not invertible"))
+      | Sql.Drop _ -> Needs_explicit_revert None
       | Sql.Create _ -> Create_table
-      | Sql.Insert _ | Sql.Delete _ | Sql.DeleteMulti _ | Sql.Update _ | Sql.UpdateMulti _ -> Needs_explicit_revert
+      | Sql.Insert _ | Sql.Delete _ | Sql.DeleteMulti _ | Sql.Update _ | Sql.UpdateMulti _ -> Needs_explicit_revert None
       | stmt -> Non_migration_stmt (Sql.show_stmt stmt)
     in
     let (sql, schema, vars, kind, dialect_features) = Syntax.eval_parsed sql parsed in
@@ -254,47 +261,55 @@ let get_statements ch =
         check_statement stmt buffer; stmt)
   ) |> List.of_enum
 
-let read_explicit_revert tokens name =
-  let r = extract_statement' tokens |> Option.map (fun (buffer, _) -> String.trim buffer) in
-  if Option.is_none r then Error.log "migrations mode: down=explicit but no following statement for %s" name;
-  r
-
 let get_migrations ch =
   let lexbuf = Lexing.from_channel ch in
   let tokens = lex_tokens lexbuf in
-  let rec aux acc index =
+  let take_next_stmt () =
+    extract_statement' tokens |> Option.map (fun (buffer, _) -> String.trim buffer)
+  in
+  let rec aux acc =
     match extract_statement' tokens with
     | None -> List.rev acc
     | Some (buffer, props) ->
       let revert_explicit = Props.get props "down" = Some "explicit" in
-      let next_index = index + 1 in
       match parse_one_migration (buffer, props) with
-      | None -> aux acc next_index
+      | None -> aux acc
       | Some (stmt, migration) ->
-        let name = Gen.choose_name stmt.props stmt.kind index in
         let apply = String.trim buffer in
-        let add revert = aux ({ Gen_migrations.name; apply; revert } :: acc) next_index in
+        let add revert =
+          aux ({ Gen_migrations.props = stmt.props; kind = stmt.kind; apply; revert } :: acc)
+        in
+        let no_following_stmt () =
+          Error.log "migrations mode: down=explicit but no following statement for:\n%s" apply
+        in
         match migration with
-        | Auto_revert revert ->
+        | Auto_revert auto ->
           let revert =
-            if revert_explicit then Option.default revert (read_explicit_revert tokens name)
-            else Option.default revert (Props.get props "down")
+            if revert_explicit then
+              match take_next_stmt () with
+              | Some r -> r
+              | None -> no_following_stmt (); auto
+            else Option.default auto (Props.get props "down")
           in
           add revert
-        | Needs_explicit_revert ->
+        | Needs_explicit_revert reason ->
           if not revert_explicit then begin
-            Error.log "migrations mode: %s contains non-invertible actions (index/constraint ops), use -- [sqlgg] down=explicit" name;
-            aux acc next_index
-          end else begin match read_explicit_revert tokens name with
+            let detail = Option.default "this statement is not auto-invertible" reason in
+            Error.log
+              "cannot auto-generate revert: %s\n  %s\n  \
+               Add `-- [sqlgg] down=explicit` before the statement and write the revert SQL manually."
+              detail apply;
+            exit 1
+          end else begin match take_next_stmt () with
             | Some revert -> add revert
-            | None -> aux acc next_index
+            | None -> no_following_stmt (); aux acc
           end
-        | Create_table -> aux acc next_index
+        | Create_table -> aux acc
         | Non_migration_stmt _ ->
           Error.log "migrations mode: unsupported statement type: %s" apply;
-          aux acc next_index
+          aux acc
   in
-  aux [] 0
+  aux []
 
 let with_channel filename f =
   match try Some (open_in filename) with _ -> None with
