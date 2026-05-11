@@ -111,6 +111,8 @@ let inverse_action table_name (columns : Tables.column list) (action : Sql.alter
       | None -> None, None
     in
     `Default_or_convert_to (cs, collation)
+  | `TtlOptions (_, _) -> `RemoveTtl (0, 0)
+  | `RemoveTtl _ -> `None
   | `None -> `None
 
 let action_to_sql_fragment (action : Sql.alter_action) =
@@ -156,6 +158,14 @@ let action_to_sql_fragment (action : Sql.alter_action) =
     | [] -> "(* unsupported: unknown previous charset *)"
     | _ -> String.concat " " parts
     end
+  | `TtlOptions (opts, _) ->
+    let opt_to_sql = function
+      | `TtlSet (col, n, unit) ->
+        sprintf "TTL = %s + INTERVAL %d %s" (quote_id col) n (String.uppercase_ascii unit)
+      | `TtlEnable v -> sprintf "TTL_ENABLE = '%s'" v
+    in
+    String.concat " " (List.map opt_to_sql opts)
+  | `RemoveTtl _ -> "REMOVE TTL"
   | `None -> "(* unsupported: index/constraint operation *)"
 
 let alter_to_sql table_name actions =
@@ -173,6 +183,7 @@ let inverse table_name (columns : Tables.column list) (actions : Sql.alter_actio
     | `None -> true
     | `AddIndex (None, _) | `DropIndex _ -> true
     | `AddConstraint None | `DropConstraint _ -> true
+    | `RemoveTtl _ -> true
     | _ -> false) actions in
   if non_invertible <> [] then
     None

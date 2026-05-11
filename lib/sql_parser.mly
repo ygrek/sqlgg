@@ -43,6 +43,7 @@
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE
+       TTL TTL_ENABLE REMOVE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
@@ -369,7 +370,13 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
             | LOCK EQUAL lock { `None }
+            | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
+            | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (Some cs, c) }
+
+ttl_option: TTL EQUAL col=IDENT PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
+              { `TtlSet (col, n, unit) }
+          | TTL_ENABLE EQUAL v=TEXT { `TtlEnable v }
 index_or_key: INDEX | KEY { }
 index_type: index_or_key | UNIQUE index_or_key? | either(FULLTEXT,SPATIAL) index_or_key? | PRIMARY KEY { }
 alter_pos: AFTER col=IDENT { `After col }
