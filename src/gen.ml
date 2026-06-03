@@ -206,7 +206,8 @@ let substitute_vars s vars subst_param =
           | None -> [Static ""]
           | Some l ->
             let (acc, last) = loop s [] c1 0 l in
-            List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc)
+            let body = List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc) in
+            squash [] ((Static " (" :: body) @ [Static ") "])
         in
         { ctor; sql; args; is_poly }
       | Verbatim (n, v) ->

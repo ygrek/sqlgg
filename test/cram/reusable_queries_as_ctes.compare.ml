@@ -38,7 +38,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params invoke_callback
 
@@ -63,7 +63,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params invoke_callback
 
@@ -129,7 +129,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
@@ -156,7 +156,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
@@ -229,7 +229,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
@@ -256,7 +256,7 @@ FROM ( \n\
         UNION ALL\n\
         SELECT 2, 'k'\n\
 ) AS x \n\
-WHERE " ^ (match param with `None -> " TRUE " | `Some -> " FALSE ") ^ ")\n\
+WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
 FROM x") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))

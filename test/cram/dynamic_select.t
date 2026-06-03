@@ -2118,7 +2118,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
         {
           set = (fun _p -> ());
           read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("(SELECT " ^ (match x with `A -> " 1 " | `B -> " 2 ") ^ " LIMIT 1)");
+          column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
           count = 0 + (match x with `A -> 0 | `B -> 0);
         }
   

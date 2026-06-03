@@ -1324,7 +1324,7 @@ parametrized order by and limit are supported with update stmt + table alias:
         T.set_param_Int p limit;
         T.finish_params p
       in
-      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY " ^ (match order with `Id -> "t.id") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
+      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY " ^ (match order with `Id -> " (t.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
   
   end (* module Sqlgg *)
 
@@ -1374,7 +1374,7 @@ order by and limit are supported with update stmt + table alias + join:
         T.set_param_Int p limit;
         T.finish_params p
       in
-      T.execute db ("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> "t.id" | `Id_2 -> "t2.id") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
+      T.execute db ("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> " (t.id) " | `Id_2 -> " (t2.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") set_params
   
   end (* module Sqlgg *)
 
@@ -2226,7 +2226,7 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
         end;
         T.finish_params p
       in
-      T.execute db ("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " " ^ "?" ^ " " | `Default -> " 'pending' ")) set_params
+      T.execute db ("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " ( ? ) " | `Default -> " ( 'pending' ) ")) set_params
   
   end (* module Sqlgg *)
 
@@ -3586,3 +3586,40 @@ Standalone TTL_ENABLE toggle:
     ]
   
   end (* module Mig *)
+
+Composite: a choice nested inside another choice — every level is wrapped
+independently, so precedence is protected at each depth:
+  $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE FALSE AND' | head -1
+  > SELECT 1 WHERE FALSE AND @a { Outer { @b { P { TRUE } | Q { FALSE OR TRUE } } } | Other { 1 = 1 } };
+  > EOF
+      T.select_one_maybe db ("SELECT 1 WHERE FALSE AND " ^ (match a with `Outer (b) -> " ( " ^ (match b with `P -> " ( TRUE ) " | `Q -> " ( FALSE OR TRUE ) ") ^ " ) " | `Other -> " ( 1 = 1 ) ")) set_params get_row
+
+Composite: a choice branch with bound params and a compound AND body is wrapped
+as a whole:
+  $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE TRUE OR' | head -1
+  > CREATE TABLE t (a INT, b INT, c INT);
+  > SELECT a FROM t WHERE TRUE OR @b { S { a = @p AND b = @q } | T { c > @r } };
+  > EOF
+      T.select db ("SELECT a FROM t WHERE TRUE OR " ^ (match b with `S _ -> " ( a = ? AND b = ? ) " | `T _ -> " ( c > ? ) ")) set_params invoke_callback
+
+Composite: a bool-choice ({...}?) whose body itself contains a nested choice —
+the bool-choice wraps the active branch and the inner choice wraps each branch:
+  $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE FALSE AND' | head -1
+  > CREATE TABLE t (a INT, b INT);
+  > SELECT a FROM t WHERE FALSE AND { a = @v OR @c { A { b = 1 } | B { b = 2 } } }?;
+  > EOF
+      T.select db ("SELECT a FROM t WHERE FALSE AND " ^ (match v with Some (_, c) -> " ( " ^ " a = " ^ "?" ^ " OR " ^ (match c with `A -> " ( b = 1 ) " | `B -> " ( b = 2 ) ") ^ " " ^ " ) " | None -> " TRUE ")) set_params invoke_callback
+
+PoC: without hand-written parentheses, the branch body is grouped correctly as
+FALSE AND ( FALSE OR TRUE ) instead of leaking into FALSE AND FALSE OR TRUE:
+  $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'SELECT 1 WHERE' | head -1
+  > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { FALSE OR TRUE } };
+  > EOF
+      T.select_one_maybe db ("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( FALSE OR TRUE ) ")) set_params get_row
+
+PoC: hand-written parentheses are now redundant — same semantics, just an extra
+harmless pair:
+  $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'SELECT 1 WHERE' | head -1
+  > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { (FALSE OR TRUE) } };
+  > EOF
+      T.select_one_maybe db ("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) set_params get_row
