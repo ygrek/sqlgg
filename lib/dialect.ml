@@ -22,6 +22,7 @@ type feature =
   | DefaultExpr
   | Ttl
   | AlterColumn
+  | UserDefinedType
 [@@deriving show { with_path = false }]
 
 let show_feature x = 
@@ -45,6 +46,7 @@ let feature_to_string = function
   | DefaultExpr -> "default_expr"
   | Ttl -> "ttl"
   | AlterColumn -> "alter_column"
+  | UserDefinedType -> "user_defined_type"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
@@ -63,6 +65,7 @@ let feature_of_string s =
   | "default_expr" -> DefaultExpr
   | "ttl" -> Ttl
   | "alter_column" -> AlterColumn
+  | "user_defined_type" -> UserDefinedType
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -158,6 +161,8 @@ let get_alter_column (change : Sql.Alter_column_pg.t) pos =
   match change with
   | Set_type _ | Set_not_null | Drop_not_null -> only AlterColumn [PostgreSQL] pos
   | Set_default | Drop_default -> only AlterColumn [MySQL; PostgreSQL; TiDB] pos
+
+let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
 
 let get_default_expr ~kind ~expr pos =
   let open Sql in
@@ -506,5 +511,5 @@ let rec analyze stmt =
             analyze_expr acc (option_list default_expr_opt) (fun acc -> process_params acc rest)
       in
       process_params acc params
-
-    
+  | CreateType _ -> [get_user_defined_type (0, 0)]
+  | DropType _ -> [get_user_defined_type (0, 0)]

@@ -877,6 +877,10 @@ type alter_action = [
     | `RemoveTtl of pos
     | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
 
+type create_type_target =
+  | TypeEnum of string list
+  [@@deriving show {with_path=false}]
+
 type stmt =
   | Create of table_name * create_target
   | Drop of table_name
@@ -891,6 +895,8 @@ type stmt =
   | UpdateMulti of nested list * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
+  | CreateType of string * create_type_target
+  | DropType of string
   [@@deriving show {with_path=false}]
 
 (*
