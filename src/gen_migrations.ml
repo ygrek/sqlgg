@@ -239,3 +239,5 @@ let rename_inverse_sql pairs =
   ) pairs in
   sprintf "RENAME TABLE %s" (String.concat ", " inverse_pairs)
 
+let drop_type_sql type_name =
+  sprintf "DROP TYPE %s" (quote_id type_name)

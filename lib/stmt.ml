@@ -21,6 +21,8 @@ type kind = | Select of cardinality
             | Alter of Sql.table_name list
             | Drop of Sql.table_name
             | CreateRoutine of Sql.table_name (** namespaced function name *)
+            | CreateType of string
+            | DropType of string
             | Other
             [@@deriving show {with_path=false}]
 
@@ -37,5 +39,7 @@ let category_of_stmt_kind = function
 | CreateIndex _
 | CreateRoutine _
 | Alter _
-| Drop _ -> DDL
+| Drop _
+| CreateType _
+| DropType _ -> DDL
 | Other -> OTHER
