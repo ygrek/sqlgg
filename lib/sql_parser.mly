@@ -195,6 +195,13 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Function.add (List.length params) (Ret (Source_type.depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }   
+         (* TYPE is not a reserved word (columns may be named `type`), so match it as IDENT *)
+         | CREATE kw=IDENT name=IDENT AS ENUM LPAREN ctors=commas(TEXT) RPAREN
+              { if String.lowercase_ascii kw <> "type" then failwith ("expected TYPE after CREATE, got " ^ kw);
+                CreateType (name, TypeEnum ctors) }
+         | DROP kw=IDENT if_exists? name=IDENT
+              { if String.lowercase_ascii kw <> "type" then failwith ("expected TYPE after DROP, got " ^ kw);
+                DropType name }
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
@@ -708,6 +715,7 @@ sql_type_flavor:
   | NATIONAL? f=text_var VARYING? charset?              { Source_type.Text f }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
+  | name=IDENT { Source_type.Infer (Types.get name) }
 
 binary: BINARY | BINARY VARYING { }
 text: CHARACTER { }

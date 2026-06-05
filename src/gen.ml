@@ -65,6 +65,8 @@ let choose_name props kind index =
   | Select _  -> sprintf "select_%u" index
   | CreateRoutine s -> sprintf "create_routine_%s" (fix s)
   | Other -> sprintf "statement_%u" index
+  | CreateType n -> sprintf "create_type_%s" (fix' n)
+  | DropType n -> sprintf "drop_type_%s" (fix' n)
   in
   make_name props name
 

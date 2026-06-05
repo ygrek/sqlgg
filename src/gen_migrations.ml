@@ -270,3 +270,6 @@ type migration = {
   apply : string list;
   revert : string list;
 }
+
+let drop_type_sql type_name =
+  sprintf "DROP TYPE %s" (quote_id type_name)
