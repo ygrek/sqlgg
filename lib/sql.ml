@@ -656,7 +656,7 @@ type col_name = {
   tname : table_name option;
 } [@@deriving show]
 type logical_op = And | Or | Xor [@@deriving show]
-type comparison_op = Comp_equal | Comp_num_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
+type comparison_op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
 type select_row_locking_kind = For_update | For_share [@@deriving show]
@@ -1176,7 +1176,10 @@ let () =
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];
   "makedate" |> monomorphic datetime [int; int];
-  (* 
+  "similarity" |> monomorphic float [text; text];
+  "word_similarity" |> monomorphic float [text; text];
+  "strict_word_similarity" |> monomorphic float [text; text];
+  (*
      Any is used instead of Var because MySQL JSON functions have unique semantics:
    
    1. ACCEPT ANY DATA TYPE: MySQL JSON functions accept values of any type
