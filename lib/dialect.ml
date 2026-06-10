@@ -164,25 +164,18 @@ let get_default_expr ~kind ~expr pos =
   let rec analyze = function
     | Value _ -> (true, false, true)
     | Column _ -> (true, true, false)
-    | Case { case; branches; else_ } ->
-        let parts = option_list case @ option_list else_ in
-        let parts = parts @ List.concat_map (fun { Sql.when_; then_ } -> [when_; then_]) branches in
-        List.fold_left
-          (fun (v_acc, c_acc, o_acc) e ->
-            let v, c, o = analyze e in
-            (v_acc && v, c_acc || c, o_acc && o))
-          (true, false, true)
-          parts
-    | Fun { parameters; _ } ->
-        List.fold_left
-          (fun (v_acc, c_acc, o_acc) e ->
-            let v, c, o = analyze e in
-            (v_acc && v, c_acc || c, o_acc && o))
-          (true, false, true)
-          parameters
-    | ( Param _ | Inparam _ | Choices _ | InChoice _
-      | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ ) ->
+    | Case _ as e -> fold_parts (sub_exprs e)
+    | Fun { parameters; _ } -> fold_parts parameters
+    | Param _ | Inparam _ | Choices _ | InChoice _
+    | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ ->
         (false, false, false)
+  and fold_parts parts =
+    List.fold_left
+      (fun (v_acc, c_acc, o_acc) e ->
+        let v, c, o = analyze e in
+        (v_acc && v, c_acc || c, o_acc && o))
+      (true, false, true)
+      parts
   in
   let valid, has_column, only_value = analyze expr in
   if not valid then only DefaultExpr [] pos
@@ -205,11 +198,7 @@ let get_default_expr ~kind ~expr pos =
       | _ -> all
     in
     let dialects =
-      base_dialects
-      |> List.to_seq
-      |> Seq.filter (fun d -> not (has_column && d = PostgreSQL))
-      |> Seq.filter (fun d -> only_value || d <> SQLite)
-      |> List.of_seq
+      List.filter (fun d -> not (has_column && d = PostgreSQL) && (only_value || d <> SQLite)) base_dialects
     in
     only DefaultExpr dialects pos
 
@@ -239,26 +228,12 @@ let rec analyze_expr acc exprs k = match exprs with
   | [] -> k acc
   | expr :: rest ->
     match expr with
-    | Value _ | Param _ | Inparam _ | Column _ | Of_values _ -> 
-        analyze_expr acc rest k
-    | Choices (_, choices) ->
-        let new_exprs = List.filter_map (fun (_, expr_opt) -> expr_opt) choices in
-        analyze_expr acc (new_exprs @ rest) k
-    | InChoice (_, _, e) -> 
-        analyze_expr acc (e :: rest) k
     | Fun { parameters; _ } ->
         analyze_expr acc (parameters @ rest) k
     | SelectExpr (select_full, _) -> 
         analyze_select_full acc [select_full] (fun acc -> analyze_expr acc rest k)
-    | InTupleList { value = { exprs; _ }; _ } -> 
-        analyze_expr acc (exprs @ rest) k
-    | OptionActions { choice; _ } -> 
-        analyze_expr acc (choice :: rest) k
-    | Case { case; branches; else_ } ->
-        let case_exprs = option_list case in
-        let branches_exprs = List.concat_map (fun { when_; then_ } -> [when_; then_]) branches in
-        let else_exprs = option_list else_ in
-        analyze_expr acc (case_exprs @ branches_exprs @ else_exprs @ rest) k
+    | e ->
+        analyze_expr acc (sub_exprs e @ rest) k
 
 and analyze_column acc cols k = match cols with
   | [] -> k acc
