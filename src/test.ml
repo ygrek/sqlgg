@@ -53,10 +53,8 @@ let assert_params_with_meta stmt meta =
           | Single (p, m) -> (p, m) 
           | SingleIn (p, m) -> (p, m) 
           | ChoiceIn { vars = [ SingleIn (p, m) ]; _ } -> (p, m)
-          | ChoiceIn _
-          | SharedVarsGroup _ | OptionActionChoice _ 
-          | Choice _   | TupleList _ -> assert false
           | DynamicSelect _ -> failwith "dynamic selects not supported for this host language"
+          | _ -> assert false
           ) 
         stmt.Gen.vars)
 
@@ -64,7 +62,7 @@ let do_test ?kind sql schema params =
   let stmt = parse sql in
   assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
-  (List.map (function Single (p, _) -> p | SharedVarsGroup _ | OptionActionChoice _ | SingleIn _ | Choice _ | ChoiceIn _ | TupleList _ -> assert false | DynamicSelect _ -> failwith "dynamic selects not supported for this host language") stmt.vars);
+  (List.map (function Single (p, _) -> p | DynamicSelect _ -> failwith "dynamic selects not supported for this host language" | _ -> assert false) stmt.vars);
 
   match kind with
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
@@ -2276,6 +2274,59 @@ let test_fn_group_by_arg = [
   ];
 ]
 
+let test_join_hole_whitespace =
+  let join_var sql sub =
+    let j1 = String.find sql sub in
+    Sql.DynamicSelectJoin {
+      pid = { value = Some "col"; pos = (0,0) };
+      pos = (j1, j1 + String.length sub);
+      source = { table = make_table_name "b"; alias = None };
+    }
+  in
+  let rec show_piece = function
+    | Gen.Static s -> sprintf "Static %S" s
+    | Gen.Cond (_, body) -> sprintf "Cond [%s]" (String.concat "; " (List.map show_piece body))
+    | _ -> "Other"
+  in
+  let check name sql joins expected =
+    name >:: (fun () ->
+      assert_equal
+        ~cmp:(fun a b -> List.map show_piece a = List.map show_piece b)
+        ~printer:(fun l -> String.concat "; " (List.map show_piece l))
+        expected
+        (Gen.substitute_vars sql (List.map (join_var sql) joins) None))
+  in
+  let join text = Gen.Cond (Gen.Dep_selected ({ value = Some "col"; pos = (0,0) }, 0), [Gen.Static text]) in
+  [
+    check "no holes"
+      "SELECT x\nFROM a\nWHERE y = 1" []
+      [Gen.Static "SELECT x\nFROM a\nWHERE y = 1"];
+    check "newline before hole absorbed"
+      "SELECT x FROM a\nLEFT JOIN b ON b.a = a.id\nWHERE y = 1"
+      ["LEFT JOIN b ON b.a = a.id"]
+      [Gen.Static "SELECT x FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nWHERE y = 1"];
+    check "space before hole absorbed"
+      "FROM a LEFT JOIN b ON b.a = a.id WHERE y = 1"
+      ["LEFT JOIN b ON b.a = a.id"]
+      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static " WHERE y = 1"];
+    check "hole at end of query"
+      "FROM a\nLEFT JOIN b ON b.a = a.id"
+      ["LEFT JOIN b ON b.a = a.id"]
+      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"];
+    check "adjacent holes leave no gap"
+      "FROM a\nLEFT JOIN b ON b.a = a.id\nLEFT JOIN c ON c.a = a.id\nWHERE y = 1"
+      ["LEFT JOIN b ON b.a = a.id"; "LEFT JOIN c ON c.a = a.id"]
+      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; join " LEFT JOIN c ON c.a = a.id"; Gen.Static "\nWHERE y = 1"];
+    check "static join between holes"
+      "FROM a\nLEFT JOIN b ON b.a = a.id\nJOIN o USING (x)\nLEFT JOIN c ON c.a = a.id"
+      ["LEFT JOIN b ON b.a = a.id"; "LEFT JOIN c ON c.a = a.id"]
+      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nJOIN o USING (x)"; join " LEFT JOIN c ON c.a = a.id"];
+    check "string literal whitespace preserved"
+      "FROM a\nLEFT JOIN b ON b.a = a.id\nWHERE note = '  two  spaces  '"
+      ["LEFT JOIN b ON b.a = a.id"]
+      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nWHERE note = '  two  spaces  '"];
+  ]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -2319,6 +2370,7 @@ let run () =
     "test_cardinality_optimization_validity" >::: test_cardinality_optimization_validity;
     "test_nullability_rules" >::: test_nullability_rules;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
+    "test_join_hole_whitespace" >::: test_join_hole_whitespace;
   ]
   in
   let test_suite = "main" >::: tests in
