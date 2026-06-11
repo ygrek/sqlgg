@@ -124,6 +124,52 @@ let add_primary_key name ~cols:col_names =
       { c with attr = { c.attr with extra = Sql.Constraints.add pk c.attr.Sql.extra } }
     else c))
 
+let alter_column_type name ~col_name ~new_kind =
+  alter name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        let new_t = Sql.Alter_action_attr.kind_to_type_kind new_kind in
+        { attr = { c.attr with domain = { c.attr.domain with Sql.Type.t = new_t } };
+          source_kind = Some new_kind }
+      else c
+    ) cols)
+
+let alter_column_set_not_null name ~col_name =
+  alter name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with
+            domain = { c.attr.domain with Sql.Type.nullability = Strict };
+            extra = Sql.Constraints.add NotNull c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_drop_not_null name ~col_name =
+  alter name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with
+            domain = { c.attr.domain with Sql.Type.nullability = Nullable };
+            extra = Sql.Constraints.remove NotNull c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_set_default name ~col_name =
+  alter name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with extra = Sql.Constraints.add WithDefault c.attr.extra } }
+      else c
+    ) cols)
+
+let alter_column_drop_default name ~col_name =
+  alter name (fun cols ->
+    List.map (fun c ->
+      if c.attr.Sql.name = col_name then
+        { c with attr = { c.attr with extra = Sql.Constraints.remove WithDefault c.attr.extra } }
+      else c
+    ) cols)
+
 let print ch tables = let out = IO.output_channel ch in List.iter (Sql.print_table out) tables; IO.flush out
 let print_all () = print stdout (List.map (fun (n, cols) -> (n, columns_to_schema cols)) !store)
 let print1 name = print stdout [get @@ Sql.make_table_name name]

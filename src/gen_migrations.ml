@@ -113,6 +113,27 @@ let inverse_action table_name (columns : Tables.column list) (action : Sql.alter
     `Default_or_convert_to (cs, collation)
   | `TtlOptions (_, _) -> `RemoveTtl (0, 0)
   | `RemoveTtl _ -> `None
+  | `AlterColumnPG (col_name, changes) ->
+    let entry = find_column columns col_name in
+    let inv_typ = Option.map (fun _ ->
+      let old = Sql.Alter_action_attr.from_attr entry.attr |> enrich_with_source_kind entry.source_kind in
+      match old.Sql.Alter_action_attr.kind with
+      | Some k -> k
+      | None -> Sql.make_located ~pos:(0,0)
+          ~value:(Sql.make_collated ~collated:(Sql.Source_type.Infer entry.attr.domain.Sql.Type.t) ())
+    ) changes.Sql.Alter_column_pg.typ in
+    let inv_not_null = Option.map (fun _ ->
+      Sql.Type.is_strict entry.attr.domain
+    ) changes.not_null in
+    let inv_default = Option.map (fun _ ->
+      if Sql.Constraints.mem WithDefault entry.attr.extra then
+        let col = Sql.Alter_action_attr.from_attr entry.attr in
+        List.find_map (fun (c : Sql.Alter_action_attr.constraint_ Sql.located) ->
+          match c.value with Sql.Alter_action_attr.Default e -> Some (Some e) | _ -> None
+        ) col.extra |> Option.default None
+      else None
+    ) changes.default in
+    `AlterColumnPG (col_name, { Sql.Alter_column_pg.typ = inv_typ; not_null = inv_not_null; default = inv_default })
   | `None -> `None
 
 let action_to_sql_fragment (action : Sql.alter_action) =
@@ -166,6 +187,21 @@ let action_to_sql_fragment (action : Sql.alter_action) =
     in
     String.concat " " (List.map opt_to_sql opts)
   | `RemoveTtl _ -> "REMOVE TTL"
+  | `AlterColumnPG (col_name, changes) ->
+    let parts = List.filter_map Fun.id [
+      Option.map (fun t ->
+        sprintf "ALTER COLUMN %s TYPE %s" (quote_id col_name) (source_type_kind_to_sql t.Sql.value.Sql.collated)
+      ) changes.Sql.Alter_column_pg.typ;
+      Option.map (fun b ->
+        if b then sprintf "ALTER COLUMN %s SET NOT NULL" (quote_id col_name)
+        else sprintf "ALTER COLUMN %s DROP NOT NULL" (quote_id col_name)
+      ) changes.not_null;
+      Option.map (function
+        | Some _ -> sprintf "ALTER COLUMN %s SET DEFAULT (* unknown *)" (quote_id col_name)
+        | None -> sprintf "ALTER COLUMN %s DROP DEFAULT" (quote_id col_name)
+      ) changes.default;
+    ] in
+    String.concat ", " parts
   | `None -> "(* unsupported: index/constraint operation *)"
 
 let alter_to_sql table_name actions =
@@ -203,3 +239,5 @@ let rename_inverse_sql pairs =
   ) pairs in
   sprintf "RENAME TABLE %s" (String.concat ", " inverse_pairs)
 
+let drop_type_sql type_name =
+  sprintf "DROP TYPE %s" (quote_id type_name)

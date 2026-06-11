@@ -36,7 +36,7 @@
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS
        PRECISION SIGNED UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
-       DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
+       DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP TYPE
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
@@ -94,7 +94,7 @@
 
 input: statement EOF { $1 }
 
-param: 
+param:
   | QSTN { { value=None; pos = ($startofs, $endofs) } }
   | PARAM  { $1 }
 
@@ -193,7 +193,11 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Function.add (List.length params) (Ret (Source_type.depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
-              }   
+              }
+         | CREATE TYPE name=IDENT AS ENUM LPAREN ctors=commas(TEXT) RPAREN
+              { CreateType (name, TypeEnum ctors) }
+         | DROP TYPE if_exists? name=IDENT
+              { DropType name }
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
@@ -214,8 +218,8 @@ routine_extra: LANGUAGE IDENT { }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
 index_column: name=IDENT index_prefix? c=collate? order_type? { make_collated ?collation:c ~collated:name ()}
 
-table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
-                      { 
+table_definition: t=sequence_(column_def1) ignore_after(RPAREN)
+                      {
                         List.fold_right
                           (fun x { schema; constraints; indexes } -> match x with
                           | `Attr a -> { schema = a::schema; constraints; indexes }
@@ -280,9 +284,9 @@ source1: table_name { `Table $1 }
        | LPAREN s=table_list RPAREN { `Nested s }
        | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
-source: src=source1 alias=maybe_as_with_detupled? { 
-  ( src, 
-    Option.map (fun (tbl, cols) -> 
+source: src=source1 alias=maybe_as_with_detupled? {
+  ( src,
+    Option.map (fun (tbl, cols) ->
       let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any) )) cols in
       { table_name = Sql.make_table_name tbl; column_aliases; }
     ) alias
@@ -299,7 +303,7 @@ on_conflict_action:
   | UPDATE SET ss=commas(set_column) { Do_update ss }
   | NOTHING { Do_nothing }
 
-conflict_clause: 
+conflict_clause:
   | ON DUPLICATE KEY UPDATE ss=commas(set_column)
     { On_duplicate { assignments = ss; }; }
   | ON CONFLICT LPAREN attrs=separated_nonempty_list(COMMA, attr_name) RPAREN DO action=on_conflict_action
@@ -367,6 +371,17 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
+            | ALTER COLUMN? col=IDENT TYPE t=located_sql_type
+                { `AlterColumnPG (col, { Alter_column_pg.typ = Some t; not_null = None; default = None }) }
+            | ALTER COLUMN? col=IDENT SET NOT NULL
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = Some true; default = None }) }
+            | ALTER COLUMN? col=IDENT DROP NOT NULL
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = Some false; default = None }) }
+            | ALTER COLUMN? col=IDENT SET DEFAULT e=default_value
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = None;
+                    default = Some (Some (make_located ~value:e ~pos:($startofs, $endofs))) }) }
+            | ALTER COLUMN? col=IDENT DROP DEFAULT
+                { `AlterColumnPG (col, { Alter_column_pg.typ = None; not_null = None; default = Some None }) }
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
             | LOCK EQUAL lock { `None }
@@ -437,7 +452,7 @@ default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
 
-set_column: 
+set_column:
   | name=attr_name EQUAL e=set_column_expr { name, e }
 
 set_column_expr:
@@ -465,9 +480,9 @@ expr:
     | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { fn_name = "comparison"; kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
     | e1=expr CONCAT_OP e2=expr { Fun { fn_name = "concat"; kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr JSON_EXTRACT_OP e2=expr { Fun { fn_name = "json_extract"; kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } }
-    | e1=expr JSON_UNQUOTE_EXTRACT_OP e2=expr { 
-        let extracted = Fun { fn_name = "json_extract"; kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } in 
-        Fun { fn_name = "json_unquote"; kind = (Function.lookup "json_unquote" 1); parameters = [extracted]; is_over_clause = false } 
+    | e1=expr JSON_UNQUOTE_EXTRACT_OP e2=expr {
+        let extracted = Fun { fn_name = "json_extract"; kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } in
+        Fun { fn_name = "json_unquote"; kind = (Function.lookup "json_unquote" 1); parameters = [extracted]; is_over_clause = false }
       }
     | e=like_expr esc=escape?
       {
@@ -512,15 +527,15 @@ expr:
     | CONVERT LPAREN e=expr COMMA f=cast_as RPAREN { f e }
     | GROUP_CONCAT LPAREN p=func_params order=loption(order) preceded(SEPARATOR, TEXT)? RPAREN
       {
-        Fun { fn_name = "group_concat"; kind = Agg ( With_order({ with_order_kind = Group_concat; order })); parameters = p; is_over_clause = false } 
+        Fun { fn_name = "group_concat"; kind = Agg ( With_order({ with_order_kind = Group_concat; order })); parameters = p; is_over_clause = false }
       }
     | JSON_ARRAYAGG LPAREN p=func_params order=loption(order) limit_t? RPAREN
       {
-        Fun { fn_name = "json_arrayagg"; kind = Agg ( With_order({ with_order_kind = Json_arrayagg; order })); parameters = p; is_over_clause = false } 
+        Fun { fn_name = "json_arrayagg"; kind = Agg ( With_order({ with_order_kind = Json_arrayagg; order })); parameters = p; is_over_clause = false }
       }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
-    | f=table_name LPAREN p=func_params RPAREN { 
-        Fun { fn_name = f.tn; kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } 
+    | f=table_name LPAREN p=func_params RPAREN {
+        Fun { fn_name = f.tn; kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false }
       }
     | e=expr IS NOT NULL { Fun { fn_name = "is_not_null"; kind = Comparison Is_not_null; parameters = [e]; is_over_clause = false } }
     | e=expr IS NULL { Fun { fn_name = "is_null"; kind = Comparison Is_null; parameters = [e]; is_over_clause = false } }
@@ -530,7 +545,7 @@ expr:
     | CASE initial_expr=expr? branches_list=nonempty_list(case_branch) else_expr=preceded(ELSE,expr)? END
       {
         let case_record = {
-          Sql.case = initial_expr; 
+          Sql.case = initial_expr;
           Sql.branches = branches_list;
           Sql.else_ = else_expr;
         } in
@@ -538,16 +553,16 @@ expr:
       }
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun { fn_name = "if"; kind = (F (Var 0, [Typ (depends Bool);Var 0;Var 0])); parameters = [e1;e2;e3]; is_over_clause = false } }
     | e=window_function OVER window_spec { e }
-    | f=table_name LPAREN p=func_params RPAREN OVER window_spec 
+    | f=table_name LPAREN p=func_params RPAREN OVER window_spec
         { Fun { fn_name = f.tn; kind = (Function.lookup_agg f.tn (List.length p)); parameters = p; is_over_clause = true } }
 
-values_stmt1: 
+values_stmt1:
   | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
   | VALUES id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types; values_start_pos = $startofs  } }
 
-values_stmt: 
+values_stmt:
   | kind=values_stmt1 row_order=loption(order) row_limit=limit_t? {{ row_constructor_list = kind; row_order; row_limit;}}
-  
+
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
 window_function:
@@ -603,26 +618,26 @@ func_params: DISTINCT? l=expr_list { l }
            | (* *) { [] }
 escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
-comparison_op: 
+comparison_op:
     | EQUAL { Comp_equal }
     | NUM_CMP_OP { Comp_num_cmp }
     | NOT_DISTINCT_OP { Not_distinct_op }
-    | NUM_EQ_OP { 
-      (* it would be nice to go into num_eq_op, 
+    | NUM_EQ_OP {
+      (* it would be nice to go into num_eq_op,
          and consider == as equal as well. but for now
-         we conservatively return `Comp_num_eq *)  
-      Comp_num_eq 
+         we conservatively return `Comp_num_eq *)
+      Comp_num_eq
     }
 
-boolean_bin_op: 
+boolean_bin_op:
     | AND { And }
     | OR { Or }
     | XOR { Xor }
 
-unary_op: EXCL { 
+unary_op: EXCL {
           (* Some SQLs use ! as negation, some don't. play it safe and negate it,
              since negation is currently only used to verify cardinality constraints *)
-          (fun e -> Fun { fn_name = "excl"; kind = Negation; parameters = [e]; is_over_clause = false }) } 
+          (fun e -> Fun { fn_name = "excl"; kind = Negation; parameters = [e]; is_over_clause = false }) }
         | TILDE { (fun e -> e) }
         | NOT { (fun e -> Fun { fn_name = "not"; kind = Negation; parameters = [e]; is_over_clause = false }) }
 
@@ -639,7 +654,7 @@ int_type:
 
 (* expr_sql_type_flavor returns Type.kind for use in CAST *)
 expr_sql_type_flavor:
-                 | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) { 
+                 | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) {
                       match p with
                       | Some (precision, scale) -> Decimal { precision = Some precision; scale }
                       | None -> Decimal { precision = None; scale = None}
@@ -652,7 +667,7 @@ expr_sql_type_flavor:
                  | T_JSON { Json }
 
 (* sql_type_flavor returns Source_type.kind *)
-sql_type_flavor: 
+sql_type_flavor:
   | t=int_type ZEROFILL? { t }
   | T_FLOAT { Source_type.Float Single }
   | T_DOUBLE PRECISION? { Source_type.Float Double }
@@ -660,6 +675,7 @@ sql_type_flavor:
   | NATIONAL? s=T_TEXT int_arg? VARYING? charset? { Source_type.Text s }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
+  | name=IDENT { Source_type.Infer (Types.get name) }
 
 binary: BINARY | BINARY VARYING { }
 text: CHARACTER { }

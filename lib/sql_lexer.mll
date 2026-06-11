@@ -197,6 +197,7 @@ let keywords =
    "ttl", TTL;
    "ttl_enable", TTL_ENABLE;
    "remove", REMOVE;
+   "type", TYPE;
   ] in (* more *)
   k := !k @ List.map (fun s -> s, INTERVAL_UNIT s) [ "microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ];
   let all token l = k := !k @ List.map (fun x -> x,token) l in

@@ -65,19 +65,21 @@ let choose_name props kind index =
   | Select _  -> sprintf "select_%u" index
   | CreateRoutine s -> sprintf "create_routine_%s" (fix s)
   | Other -> sprintf "statement_%u" index
+  | CreateType n -> sprintf "create_type_%s" (fix' n)
+  | DropType n -> sprintf "drop_type_%s" (fix' n)
   in
   make_name props name
 
 type sql =
     Static of string
-  | Dynamic of Sql.param_id * sql_dynamic_ctor list 
+  | Dynamic of Sql.param_id * sql_dynamic_ctor list
   | SubstIn of Sql.Type.t Sql.param * Sql.Meta.t
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
 
-and sql_dynamic_ctor = { 
-  ctor: Sql.param_id; 
-  args: Sql.var list option; 
+and sql_dynamic_ctor = {
+  ctor: Sql.param_id;
+  args: Sql.var list option;
   sql: sql list;
   is_poly: bool;
 }
@@ -128,7 +130,7 @@ let substitute_vars s vars subst_param =
       assert (i2 > i1);
       assert (i1 > i);
       assert (j2 > j1);
-      assert (j1 > i); 
+      assert (j1 > i);
       let sub = [Static (String.slice ~first:j1 ~last:i1 s); SubstTuple (id, Where_in { value = (types, in_not_in); pos = (j1, j2) })] in
       let acc = DynamicIn (id, in_not_in, sub) :: Static (String.slice ~first:i ~last:j1 s) :: acc in
       loop s acc i2 parami tl
@@ -144,18 +146,18 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = SubstTuple (id, kind) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
-    (* Resuse Dynamic to avoid of making a new substitution constructor. *)  
+    (* Resuse Dynamic to avoid of making a new substitution constructor. *)
     | OptionActionChoice (name, vars, ((f1, f2), (c1, c2)), kind) :: tl ->
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
         let (acc, last) = loop s [] c1 0 vars in
-        let s_choice = 
+        let s_choice =
           let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
           let ctor = Sql.{ value=Some("Some"); pos=(0, 0); } in
           let args = Some(vars) in
           {ctor; args; sql; is_poly=false} in
-        let n = 
+        let n =
           let sql = Static (match kind with | BoolChoices -> " TRUE " | SetDefault -> " DEFAULT ") in
           let ctor = Sql.{ value=Some("None"); pos=(0, 0); } in
           let args = None in

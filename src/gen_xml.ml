@@ -67,12 +67,12 @@ let tuplelist_value_of_param = function
   | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionActionChoice _ | SharedVarsGroup _ | DynamicSelect _ -> None
   | TupleList ({ value = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ value = Some name; _ }, kind) ->
-    let schema = match kind with 
-    | Insertion schema -> schema 
-    | ValueRows { types; _ } -> 
+    let schema = match kind with
+    | Insertion schema -> schema
+    | ValueRows { types; _ } ->
       let types = List.map (fun t -> t, Sql.Meta.empty()) types in
       Gen_caml.make_schema_of_tuple_types name types
-    | Where_in { value = (types, _); _ } -> 
+    | Where_in { value = (types, _); _ } ->
       let types = List.map (fun (t, m) -> t, m) types in
       Gen_caml.make_schema_of_tuple_types name types
     in
@@ -144,6 +144,8 @@ let generate_code (x,_) index stmt =
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateRoutine s  -> ["kind", "create_routine"; "target", Sql.show_table_name s]
     | Other            -> ["kind", "other"]
+    | CreateType n     -> ["kind", "create_type"; "target", n; "cardinality", "0"]
+    | DropType n       -> ["kind", "drop_type"; "target", n; "cardinality", "0"]
   in
   let nodes = [ input; output] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x

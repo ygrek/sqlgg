@@ -17,12 +17,12 @@ struct
 
   module Enum_kind = struct
 
-    module Ctors =  struct 
+    module Ctors =  struct
       include Set.Make(String)
-  
-      let pp fmt s = 
-        Format.fprintf fmt "{%s}" 
-          (String.concat "; " (elements s))  
+
+      let pp fmt s =
+        Format.fprintf fmt "{%s}"
+          (String.concat "; " (elements s))
     end
 
     type t = Ctors.t [@@deriving eq, show{with_path=false}]
@@ -77,7 +77,7 @@ struct
   let make_nullable { t; nullability=_ } = nullable t
 
   let make_strict { t; nullability=_ } = strict t
-  
+
   let make_enum_kind ctors = Union { ctors = (Enum_kind.make ctors); is_closed = true }
 
   let is_strict { nullability; _ } = nullability = Strict
@@ -106,10 +106,10 @@ struct
   | _ -> true
 
   (** @return (subtype, supertype) *)
-  let order_kind x y =  
+  let order_kind x y =
     match x, y with
     | x, y when equal_kind x y -> `Equal
-    | StringLiteral a, StringLiteral b -> 
+    | StringLiteral a, StringLiteral b ->
       `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
 
     | StringLiteral a, Union u | Union u, StringLiteral a ->
@@ -132,7 +132,7 @@ struct
     | Any, t | t, Any -> `Order (t, t)
 
     | Int, Decimal dec | Decimal dec, Int -> `Order (Int, Decimal dec)
-    | Decimal d1, Decimal d2 when d1 <> d2 -> 
+    | Decimal d1, Decimal d2 when d1 <> d2 ->
         let scale = match d1.scale, d2.scale with
           | None, _ | _, None -> None
           | Some a, Some b -> Some (max a b) in
@@ -143,9 +143,9 @@ struct
     | Decimal _, Float | Float, Decimal _ -> `No
     | FloatingLiteral _, Int | Int, FloatingLiteral _ -> `Order (Int, Float)
     | FloatingLiteral x, Float | Float, FloatingLiteral x -> `Order (FloatingLiteral x, Float)
-    | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f -> 
+    | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f ->
         if check_exact_exact_number f dec then `Equal else `No
-    (* UInt64 cannot be a subtype of Float: double precision only guarantees exact 
+    (* UInt64 cannot be a subtype of Float: double precision only guarantees exact
      representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
      Converting large UInt64 values to Float would lose precision *)
     | UInt64, Int | Int, UInt64 -> `Order (Int, UInt64)
@@ -155,26 +155,26 @@ struct
 
     (*  JSON literal validation:
        sqlgg can statically validate JSON string literals at compile time:
-       
+
        Valid JSON literals are accepted:
        '{"valid": "example"}' -> StringLiteral is subtype of Json
        '["array", "example"]' -> StringLiteral is subtype of Json
        '"simple string"'      -> StringLiteral is subtype of Json
-       
+
        Invalid JSON literals are rejected:
        '{NOTVALID|}' -> No subtype relation, compile error
        '{missing: quotes}' -> No subtype relation, compile error
-       
+
        However, sqlgg cannot validate JSON strings constructed dynamically:
        CONCAT('{"key": "', user_input, '"}') -> Text type, no validation
        CONCAT('{"key": "', column_name, '"}') -> Text type, no validation (column value unknown)
        JSON_EXTRACT(dynamic_column, '$.path') -> Json type, runtime validation
-       
+
        This static validation helps catch JSON syntax errors early in development
-       while still allowing dynamic JSON construction when needed. 
+       while still allowing dynamic JSON construction when needed.
     *)
 
-    | Json, StringLiteral x | StringLiteral x, Json -> 
+    | Json, StringLiteral x | StringLiteral x, Json ->
       begin match Yojson.Safe.from_string x with
         | _ -> `Order (StringLiteral x, Json)
         | exception Yojson.Json_error _ -> `No
@@ -182,7 +182,7 @@ struct
     | Text, Json | Json, Text -> `Order (Json, Text)
     | Blob, Json | Json, Blob -> `Order (Json, Blob)
 
-    | (Json_path, StringLiteral x | StringLiteral x, Json_path) 
+    | (Json_path, StringLiteral x | StringLiteral x, Json_path)
         when Sqlgg_json_path.Json_path.is_valid x -> `Order (StringLiteral x, Json_path)
     | Json_path, Text | Text, Json_path -> `Order (Json_path, Text)
 
@@ -190,7 +190,7 @@ struct
     | Json, One_or_all | One_or_all, Json -> `Order (One_or_all, Text)
 
     | _ -> `No
-    
+
 
   let order_nullability x y =
     match x,y with
@@ -228,23 +228,23 @@ struct
   | [] -> None
   | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> common_type_ order prev t) (Some t) ts
 
-  let get_subtype = function 
+  let get_subtype = function
   | `CommonType t -> Some (fst t)
   | `StringLiteralUnion t -> Some t
 
-  let get_supertype = function 
+  let get_supertype = function
   | `CommonType t -> Some (snd t)
   | `StringLiteralUnion t -> Some t
 
   let subtype = common_type_ get_subtype
   let supertype = common_type_ get_supertype
-  
-  let common_subtype types = 
+
+  let common_subtype types =
     match common_type_l_ get_subtype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
 
-  let common_supertype types = 
+  let common_supertype types =
     match common_type_l_ get_supertype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
@@ -287,14 +287,14 @@ end
 module Meta = struct
 
   module StringMap = Map.Make(String)
-  
+
   type t = string StringMap.t
-  
+
   let of_list list = List.fold_left (fun map (k, v) -> StringMap.add k v map) StringMap.empty list
-  
+
   let empty () = StringMap.empty
   let find_opt k map = StringMap.find_opt map k
-  
+
   let mem k map = StringMap.mem map k
   let pp fmt t =
     if StringMap.is_empty t then
@@ -322,7 +322,7 @@ module Meta = struct
       | None, None -> None
     ) t1 t2
 
-  let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
+  let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true"
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
@@ -573,9 +573,9 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = 
-  | Insertion of schema 
-  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located 
+and tuple_list_kind =
+  | Insertion of schema
+  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located
   | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
@@ -621,22 +621,22 @@ and select_complete = {
   select_row_locking: select_row_locking_kind located option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
-and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Source_type.t list; values_start_pos: int; } 
+and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Source_type.t list; values_start_pos: int; }
 and row_values = {
   row_constructor_list: row_constructor_list;
   row_order: order;
   row_limit: limit option;
 }
 and order = (expr * direction option) list
-and agg_with_order_kind = 
+and agg_with_order_kind =
     | Group_concat
     | Json_arrayagg
-and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
-    | Count (* count it's count function which never returns null  *) 
+and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *)
+    | Count (* count it's count function which never returns null  *)
     | Avg (* avg it's avg function that returns float *)
     | With_order of {
         with_order_kind: agg_with_order_kind;
-        order: order; 
+        order: order;
       }
 and 't func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
@@ -647,22 +647,22 @@ and 't func =
   | Ret of 't (* _ -> t *) (* TODO eliminate *)
   | F of Type.tyvar * Type.tyvar list
   | Col_assign of { ret_t: Type.tyvar; col_t: Type.tyvar; arg_t: Type.tyvar; }
-  | Multi of { 
-    ret: Type.tyvar; 
-    fixed_args: Type.tyvar list; 
-    repeating_pattern: Type.tyvar list 
+  | Multi of {
+    ret: Type.tyvar;
+    fixed_args: Type.tyvar list;
+    repeating_pattern: Type.tyvar list
   }
   (* repeating_pattern is needed for functions with fixed initial args + optional repeating pattern
      Example: JSON_ARRAY_APPEND(json_doc, path, val[, path, val] ...)
      - return_type: what function returns
-     - fixed_args: required initial arguments [json_doc, path, val] 
+     - fixed_args: required initial arguments [json_doc, path, val]
      - repeating_pattern: list of types that repeat [path_type, val_type]
      Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
   [@@deriving show]
 and 'expr choices = (param_id * 'expr option) list
 and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; is_over_clause: bool; } [@@deriving show]
 and case_branch = { when_: expr; then_: expr }
-and case = {  
+and case = {
   case: expr option;
   branches: case_branch list;
   else_: expr option;
@@ -694,9 +694,9 @@ type columns = column list [@@deriving show]
 
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
-  | Agg (Self | Count | Avg | With_order _) 
+  | Agg (Self | Count | Avg | With_order _)
   | Null_handling _ | Comparison _
-  | Logical _ | Negation | F _ 
+  | Logical _ | Negation | F _
   | Col_assign _ | Multi _ as fn -> fn
 
 let expr_to_string = show_expr
@@ -705,8 +705,8 @@ let make_partition_by = List.iter (function
   | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
   | _ -> ())
 
-type assignment_expr = 
-  | RegularExpr of expr 
+type assignment_expr =
+  | RegularExpr of expr
   | AssignDefault
   | WithDefaultParam of expr * (pos * pos)
   [@@deriving show {with_path=false}]
@@ -715,7 +715,7 @@ type assignments = (col_name * assignment_expr) list [@@deriving show]
 
 type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
 
-type conflict_clause = 
+type conflict_clause =
   | On_duplicate of { assignments: assignments; }
   | On_conflict of { action: on_conflict; attrs: col_name list; }
   [@@deriving show]
@@ -735,7 +735,7 @@ type insert_action =
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
 
-type index_kind  = 
+type index_kind  =
   | Regular_idx
   | Fulltext
   | Spatial
@@ -746,11 +746,11 @@ module Alter_action_attr = struct
   type constraint_ = Syntax_constraint of Constraint.t | Default of expr located
     [@@deriving show {with_path=false}]
 
-  type t = {  
-    name : string; 
+  type t = {
+    name : string;
     kind : Source_type.kind collated located option;
     extra : constraint_ located list;
-    meta: (string * string) list; 
+    meta: (string * string) list;
   }
   [@@deriving show {with_path=false}]
 
@@ -766,7 +766,7 @@ module Alter_action_attr = struct
     | Source_type.Blob _ -> Type.Blob
     | Source_type.Text _ -> Type.Text
 
-  let to_attr (x: t): attr = make_attribute x.name 
+  let to_attr (x: t): attr = make_attribute x.name
     (Option.map_default (fun k -> Some (kind_to_type_kind k.value.collated)) None x.kind)
     (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
@@ -775,10 +775,10 @@ module Alter_action_attr = struct
      we deliberately make the fields dummy to reconstruct
    *)
   let from_attr (attr: attr): t =
-    let extra = attr.extra |> Constraints.elements |> List.map (fun c -> 
+    let extra = attr.extra |> Constraints.elements |> List.map (fun c ->
       let c = match c with
-      | Constraint.WithDefault -> Default (make_located ~pos:(0,0) ~value:(Value 
-        (make_collated ~collated:(Type.depends Any) ()))) 
+      | Constraint.WithDefault -> Default (make_located ~pos:(0,0) ~value:(Value
+        (make_collated ~collated:(Type.depends Any) ())))
       | x -> Syntax_constraint x
       in
       make_located ~pos:(0,0) ~value:c
@@ -788,14 +788,14 @@ module Alter_action_attr = struct
     { name = attr.name; kind; extra; meta }
 end
 
-type create_target_schema = { 
-  schema: Alter_action_attr.t list; 
-  constraints: table_constraints list; 
-  indexes: index_kind located list; 
+type create_target_schema = {
+  schema: Alter_action_attr.t list;
+  constraints: table_constraints list;
+  indexes: index_kind located list;
 }
 [@@deriving show]
 
-type create_target = 
+type create_target =
   | Schema of create_target_schema
   | Select of select_full located
 [@@deriving show {with_path=false}]
@@ -806,6 +806,16 @@ type charset_name = Named of string | Binary | Ascii | Unicode
 type ttl_option =
   [ `TtlSet of string * int * string
   | `TtlEnable of string ] [@@deriving show {with_path=false}]
+
+module Alter_column_pg = struct
+  (* Each field is optional: [None] means "don't change this property".
+     [Some x] means "set this property to [x]". *)
+  type t = {
+    typ : Source_type.kind collated located option;
+    not_null : bool option;
+    default : expr located option option;
+  } [@@deriving show {with_path=false}]
+end
 
 type alter_action = [
     | `Add of Alter_action_attr.t * alter_pos
@@ -823,7 +833,12 @@ type alter_action = [
     | `Default_or_convert_to of (charset_name option * string located option)
     | `TtlOptions of ttl_option list * pos
     | `RemoveTtl of pos
+    | `AlterColumnPG of string * Alter_column_pg.t
     | `None ] [@@deriving show {with_path=false}]
+
+type create_type_target =
+  | TypeEnum of string list
+  [@@deriving show {with_path=false}]
 
 type stmt =
   | Create of table_name * create_target
@@ -839,6 +854,8 @@ type stmt =
   | UpdateMulti of nested list * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
+  | CreateType of string * create_type_target
+  | DropType of string
   [@@deriving show {with_path=false}]
 
 (*
@@ -933,9 +950,9 @@ let exclude narg name = add_ (Some narg) None name
 let add_multi typ name = add_ None (Some typ) name
 let add narg typ name = add_ (Some narg) (Some typ) name
 
-let sponge = 
-  let open Type in 
-  let any = depends Any in 
+let sponge =
+  let open Type in
+  let any = depends Any in
   Multi { ret = Typ any; fixed_args = []; repeating_pattern = [Typ any] }
 
 let lookup name narg =
@@ -953,18 +970,18 @@ let lookup name narg =
     eprintfn "W: unknown function %S of %d arguments, treating as untyped" name narg;
     sponge
 
-let lookup_agg name narg = match lookup name narg with 
+let lookup_agg name narg = match lookup name narg with
   | Agg _ as a -> a
   | _ -> fail "Function %s is not an aggregate function" name
 
 let monomorphic ret args name = add (List.length args) (monomorphic ret args) name
-let multi_polymorphic name = 
+let multi_polymorphic name =
   add_multi (Multi { ret = Var 0; fixed_args = []; repeating_pattern = [Var 0] }) name
 
-let multi ~ret args name = 
+let multi ~ret args name =
   add_multi (Multi { ret; fixed_args = []; repeating_pattern = [args] }) name
 
-let add_fixed_then_pairs ~ret ~fixed_args ~repeating_pattern name = 
+let add_fixed_then_pairs ~ret ~fixed_args ~repeating_pattern name =
   add_multi (Multi { ret; fixed_args; repeating_pattern }) name
 
 end
@@ -1026,62 +1043,62 @@ let () =
   "uuid_short" |> monomorphic int [];
   "is_uuid" |> monomorphic bool [text];
   "makedate" |> monomorphic datetime [int; int];
-  (* 
+  (*
      Any is used instead of Var because MySQL JSON functions have unique semantics:
-   
+
    1. ACCEPT ANY DATA TYPE: MySQL JSON functions accept values of any type
       and automatically serialize them to JSON according to built-in rules
-   
+
    2. PRESERVE TYPES IN JSON: each type is serialized differently:
       - Numbers → JSON numbers (123 → 123)
-      - Strings → JSON strings ("text" → "text")  
+      - Strings → JSON strings ("text" → "text")
       - Booleans → JSON booleans (true → true)
       - NULL → JSON null
       - JSON-like strings remain STRINGS: '{"a":1}' → "{\"a\":1}" (not parsed!)
-   
+
    3. ONLY RESULTS OF JSON FUNCTIONS become JSON objects:
       JSON_SET(data, '$.obj', JSON_OBJECT('key', 'value'))  -- JSON object
       JSON_SET(data, '$.str', '{"key": "value"}')           -- string!
-   
+
    4. CRITICAL: different values in a single call can have DIFFERENT types
-      
+
       Example of valid MySQL query:
       JSON_SET(
-        data, 
+        data,
         '$.user.name',    'Alice',              -- Text
         '$.user.age',     25,                   -- Int
         '$.user.active',  true,                 -- Bool
         '$.user.score',   99.5,                 -- Float
         '$.user.meta',    JSON_OBJECT('x', 1)   -- Json
       )
-   
+
    WHY NOT Var 0:
    If we used ~repeating_pattern:[Typ json_path; Var 0], then:
    - First value 'Alice' (Text) → Var 0 becomes Text
    - Second value 25 (Int) → requires Text, but gets Int → TYPE ERROR
    - Valid MySQL query would be rejected!
-   
+
    WHY NOT fresh Var for each cycle:
    Consider this example:
    JSON_ARRAY_APPEND(
-     data, 
+     data,
      '$[0].items',     123,           -- Int
-     '$[1].props',     "hello",       -- Text  
+     '$[1].props',     "hello",       -- Text
      '$[2].flags',     true,          -- Bool
      '$[3].meta',      null,          -- Null
      '$[4].nested',    JSON_OBJECT('x', 'y')  -- Json
    )
-   
+
    With fresh Var this would be:
    json -> json_path -> 'a -> json_path -> 'b -> json_path -> 'c -> json_path -> 'd -> json_path -> 'e -> json
-   
+
   This is essentially an existential type: json -> (json_path -> ∃a. a)* -> json
-   
+
    But this complicates implementation for the same effect as Any:
    - Fresh Var can be any type = Any
    - In our type system: | Any, t | t, Any -> `Order (t, t)
    - Any already correctly handles unification with any types
-   
+
    Applied to: JSON_SET, JSON_ARRAY_APPEND, JSON_OBJECT, JSON_ARRAY, etc.
   *)
   "json_array_append" |> add_fixed_then_pairs
@@ -1096,7 +1113,7 @@ let () =
   "json_remove" |> add_fixed_then_pairs
     ~ret:(Typ (depends Json))
     ~fixed_args:[Typ (depends Json); Typ (depends Json_path)]
-    ~repeating_pattern:[Typ (depends Json_path)];   
+    ~repeating_pattern:[Typ (depends Json_path)];
   "json_set" |> add_fixed_then_pairs
     ~ret:(Typ (depends Json))
     ~fixed_args:[(Typ (depends Json)); Typ (depends Json_path); Typ (depends Any)]
@@ -1106,7 +1123,7 @@ let () =
   "json_object" |> add_fixed_then_pairs
     ~ret:(Typ json)
     ~fixed_args:[Typ text; Typ (depends Any)]
-    ~repeating_pattern:[Typ text; Typ (depends Any)]; 
+    ~repeating_pattern:[Typ text; Typ (depends Any)];
   "json_contains" |> add 2 (F (Typ (nullable Bool), [Typ json; Typ json]));
   "json_contains" |> add 3 (F (Typ (nullable Bool), [Typ json; Typ json; Typ json_path]));
   "json_unquote" |> monomorphic (depends Text) [depends (Json)];

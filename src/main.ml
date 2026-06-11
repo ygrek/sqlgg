@@ -35,8 +35,8 @@ let preserve_exception_context sql props exn =
   Error.log "Failed %s: %s" (Option.default "" @@ Props.get props "name") sql;
   let exn =
     match exn with
-    | Prelude.At ((p1, p2), exn) -> 
-        Error.log "At : %s" (String.slice ~first:p1 ~last:p2 sql); 
+    | Prelude.At ((p1, p2), exn) ->
+        Error.log "At : %s" (String.slice ~first:p1 ~last:p2 sql);
         exn
     | _ -> exn
   in
@@ -59,10 +59,10 @@ let check_dialect sql dialect_features =
         let supported_dialects = String.concat ", " (List.map show ds.state.supported) in
         let supported_info =
           if ds.state.supported = [] then ""
-          else Printf.sprintf " (supported by: %s)" supported_dialects 
+          else Printf.sprintf " (supported by: %s)" supported_dialects
         in
         Error.log "Feature %s is not supported for dialect %s%s at %s"
-          (show_feature ds.feature) (show !selected) supported_info 
+          (show_feature ds.feature) (show !selected) supported_info
           (position_info ds)
     | `Unknown when List.mem ds.feature !Sqlgg_config.no_check_features ->
         (match ds.feature with
@@ -119,6 +119,8 @@ let parse_one_migration' (sql, props) =
       | Sql.Drop _ -> Needs_explicit_revert
       | Sql.Create _ -> Create_table
       | Sql.Insert _ | Sql.Delete _ | Sql.DeleteMulti _ | Sql.Update _ | Sql.UpdateMulti _ -> Needs_explicit_revert
+      | Sql.CreateType (name, _) -> Auto_revert (Gen_migrations.drop_type_sql name)
+      | Sql.DropType _ -> Needs_explicit_revert
       | stmt -> Non_migration_stmt (Sql.show_stmt stmt)
     in
     let (sql, schema, vars, kind, dialect_features) = Syntax.eval_parsed sql parsed in
@@ -153,12 +155,12 @@ let parse_one_migration (_sql, props as x) =
 let parse_select_one (sql, props) =
   try
     match Parser.parse_stmt sql with
-    | { statement=Select select_full; dialect_features } -> 
+    | { statement=Select select_full; dialect_features } ->
         check_dialect sql dialect_features;
-        Shared_queries.add (Option.default "" (Props.get props "name")) (sql, select_full); 
+        Shared_queries.add (Option.default "" (Props.get props "name")) (sql, select_full);
         Some select_full
-    | _ -> 
-        if Sqlgg_config.debug1 () then 
+    | _ ->
+        if Sqlgg_config.debug1 () then
           Error.log "Cannot use shared with non-select statement";
         None
   with
@@ -168,11 +170,11 @@ let parse_select_one (sql, props) =
       preserve_exception_context sql props exn
 
 type token = [
-  | `Comment of string 
-  | `Token of string 
+  | `Comment of string
+  | `Token of string
   | `Char of char
-  | `Space of string 
-  | `Semicolon 
+  | `Space of string
+  | `Semicolon
   | `Props of (string * string) list
 ]
 
@@ -202,14 +204,14 @@ let extract_statement' tokens =
     let answer () = Buffer.contents b, !props in
 
     let internal_props = ref Props.empty in
-    
+
     let rec loop smth =
       match Enum.get tokens with
       | None -> if smth then Some (answer ()) else None
       | Some x ->
         begin match x with
         | `Comment _ -> loop smth
-        | `Char c -> 
+        | `Char c ->
           if List.length !internal_props > 0 then (
             Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
             internal_props := Props.empty;
@@ -224,8 +226,8 @@ let extract_statement' tokens =
     in
     Parser_state.Stmt_metadata.reset();
     try loop false
-    with e -> 
-      Error.log "lexer failed (%s)" (Printexc.to_string e); 
+    with e ->
+      Error.log "lexer failed (%s)" (Printexc.to_string e);
       None
 
 let get_statements ch =
