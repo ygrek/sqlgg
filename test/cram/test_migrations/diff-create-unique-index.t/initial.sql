@@ -1,0 +1,1 @@
+CREATE TABLE other (id INT PRIMARY KEY);

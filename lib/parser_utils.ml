@@ -13,6 +13,7 @@ exception Error of exn * (int * int * string * string)
 module Make(T : Parser_type) =
 struct
   let parse_buf_exn lexbuf =
+    Parser_state.with_lexbuf lexbuf @@ fun () ->
     try
       T.input T.rule lexbuf
     with exn ->

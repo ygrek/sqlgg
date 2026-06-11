@@ -1,0 +1,2 @@
+CREATE TABLE other (id INT PRIMARY KEY);
+CREATE TABLE u (id INT PRIMARY KEY, email VARCHAR(255), UNIQUE KEY uniq_email (email));

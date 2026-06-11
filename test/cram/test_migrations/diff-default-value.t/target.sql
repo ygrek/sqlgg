@@ -1,0 +1,1 @@
+CREATE TABLE t (id INT NOT NULL, status TEXT NOT NULL DEFAULT 'new');
