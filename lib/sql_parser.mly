@@ -36,7 +36,7 @@
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
        UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS
        PRECISION SIGNED UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
-       DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
+       DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP TYPE
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
        CASE WHEN THEN ELSE END CHANGE MODIFY DELAYED ENUM FOR SHARE MODE LOCK
        OF WITH NOWAIT ACTION NO IS INTERVAL SUBSTRING DIV MOD CONVERT LAG LEAD OVER
@@ -354,6 +354,13 @@ maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
+alter_column_pg_spec:
+  | TYPE t=located_sql_type { { Alter_column_pg.typ = Some t; not_null = None; default = None } }
+  | SET NOT NULL { { Alter_column_pg.typ = None; not_null = Some true; default = None } }
+  | DROP NOT NULL { { Alter_column_pg.typ = None; not_null = Some false; default = None } }
+  | SET DEFAULT e=default_value { { Alter_column_pg.typ = None; not_null = None; default = Some (Some (make_located ~value:e ~pos:($startofs, $endofs))) } }
+  | DROP DEFAULT { { Alter_column_pg.typ = None; not_null = None; default = Some None } }
+
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD index_type name=IDENT? cols=sequence(IDENT) { `AddIndex (name, cols) }
             | ADD CONSTRAINT name=IDENT? table_constraint_1 index_options { `AddConstraint name }
@@ -367,6 +374,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
+	    | ALTER COLUMN? col=IDENT spec=alter_column_pg_spec { `AlterColumnPG (col, spec) }
             | SET IDENT IDENT { `None }
             | ALGORITHM EQUAL algorithm { `None }
             | LOCK EQUAL lock { `None }
