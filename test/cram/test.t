@@ -1169,6 +1169,23 @@ Test INSERT (.. ) VALUES @rows with non_nullifiable column (NULL allowed on inse
   
   end (* module Sqlgg *)
 
+Test INSERT (..) VALUES @rows with columns whose names are OCaml keywords (must escape tuple binders):
+  $ sqlgg -gen caml -no-header -params named -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE kw_rows (type INTEGER, val TEXT);
+  > INSERT INTO kw_rows (type, val) VALUES @rows;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_kw_rows db  =
+      T.execute db ("CREATE TABLE kw_rows (type INTEGER, val TEXT)") T.no_params
+  
+    let insert_kw_rows_1 db ~rows =
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db ("INSERT INTO kw_rows (type, val) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (type_, val_) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match type_ with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match val_ with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) T.no_params )
+  
+  end (* module Sqlgg *)
+
 Test non_nullifiable with multi-table UPDATE (param must be non-nullable):
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null
   > CREATE TABLE nn_multi_t1 (
