@@ -102,6 +102,9 @@ end
 
 let inline_values = String.concat " "
 
+let idents_of_attrs ~prefix attrs =
+  Name.idents ~prefix (List.map (fun a -> a.Sql.name) attrs)
+
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
 
@@ -219,7 +222,7 @@ let output_schema_binder_labeled _ schema =
   let attrs = schema_to_attrs schema in
   let name = "invoke_callback" in
   output "let %s stmt =" name;
-  let args = Name.idents ~prefix:"r" (List.map (fun a -> a.Sql.name) attrs) in
+  let args = idents_of_attrs ~prefix:"r" attrs in
   let values = List.mapi get_column attrs in
   indented (fun () ->
     output "callback";
@@ -643,7 +646,7 @@ let gen_in_substitution meta var =
     (Option.get var.id.value)
 
 let gen_tuple_printer ~is_row _label schema =
-  let params = List.map (fun { name; _ } -> name) schema in
+  let params = idents_of_attrs ~prefix:"col" schema in
   let open_paren = if is_row then {|then "ROW(" else ", ROW("|} else {|then "(" else ", ("|} in
   sprintf
     {|(fun _sqlgg_idx (%s) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 %s); %s Buffer.add_char _sqlgg_b ')')|}
@@ -651,15 +654,15 @@ let gen_tuple_printer ~is_row _label schema =
     open_paren
     (String.concat " " @@
      List.mapi
-     (fun idx attr ->
-        let { name; domain; meta; _ } = attr in
+     (fun idx (name, attr) ->
+        let { domain; meta; _ } = attr in
         (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
         sprintf {|Buffer.add_string _sqlgg_b (%s);|}
           (let to_literal = sprintf "%s %s" (make_to_literal meta domain) in
            if is_attr_nullable attr then 
            (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
            else to_literal name))
-     schema)
+     (List.combine params schema))
 
 let resolve_tuple_label id = match id.value with
 | None -> failwith "empty label in tuple param"
