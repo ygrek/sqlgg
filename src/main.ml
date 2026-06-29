@@ -171,21 +171,24 @@ let extract_statement' tokens =
     let answer () = Buffer.contents b, !props in
 
     let internal_props = ref Props.empty in
-    
+
+    let flush_internal_props () =
+      if List.length !internal_props > 0 then (
+        Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
+        internal_props := Props.empty;
+      )
+    in
+
     let rec loop smth =
       match Enum.get tokens with
       | None -> if smth then Some (answer ()) else None
       | Some x ->
         begin match x with
         | `Comment _ -> loop smth
-        | `Char c -> 
-          if List.length !internal_props > 0 then (
-            Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
-            internal_props := Props.empty;
-          );
-          Buffer.add_char b c; loop true
+        | `Char c -> flush_internal_props (); Buffer.add_char b c; loop true
+        | `Token s -> flush_internal_props (); Buffer.add_string b s; loop true
         | `Space _ when smth = false -> loop smth
-        | `Token s | `Space s -> Buffer.add_string b s; loop true
+        | `Space s -> Buffer.add_string b s; loop true
         | `Props p when smth -> internal_props := Props.set_all p !internal_props; loop smth
         | `Props p -> props := Props.set_all p !props; loop smth
         | `Semicolon -> Some (answer ())
