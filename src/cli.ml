@@ -388,10 +388,10 @@ let run_migrate ({ gen_lang; name; initial_files; target_files; migrations_file;
   in
   match diff_schema ~ddl_as_migration ~from_:current ~to_:target with
   | [] ->
+    regenerate ();
     (match before with
      | [] -> prerr_endline "nothing to do"
      | _ ->
-       regenerate ();
        eprintf "nothing new to migrate; regenerated code from %d recorded migration(s)\n"
          (List.length before))
   | migs ->
