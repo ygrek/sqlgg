@@ -1141,6 +1141,19 @@ let test_meta_propagation = [
     attr' ~extra:[NotNull;] "col_2" Int;
   ] [];
 
+  tt {|
+    CREATE TABLE "table_39" (
+      -- [sqlgg] module=HelloWorld
+      "col_1" INT PRIMARY KEY,
+      "col_2" INT NOT NULL
+    )
+  |} [] [];
+
+  tt {|SELECT "col_1", "col_2" FROM "table_39"|} [
+    attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "col_1" Int;
+    attr' ~extra:[NotNull;] "col_2" Int;
+  ] [];
+
   tt "SELECT col_1 + 1 as col_1_with_plus_1, col_2 FROM table_37" [
     attr' ~meta:[] "col_1_with_plus_1" Int;
     attr' ~extra:[NotNull;] "col_2" Int;
