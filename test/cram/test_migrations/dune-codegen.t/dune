@@ -1,0 +1,8 @@
+(rule
+ (deps initial.sql extends.sql migrations.sql target.sql)
+ (target sql_migrations.ml)
+ (action
+  (with-stdout-to sql_migrations.ml
+   (run sqlgg -no-header -dialect mysql -migrate -now 20260101000000 -gen caml
+    -name migrations -initial initial.sql -migrations-file migrations.sql
+    -extends extends.sql -target target.sql))))
