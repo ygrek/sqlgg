@@ -1,0 +1,1 @@
+ALTER TABLE foo TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'OFF';

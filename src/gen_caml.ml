@@ -102,6 +102,9 @@ end
 
 let inline_values = String.concat " "
 
+let idents_of_attrs ~prefix attrs =
+  Name.idents ~prefix (List.map (fun a -> a.Sql.name) attrs)
+
 let quote = String.replace_chars (function '\n' -> "\\n\\\n" | '\r' -> "" | '"' -> "\\\"" | c -> String.make 1 c)
 let quote s = "\"" ^ quote s ^ "\""
 
@@ -223,7 +226,7 @@ let output_schema_binder_labeled _ schema =
   let attrs = schema_to_attrs schema in
   let name = "invoke_callback" in
   output "let %s stmt =" name;
-  let args = Name.idents ~prefix:"r" (List.map (fun a -> a.Sql.name) attrs) in
+  let args = idents_of_attrs ~prefix:"r" attrs in
   let values = List.mapi get_column attrs in
   indented (fun () ->
     output "callback";
@@ -643,7 +646,7 @@ let gen_in_substitution meta var =
     (Option.get var.id.value)
 
 let gen_tuple_printer ~is_row _label schema =
-  let params = List.map (fun { name; _ } -> name) schema in
+  let params = idents_of_attrs ~prefix:"col" schema in
   let open_paren = if is_row then {|then "ROW(" else ", ROW("|} else {|then "(" else ", ("|} in
   sprintf
     {|(fun _sqlgg_idx (%s) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 %s); %s Buffer.add_char _sqlgg_b ')')|}
@@ -651,15 +654,15 @@ let gen_tuple_printer ~is_row _label schema =
     open_paren
     (String.concat " " @@
      List.mapi
-     (fun idx attr ->
-        let { name; domain; meta; _ } = attr in
+     (fun idx (name, attr) ->
+        let { domain; meta; _ } = attr in
         (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
         sprintf {|Buffer.add_string _sqlgg_b (%s);|}
           (let to_literal = sprintf "%s %s" (make_to_literal meta domain) in
            if is_attr_nullable attr then 
            (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
            else to_literal name))
-     schema)
+     (List.combine params schema))
 
 let resolve_tuple_label id = match id.value with
 | None -> failwith "empty label in tuple param"
@@ -872,6 +875,12 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos stmt =
 
 let generate_stmt ~module_kind index stmt =
   if not (supports_module_kind module_kind stmt) then () else
+  if Props.get stmt.props "noop" <> None then begin
+    let _ = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
+    output "ignore db;";
+    output "IO.return { T.affected_rows = 0L; insert_id = None }";
+    complete_func module_kind
+  end else
   let subst = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
   let sql = make_sql @@ get_sql stmt in
   let sql = match subst with
@@ -1217,7 +1226,7 @@ let generate ~gen_io ~migration_names name stmts =
     output "let migrations = [";
     inc_indent ();
     List.iter (fun n ->
-      output "(%s, [(apply_%s, revert_%s)]);" (quote n) n n;
+      output "(%s, apply_%s, revert_%s);" (quote n) n n;
     ) names;
     dec_indent ();
     output "]";
@@ -1250,14 +1259,21 @@ end
 module Header = Gen.Make(Generator_io)
 
 let generate_migrations name migrations =
-  let migration_names = List.map (fun (m : Gen_migrations.migration) -> m.name) migrations in
+  let named = List.mapi (fun index (m : Gen_migrations.migration) ->
+    Gen.choose_name m.props m.kind index, m
+  ) migrations in
+  let migration_names = List.map fst named in
   let make_stmt fn_name sql =
     { Gen.schema = []; vars = []; kind = Stmt.Other;
       props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
   in
-  let stmts = List.concat_map (fun (m : Gen_migrations.migration) ->
-    [make_stmt ("apply_" ^ m.name) m.apply;
-     make_stmt ("revert_" ^ m.name) m.revert]
-  ) migrations in
+  let revert_stmt name (m : Gen_migrations.migration) =
+    match m.revert with
+    | [] -> let s = make_stmt ("revert_" ^ name) "" in { s with props = Props.set s.props "noop" "" }
+    | revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
+  in
+  let stmts = List.concat_map (fun (name, (m : Gen_migrations.migration)) ->
+    [make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
+  ) named in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
   generate ~gen_io:true ~migration_names:(Some migration_names) name stmts

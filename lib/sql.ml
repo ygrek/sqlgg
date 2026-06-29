@@ -273,13 +273,13 @@ struct
   end
 
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
-    [@@deriving show{with_path=false}, ord]
+    [@@deriving show{with_path=false}, ord, eq]
 
   type composite = | CompositePrimary of StringSet.t | CompositeUnique of StringSet.t
-    [@@deriving show{with_path=false}, ord]
+    [@@deriving show{with_path=false}, ord, eq]
 
   type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault | Composite of composite
-    [@@deriving show{with_path=false}, ord]
+    [@@deriving show{with_path=false}, ord, eq]
 
   let make_composite_primary cols = Composite (CompositePrimary (StringSet.of_list cols))
   let make_composite_unique cols = Composite (CompositeUnique (StringSet.of_list cols))
@@ -538,10 +538,23 @@ type float_precision = Single | Double
   [@@deriving show {with_path=false}, eq]
 
 module Source_type = struct
+  type text_flavor =
+    | PlainText of lob_size option
+    | Char of int option
+    | Varchar of int option
+    | Varchar2 of int option
+    [@@deriving show, eq]
+
+  type blob_flavor =
+    | PlainBlob of lob_size option
+    | Varbinary of int option
+    [@@deriving show, eq]
+
   type kind = Infer of Type.kind
-    | Int of int_size option * signedness
+    | Int of { size : int_size option; sign : signedness; display_width : int option }
     | Float of float_precision
-    | Blob of lob_size option | Text of lob_size option
+    | Blob of blob_flavor
+    | Text of text_flavor
     [@@deriving show, eq]
 
   type t = { t : kind; nullability : Type.nullability; } [@@deriving eq, show{with_path=false}, make]
@@ -551,16 +564,15 @@ module Source_type = struct
   let depends = nullability Type.Depends
   let nullable = nullability Type.Nullable
 
-  let to_infer_type { t; nullability; } =
-    let t = match t with
-      | Infer ty -> ty
-      | Int (Some Big, Unsigned) -> Type.UInt64
-      | Int _ -> Type.Int
-      | Float _ -> Type.Float
-      | Blob _ -> Type.Blob
-      | Text _ -> Type.Text
-    in
-    { Type.t; nullability }
+  let kind_to_type_kind = function
+    | Infer ty -> ty
+    | Int { size = Some Big; sign = Unsigned; _ } -> Type.UInt64
+    | Int _ -> Type.Int
+    | Float _ -> Type.Float
+    | Blob _ -> Type.Blob
+    | Text _ -> Type.Text
+
+  let to_infer_type { t; nullability; } = { Type.t = kind_to_type_kind t; nullability }
 
 end
 
@@ -741,7 +753,7 @@ type insert_action =
   on_conflict_clause : conflict_clause located option;
 } [@@deriving show {with_path=false}]
 
-type table_constraints = [ `Ignore | `Primary of string list | `Unique of string list ] [@@deriving show {with_path=false}]
+type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list ] [@@deriving show {with_path=false}]
 
 type index_kind  = 
   | Regular_idx
@@ -751,7 +763,10 @@ type index_kind  =
 
 module Alter_action_attr = struct
 
-  type constraint_ = Syntax_constraint of Constraint.t | Default of expr located
+  type default = { expr : expr located; sql : string option }
+    [@@deriving show {with_path=false}]
+
+  type constraint_ = Syntax_constraint of Constraint.t | Default of default
     [@@deriving show {with_path=false}]
 
   type t = {  
@@ -766,16 +781,15 @@ module Alter_action_attr = struct
     | Syntax_constraint c -> c
     | Default _ -> WithDefault
 
-  let kind_to_type_kind = function
-    | Source_type.Infer k -> k
-    | Source_type.Int (Some Big, Unsigned) -> Type.UInt64
-    | Source_type.Int _ -> Type.Int
-    | Source_type.Float _ -> Type.Float
-    | Source_type.Blob _ -> Type.Blob
-    | Source_type.Text _ -> Type.Text
+  let default_sql (col : t) =
+    List.find_map (fun (c : constraint_ located) ->
+      match c.value with
+      | Default { sql; _ } -> sql
+      | Syntax_constraint _ -> None
+    ) col.extra
 
   let to_attr (x: t): attr = make_attribute x.name 
-    (Option.map_default (fun k -> Some (kind_to_type_kind k.value.collated)) None x.kind)
+    (Option.map_default (fun k -> Some (Source_type.kind_to_type_kind k.value.collated)) None x.kind)
     (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
 
@@ -785,8 +799,10 @@ module Alter_action_attr = struct
   let from_attr (attr: attr): t =
     let extra = attr.extra |> Constraints.elements |> List.map (fun c -> 
       let c = match c with
-      | Constraint.WithDefault -> Default (make_located ~pos:(0,0) ~value:(Value 
-        (make_collated ~collated:(Type.depends Any) ()))) 
+      | Constraint.WithDefault -> Default {
+          expr = make_located ~pos:(0,0) ~value:(Value (make_collated ~collated:(Type.depends Any) ()));
+          sql = None;
+        }
       | x -> Syntax_constraint x
       in
       make_located ~pos:(0,0) ~value:c
@@ -796,10 +812,36 @@ module Alter_action_attr = struct
     { name = attr.name; kind; extra; meta }
 end
 
+type index_op_kind =
+  | Plain_idx
+  | Unique_idx
+  | Fulltext_idx
+  | Spatial_idx
+  [@@deriving show {with_path=false}, eq]
+
+type table_inline_index = {
+  idx_kind : index_kind;
+  idx_name : string option;
+  idx_cols : string list;
+  idx_unique : bool;
+}
+[@@deriving show {with_path=false}]
+
+type add_index = { add_idx_name : string option; add_idx_kind : index_op_kind; add_idx_cols : string list }
+  [@@deriving show {with_path=false}]
+
+type create_index_def = {
+  ci_name : string;
+  ci_table : table_name;
+  ci_cols : string collated list;
+  ci_kind : index_op_kind;
+}
+[@@deriving show {with_path=false}]
+
 type create_target_schema = { 
   schema: Alter_action_attr.t list; 
   constraints: table_constraints list; 
-  indexes: index_kind located list; 
+  indexes: table_inline_index located list; 
 }
 [@@deriving show]
 
@@ -822,23 +864,22 @@ type alter_action = [
     | `RenameIndex of string * string
     | `Drop of string
     | `Change of string * Alter_action_attr.t * alter_pos
-    | `AddIndex of string option * string list
+    | `AddIndex of add_index
     | `DropIndex of string
     | `AddPrimaryKey of string list
     | `DropPrimaryKey
     | `AddConstraint of string option
     | `DropConstraint of string
-    | `Default_or_convert_to of (charset_name option * string located option)
+    | `Default_or_convert_to of (charset_name * string located option)
     | `TtlOptions of ttl_option list * pos
-    | `RemoveTtl of pos
-    | `None ] [@@deriving show {with_path=false}]
+    | `RemoveTtl of pos ] [@@deriving show {with_path=false}]
 
 type stmt =
   | Create of table_name * create_target
   | Drop of table_name
   | Alter of table_name * alter_action list
   | Rename of (table_name * table_name) list
-  | CreateIndex of string * table_name * string collated list (* index name, table name, columns *)
+  | CreateIndex of create_index_def
   | Insert of insert_action
   | Delete of table_name * expr option
   | DeleteMulti of table_name list * nested * expr option

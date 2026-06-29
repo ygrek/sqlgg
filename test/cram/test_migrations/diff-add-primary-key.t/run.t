@@ -1,0 +1,7 @@
+Add a primary key: up = ADD PRIMARY KEY, down = DROP PRIMARY KEY. The committed
+migrations.sql / migrations.ml are the generation result; the generator must still
+reproduce them (no diff output == equal).
+
+  $ sqlgg -no-header -dialect mysql -diff -now 20260101000000 -gen sql -name mig -base initial.sql -target target.sql | diff migrations.sql -
+
+  $ sqlgg -no-header -dialect mysql -diff -now 20260101000000 -gen caml -name mig -base initial.sql -target target.sql | diff migrations.ml -

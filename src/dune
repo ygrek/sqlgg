@@ -18,6 +18,7 @@
     extlib
     oUnit
     sqlgg
+    unix
   )
   (preprocess (pps ppx_deriving.std))
 )
