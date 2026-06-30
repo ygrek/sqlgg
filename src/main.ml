@@ -13,9 +13,19 @@ let () = Printexc.(register_printer begin function
   | _ -> None
 end)
 
-let set_dynamic_select_prop props = match Props.get props "dynamic_select" with
-  | Some s -> String.lowercase_ascii s = "true"
-  | None -> false
+type dynamic_select_mode = Dynamic_off | Dynamic_only | Dynamic_both [@@deriving eq]
+
+let dynamic_select_mode props =
+  match Props.get props "dynamic_select" with
+  | None -> if !Sqlgg_config.dynamic_select then Dynamic_both else Dynamic_off
+  | Some s ->
+    match String.lowercase_ascii s with
+    | "true" -> Dynamic_only
+    | "both" -> Dynamic_both
+    | "false" -> Dynamic_off
+    | other ->
+      Error.log "Unknown dynamic_select=%s (expected true, both or false)" other;
+      Dynamic_off
 
 (** Handle parsing error and format a helpful error message *)
 let handle_parsing_error sql exn (line, cnum, tok, tail) =
@@ -91,7 +101,7 @@ let check_statement stmt sql =
 
 let parse_one' (sql, props) =
     if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" sql;
-    Syntax.Config.dynamic_select := set_dynamic_select_prop props;
+    Syntax.Config.dynamic_select := not (equal_dynamic_select_mode (dynamic_select_mode props) Dynamic_off);
     let (sql, schema, vars, kind, dialect_features) = Syntax.parse sql in
     check_dialect sql dialect_features;
     begin match kind, !Gen.params_mode with
@@ -113,10 +123,27 @@ let try_parse f (sql, props as x) =
   | exn ->
       preserve_exception_context sql props exn
 
+let stmt_has_dynamic_select (stmt : Gen.stmt) =
+  List.exists (function Sql.DynamicSelect _ -> true | _ -> false) stmt.vars
+
 let parse_one (sql, props as x) =
   match Props.get props "noparse" with
-  | Some _ -> Some { Gen.schema=[]; vars=[]; kind=Stmt.Other; props=Props.set props "sql" sql }
-  | None -> try_parse parse_one' x
+  | Some _ -> [ { Gen.schema=[]; vars=[]; kind=Stmt.Other; props=Props.set props "sql" sql } ]
+  | None ->
+    match try_parse parse_one' x with
+    | None -> []
+    | Some stmt when stmt_has_dynamic_select stmt && equal_dynamic_select_mode (dynamic_select_mode props) Dynamic_both ->
+      let static_props =
+        let props = Props.set props "dynamic_select" "false" in
+        match Props.get props "name" with
+        | Some name -> Props.set props "name" (name ^ "_static")
+        | None -> props
+      in
+      begin match try_parse parse_one' (sql, static_props) with
+      | Some static_stmt -> [stmt; static_stmt]
+      | None -> [stmt]
+      end
+    | Some stmt -> [stmt]
 
 (** Parse a select statement for sharing *)
 let parse_select_one (sql, props) =
@@ -207,7 +234,7 @@ let get_statements ch =
     match extract_statement' tokens with
     | Some x -> x
     | None -> raise Enum.No_more_elements)
-  |> Enum.filter_map (fun (buffer, props) ->
+  |> Enum.map (fun (buffer, props) ->
     let include_ = match Props.get props "include" with
       | Some s -> Include.of_string s
       | None -> Include.OnlyExecutable
@@ -215,16 +242,18 @@ let get_statements ch =
     match include_ with
     | OnlyReusable ->
       let (_: Sql.select_full option) = parse_select_one (buffer, props) in
-      None
+      []
     | OnlyExecutable ->
-      parse_one (buffer, props) |> Option.map (fun stmt ->
-        check_statement stmt buffer; stmt)
+      begin match parse_one (buffer, props) with
+      | [] -> []
+      | stmt :: _ as stmts -> check_statement stmt buffer; stmts
+      end
     | ReusableAndExecutable ->
-      parse_select_one (buffer, props) |> Option.map (fun select_full ->
+      parse_select_one (buffer, props) |> Option.map_default (fun select_full ->
         let (schema, vars, kind) = Syntax.eval_select select_full in
         let stmt = { Gen.schema; vars; kind; props = Props.set props "sql" buffer } in
-        check_statement stmt buffer; stmt)
-  ) |> List.of_enum
+        check_statement stmt buffer; [stmt]) []
+  ) |> List.of_enum |> List.concat
 
 let replay_sql sql = ignore (try_parse parse_one' (sql, Props.empty))
 

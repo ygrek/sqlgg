@@ -1,13 +1,7 @@
-Join kinds: only LEFT JOIN ... ON is a candidate (INNER removes rows, RIGHT
-flips sides, comma join has no ON, USING/NATURAL have no ON to analyse).
-USING/NATURAL only blocks candidates that come before it, not after.
-
-Generated code matches the golden file:
+Only LEFT JOIN ... ON is a candidate; USING/NATURAL blocks only preceding candidates.
 
   $ cat join_kinds.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > join_kinds.ml
   $ diff join_kinds.ml join_kinds.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

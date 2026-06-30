@@ -1,14 +1,7 @@
-ON shapes: parameter in ON keeps the join, an extra constant conjunct does not,
-inequality keeps it, a table without an alias is matched by its own name,
-operand order in the key equation does not matter, a key equated to a constant
-is droppable, OR and a subquery in the candidate's own ON keep the join.
-
-Generated code matches the golden file:
+ON shapes: params/inequality/OR/subquery keep the join, constants do not.
 
   $ cat on_shapes.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > on_shapes.ml
   $ diff on_shapes.ml on_shapes.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

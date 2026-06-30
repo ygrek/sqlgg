@@ -21,7 +21,7 @@ module M (T: Sqlgg_traits.M with
 
   (* Group 1: pass-through SELECT * over a subquery -> pushdown into the subquery *)
   module Test1 = struct
-    open Sql.Star_over_subq_col
+    open Sql.Star_over_subq
 
     let run c =
       printf "[1.1] pick id\n";    prep (); ignore (List.select c id ~min:10L (fun x -> x));
@@ -33,7 +33,7 @@ module M (T: Sqlgg_traits.M with
 
   (* Group 2: pass-through via explicit sub.* *)
   module Test2 = struct
-    open Sql.Star_alias_over_subq_col
+    open Sql.Star_alias_over_subq
 
     let run c =
       printf "[2.1] pick name\n";        prep (); ignore (List.select c name (fun x -> x));
@@ -43,7 +43,7 @@ module M (T: Sqlgg_traits.M with
 
   (* Group 3: pass-through over a LEFT JOIN subquery (nullable joined columns) *)
   module Test3 = struct
-    open Sql.Star_over_join_subq_col
+    open Sql.Star_over_join_subq
 
     let run c =
       printf "[3.1] pick uid\n";                 prep (); ignore (List.select c uid (fun x -> x));
@@ -54,7 +54,7 @@ module M (T: Sqlgg_traits.M with
 
   (* Group 4: non-pass-through outer -> dynamic stays outside, subquery fixed *)
   module Test4 = struct
-    open Sql.Cols_over_subq_col
+    open Sql.Cols_over_subq
 
     let run c =
       printf "[4.1] pick id\n";          prep (); ignore (List.select c id ~id:1L (fun x -> x));

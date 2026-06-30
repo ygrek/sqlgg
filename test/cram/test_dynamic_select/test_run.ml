@@ -1,4 +1,4 @@
-(* test_run.ml - Test dynamic select query generation *)
+(* dynamic select runtime tests over the printing mock *)
 
 open Printf
 
@@ -12,9 +12,8 @@ module M (T: Sqlgg_traits.M with
   open Sql
 
   (* === Test 1: Basic select_one_maybe === *)
-  (* Now all columns (id, name, price, category) are dynamic *)
   module Test1 = struct
-    open Sql.Select_product_col
+    open Sql.Select_product
 
     let single_field_name connection =
       printf "[TEST 1.1] Single field: Name\n";
@@ -103,9 +102,8 @@ module M (T: Sqlgg_traits.M with
   end
 
   (* === Test 2: select with callback (multiple rows) === *)
-  (* Now all columns (id, name, price) are dynamic - callback is (fun col -> ...) *)
   module Test2 = struct
-    open Sql.List_products_col
+    open Sql.List_products
 
     let single_field connection =
       printf "[TEST 2.1] List with single field: Name\n";
@@ -147,7 +145,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 3: Dynamic select with aliased expressions === *)
   module Test3 = struct
-    open Sql.Multi_dynamic_col
+    open Sql.Multi_dynamic
 
     let single_field connection =
       printf "[TEST 3.1] Single field: label\n";
@@ -184,7 +182,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 4: Literal value column === *)
   module Test4 = struct
-    open Sql.With_verbatim_col
+    open Sql.With_verbatim
 
     let single_field connection =
       printf "[TEST 4.1] Fallback literal field\n";
@@ -223,7 +221,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 5: Typed parameter column === *)
   module Test5 = struct
-    open Sql.With_param_col
+    open Sql.With_param
 
     let name_field connection =
       printf "[TEST 5.1] Name field\n";
@@ -271,7 +269,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 6: All columns dynamic, different order === *)
   module Test6 = struct
-    open Sql.First_position_col
+    open Sql.First_position
 
     let first_position connection =
       printf "[TEST 6.1] Dynamic select at first position\n";
@@ -308,7 +306,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 7: select_one (guaranteed row) === *)
   module Test7 = struct
-    open Sql.Select_one_product_col
+    open Sql.Select_one_product
 
     let select_one_single connection =
       printf "[TEST 7.1] select_one with single field\n";
@@ -343,7 +341,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 8: module-wrapped column === *)
   module Test8 = struct
-    open Sql.With_module_col
+    open Sql.With_module
 
     let with_module_id connection =
       printf "[TEST 8.1] Module-wrapped column: Id\n";
@@ -370,9 +368,8 @@ module M (T: Sqlgg_traits.M with
   
 
   (* === Test 9: IN @list inside subquery branch === *)
-  (* Now all columns (id, name, filtered) are dynamic *)
   module Test9 = struct
-    open Sql.With_in_subquery_col
+    open Sql.With_in_subquery
 
     let in_subquery_filtered connection =
       printf "[TEST 9.1] IN list inside subquery branch\n";
@@ -398,9 +395,8 @@ module M (T: Sqlgg_traits.M with
   end
 
   (* === Test 10: arithmetic param inside branch === *)
-  (* Now all columns (id, add_tax) are dynamic *)
   module Test10 = struct
-    open Sql.With_arith_param_col
+    open Sql.With_arith_param
 
     let add_tax connection =
       printf "[TEST 10.1] Arithmetic param in branch (price + tax)\n";
@@ -425,7 +421,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 11: two params inside branch === *)
   module Test11 = struct
-    open Sql.With_two_params_col
+    open Sql.With_two_params
 
     let test_in_range connection =
       printf "[TEST 11.1] Two params in branch (range)\n";
@@ -450,7 +446,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 12: normal param + IN @list inside one branch === *)
   module Test12 = struct
-    open Sql.With_param_and_in_col
+    open Sql.With_param_and_in
 
     let match_with_suffix connection =
       printf "[TEST 12.1] Param + IN list in branch\n";
@@ -475,7 +471,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 13: option-actions inside subquery WHERE === *)
   module Test13 = struct
-    open Sql.With_option_actions_in_subquery_col
+    open Sql.With_option_actions_in_subquery
 
     let opt_none connection =
       printf "[TEST 13.1] Option-actions in subquery (None)\n";
@@ -518,7 +514,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 14: tuple list IN inside subquery WHERE === *)
   module Test14 = struct
-    open Sql.With_tuple_list_in_subquery_col
+    open Sql.With_tuple_list_in_subquery
 
     let test_pairs connection =
       printf "[TEST 14.1] Tuple list IN inside subquery\n";
@@ -543,7 +539,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 15: CASE expression inside branch === *)
   module Test15 = struct
-    open Sql.With_case_expr_col
+    open Sql.With_case_expr
 
     let test_casey connection =
       printf "[TEST 15.1] CASE expression inside branch\n";
@@ -568,7 +564,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 16: typed param inside branch === *)
   module Test16 = struct
-    open Sql.With_typed_param_col
+    open Sql.With_typed_param
 
     let test_typed connection =
       printf "[TEST 16.1] Typed param inside branch\n";
@@ -593,7 +589,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 17: Complex subquery as plain dynamic column === *)
   module Test17 = struct
-    open Sql.Monster_nested_col
+    open Sql.Monster_nested
 
     let monster_field connection =
       printf "[TEST 17.1] Monster subquery field\n";
@@ -631,7 +627,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 18: Various SQL constructs as plain dynamic columns === *)
   module Test18 = struct
-    open Sql.Ultimate_combo_col
+    open Sql.Ultimate_combo
 
     let test_plain connection =
       printf "[TEST 18.1] Plain stock field\n";
@@ -714,7 +710,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 19: Mixed columns with arithmetic expression === *)
   module Test19 = struct
-    open Sql.Ultimate_combo_simple2_col
+    open Sql.Ultimate_combo_simple2
 
     let test_all_fields connection =
       printf "[TEST 19] All fields combined\n";
@@ -745,7 +741,7 @@ module M (T: Sqlgg_traits.M with
 
   (* === Test 20: Star expansion and concatenation in runtime mode === *)
   module Test20 = struct
-    open Sql.All_cols_runtime_col
+    open Sql.All_cols_runtime
 
     let star_only connection =
       printf "[TEST 20.1] Star-only dynamic select\n";
@@ -772,7 +768,7 @@ module M (T: Sqlgg_traits.M with
   end
 
   module Test21 = struct
-    open Sql.All_cols_plus_expr_runtime_col
+    open Sql.All_cols_plus_expr_runtime
 
     let star_plus_expr connection =
       printf "[TEST 21.1] Star + expr dynamic select\n";
@@ -804,7 +800,7 @@ module M (T: Sqlgg_traits.M with
   end
 
   module Test22 = struct
-    open Sql.Multiline_cols_runtime_col
+    open Sql.Multiline_cols_runtime
 
     let multiline_select_list connection =
       printf "[TEST 22.1] Multiline select-list formatting\n";

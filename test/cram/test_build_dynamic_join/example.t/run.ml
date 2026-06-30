@@ -7,7 +7,7 @@ let run label f =
 module Example = Example.Sqlgg(Print_impl)
 
 let () =
-  let open Example.User_info_col in
+  let open Example.User_info in
   run "brief: name + email -> no joins" (fun () ->
     ignore (List.select () (let+ n = name and+ e = email in (n, e)) ~org:1L (fun x -> x)));
   run "card: name + bio + avatar_url -> profiles only" (fun () ->
