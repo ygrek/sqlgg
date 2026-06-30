@@ -1,51 +1,32 @@
 module Sqlgg (T : Sqlgg_traits.M) = struct
 
   module IO = Sqlgg_io.Blocking
-  module Ref_in_group_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let bio =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("p.bio");
-        count = 0;
-      }
+  module Ref_in_group = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
 
     let select db (col : _ t) callback =
       let set_params stmt =
@@ -92,51 +73,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Ref_in_order_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let bio =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("p.bio");
-        count = 0;
-      }
+  module Ref_in_order = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
 
     let select db (col : _ t) callback =
       let set_params stmt =
@@ -183,51 +145,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Ref_in_having_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let bio =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("p.bio");
-        count = 0;
-      }
+  module Ref_in_having = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
 
     let select db (col : _ t) callback =
       let set_params stmt =
@@ -274,51 +217,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Complex_proj_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let shout =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("CONCAT(p.bio, '!')");
-        count = 0;
-      }
+  module Complex_proj = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let shout : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("CONCAT(p.bio, '!')");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method shout = Cols.shout
+    end
 
     let select db (col : _ t) ~uid callback =
       let set_params stmt =
@@ -368,51 +292,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Subq_in_where_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let bio =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("p.bio");
-        count = 0;
-      }
+  module Subq_in_where = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
 
     let select db (col : _ t) callback =
       let set_params stmt =
@@ -459,51 +364,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Unqualified_where_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let bio =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("p.bio");
-        count = 0;
-      }
+  module Unqualified_where = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
 
     let select db (col : _ t) callback =
       let set_params stmt =
@@ -550,51 +436,32 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
   end
 
-  module Join_unreferenced_col = struct
-    type 'a t = {
-      set: T.params -> unit;
-      read: T.row -> int -> 'a * int;
-      column: string;
-      count: int;
-    }
-
-    let pure x = {
-      set = (fun _p -> ());
-      read = (fun _row idx -> (x, idx));
-      column = "";
-      count = 0;
-    }
-
-    let apply f a = {
-      set = (fun p -> f.set p; a.set p);
-      read = (fun row idx ->
-        let (vf, i1) = f.read row idx in
-        let (va, i2) = a.read row i1 in
-        (vf va, i2));
-      column = (match f.column, a.column with
-        | "", c | c, "" -> c
-        | c1, c2 -> c1 ^ ", " ^ c2);
-      count = f.count + a.count;
-    }
-
-    let map f a = apply (pure f) a
-
-    let (let+) t f = map f t
-    let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-    let id =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-        column = ("u.id");
-        count = 0;
-      }
-    let name =
-      {
-        set = (fun _p -> ());
-        read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-        column = ("u.name");
-        count = 0;
-      }
+  module Join_unreferenced = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let name : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("u.name");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method name = Cols.name
+    end
 
     let select db (col : _ t) ~uid callback =
       let set_params stmt =

@@ -1,11 +1,7 @@
-Key shapes: non-PK UNIQUE works, composite PK only when ALL parts are equated.
-
-Generated code matches the golden file:
+Non-PK UNIQUE works; composite PK only when all parts are equated.
 
   $ cat key_shapes.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > key_shapes.ml
   $ diff key_shapes.ml key_shapes.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

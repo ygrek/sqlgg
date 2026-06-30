@@ -1,6 +1,5 @@
-Dynamic select penetrates a pass-through (SELECT *) subquery source: the dynamic
-column placeholder is pushed down INTO the subquery. A non-pass-through outer query
-keeps the dynamic placeholder at the outer level (subquery projection stays fixed).
+Dynamic column placeholder is pushed down into a pass-through (SELECT *)
+subquery, but stays at the outer level for a non-pass-through one.
 
   $ cat > dyn_subq.sql <<'EOF'
   > CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT);
@@ -18,58 +17,41 @@ Full generated code:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Products_dyn_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
+    module Products_dyn = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method price = Cols.price
+      end
   
       let select db (col : _ t) ~min callback =
         let set_params stmt =
@@ -119,51 +101,32 @@ Full generated code:
   
     end
   
-    module Cols_over_subq_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("sub.id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("sub.name");
-          count = 0;
-        }
+    module Cols_over_subq = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("sub.id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("sub.name");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+      end
   
       let select db (col : _ t) ~id callback =
         let set_params stmt =
@@ -224,17 +187,16 @@ Full generated code:
     end (* module List *)
   end (* module Sqlgg *)
 
-Compile the generated module together with the printing mock traits implementation:
+Compile with the printing mock traits:
 
   $ ocamlfind ocamlc -package sqlgg.traits,sqlgg -I . -c output.ml
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml
 
-A tiny driver that picks different fields at runtime and lets the mock print the SQL
-that is actually sent (with the chosen columns spliced into the subquery):
+Driver picking different fields at runtime:
 
   $ cat > run_subq.ml <<'EOF'
   > module S = Output.Sqlgg(Print_impl)
-  > open S.Products_dyn_col
+  > open S.Products_dyn
   > 
   > let run label col =
   >   Printf.printf "=== %s ===\n%!" label;
@@ -250,7 +212,7 @@ that is actually sent (with the chosen columns spliced into the subquery):
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c run_subq.ml
   $ ocamlfind ocamlc -package unix,sqlgg.traits -I . -linkpkg -o run_subq.exe output.ml print_impl.ml run_subq.ml
 
-Run it and observe the final SQL per field selection:
+Final SQL per field selection:
 
   $ ./run_subq.exe 2>&1 | grep -E '^===|^\[SQL\]'
   === pick id ===

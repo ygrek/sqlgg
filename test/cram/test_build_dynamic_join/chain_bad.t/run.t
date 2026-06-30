@@ -1,11 +1,7 @@
-If the child join is NOT droppable, its ON reference pins the parent too.
-
-Generated code matches the golden file:
+A non-droppable child join pins its parent via the ON reference.
 
   $ cat chain_bad.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > chain_bad.ml
   $ diff chain_bad.ml chain_bad.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

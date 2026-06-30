@@ -1,13 +1,7 @@
-Multiple joins in one FROM: two independent droppables, a subquery in another
-join's ON (conservative keep of everything), the same table joined twice
-(distinct constructors per alias).
-
-Generated code matches the golden file:
+Several joins in one FROM: independent droppables, subquery in ON, same table twice.
 
   $ cat multi.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > multi.ml
   $ diff multi.ml multi.compare.ml
-
-Runtime (print_impl mock): each pick renders only its own join:
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

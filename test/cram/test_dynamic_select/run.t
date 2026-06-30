@@ -1,7 +1,5 @@
 Test DynamicSelect with applicative combinators generates proper SQL:
-  $ cp test_build_dynamic_select/dynamic_select.sql .
-  $ cp test_build_dynamic_select/product_id.ml .
-  $ cp test_build_dynamic_select/test_run.ml .
+  $ cp ../print_ocaml_impl.ml .
   $ cat dynamic_select.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > output.ml
   $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -c print_ocaml_impl.ml
   $ ocamlfind ocamlc -package sqlgg.traits,yojson -I . -c product_id.ml
@@ -441,44 +439,23 @@ Test DynamicSelect edge: single column:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Single_col_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
+    module Single_col = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -546,51 +523,32 @@ DynamicSelect: SELECT * remains static select:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module All_cols_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = "t.id";
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = "t.name";
-          count = 0;
-        }
+    module All_cols = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = "t.id";
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = "t.name";
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -658,58 +616,41 @@ DynamicSelect: SELECT * with expression in same list:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module All_cols_plus_expr_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = "t.id";
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = "t.name";
-          count = 0;
-        }
-      let id_plus =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id + 2");
-          count = 0;
-        }
+    module All_cols_plus_expr = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = "t.id";
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = "t.name";
+            count = 0;
+            deps = [];
+          }
+        let id_plus : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id + 2");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method id_plus = Cols.id_plus
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -777,58 +718,41 @@ DynamicSelect: auto names for expressions without alias:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Auto_names_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let col1 =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id + 1");
-          count = 0;
-        }
-      let col2 =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id * 2");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
+    module Auto_names = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let col1 : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id + 1");
+            count = 0;
+            deps = [];
+          }
+        let col2 : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id * 2");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method col1 = Cols.col1
+        method col2 = Cols.col2
+        method name = Cols.name
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -896,44 +820,23 @@ Test DynamicSelect edge: expression at first position:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Expr_first_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id_plus =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id + 1");
-          count = 0;
-        }
+    module Expr_first = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id_plus : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id + 1");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id_plus = Cols.id_plus
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1001,51 +904,32 @@ Test DynamicSelect edge: literal only:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Literal_only_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let greeting =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
-          column = ("'hello'");
-          count = 0;
-        }
-      let answer =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("42");
-          count = 0;
-        }
+    module Literal_only = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let greeting : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+            column = ("'hello'");
+            count = 0;
+            deps = [];
+          }
+        let answer : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("42");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method greeting = Cols.greeting
+        method answer = Cols.answer
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1113,72 +997,59 @@ Test DynamicSelect edge: many columns:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Many_cols_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let a =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("a");
-          count = 0;
-        }
-      let b =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("b");
-          count = 0;
-        }
-      let c =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("c");
-          count = 0;
-        }
-      let d =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("d");
-          count = 0;
-        }
-      let e =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("e");
-          count = 0;
-        }
+    module Many_cols = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let a : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("a");
+            count = 0;
+            deps = [];
+          }
+        let b : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("b");
+            count = 0;
+            deps = [];
+          }
+        let c : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("c");
+            count = 0;
+            deps = [];
+          }
+        let d : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("d");
+            count = 0;
+            deps = [];
+          }
+        let e : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("e");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method a = Cols.a
+        method b = Cols.b
+        method c = Cols.c
+        method d = Cols.d
+        method e = Cols.e
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1246,58 +1117,41 @@ Test DynamicSelect edge: no space after commas:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module No_space_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
+    module No_space = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method price = Cols.price
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1365,51 +1219,32 @@ Test DynamicSelect edge: minimal spacing:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Tight_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let a =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("a");
-          count = 0;
-        }
-      let b =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("b");
-          count = 0;
-        }
+    module Tight = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let a : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("a");
+            count = 0;
+            deps = [];
+          }
+        let b : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("b");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method a = Cols.a
+        method b = Cols.b
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1477,44 +1312,23 @@ Test DynamicSelect edge: column without alias gets auto name:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module No_alias_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let col1 =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id + 1");
-          count = 0;
-        }
+    module No_alias = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let col1 : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id + 1");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method col1 = Cols.col1
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1582,73 +1396,58 @@ Test DynamicSelect with dynamic_select flag:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Select_ids2_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let balance =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("balance");
-          count = 0;
-        }
-      let t_plus_one t =
-        let _set_t_plus_one p =
-          T.set_param_Int p t;
-          ()
-        in
-        {
-          set = _set_t_plus_one;
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("" ^ "?" ^ " + 1");
-          count = 1;
-        }
-      let sub_result seven =
-        let _set_sub_result p =
-          T.set_param_Int p seven;
-          ()
-        in
-        {
-          set = _set_sub_result;
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("(SELECT 6 + " ^ "?" ^ " LIMIT 1)");
-          count = 1;
-        }
+    module Select_ids2 = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let balance : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("balance");
+            count = 0;
+            deps = [];
+          }
+        let t_plus_one t : _ t =
+          let _set_t_plus_one p =
+            T.set_param_Int p t;
+            ()
+          in
+          {
+            set = _set_t_plus_one;
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("" ^ "?" ^ " + 1");
+            count = 1;
+            deps = [];
+          }
+        let sub_result seven : _ t =
+          let _set_sub_result p =
+            T.set_param_Int p seven;
+            ()
+          in
+          {
+            set = _set_sub_result;
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("(SELECT 6 + " ^ "?" ^ " LIMIT 1)");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method balance = Cols.balance
+        method t_plus_one = Cols.t_plus_one
+        method sub_result = Cols.sub_result
+      end
   
       let select db (col : _ t) ~t callback =
         let set_params stmt =
@@ -1719,65 +1518,50 @@ Test DynamicSelect with two dynamic columns:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Multi_dynamic_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
-      let doubled_price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price * 2");
-          count = 0;
-        }
+    module Multi_dynamic = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+        let doubled_price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price * 2");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method price = Cols.price
+        method doubled_price = Cols.doubled_price
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1845,58 +1629,41 @@ Test DynamicSelect with Verbatim branches:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module With_verbatim_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let status =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("status");
-          count = 0;
-        }
-      let literal_status =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
-          column = ("'active'");
-          count = 0;
-        }
+    module With_verbatim = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let status : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("status");
+            count = 0;
+            deps = [];
+          }
+        let literal_status : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+            column = ("'active'");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method status = Cols.status
+        method literal_status = Cols.literal_status
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -1964,51 +1731,32 @@ Test DynamicSelect at beginning of SELECT:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module First_col_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let a =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("a");
-          count = 0;
-        }
-      let b =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("b");
-          count = 0;
-        }
+    module First_col = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let a : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("a");
+            count = 0;
+            deps = [];
+          }
+        let b : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("b");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method a = Cols.a
+        method b = Cols.b
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -2076,51 +1824,32 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module With_subquery_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let sub x =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
-          count = 0 + (match x with `A -> 0 | `B -> 0);
-        }
+    module With_subquery = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let sub x : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
+            count = 0 + (match x with `A -> 0 | `B -> 0);
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method sub = Cols.sub
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -2193,58 +1922,41 @@ Test DynamicSelect with module annotation:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module With_module_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (Product_id.get_column (T.get_column_int64 row idx), idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
+    module With_module = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (Product_id.get_column (T.get_column_int64 row idx), idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method price = Cols.price
+      end
   
       let select db (col : _ t) ~id =
         let set_params stmt =
@@ -2281,51 +1993,32 @@ Test DynamicSelect with LIMIT 1 (select_one):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Select_one_product_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
+    module Select_one_product = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method name = Cols.name
+        method price = Cols.price
+      end
   
       let select db (col : _ t) ~id =
         let set_params stmt =
@@ -2369,76 +2062,63 @@ Test DynamicSelect comprehensive list:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Ultimate_combo_simple2_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let category =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("category");
-          count = 0;
-        }
-      let stock =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("stock");
-          count = 0;
-        }
-      let price_with_tax tax_rate =
-        let _set_price_with_tax p =
-          T.set_param_Int p tax_rate;
-          ()
-        in
-        {
-          set = _set_price_with_tax;
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price * (1 + " ^ "?" ^ ")");
-          count = 1;
-        }
+    module Ultimate_combo_simple2 = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let category : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("category");
+            count = 0;
+            deps = [];
+          }
+        let stock : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("stock");
+            count = 0;
+            deps = [];
+          }
+        let price_with_tax tax_rate : _ t =
+          let _set_price_with_tax p =
+            T.set_param_Int p tax_rate;
+            ()
+          in
+          {
+            set = _set_price_with_tax;
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price * (1 + " ^ "?" ^ ")");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method category = Cols.category
+        method stock = Cols.stock
+        method price_with_tax = Cols.price_with_tax
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -2518,55 +2198,36 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Bare_param_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let custom custom_val =
-        let _set_custom p =
-          T.set_param_Text p custom_val;
-          ()
-        in
-        {
-          set = _set_custom;
-          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
-          column = ("" ^ "?");
-          count = 1;
-        }
+    module Bare_param = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let custom custom_val : _ t =
+          let _set_custom p =
+            T.set_param_Text p custom_val;
+            ()
+          in
+          {
+            set = _set_custom;
+            read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+            column = ("" ^ "?");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method custom = Cols.custom
+      end
   
       let select db (col : _ t) ~id callback =
         let set_params stmt =
@@ -2637,59 +2298,40 @@ Virtual select: consecutive params as columns:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Multi_param_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let col_a a =
-        let _set_col_a p =
-          T.set_param_Int p a;
-          ()
-        in
-        {
-          set = _set_col_a;
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("" ^ "?");
-          count = 1;
-        }
-      let col_b b =
-        let _set_col_b p =
-          T.set_param_Text p b;
-          ()
-        in
-        {
-          set = _set_col_b;
-          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
-          column = ("" ^ "?");
-          count = 1;
-        }
+    module Multi_param = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let col_a a : _ t =
+          let _set_col_a p =
+            T.set_param_Int p a;
+            ()
+          in
+          {
+            set = _set_col_a;
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("" ^ "?");
+            count = 1;
+            deps = [];
+          }
+        let col_b b : _ t =
+          let _set_col_b p =
+            T.set_param_Text p b;
+            ()
+          in
+          {
+            set = _set_col_b;
+            read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+            column = ("" ^ "?");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method col_a = Cols.col_a
+        method col_b = Cols.col_b
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -2757,69 +2399,54 @@ Virtual select: mixed columns and params without spaces after commas:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Tight_commas_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("name");
-          count = 0;
-        }
-      let price =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("price");
-          count = 0;
-        }
-      let bonus extra =
-        let _set_bonus p =
-          T.set_param_Int p extra;
-          ()
-        in
-        {
-          set = _set_bonus;
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("" ^ "?");
-          count = 1;
-        }
+    module Tight_commas = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("name");
+            count = 0;
+            deps = [];
+          }
+        let price : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("price");
+            count = 0;
+            deps = [];
+          }
+        let bonus extra : _ t =
+          let _set_bonus p =
+            T.set_param_Int p extra;
+            ()
+          in
+          {
+            set = _set_bonus;
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("" ^ "?");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method name = Cols.name
+        method price = Cols.price
+        method bonus = Cols.bonus
+      end
   
       let select db (col : _ t) ~id callback =
         let set_params stmt =
@@ -2890,51 +2517,32 @@ Virtual select: subquery expression as dynamic column:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Subquery_col_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let rank =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("(SELECT COUNT(*) FROM t t2 WHERE t2.id <= t.id)");
-          count = 0;
-        }
+    module Subquery_col = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let rank : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("(SELECT COUNT(*) FROM t t2 WHERE t2.id <= t.id)");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method rank = Cols.rank
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -3008,51 +2616,32 @@ Virtual select: CASE WHEN as dynamic column:
         let inj = function | "active" -> `Active | "inactive" -> `Inactive | s -> failwith (Printf.sprintf "Invalid enum value: %s" s)
         let proj = function  | `Active -> "active"| `Inactive -> "inactive"
       end)
-    module Case_col_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let label =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (Enum_0.get_column row idx, idx + 1));
-          column = ("CASE WHEN status = 1 THEN 'active' ELSE 'inactive' END");
-          count = 0;
-        }
+    module Case_col = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let label : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (Enum_0.get_column row idx, idx + 1));
+            column = ("CASE WHEN status = 1 THEN 'active' ELSE 'inactive' END");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method label = Cols.label
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -3120,51 +2709,32 @@ Virtual select: function call with multiple args as column:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Func_col_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let full_name =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("CONCAT(first_name, ' ', last_name)");
-          count = 0;
-        }
+    module Func_col = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let full_name : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("CONCAT(first_name, ' ', last_name)");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method full_name = Cols.full_name
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -3232,55 +2802,36 @@ Virtual select: arithmetic with param at expression start:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Param_start_expr_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let scaled multiplier =
-        let _set_scaled p =
-          begin match multiplier with None -> T.set_param_null p | Some v -> T.set_param_Decimal p v end;
-          ()
-        in
-        {
-          set = _set_scaled;
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("" ^ "?" ^ " * price");
-          count = 1;
-        }
+    module Param_start_expr = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let scaled multiplier : _ t =
+          let _set_scaled p =
+            begin match multiplier with None -> T.set_param_null p | Some v -> T.set_param_Decimal p v end;
+            ()
+          in
+          {
+            set = _set_scaled;
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("" ^ "?" ^ " * price");
+            count = 1;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method scaled = Cols.scaled
+      end
   
       let select db (col : _ t) ~id callback =
         let set_params stmt =
@@ -3358,51 +2909,32 @@ Virtual select: tab-separated columns (non-space whitespace):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Tab_sep_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let a =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("a");
-          count = 0;
-        }
-      let b =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
-          column = ("b");
-          count = 0;
-        }
+    module Tab_sep = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let a : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("a");
+            count = 0;
+            deps = [];
+          }
+        let b : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+            column = ("b");
+            count = 0;
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method a = Cols.a
+        method b = Cols.b
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =

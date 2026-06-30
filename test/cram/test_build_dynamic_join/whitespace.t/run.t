@@ -1,13 +1,7 @@
-Whitespace around dropped joins: a dropped join takes its leading whitespace
-with it, a kept one is spliced back with a single space, string literals stay
-untouched.
-
-Generated code matches the golden file:
+A dropped join takes its leading whitespace, a kept one is spliced with a single space.
 
   $ cat whitespace.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > whitespace.ml
   $ diff whitespace.ml whitespace.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

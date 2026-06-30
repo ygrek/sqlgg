@@ -1,14 +1,7 @@
-Transitive chains: a child's ON reference to a droppable parent is a parent
-edge, not a blocker; closures are accumulated child first (two-level,
-three-level, diamond).
-
-Generated code matches the golden file:
+Transitive chains: closures accumulate child-first (two-level, three-level, diamond).
 
   $ cat chains.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > chains.ml
   $ diff chains.ml chains.compare.ml
-
-Runtime (print_impl mock): a pick renders only the joins its closure needs,
-the parent is emitted once:
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml
