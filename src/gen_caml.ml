@@ -182,18 +182,22 @@ module L = struct
   let as_api_type = as_lang_type
 end
 
+let codec_get_column, codec_set_param =
+  let codec name meta =
+    match Sql.Meta.find_opt meta "module", Sql.Meta.find_opt meta name with
+    | Some m, fn -> Some (sprintf "%s.%s" m (Option.default name fn))
+    | None, fn -> fn
+  in
+  codec "get_column", codec "set_param"
+
 let format_get_column ~row ~idx attr =
   let null_suffix = if is_attr_nullable attr then "_nullable" else "" in
   let format_t_get_column type_name =
     sprintf "T.get_column_%s%s %s %s" type_name null_suffix row idx
   in
-  match Sql.Meta.find_opt attr.meta "module" with
-  | Some m ->
-      let runtime_repr_name = L.as_runtime_repr_name attr.domain in
-      let inner_get_column_expr = sprintf "(T.get_column_%s%s %s %s)" runtime_repr_name null_suffix row idx in
-      let get_column = "get_column" in
-      let get_column_name = get_column |> Sql.Meta.find_opt attr.meta |> Option.default get_column in
-      sprintf "%s.%s%s %s" m get_column_name null_suffix inner_get_column_expr
+  match codec_get_column attr.meta with
+  | Some getter ->
+      sprintf "%s%s (%s)" getter null_suffix (format_t_get_column (L.as_runtime_repr_name attr.domain))
   | None ->
       begin match attr.domain with
       | { t = Union { ctors; _ }; _ } ->
@@ -362,16 +366,10 @@ let set_param ~meta index param =
   let pname = show_param_name param index in
   let ptype = show_param_type param in
   let set_param_nullable v r = output "begin match %s with None -> T.set_param_null p | Some %s -> %s end;" pname v r in
-  let module_ = Sql.Meta.find_opt meta "module" in
-  match module_ with
-  | Some m ->
-      let set_param = "set_param" in
-      let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
-      let runtime_repr_name = L.as_runtime_repr_name param.typ in
-      if nullable then
-        set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
-      else
-        output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
+  match codec_set_param meta with
+  | Some setter ->
+      let set = sprintf "T.set_param_%s p (%s %s);" (L.as_runtime_repr_name param.typ) setter pname in
+      if nullable then set_param_nullable pname set else output "%s" set
   | None ->
       match param with
       | { typ = { t=(Union { ctors; _ }); _ }; _ } when nullable ->
@@ -628,12 +626,10 @@ let output_params_binder index vars =
 
 
 let make_to_literal meta typ =
-  match Sql.Meta.find_opt meta "module" with
-  | Some m ->
-    let set_param = "set_param" in
-    let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
+  match codec_set_param meta with
+  | Some setter ->
     let trait_type_name = match typ.Type.t with | Union _ -> "Text" | StringLiteral _ -> "Text" | _ -> L.as_lang_type typ in
-    sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" trait_type_name (L.as_runtime_repr_name typ) m set_param_name
+    sprintf "(fun v -> T.Types.%s.%s_to_literal (%s v))" trait_type_name (L.as_runtime_repr_name typ) setter
   | None ->
     match typ.Type.t with
     | Union { ctors; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
@@ -959,19 +955,19 @@ let generate_enum_modules stmts =
     | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
-  let meta_has_module m = Sql.Meta.mem m "module" in
+  let enum_unless_codec codec typ meta =
+    match codec meta with Some _ -> None | None -> get_enum typ
+  in
 
   let schemas_to_enums schemas =
     List.filter_map (fun ({ domain; meta; _ } : Sql.attr) ->
-      if meta_has_module meta then None else get_enum domain
+      enum_unless_codec codec_set_param domain meta
     ) schemas
   in
   
 
   let schema_columns_to_enums schema_cols =
-    let attr_enum attr = 
-      if meta_has_module attr.meta then [] else option_list (get_enum attr.domain)
-    in
+    let attr_enum attr = option_list (enum_unless_codec codec_get_column attr.domain attr.meta) in
     List.concat_map (function
       | Sql.Attr attr -> attr_enum attr
       | Dynamic (_, fields) -> List.concat_map (fun (_, attr) -> attr_enum attr) fields
@@ -980,7 +976,7 @@ let generate_enum_modules stmts =
 
   let rec vars_to_enums vars =
     let enum_opt typ = typ |> get_enum |> option_list in
-    let enum_opt_with_meta typ meta = if meta_has_module meta then [] else enum_opt typ in
+    let enum_opt_with_meta typ meta = option_list (enum_unless_codec codec_set_param typ meta) in
     List.concat_map (function
       | Single ({ typ; _ }, meta)
       | SingleIn ({ typ; _ }, meta) -> enum_opt_with_meta typ meta
