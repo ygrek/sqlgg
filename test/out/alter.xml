@@ -13,25 +13,6 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="create_bar" sql="CREATE TABLE &quot;bar&quot; (&#x0A;  &quot;id&quot; INTEGER NOT NULL,&#x0A;  &quot;role&quot; SMALLINT NOT NULL,&#x0A;  &quot;role_new&quot; INTEGER NOT NULL,&#x0A;  &quot;omniscience&quot; INTEGER NOT NULL&#x0A;)" category="DDL" kind="create" target="bar" cardinality="0">
-  <in/>
-  <out/>
- </stmt>
- <stmt name="alter_bar_4" sql="ALTER TABLE &quot;bar&quot;&#x0A;  DROP COLUMN &quot;role&quot;,&#x0A;  ALTER COLUMN &quot;role_new&quot; TYPE SMALLINT,&#x0A;  ALTER COLUMN &quot;role_new&quot; SET NOT NULL,&#x0A;  ALTER COLUMN &quot;omniscience&quot; TYPE BOOLEAN,&#x0A;  ALTER COLUMN &quot;omniscience&quot; SET NOT NULL" category="DDL" kind="alter" target="bar" cardinality="0">
-  <in/>
-  <out/>
- </stmt>
- <stmt name="alter_bar_5" sql="ALTER TABLE &quot;bar&quot; RENAME COLUMN &quot;role_new&quot; TO &quot;role&quot;" category="DDL" kind="alter" target="bar" cardinality="0">
-  <in/>
-  <out/>
- </stmt>
- <table name="bar">
-  <schema>
-   <value name="id" type="Int"/>
-   <value name="role" type="Int"/>
-   <value name="omniscience" type="Bool"/>
-  </schema>
- </table>
  <table name="foo">
   <schema>
    <value name="col1" type="Int"/>
