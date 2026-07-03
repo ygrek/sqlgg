@@ -221,6 +221,42 @@ Test SQLite dialect with ON DUPLICATE KEY UPDATE (should fail):
   Errors encountered, no code generated
   [1]
 
+Test PostgreSQL dialect with PostgreSQL-style ALTER COLUMN (should work):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT DEFAULT 'a');
+  > ALTER TABLE users ALTER COLUMN id TYPE SMALLINT, ALTER COLUMN id SET NOT NULL, ALTER COLUMN name DROP NOT NULL;
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b', ALTER COLUMN name DROP DEFAULT;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ALTER COLUMN SET/DROP DEFAULT (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b', ALTER COLUMN name DROP DEFAULT;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ALTER COLUMN TYPE / SET NOT NULL (should fail, PostgreSQL-only):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN id TYPE SMALLINT, ALTER COLUMN id SET NOT NULL;
+  > EOF
+  Feature AlterColumn is not supported for dialect MySQL (supported by: PostgreSQL) at TYPE SMALLINT
+  Feature AlterColumn is not supported for dialect MySQL (supported by: PostgreSQL) at SET NOT NULL
+  Errors encountered, no code generated
+  [1]
+
+Test SQLite dialect with ALTER COLUMN (should fail, no ALTER COLUMN support at all):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b';
+  > EOF
+  Feature AlterColumn is not supported for dialect SQLite (supported by: MySQL, PostgreSQL, TiDB) at SET DEFAULT 'b'
+  Errors encountered, no code generated
+  [1]
+
 Test SQLite dialect with ON CONFLICT, column-level primary key (should work):
   $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
   > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);

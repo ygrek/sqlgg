@@ -237,52 +237,24 @@ let add_primary_key name ~cols =
   let pk = grouped_constraint cols ~single:Sql.Constraint.PrimaryKey ~composite:Sql.Constraint.make_composite_primary in
   alter_columns name (fun columns -> add_constraint_to_columns columns ~cols pk)
 
-let alter_column_type name ~col_name ~new_kind =
-  alter_columns name (fun cols ->
-    List.map (fun c ->
-      if c.attr.Sql.name = col_name then
-        let new_t = Sql.Source_type.kind_to_type_kind new_kind.Sql.collated in
-        { c with
-          attr = { c.attr with domain = { c.attr.domain with Sql.Type.t = new_t } };
-          source_kind = Some new_kind }
-      else c
-    ) cols)
-
-let alter_column_set_not_null name ~col_name =
-  alter_columns name (fun cols ->
-    List.map (fun c ->
-      if c.attr.Sql.name = col_name then
-        { c with attr = { c.attr with
-            domain = { c.attr.domain with Sql.Type.nullability = Strict };
-            extra = Sql.Constraints.add NotNull c.attr.extra } }
-      else c
-    ) cols)
-
-let alter_column_drop_not_null name ~col_name =
-  alter_columns name (fun cols ->
-    List.map (fun c ->
-      if c.attr.Sql.name = col_name then
-        { c with attr = { c.attr with
-            domain = { c.attr.domain with Sql.Type.nullability = Nullable };
-            extra = Sql.Constraints.remove NotNull c.attr.extra } }
-      else c
-    ) cols)
-
-let alter_column_set_default name ~col_name =
-  alter_columns name (fun cols ->
-    List.map (fun c ->
-      if c.attr.Sql.name = col_name then
-        { c with attr = { c.attr with extra = Sql.Constraints.add WithDefault c.attr.extra } }
-      else c
-    ) cols)
-
-let alter_column_drop_default name ~col_name =
-  alter_columns name (fun cols ->
-    List.map (fun c ->
-      if c.attr.Sql.name = col_name then
-        { c with attr = { c.attr with extra = Sql.Constraints.remove WithDefault c.attr.extra } }
-      else c
-    ) cols)
+let alter_column_pg name ~col_name (change : Sql.Alter_column_pg.t) =
+  let set_not_null nn =
+    let update = if nn then Sql.Constraints.add else Sql.Constraints.remove in
+    map_attr (fun a -> { a with domain = if nn then Sql.Type.make_strict a.domain else Sql.Type.make_nullable a.domain })
+    $ map_extra (update NotNull)
+  in
+  let f = match change with
+    | Set_type { Sql.value = kind; _ } ->
+      fun c ->
+        { c with source_kind = Some kind;
+          attr = { c.attr with domain =
+            { c.attr.domain with Sql.Type.t = Sql.Source_type.kind_to_type_kind kind.Sql.collated } } }
+    | Set_not_null -> set_not_null true
+    | Drop_not_null -> set_not_null false
+    | Set_default -> map_extra (Sql.Constraints.add WithDefault)
+    | Drop_default -> map_extra (Sql.Constraints.remove WithDefault)
+  in
+  alter_columns name (List.map (fun c -> if c.attr.Sql.name = col_name then f c else c))
 
 let print ch tables = let out = IO.output_channel ch in List.iter (Sql.print_table out) tables; IO.flush out
 

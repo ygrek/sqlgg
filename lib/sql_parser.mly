@@ -356,14 +356,13 @@ maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
 alter_column_pg_spec:
-  (* TYPE is not a reserved word (columns may be named `type`), so match it as IDENT *)
   | kw=IDENT t=located_sql_type
       { if String.lowercase_ascii kw <> "type" then failwith ("expected TYPE after ALTER COLUMN, got " ^ kw);
-        { Alter_column_pg.typ = Some t; not_null = None; default = None } }
-  | SET NOT NULL { { Alter_column_pg.typ = None; not_null = Some true; default = None } }
-  | DROP NOT NULL { { Alter_column_pg.typ = None; not_null = Some false; default = None } }
-  | SET DEFAULT e=default_value { { Alter_column_pg.typ = None; not_null = None; default = Some (Some (make_located ~value:e ~pos:($startofs, $endofs))) } }
-  | DROP DEFAULT { { Alter_column_pg.typ = None; not_null = None; default = Some None } }
+        Alter_column_pg.Set_type t }
+  | SET NOT NULL { Alter_column_pg.Set_not_null }
+  | DROP NOT NULL { Alter_column_pg.Drop_not_null }
+  | SET DEFAULT default_value { Alter_column_pg.Set_default }
+  | DROP DEFAULT { Alter_column_pg.Drop_default }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
             | ADD PRIMARY KEY cols=sequence(IDENT) { `AddPrimaryKey cols }
@@ -379,7 +378,7 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | DROP CHECK name=IDENT { `DropConstraint name }
             | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
-            | ALTER COLUMN? col=IDENT spec=alter_column_pg_spec { `AlterColumnPG (col, spec) }
+            | ALTER COLUMN? col=IDENT spec=located(alter_column_pg_spec) { `AlterColumnPG (col, spec) }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }

@@ -858,13 +858,13 @@ type ttl_option =
   | `TtlEnable of string ] [@@deriving show {with_path=false}]
 
 module Alter_column_pg = struct
-  (* Each field is optional: [None] means "don't change this property".
-     [Some x] means "set this property to [x]". *)
-  type t = {
-    typ : Source_type.kind collated located option;
-    not_null : bool option;
-    default : expr located option option;
-  } [@@deriving show {with_path=false}]
+  type t =
+    | Set_type of Source_type.kind collated located
+    | Set_not_null
+    | Drop_not_null
+    | Set_default
+    | Drop_default
+  [@@deriving show {with_path=false}]
 end
 
 type alter_action = [
@@ -883,7 +883,7 @@ type alter_action = [
     | `Default_or_convert_to of (charset_name * string located option)
     | `TtlOptions of ttl_option list * pos
     | `RemoveTtl of pos
-    | `AlterColumnPG of string * Alter_column_pg.t ] [@@deriving show {with_path=false}]
+    | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
 
 type stmt =
   | Create of table_name * create_target

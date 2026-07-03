@@ -1474,18 +1474,8 @@ let rec eval (stmt:Sql.stmt) =
         Tables.drop_primary_key name
       | `AddPrimaryKey cols ->
         Tables.add_primary_key name ~cols
-      | `AlterColumnPG (col_name, changes) ->
-        Option.may (fun new_type ->
-          Tables.alter_column_type name ~col_name ~new_kind:new_type.value
-        ) changes.Alter_column_pg.typ;
-        Option.may (fun not_null ->
-          if not_null then Tables.alter_column_set_not_null name ~col_name
-          else Tables.alter_column_drop_not_null name ~col_name
-        ) changes.not_null;
-        Option.may (function
-          | Some _ -> Tables.alter_column_set_default name ~col_name
-          | None -> Tables.alter_column_drop_default name ~col_name
-        ) changes.default
+      | `AlterColumnPG (col_name, change) ->
+        Tables.alter_column_pg name ~col_name change.value
       | `AddIndex { add_idx_name = Some index_name; add_idx_kind = kind; add_idx_cols = cols } ->
         Tables.index_add name ~index_name ~kind ~cols
       | `AddIndex { add_idx_name = None; add_idx_kind = kind; add_idx_cols = cols } ->
