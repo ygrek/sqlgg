@@ -1672,10 +1672,10 @@ let rec eval (stmt:Sql.stmt) =
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name
   | CreateType (name, TypeEnum ctors) ->
-     Types.add name (Sql.Type.make_enum_kind ctors);
+     User_types.add name (Sql.Type.make_enum_kind ctors);
      ([], [], CreateType name)
-  | DropType name ->
-     Types.drop name;
+  | DropType (name, if_exists) ->
+     User_types.drop ~if_exists name;
      ([], [], DropType name)
 
 (* FIXME unify each choice separately *)
