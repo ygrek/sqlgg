@@ -159,6 +159,20 @@ let action_to_sql_fragment ~default_sql_lookup (action : Sql.alter_action) = mat
       | `TtlEnable v -> sprintf "TTL_ENABLE = '%s'" v)
     |> String.concat " "
   | `RemoveTtl _ -> "REMOVE TTL"
+  | `AlterColumnPG (col_name, change) ->
+    sprintf "ALTER COLUMN %s %s" (quote_id col_name)
+      (match change.Sql.value with
+      | Sql.Alter_column_pg.Set_type t -> "TYPE " ^ source_type_kind_to_sql t.Sql.value.Sql.collated
+      | Set_not_null -> "SET NOT NULL"
+      | Drop_not_null -> "DROP NOT NULL"
+      | Set_default ->
+        (match default_sql_lookup col_name with
+         | Some sql -> "SET DEFAULT " ^ sql
+         | None ->
+           fail "column `%s` has a DEFAULT whose source SQL was not captured; \
+                 cannot serialize it for migration (write this migration by hand)"
+             col_name)
+      | Drop_default -> "DROP DEFAULT")
 
 type ddl_column = { col : Sql.Alter_action_attr.t; col_default_sql : string option }
 

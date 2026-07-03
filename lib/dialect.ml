@@ -21,6 +21,7 @@ type feature =
   | RowLocking
   | DefaultExpr
   | Ttl
+  | AlterColumn
 [@@deriving show { with_path = false }]
 
 let show_feature x = 
@@ -43,6 +44,7 @@ let feature_to_string = function
   | RowLocking -> "row_locking"
   | DefaultExpr -> "default_expr"
   | Ttl -> "ttl"
+  | AlterColumn -> "alter_column"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
@@ -60,6 +62,7 @@ let feature_of_string s =
   | "row_locking" -> RowLocking
   | "default_expr" -> DefaultExpr
   | "ttl" -> Ttl
+  | "alter_column" -> AlterColumn
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -150,6 +153,11 @@ let get_replace_into pos = only ReplaceInto [MySQL; TiDB] pos
 let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
 
 let get_ttl pos = only Ttl [TiDB] pos
+
+let get_alter_column (change : Sql.Alter_column_pg.t) pos =
+  match change with
+  | Set_type _ | Set_not_null | Drop_not_null -> only AlterColumn [PostgreSQL] pos
+  | Set_default | Drop_default -> only AlterColumn [MySQL; PostgreSQL; TiDB] pos
 
 let get_default_expr ~kind ~expr pos =
   let open Sql in
@@ -403,8 +411,10 @@ and analyze_alter_action acc actions k = match actions with
     | `TtlOptions (_, pos) | `RemoveTtl pos ->
         let acc = get_ttl pos :: acc in
         analyze_alter_action acc rest k
+    | `AlterColumnPG (_, { value; pos }) ->
+        let acc = get_alter_column value pos :: acc in
+        analyze_alter_action acc rest k
     | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _ ->
-
         analyze_alter_action acc rest k
 
 and analyze_insert_action acc ias k = match ias with

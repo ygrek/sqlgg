@@ -1474,6 +1474,8 @@ let rec eval (stmt:Sql.stmt) =
         Tables.drop_primary_key name
       | `AddPrimaryKey cols ->
         Tables.add_primary_key name ~cols
+      | `AlterColumnPG (col_name, change) ->
+        Tables.alter_column_pg name ~col_name change.value
       | `AddIndex { add_idx_name = Some index_name; add_idx_kind = kind; add_idx_cols = cols } ->
         Tables.index_add name ~index_name ~kind ~cols
       | `AddIndex { add_idx_name = None; add_idx_kind = kind; add_idx_cols = cols } ->

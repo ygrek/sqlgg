@@ -237,6 +237,25 @@ let add_primary_key name ~cols =
   let pk = grouped_constraint cols ~single:Sql.Constraint.PrimaryKey ~composite:Sql.Constraint.make_composite_primary in
   alter_columns name (fun columns -> add_constraint_to_columns columns ~cols pk)
 
+let alter_column_pg name ~col_name (change : Sql.Alter_column_pg.t) =
+  let set_not_null nn =
+    let update = if nn then Sql.Constraints.add else Sql.Constraints.remove in
+    map_attr (fun a -> { a with domain = if nn then Sql.Type.make_strict a.domain else Sql.Type.make_nullable a.domain })
+    $ map_extra (update NotNull)
+  in
+  let f = match change with
+    | Set_type { Sql.value = kind; _ } ->
+      fun c ->
+        { c with source_kind = Some kind;
+          attr = { c.attr with domain =
+            { c.attr.domain with Sql.Type.t = Sql.Source_type.kind_to_type_kind kind.Sql.collated } } }
+    | Set_not_null -> set_not_null true
+    | Drop_not_null -> set_not_null false
+    | Set_default -> map_extra (Sql.Constraints.add WithDefault)
+    | Drop_default -> map_extra (Sql.Constraints.remove WithDefault)
+  in
+  alter_columns name (List.map (fun c -> if c.attr.Sql.name = col_name then f c else c))
+
 let print ch tables = let out = IO.output_channel ch in List.iter (Sql.print_table out) tables; IO.flush out
 
 let all () = List.map to_table !store
