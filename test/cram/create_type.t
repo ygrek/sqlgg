@@ -59,6 +59,13 @@ Duplicate CREATE TYPE
   Fatal error: exception Failure("duplicate type declaration for \"color\"")
   [2]
 
+DROP TYPE IF EXISTS is idempotent
+  $ sqlgg -gen none -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TYPE "color" AS ENUM ('red', 'green', 'blue');
+  > DROP TYPE IF EXISTS "color";
+  > DROP TYPE IF EXISTS "color";
+  > EOF
+
 Duplicate DROP TYPE
   $ sqlgg -gen caml -no-header -dialect=postgresql - <<'EOF' 2>&1
   > CREATE TYPE "color" AS ENUM ('red', 'green', 'blue');
@@ -144,3 +151,53 @@ Only in PostgreSQL dialect
   Feature UserDefinedType is not supported for dialect MySQL (supported by: PostgreSQL) at 
   Errors encountered, no code generated
   [1]
+
+DROP TYPE is gated per-dialect too
+  $ sqlgg -gen none -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TYPE color AS ENUM ('red');
+  > DROP TYPE color;
+  > EOF
+  Feature UserDefinedType is not supported for dialect MySQL (supported by: PostgreSQL) at 
+  Feature UserDefinedType is not supported for dialect MySQL (supported by: PostgreSQL) at 
+  Errors encountered, no code generated
+  [1]
+
+ALTER COLUMN ... TYPE is gated per-dialect (AlterColumn feature)
+  $ sqlgg -gen none -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE t (a INT NOT NULL);
+  > ALTER TABLE t ALTER COLUMN a TYPE BIGINT;
+  > EOF
+  Feature AlterColumn is not supported for dialect MySQL (supported by: PostgreSQL) at TYPE BIGINT
+  Errors encountered, no code generated
+  [1]
+
+TYPE is unreserved: still usable as a column name, even next to the TYPE keyword
+  $ sqlgg -gen none -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE kw (type INTEGER NOT NULL, val TEXT);
+  > SELECT type FROM kw WHERE type = 1;
+  > ALTER TABLE kw ALTER COLUMN type TYPE SMALLINT;
+  > EOF
+
+Unquoted CREATE TYPE / DROP TYPE
+  $ sqlgg -gen none -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TYPE color AS ENUM ('red', 'green', 'blue');
+  > CREATE TABLE shirt (id INTEGER NOT NULL, c color NOT NULL);
+  > SELECT id FROM shirt WHERE c = 'red';
+  > DROP TYPE color;
+  > EOF
+
+Diff mode: the type registry is reset per schema replay, so the same
+CREATE TYPE in both schemas must not clash as a duplicate
+  $ cat > diff_initial.sql <<'EOF'
+  > CREATE TYPE color AS ENUM ('red');
+  > CREATE TABLE t (id INTEGER NOT NULL, c color NOT NULL);
+  > EOF
+  $ cat > diff_target.sql <<'EOF'
+  > CREATE TYPE color AS ENUM ('red');
+  > CREATE TABLE t (id INTEGER NOT NULL, c color NOT NULL, extra INTEGER);
+  > EOF
+  $ sqlgg -no-header -dialect postgresql -diff -now 20260101000000 -gen sql -base diff_initial.sql -target diff_target.sql
+  -- [sqlgg] generated
+  -- [sqlgg] id=20260101000000_alter_t_add_col_extra
+  ALTER TABLE `t` ADD COLUMN `extra` INT;
+  ALTER TABLE `t` DROP COLUMN `extra`;

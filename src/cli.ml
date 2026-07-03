@@ -218,6 +218,7 @@ let to_file_sources files = List.map (fun f -> From_file f) files
 
 let replay_sources sources =
   Tables.reset ();
+  User_types.reset ();
   List.iter (function
     | From_file f -> Main.with_channel f (Option.map_default Main.replay_schema ())
     | From_sql sql -> Main.replay_sql sql) sources

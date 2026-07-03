@@ -896,7 +896,7 @@ type stmt =
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
   | CreateType of string * create_type_target
-  | DropType of string
+  | DropType of string * bool
   [@@deriving show {with_path=false}]
 
 (*

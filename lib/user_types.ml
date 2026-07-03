@@ -1,4 +1,4 @@
-(** Global list of types *)
+(** Global registry of user-defined types (CREATE TYPE) *)
 
 open Printf
 
@@ -11,10 +11,11 @@ let add name kind =
   | true -> failwith (sprintf "duplicate type declaration for %S" name)
   | false -> Hashtbl.add registry name kind
 
-let drop name =
-  match Hashtbl.mem registry name with
-  | true -> Hashtbl.remove registry name
-  | false -> failwith (sprintf "no such type %S" name)
+let drop ~if_exists name =
+  match Hashtbl.mem registry name, if_exists with
+  | true, _ -> Hashtbl.remove registry name
+  | false, true -> ()
+  | false, false -> failwith (sprintf "no such type %S" name)
 
 let get_opt = Hashtbl.find_opt registry
 
