@@ -81,7 +81,7 @@ let check_dialect sql dialect_features =
 let check_statement stmt sql =
   let schema = List.concat_map (function
     | Sql.Attr attr -> [attr]
-    | Dynamic (_, l) -> List.map snd l) stmt.Gen.schema in
+    | Dynamic (_, l) -> List.map (fun f -> f.Sql.field_attr) l) stmt.Gen.schema in
   if not (Sql.Schema.is_unique schema) then
     Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" sql;
   match stmt.kind with
@@ -173,7 +173,7 @@ let extract_statement' tokens =
     let internal_props = ref Props.empty in
 
     let flush_internal_props () =
-      if not (List.is_empty !internal_props) then (
+      if !internal_props <> Props.empty then (
         Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
         internal_props := Props.empty;
       )
