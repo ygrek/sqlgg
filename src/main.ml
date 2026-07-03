@@ -173,7 +173,7 @@ let extract_statement' tokens =
     let internal_props = ref Props.empty in
 
     let flush_internal_props () =
-      if not (List.is_empty !internal_props) then (
+      if !internal_props <> Props.empty then (
         Parser_state.Stmt_metadata.add (Buffer.length b) !internal_props;
         internal_props := Props.empty;
       )
