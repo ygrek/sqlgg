@@ -1,3 +1,10 @@
+; ocaml-ci fix: ocamlfind warns on relative paths in ld.conf (OCaml >= 5.5),
+; breaking cram output; safe to ignore, no C stubs linked here.
+(env
+ (_
+  (env-vars
+   (OCAMLFIND_LDCONF ignore))))
+
 (cram
  (deps
   %{bin:sqlgg}
