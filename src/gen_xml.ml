@@ -144,6 +144,8 @@ let generate_code (x,_) index stmt =
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateRoutine s  -> ["kind", "create_routine"; "target", Sql.show_table_name s]
     | Other            -> ["kind", "other"]
+    | CreateType n     -> ["kind", "create_type"; "target", n; "cardinality", "0"]
+    | DropType n       -> ["kind", "drop_type"; "target", n; "cardinality", "0"]
   in
   let nodes = [ input; output] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x

@@ -1671,6 +1671,12 @@ let rec eval (stmt:Sql.stmt) =
     List.map drop_sources schema, a, b
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name
+  | CreateType (name, TypeEnum ctors) ->
+     User_types.add name (Sql.Type.make_enum_kind ctors);
+     ([], [], CreateType name)
+  | DropType (name, if_exists) ->
+     User_types.drop ~if_exists name;
+     ([], [], DropType name)
 
 (* FIXME unify each choice separately *)
 let unify_params l =
