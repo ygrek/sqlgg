@@ -42,7 +42,7 @@ PostgreSQL parameter numbering in reusable queries, distinct parameters:
   SELECT *\n\
   FROM \"user\"\n\
   JOIN person ON person.user_id = \"user\".id\n\
-  WHERE \"user\".id > $1") set_params invoke_callback
+  WHERE \"user\".id > $2") set_params invoke_callback
 
 PostgreSQL parameter numbering in reusable queries, shared parameter:
 
@@ -97,8 +97,8 @@ PostgreSQL parameter numbering in reusable queries, shared parameter:
   FROM \"user\"\n\
   JOIN person ON person.user_id = \"user\".id\n\
   WHERE\n\
-    username LIKE $1\n\
-    AND \"user\".id > $2") set_params invoke_callback
+    username LIKE $3\n\
+    AND \"user\".id > $4") set_params invoke_callback
 
 PostgreSQL parameter numbering with two reusable queries in one outer query:
 
@@ -135,10 +135,10 @@ PostgreSQL parameter numbering with two reusable queries in one outer query:
         T.set_param_Int p min_id;
         T.finish_params p
       in
-      T.select db ("WITH p AS (SELECT * FROM person WHERE name LIKE $1), a AS (SELECT * FROM \"user\" WHERE username LIKE $1)\n\
+      T.select db ("WITH p AS (SELECT * FROM person WHERE name LIKE $1), a AS (SELECT * FROM \"user\" WHERE username LIKE $2)\n\
   SELECT p.id, a.username\n\
   FROM p JOIN a ON a.id = p.user_id\n\
-  WHERE p.id > $1") set_params invoke_callback
+  WHERE p.id > $3") set_params invoke_callback
 
 PostgreSQL parameter numbering with reusable queries threaded into each other:
 
@@ -172,5 +172,5 @@ PostgreSQL parameter numbering with reusable queries threaded into each other:
         T.finish_params p
       in
       T.select db ("WITH p AS (WITH inner_p AS (SELECT * FROM person WHERE name LIKE $1)\n\
-  SELECT * FROM inner_p WHERE inner_p.id > $1)\n\
-  SELECT * FROM p WHERE p.user_id > $1") set_params invoke_callback
+  SELECT * FROM inner_p WHERE inner_p.id > $2)\n\
+  SELECT * FROM p WHERE p.user_id > $3") set_params invoke_callback

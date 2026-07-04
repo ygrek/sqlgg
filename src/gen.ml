@@ -90,7 +90,7 @@ and sql_dynamic_ctor = {
 let substitute_vars s vars subst_param =
   let rec loop s acc i parami vars =
     match vars with
-    | [] -> acc, i
+    | [] -> acc, i, parami
     | Sql.Single (param, _) :: tl ->
       let (i1,i2) = param.id.pos in
       assert (i2 > i1);
@@ -116,7 +116,7 @@ let substitute_vars s vars subst_param =
       assert (i2 > i1);
       assert (i1 > i);
       let acc =
-        DynamicIn (name, kind, List.rev @@ fst @@ loop s [] i1 0 vars) ::
+        DynamicIn (name, kind, (let acc, _, _ = loop s [] i1 0 vars in List.rev acc)) ::
         Static (String.slice ~first:i ~last:i1 s) ::
         acc
       in
@@ -161,7 +161,7 @@ let substitute_vars s vars subst_param =
       assert ((c2 = 0 && c1 = 1) || c2 > c1);
       assert (c1 > i);
       let pieces =
-        let (acc, last) = loop s [] c1 0 vars in
+        let (acc, last, _) = loop s [] c1 0 vars in
         let s_choice = 
           let sql = [Static " ( "] @ List.rev(Static (String.slice ~first:last ~last:c2 s) :: acc)  @ [Static " ) "]in
           let ctor = Sql.{ value=Some("Some"); pos=(0, 0); } in
@@ -181,7 +181,7 @@ let substitute_vars s vars subst_param =
         assert (i2 > i1);
         assert (i1 > i);
         let shared_sql, (_: Sql.select_full) = Shared_queries.get id.value in
-        let raw_processed = loop_and_squash shared_sql shared_vars in
+        let raw_processed, parami = loop_and_squash ~parami shared_sql shared_vars in
         let processed_shared = [Static "("] @ raw_processed @ [Static ")"] in
         loop s (List.rev processed_shared @ Static (String.slice ~first:i ~last:i1 s) :: acc) i2 parami tl
     | DynamicSelect (name,ctors) :: tl ->
@@ -191,7 +191,7 @@ let substitute_vars s vars subst_param =
           let sql = match args with
             | None | Some [] -> [Static (String.slice ~first:c1 ~last:c2 s)]
             | Some l ->
-              let (acc, last) = loop s [] (c1 - 1) 0 l in
+              let (acc, last, _) = loop s [] (c1 - 1) 0 l in
               let pieces = List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc) in
               begin match pieces with
               | Static hd :: rest -> Static (String.slice ~first:1 hd) :: rest
@@ -217,7 +217,7 @@ let substitute_vars s vars subst_param =
           match args with
           | None -> [Static ""]
           | Some l ->
-            let (acc, last) = loop s [] c1 0 l in
+            let (acc, last, _) = loop s [] c1 0 l in
             let body = List.rev (Static (String.slice ~first:last ~last:c2 s) :: acc) in
             squash [] ((Static " (" :: body) @ [Static ") "])
         in
@@ -225,17 +225,17 @@ let substitute_vars s vars subst_param =
       | Verbatim (n, v) ->
         { ctor = { value = Some n; pos = (0,0) }; args = Some []; sql = [Static v]; is_poly }
     end
-  and loop_and_squash sql vars =
-    let acc, last = loop sql [] 0 0 vars in
+  and loop_and_squash ?(parami=0) sql vars =
+    let acc, last, parami = loop sql [] 0 parami vars in
     let acc = List.rev (Static (String.slice ~first:last sql) :: acc) in
-    squash [] acc
+    squash [] acc, parami
   and squash acc = function
     | [] -> List.rev acc
     | Static "" :: tl -> squash acc tl
     | Static s1 :: Static s2 :: tl -> squash acc (Static (s1 ^ s2) :: tl)
     | x::xs -> squash (x::acc) xs
   in
-  loop_and_squash s vars
+  fst (loop_and_squash s vars)
 
 let subst_named index p = "@" ^ (show_param_name p index)
 let subst_oracle index p = ":" ^ (show_param_name p index)
