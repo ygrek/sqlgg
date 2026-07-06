@@ -182,26 +182,30 @@ module L = struct
   let as_api_type = as_lang_type
 end
 
+let codec_get_column, codec_set_param =
+  let codec name meta =
+    match Sql.Meta.find_opt meta "module", Sql.Meta.find_opt meta name with
+    | Some m, fn -> Some (sprintf "%s.%s" m (Option.default name fn))
+    | None, fn -> fn
+  in
+  codec "get_column", codec "set_param"
+
 let format_get_column ~row ~idx attr =
   let null_suffix = if is_attr_nullable attr then "_nullable" else "" in
   let format_t_get_column type_name =
     sprintf "T.get_column_%s%s %s %s" type_name null_suffix row idx
   in
   let rec format_column_expr attr =
-    match attr with
-    | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
-      sprintf "%s.get_column%s %s %s" (get_enum_name ctors) null_suffix row idx
-    | { domain={ t = Union _; _ }; _ } as c ->
-      format_column_expr { c with domain = { c.domain with t = Text } }
-    | _ ->
-      match Sql.Meta.find_opt attr.meta "module" with
-      | Some m ->
-          let runtime_repr_name = L.as_runtime_repr_name attr.domain in
-          let inner_get_column_expr = sprintf "(T.get_column_%s%s %s %s)" runtime_repr_name null_suffix row idx in
-          let get_column = "get_column" in
-          let get_column_name = get_column |> Sql.Meta.find_opt attr.meta |> Option.default get_column in
-          sprintf "%s.%s%s %s" m get_column_name null_suffix inner_get_column_expr
-      | None ->
+    match codec_get_column attr.meta with
+    | Some getter ->
+      sprintf "%s%s (%s)" getter null_suffix (format_t_get_column (L.as_runtime_repr_name attr.domain))
+    | None ->
+      match attr with
+      | { domain={ t = Union {ctors; _}; _ }; _ } when !Sqlgg_config.enum_as_poly_variant ->
+        sprintf "%s.get_column%s %s %s" (get_enum_name ctors) null_suffix row idx
+      | { domain={ t = Union _; _ }; _ } as c ->
+        format_column_expr { c with domain = { c.domain with t = Text } }
+      | _ ->
           format_t_get_column (L.as_lang_type attr.domain)
   in
   format_column_expr attr
@@ -366,23 +370,20 @@ let rec set_param ~meta index param =
   let pname = show_param_name param index in
   let ptype = show_param_type param in
   let set_param_nullable v r = output "begin match %s with None -> T.set_param_null p | Some %s -> %s end;" pname v r in
-  match param with
-  | { typ = { t=Union _; _}; _ } as c when not !Sqlgg_config.enum_as_poly_variant -> set_param ~meta index { c with typ = { c.typ with t = Text } }
-  | { typ = { t=Union {ctors; _}; _}; _ } when nullable -> set_param_nullable "v" @@ (get_enum_name ctors) ^ ".set_param p v"
-  | { typ = { t=Union {ctors; _}; _ }; _ } -> output "%s.set_param p %s;" (get_enum_name ctors) pname
-  | param' ->
-    let module_ = Sql.Meta.find_opt meta "module" in
-    match module_ with
-    | None -> if nullable then set_param_nullable "v" @@ sprintf "T.set_param_%s %s" (show_param_type param') "p v"
-      else output "T.set_param_%s p %s;" ptype pname
-    | Some m ->
-      let set_param = "set_param" in
-      let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
-      let runtime_repr_name = L.as_runtime_repr_name param'.typ in
-      if nullable then
-         set_param_nullable pname @@ sprintf "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
-      else
-        output "T.set_param_%s p (%s);" runtime_repr_name (sprintf "%s.%s %s" m set_param_name pname)
+  match codec_set_param meta with
+  | Some setter ->
+      let set = sprintf "T.set_param_%s p (%s %s);" (L.as_runtime_repr_name param.typ) setter pname in
+      if nullable then set_param_nullable pname set else output "%s" set
+  | None ->
+      match param with
+      | { typ = { t=Union _; _}; _ } as c when not !Sqlgg_config.enum_as_poly_variant -> set_param ~meta index { c with typ = { c.typ with t = Text } }
+      | { typ = { t=Union {ctors; _}; _}; _ } when nullable -> set_param_nullable "v" @@ (get_enum_name ctors) ^ ".set_param p v"
+      | { typ = { t=Union {ctors; _}; _ }; _ } -> output "%s.set_param p %s;" (get_enum_name ctors) pname
+      | param' ->
+          if nullable then
+            set_param_nullable "v" @@ sprintf "T.set_param_%s %s" (show_param_type param') "p v"
+          else
+            output "T.set_param_%s p %s;" ptype pname
 
 let rec has_set_params vars =
   List.exists (fun var ->
@@ -628,16 +629,16 @@ let output_params_binder index vars =
 
 
 let make_to_literal meta typ =
-  let rec go domain = match domain with 
-    | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
-    | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
-    | t -> match Sql.Meta.find_opt meta "module" with
-      | None -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t)
-      | Some m -> 
-        let set_param = "set_param" in
-        let set_param_name = set_param |> Sql.Meta.find_opt meta |> Option.default set_param in
-        sprintf "(fun v -> T.Types.%s.%s_to_literal (%s.%s v))" (Sql.Type.type_name t) (L.as_runtime_repr_name t) m set_param_name
-  in go typ
+  match codec_set_param meta with
+  | Some setter ->
+    let trait_type_name = match typ.Type.t with | Union _ -> "Text" | StringLiteral _ -> "Text" | _ -> Sql.Type.type_name typ in
+    sprintf "(fun v -> T.Types.%s.%s_to_literal (%s v))" trait_type_name (L.as_runtime_repr_name typ) setter
+  | None ->
+    let rec go domain = match domain with
+      | { Type.t = Union _; _ } when not !Sqlgg_config.enum_as_poly_variant -> go { domain with Type.t = Text }
+      | { Type.t = Union { ctors; _ }; _ } -> sprintf "%s.to_literal" (get_enum_name ctors)
+      | t -> sprintf "T.Types.%s.to_literal" (Sql.Type.type_name t)
+    in go typ
 
 let gen_in_substitution meta var =
   if Option.is_none var.id.value then failwith "empty label in IN param";
@@ -959,18 +960,18 @@ let generate_enum_modules stmts =
     | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
   in
 
-  let meta_has_module m = Sql.Meta.mem m "module" in
+  let enum_unless_codec codec typ meta =
+    match codec meta with Some _ -> None | None -> get_enum typ
+  in
 
   let schemas_to_enums schemas =
     List.filter_map (fun ({ domain; meta; _ } : Sql.attr) ->
-      if meta_has_module meta then None else get_enum domain
+      enum_unless_codec codec_set_param domain meta
     ) schemas
   in
 
   let schema_columns_to_enums schema_cols =
-    let attr_enum attr = 
-      if meta_has_module attr.meta then [] else option_list (get_enum attr.domain)
-    in
+    let attr_enum attr = option_list (enum_unless_codec codec_get_column attr.domain attr.meta) in
     List.concat_map (function
       | Sql.Attr attr -> attr_enum attr
       | Dynamic (_, fields) -> List.concat_map (fun (_, attr) -> attr_enum attr) fields
@@ -979,7 +980,7 @@ let generate_enum_modules stmts =
 
   let rec vars_to_enums vars =
     let enum_opt typ = typ |> get_enum |> option_list in
-    let enum_opt_with_meta typ meta = if meta_has_module meta then [] else enum_opt typ in
+    let enum_opt_with_meta typ meta = option_list (enum_unless_codec codec_set_param typ meta) in
     List.concat_map (function
       | Single ({ typ; _ }, meta)
       | SingleIn ({ typ; _ }, meta) -> enum_opt_with_meta typ meta
