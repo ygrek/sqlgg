@@ -1,0 +1,6 @@
+(cram
+ (deps
+  %{bin:sqlgg}
+  (glob_files *.sql)
+  run.ml
+  ../print_ocaml_impl.ml))

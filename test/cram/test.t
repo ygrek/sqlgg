@@ -3625,3 +3625,4 @@ harmless pair:
   > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { (FALSE OR TRUE) } };
   > EOF
       T.select_one_maybe db ("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) set_params get_row
+
