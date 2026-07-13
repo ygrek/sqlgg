@@ -2895,7 +2895,7 @@ Virtual select: explicit choices with alias alongside plain columns:
   > EOF
   Failed mixed_explicit: SELECT id, @col { Name { name } | Cat { category } } AS detail FROM t WHERE id = @id
   At : @col { Name { name } | Cat { category } }
-  Fatal error: exception Failure("sharing choices not implemented")
+  Fatal error: exception Failure("dynamic_select reserves the name col for the column picker, rename choice col")
   [2]
 
 Virtual select: tab-separated columns (non-space whitespace):

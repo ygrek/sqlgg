@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+
+<sqlgg>
+ <stmt name="create_test" sql="CREATE TABLE test(a INT, b INT)" category="DDL" kind="create" target="test" cardinality="0">
+  <in/>
+  <out/>
+ </stmt>
+ <stmt name="select_1" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
+  <in/>
+  <out>
+   <value name="a" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="select_2" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="v" type="Int"/>
+  </in>
+  <out>
+   <value name="a" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <stmt name="select_3" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
+  <in>
+   <value name="p" type="Int"/>
+   <value name="q" type="Int"/>
+  </in>
+  <out>
+   <value name="a" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
+  </out>
+ </stmt>
+ <table name="test">
+  <schema>
+   <value name="a" type="Int" nullable="true"/>
+   <value name="b" type="Int" nullable="true"/>
+  </schema>
+ </table>
+</sqlgg>
