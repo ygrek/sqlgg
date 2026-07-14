@@ -127,6 +127,7 @@ let action_slug : Sql.alter_action -> string = function
   | `Default_or_convert_to _ -> "set_charset"
   | `TtlOptions _ -> "set_ttl"
   | `RemoveTtl _ -> "remove_ttl"
+  | `AlterColumnPG (col, _) -> "alter_col_" ^ safe_ident col
 
 let diff_columns ~from_ ~to_ =
   let from_cols = columns_without_index_unique from_ in

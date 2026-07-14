@@ -218,6 +218,7 @@ let to_file_sources files = List.map (fun f -> From_file f) files
 
 let replay_sources sources =
   Tables.reset ();
+  User_types.reset ();
   List.iter (function
     | From_file f -> Main.with_channel f (Option.map_default Main.replay_schema ())
     | From_sql sql -> Main.replay_sql sql) sources
@@ -317,6 +318,8 @@ let parse_args () =
     "-show-table", Arg.String Tables.print1, "<name> Show specified table";
     "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), "Treat writing NULL to NOT NULL columns as error";
     "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
+    "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
+      " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
     "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set SQL dialect - will only allow this dialect's features in SQL queries";
     "-no-check", Arg.String set_no_check, "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select) - do not enforce dialect feature checks";
     "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";

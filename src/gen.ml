@@ -65,6 +65,8 @@ let choose_name props kind index =
   | Select _  -> sprintf "select_%u" index
   | CreateRoutine s -> sprintf "create_routine_%s" (fix s)
   | Other -> sprintf "statement_%u" index
+  | CreateType n -> sprintf "create_type_%s" (fix' n)
+  | DropType n -> sprintf "drop_type_%s" (fix' n)
   in
   make_name props name
 
@@ -74,6 +76,9 @@ type sql =
   | SubstIn of Sql.Type.t Sql.param * Sql.Meta.t
   | DynamicIn of Sql.param_id * [`In | `NotIn] * sql list
   | SubstTuple of Sql.param_id * Sql.tuple_list_kind
+  | Cond of cond * sql list
+
+and cond = Dep_selected of Sql.param_id * int
 
 and sql_dynamic_ctor = { 
   ctor: Sql.param_id; 
@@ -123,6 +128,13 @@ let substitute_vars s vars subst_param =
       assert (i1 > i);
       let acc = Dynamic (name, dyn) :: Static (String.slice ~first:i ~last:i1 s) :: acc in
       loop s acc i2 parami tl
+    | DynamicSelectJoin { pid = name; pos = (j1, j2); _ } :: tl ->
+      assert (j2 > j1);
+      assert (j1 > i);
+      let join_text = " " ^ String.trim (String.slice ~first:j1 ~last:j2 s) in
+      let rec lead k = if k > i && String.contains " \t\n\r" s.[k - 1] then lead (k - 1) else k in
+      let acc = Cond (Dep_selected (name, j1), [Static join_text]) :: Static (String.slice ~first:i ~last:(lead j1) s) :: acc in
+      loop s acc j2 parami tl
     | TupleList (id, Where_in { value = (types, in_not_in); pos = (j1, j2) }) :: tl ->
       let (i1,i2) = id.pos in
       assert (i2 > i1);
@@ -219,11 +231,11 @@ let substitute_vars s vars subst_param =
     squash [] acc
   and squash acc = function
     | [] -> List.rev acc
+    | Static "" :: tl -> squash acc tl
     | Static s1 :: Static s2 :: tl -> squash acc (Static (s1 ^ s2) :: tl)
     | x::xs -> squash (x::acc) xs
   in
   loop_and_squash s vars
-
 
 let subst_named index p = "@" ^ (show_param_name p index)
 let subst_oracle index p = ":" ^ (show_param_name p index)
@@ -292,7 +304,8 @@ let rec find_param_ids l =
       | ChoiceIn { param; vars; _ } -> find_param_ids vars @ [param]
       | SharedVarsGroup (vars, _) -> find_param_ids vars
       | TupleList (id, _) -> [ id ]
-      | DynamicSelect (id, _) -> [ id ])
+      | DynamicSelect (id, _) -> [ id ]
+      | DynamicSelectJoin _ -> [])
     l
 
 let names_of_vars l =
@@ -305,13 +318,10 @@ let rec params_only l =
   List.map
     (function
       | Sql.Single (p, _) -> [p]
-      | SingleIn _ -> []
-      | SharedVarsGroup (vars, _)
-      | ChoiceIn { vars; _ } -> params_only vars
       | OptionActionChoice _
       | Choice _ -> fail "dynamic choices not supported for this host language"
-      | TupleList _ -> []
-      | DynamicSelect _ -> fail "dynamic selects not supported for this host language (params_only)")
+      | DynamicSelect _ -> fail "dynamic selects not supported for this host language (params_only)"
+      | v -> params_only (Sql.sub_vars v))
     l
 
 let rec inparams_only l =

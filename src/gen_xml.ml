@@ -64,8 +64,7 @@ let value ?(inparam=false) v =
   Node ("value", attrs, [])
 
 let tuplelist_value_of_param = function
-  | Sql.Single _ | SingleIn _ | Choice _ | ChoiceIn _ | OptionActionChoice _ | SharedVarsGroup _ | DynamicSelect _ -> None
-  | TupleList ({ value = None; _ }, _) -> failwith "empty label in tuple subst"
+  | Sql.TupleList ({ value = None; _ }, _) -> failwith "empty label in tuple subst"
   | TupleList ({ value = Some name; _ }, kind) ->
     let schema = match kind with 
     | Insertion schema -> schema 
@@ -79,6 +78,7 @@ let tuplelist_value_of_param = function
     let typ = "list(" ^ String.concat ", " (List.map (fun { Sql.domain; _ } -> Sql.Type.type_name domain) schema) ^ ")" in
     let attrs = ["name", name; "type", typ] in
     Some (Node ("value", attrs, []))
+  | _ -> None
 
 (* open Gen_caml.L *)
 open Gen_caml.T
@@ -99,6 +99,7 @@ let get_sql_string stmt =
   | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
   | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | Dynamic _ -> "{TODO dynamic choice}"
+  | Cond _ -> "{TODO dynamic join}"
   in
   String.concat "" @@ List.mapi map @@ get_sql stmt
 
@@ -107,16 +108,7 @@ let rec params_only l =
   List.map
     (function
       | Sql.Single (p, _) -> [p]
-      | OptionActionChoice (_, v, _, _) -> params_only v
-      | SingleIn _ -> []
-      | SharedVarsGroup (vars, _)
-      | ChoiceIn { vars; _ } -> params_only vars
-      | Choice (_,choices)
-      | DynamicSelect (_, choices) ->
-        choices
-        |> List.map (function Sql.Verbatim _ | Simple (_,None) -> [] | Simple (_name,Some vars) -> params_only vars) (* TODO prefix names *)
-        |> List.concat
-      | TupleList _ -> [])
+      | v -> params_only (Sql.sub_vars v)) (* TODO prefix names *)
     l
 
 let generate_code (x,_) index stmt =
@@ -144,6 +136,8 @@ let generate_code (x,_) index stmt =
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateRoutine s  -> ["kind", "create_routine"; "target", Sql.show_table_name s]
     | Other            -> ["kind", "other"]
+    | CreateType n     -> ["kind", "create_type"; "target", n; "cardinality", "0"]
+    | DropType n       -> ["kind", "drop_type"; "target", n; "cardinality", "0"]
   in
   let nodes = [ input; output] in
   x := Node ("stmt", ("name",name)::("sql",sql)::("category",show_category @@ category_of_stmt_kind stmt.kind)::attrs, nodes) :: !x

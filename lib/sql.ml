@@ -4,7 +4,7 @@ open Printf
 open ExtLib
 open Prelude
 
-type pos = (int * int) [@@deriving show]
+type pos = int * int [@@deriving show]
 
 type 'a located  = { value : 'a; pos : pos } [@@deriving show, make]
 type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make]
@@ -336,6 +336,17 @@ end
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
   [@@deriving show {with_path=false}]
 
+let unique_keys schema =
+  let keys_of a =
+    Constraints.fold (fun c acc ->
+      match c with
+      | Constraint.PrimaryKey | Unique -> Constraint.StringSet.singleton a.name :: acc
+      | Composite (CompositePrimary s | CompositeUnique s) -> s :: acc
+      | NotNull | Null | Autoincrement | OnConflict _ | WithDefault -> acc)
+      a.extra []
+  in
+  List.concat_map keys_of schema |> List.sort_uniq Constraint.StringSet.compare
+
 let make_attribute name kind extra ~meta =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
   let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
@@ -358,6 +369,8 @@ struct
       type 'a t = { attr: attr; sources: 'a list } [@@deriving show]
 
       let by_name name sattr = sattr.attr.name = name
+
+      let map_attr f sattr = { sattr with attr = f sattr.attr }
     end
 
     type 'a t = 'a Attr.t list
@@ -471,7 +484,7 @@ struct
     List.combine t1 t2
     |> List.mapi begin fun i (a1,a2) ->
       match Type.supertype a1.attr.domain a2.attr.domain with
-      | Some t -> { a1 with attr = { a1.attr with domain=t } }
+      | Some t -> Attr.map_attr (fun attr -> { attr with domain = t }) a1
       | None -> raise (Error (List.map (fun i -> i.attr) t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
         (show_name i a1.attr) (Type.show a1.attr.domain)
         (show_name i a2.attr) (Type.show a2.attr.domain)))
@@ -513,6 +526,9 @@ let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn 
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
 type table = table_name * schema [@@deriving show]
+
+type join_source = { table : table_name; alias : table_name option } [@@deriving show]
+let join_source_name { table; alias } = Option.default table alias
 
 let print_table out (name,schema) =
   IO.write_line out (show_table_name name);
@@ -589,6 +605,7 @@ and var =
 | ChoiceIn of { param: param_id; kind : in_or_not_in; vars: var list }
 | Choice of param_id * ctor list
 | DynamicSelect of param_id * ctor list
+| DynamicSelectJoin of { pid : param_id; pos : pos; source : join_source }
 | TupleList of param_id * tuple_list_kind
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (pos * pos) * option_actions_kind
@@ -599,6 +616,38 @@ and tuple_list_kind =
   | ValueRows of { types: Type.t list; values_start_pos: int; }
 [@@deriving show]
 and vars = var list [@@deriving show]
+
+let ctor_vars = function
+  | Simple (_, vars) -> Option.default [] vars
+  | Verbatim _ -> []
+
+let sub_vars = function
+  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ -> []
+  | ChoiceIn { vars; _ } -> vars
+  | OptionActionChoice (_, vars, _, _) -> vars
+  | SharedVarsGroup (vars, _) -> vars
+  | Choice (_, ctors) | DynamicSelect (_, ctors) -> List.concat_map ctor_vars ctors
+
+let map_sub_vars f =
+  let map_ctor = function
+    | Simple (n, vars) -> Simple (n, Option.map f vars)
+    | Verbatim _ as c -> c
+  in
+  function
+  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ as v -> v
+  | ChoiceIn t -> ChoiceIn { t with vars = f t.vars }
+  | OptionActionChoice (p, vars, pos, kind) -> OptionActionChoice (p, f vars, pos, kind)
+  | SharedVarsGroup (vars, id) -> SharedVarsGroup (f vars, id)
+  | Choice (p, ctors) -> Choice (p, List.map map_ctor ctors)
+  | DynamicSelect (p, ctors) -> DynamicSelect (p, List.map map_ctor ctors)
+
+let var_pos = function
+  | Single (p, _) | SingleIn (p, _) -> fst p.id.pos
+  | Choice (id, _) | DynamicSelect (id, _) | TupleList (id, _)
+  | OptionActionChoice (id, _, _, _) -> fst id.pos
+  | ChoiceIn { param; _ } -> fst param.pos
+  | SharedVarsGroup (_, id) -> fst id.pos
+  | DynamicSelectJoin { pos = (j1, _); _ } -> j1
 
 type alter_pos = [ `After of string | `Default | `First ] [@@deriving show {with_path=false}]
 
@@ -721,6 +770,40 @@ let source_fun_kind_to_infer = function
 
 let expr_to_string = show_expr
 
+let sub_exprs = function
+  | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ -> []
+  | Choices (_, l) -> List.filter_map snd l
+  | InChoice (_, _, e) -> [e]
+  | OptionActions { choice; _ } -> [choice]
+  | Fun { kind = Agg (With_order { order; _ }); parameters; _ } -> parameters @ List.map fst order
+  | Fun { parameters; _ } -> parameters
+  | InTupleList { value = { exprs; _ }; _ } -> exprs
+  | Case { case; branches; else_ } ->
+    option_list case
+    @ List.concat_map (fun (b : case_branch) -> [b.when_; b.then_]) branches
+    @ option_list else_
+
+let map_sub_exprs f = function
+  | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ as e -> e
+  | Choices (n, l) -> Choices (n, List.map (fun (n, e) -> n, Option.map f e) l)
+  | InChoice (n, k, e) -> InChoice (n, k, f e)
+  | OptionActions ({ choice; _ } as o) -> OptionActions { o with choice = f choice }
+  | Fun ({ kind = Agg (With_order ({ order; _ } as wo)); parameters; _ } as fn) ->
+    Fun { fn with
+          kind = Agg (With_order { wo with order = List.map (fun (e, dir) -> f e, dir) order });
+          parameters = List.map f parameters }
+  | Fun ({ parameters; _ } as fn) -> Fun { fn with parameters = List.map f parameters }
+  | InTupleList ({ value = { exprs; _ } as tl; _ } as loc) ->
+    InTupleList { loc with value = { tl with exprs = List.map f exprs } }
+  | Case { case; branches; else_ } ->
+    Case {
+      case = Option.map f case;
+      branches = List.map (fun (b : case_branch) -> { when_ = f b.when_; then_ = f b.then_ }) branches;
+      else_ = Option.map f else_;
+    }
+
+let rec expr_exists p e = p e || List.exists (expr_exists p) (sub_exprs e)
+
 let make_partition_by = List.iter (function
   | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
   | _ -> ())
@@ -808,7 +891,7 @@ module Alter_action_attr = struct
       make_located ~pos:(0,0) ~value:c
     ) in
     let kind = Some (make_located ~pos:(0,0) ~value:(make_collated ~collated:(Source_type.Infer attr.domain.Type.t) ())) in
-    let meta = Meta.StringMap.to_seq attr.meta |> List.of_seq in
+    let meta = Meta.StringMap.bindings attr.meta in
     { name = attr.name; kind; extra; meta }
 end
 
@@ -857,6 +940,16 @@ type ttl_option =
   [ `TtlSet of string * int * string
   | `TtlEnable of string ] [@@deriving show {with_path=false}]
 
+module Alter_column_pg = struct
+  type t =
+    | Set_type of Source_type.kind collated located
+    | Set_not_null
+    | Drop_not_null
+    | Set_default
+    | Drop_default
+  [@@deriving show {with_path=false}]
+end
+
 type alter_action = [
     | `Add of Alter_action_attr.t * alter_pos
     | `RenameTable of table_name
@@ -872,7 +965,12 @@ type alter_action = [
     | `DropConstraint of string
     | `Default_or_convert_to of (charset_name * string located option)
     | `TtlOptions of ttl_option list * pos
-    | `RemoveTtl of pos ] [@@deriving show {with_path=false}]
+    | `RemoveTtl of pos
+    | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
+
+type create_type_target =
+  | TypeEnum of string list
+  [@@deriving show {with_path=false}]
 
 type stmt =
   | Create of table_name * create_target
@@ -888,6 +986,8 @@ type stmt =
   | UpdateMulti of nested list * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
+  | CreateType of string * create_type_target
+  | DropType of string * bool
   [@@deriving show {with_path=false}]
 
 (*
@@ -901,19 +1001,28 @@ let () = print (project ["b";"d"] test)
 let () = print (rename test "a" "new_a")
 *)
 
+type 'attr dynamic_field = {
+  field_id : param_id;
+  field_attr : 'attr;
+  join_deps : int list;
+}
+[@@deriving show]
+
 type schema_column_with_sources =
   | AttrWithSources of table_name Schema.Source.Attr.t
-  | DynamicWithSources of param_id * (param_id * table_name Schema.Source.Attr.t) list
+  | DynamicWithSources of param_id * table_name Schema.Source.Attr.t dynamic_field list
   [@@deriving show]
 
 type schema_column =
   | Attr of attr
-  | Dynamic of param_id * (param_id * attr) list
+  | Dynamic of param_id * attr dynamic_field list
   [@@deriving show]
 
 let drop_sources : schema_column_with_sources -> schema_column = function
   | AttrWithSources { attr; _ } -> Attr attr
-  | DynamicWithSources (p, l) -> Dynamic (p, List.map (fun (p, { Schema.Source.Attr.attr; _ }) -> p, attr) l)
+  | DynamicWithSources (p, l) ->
+    Dynamic (p, List.map (fun { field_id; field_attr = { Schema.Source.Attr.attr; _ }; join_deps } ->
+      { field_id; field_attr = attr; join_deps }) l)
 
 let monomorphic ret args = F (Typ ret, List.map (fun t -> Type.Typ t) args)
 let fixed ret args = monomorphic (Type.depends ret) (List.map Type.depends args)

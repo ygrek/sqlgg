@@ -5,7 +5,7 @@
   (glob_files *.compare.ml)
   (source_tree test_build_json_functions)
   (source_tree test_build_enum_literals)
-  (source_tree test_build_dynamic_select)
+  (source_tree test_build_dynamic_subquery)
   (source_tree test_build_paren_poc)
   (glob_files print_ocaml_impl.ml)
   (glob_files test_cached_prepared_stmts.ml)

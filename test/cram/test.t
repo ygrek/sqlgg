@@ -221,6 +221,42 @@ Test SQLite dialect with ON DUPLICATE KEY UPDATE (should fail):
   Errors encountered, no code generated
   [1]
 
+Test PostgreSQL dialect with PostgreSQL-style ALTER COLUMN (should work):
+  $ sqlgg -gen caml -dialect=postgresql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT DEFAULT 'a');
+  > ALTER TABLE users ALTER COLUMN id TYPE SMALLINT, ALTER COLUMN id SET NOT NULL, ALTER COLUMN name DROP NOT NULL;
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b', ALTER COLUMN name DROP DEFAULT;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ALTER COLUMN SET/DROP DEFAULT (should work):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b', ALTER COLUMN name DROP DEFAULT;
+  > EOF
+  $ echo $?
+  0
+
+Test MySQL dialect with ALTER COLUMN TYPE / SET NOT NULL (should fail, PostgreSQL-only):
+  $ sqlgg -gen caml -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN id TYPE SMALLINT, ALTER COLUMN id SET NOT NULL;
+  > EOF
+  Feature AlterColumn is not supported for dialect MySQL (supported by: PostgreSQL) at TYPE SMALLINT
+  Feature AlterColumn is not supported for dialect MySQL (supported by: PostgreSQL) at SET NOT NULL
+  Errors encountered, no code generated
+  [1]
+
+Test SQLite dialect with ALTER COLUMN (should fail, no ALTER COLUMN support at all):
+  $ sqlgg -gen caml -dialect=sqlite - <<'EOF' 2>&1
+  > CREATE TABLE users (id INT, name TEXT);
+  > ALTER TABLE users ALTER COLUMN name SET DEFAULT 'b';
+  > EOF
+  Feature AlterColumn is not supported for dialect SQLite (supported by: MySQL, PostgreSQL, TiDB) at SET DEFAULT 'b'
+  Errors encountered, no code generated
+  [1]
+
 Test SQLite dialect with ON CONFLICT, column-level primary key (should work):
   $ sqlgg -gen caml -dialect=sqlite - <<'EOF' >/dev/null
   > CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
@@ -2721,67 +2757,50 @@ Test DynamicSelect with dynamic_select flag:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Select_ids2_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let balance =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("balance");
-          count = 0;
-        }
-      let col3 x =
-        let _set_col3 p =
-          begin match x with
-          | `A (t) ->
-            T.set_param_Int p t;
-          | `B (seven) ->
-            T.set_param_Int p seven;
-          end;
-          ()
-        in
-        {
-          set = _set_col3;
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("" ^ (match x with `A _ -> " ( ? + 1 ) " | `B _ -> " ( (SELECT 6 + ? LIMIT 1) ) "));
-          count = 0 + (match x with `A _ -> 1 | `B _ -> 1);
-        }
+    module Select_ids2 = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let balance : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("balance");
+            count = 0;
+            deps = [];
+          }
+        let col3 x : _ t =
+          let _set_col3 p =
+            begin match x with
+            | `A (t) ->
+              T.set_param_Int p t;
+            | `B (seven) ->
+              T.set_param_Int p seven;
+            end;
+            ()
+          in
+          {
+            set = _set_col3;
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("" ^ (match x with `A _ -> " ( ? + 1 ) " | `B _ -> " ( (SELECT 6 + ? LIMIT 1) ) "));
+            count = 0 + (match x with `A _ -> 1 | `B _ -> 1);
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method balance = Cols.balance
+        method col3 = Cols.col3
+      end
   
       let select db (col : _ t) ~t callback =
         let set_params stmt =
@@ -2885,51 +2904,32 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module With_subquery_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let sub x =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
-          count = 0 + (match x with `A -> 0 | `B -> 0);
-        }
+    module With_subquery = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let sub x : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
+            count = 0 + (match x with `A -> 0 | `B -> 0);
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method sub = Cols.sub
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -3051,67 +3051,50 @@ Test DynamicSelect with dynamic_select flag:
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module Select_ids2_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let balance =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
-          column = ("balance");
-          count = 0;
-        }
-      let col3 x =
-        let _set_col3 p =
-          begin match x with
-          | `A (t) ->
-            T.set_param_Int p t;
-          | `B (seven) ->
-            T.set_param_Int p seven;
-          end;
-          ()
-        in
-        {
-          set = _set_col3;
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("" ^ (match x with `A _ -> " ( ? + 1 ) " | `B _ -> " ( (SELECT 6 + ? LIMIT 1) ) "));
-          count = 0 + (match x with `A _ -> 1 | `B _ -> 1);
-        }
+    module Select_ids2 = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let balance : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Decimal_nullable row idx, idx + 1));
+            column = ("balance");
+            count = 0;
+            deps = [];
+          }
+        let col3 x : _ t =
+          let _set_col3 p =
+            begin match x with
+            | `A (t) ->
+              T.set_param_Int p t;
+            | `B (seven) ->
+              T.set_param_Int p seven;
+            end;
+            ()
+          in
+          {
+            set = _set_col3;
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("" ^ (match x with `A _ -> " ( ? + 1 ) " | `B _ -> " ( (SELECT 6 + ? LIMIT 1) ) "));
+            count = 0 + (match x with `A _ -> 1 | `B _ -> 1);
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method balance = Cols.balance
+        method col3 = Cols.col3
+      end
   
       let select db (col : _ t) ~t callback =
         let set_params stmt =
@@ -3215,51 +3198,32 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   module Sqlgg (T : Sqlgg_traits.M) = struct
   
     module IO = Sqlgg_io.Blocking
-    module With_subquery_col = struct
-      type 'a t = {
-        set: T.params -> unit;
-        read: T.row -> int -> 'a * int;
-        column: string;
-        count: int;
-      }
-  
-      let pure x = {
-        set = (fun _p -> ());
-        read = (fun _row idx -> (x, idx));
-        column = "";
-        count = 0;
-      }
-  
-      let apply f a = {
-        set = (fun p -> f.set p; a.set p);
-        read = (fun row idx ->
-          let (vf, i1) = f.read row idx in
-          let (va, i2) = a.read row i1 in
-          (vf va, i2));
-        column = (match f.column, a.column with
-          | "", c | c, "" -> c
-          | c1, c2 -> c1 ^ ", " ^ c2);
-        count = f.count + a.count;
-      }
-  
-      let map f a = apply (pure f) a
-  
-      let (let+) t f = map f t
-      let (and+) a b = apply (map (fun a b -> (a, b)) a) b
-      let id =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("id");
-          count = 0;
-        }
-      let sub x =
-        {
-          set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
-          column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
-          count = 0 + (match x with `A -> 0 | `B -> 0);
-        }
+    module With_subquery = struct
+      type brand
+      include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+      module Cols = struct
+        let id : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("id");
+            count = 0;
+            deps = [];
+          }
+        let sub x : _ t =
+          {
+            set = (fun _p -> ());
+            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            column = ("(SELECT " ^ (match x with `A -> " ( 1 ) " | `B -> " ( 2 ) ") ^ " LIMIT 1)");
+            count = 0 + (match x with `A -> 0 | `B -> 0);
+            deps = [];
+          }
+      end
+      include Cols
+      let cols = object
+        method id = Cols.id
+        method sub = Cols.sub
+      end
   
       let select db (col : _ t) callback =
         let set_params stmt =
@@ -3426,3 +3390,4 @@ harmless pair:
   > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { (FALSE OR TRUE) } };
   > EOF
       T.select_one_maybe db ("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) set_params get_row
+

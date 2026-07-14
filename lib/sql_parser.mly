@@ -23,6 +23,7 @@
 
 %token <int> INTEGER
 %token <string> IDENT TEXT BLOB
+%token <string> TYPE
 %token <float> FLOAT
 %token <Sql.param_id> PARAM
 %token <Sql.shared_query_ref_id> SHARED_QUERY_REF
@@ -101,15 +102,15 @@ param:
 if_not_exists: IF NOT EXISTS { }
 if_exists: IF EXISTS {}
 temporary: either(GLOBAL,LOCAL)? TEMPORARY { }
-assign: name=IDENT EQUAL e=expr { name, e }
+assign: name=ident EQUAL e=expr { name, e }
 
 
-cte_item: | cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS LPAREN stmt=select_stmt_plain RPAREN
+cte_item: | cte_name=ident names=maybe_parenth(sequence(ident))? AS LPAREN stmt=select_stmt_plain RPAREN
             {
               let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any) )) names in
               { cte_name; cols; stmt = CteInline stmt }
             }
-          | cte_name=IDENT names=maybe_parenth(sequence(IDENT))? AS shared_query_ref_id=SHARED_QUERY_REF
+          | cte_name=ident names=maybe_parenth(sequence(ident))? AS shared_query_ref_id=SHARED_QUERY_REF
             {
               let cols = Option.map (List.map (fun name -> make_attribute' name (depends Any) )) names in
               { cte_name; cols; stmt = CteSharedQuery shared_query_ref_id; }
@@ -133,21 +134,21 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Drop name
               }
-         | CREATE u=boption(UNIQUE) INDEX if_not_exists? name=IDENT ON table=table_name cols=sequence(index_column)
+         | CREATE u=boption(UNIQUE) INDEX if_not_exists? name=ident ON table=table_name cols=sequence(index_column)
               {
                 let ci_kind = if u then Sql.Unique_idx else Sql.Plain_idx in
                 CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind }
               }
          | select_stmt { Select $1 }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? VALUES p=param ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES p=param ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(IDENT)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; }
               }
@@ -195,10 +196,14 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 Function.add (List.length params) (Ret (Source_type.depends Any)) name.tn; (* FIXME void *)
                 CreateRoutine (name, None, params)
               }   
+         | CREATE TYPE name=ident AS ENUM LPAREN ctors=commas(TEXT) RPAREN
+              { CreateType (name, TypeEnum ctors) }
+         | DROP TYPE ie=boption(if_exists) name=ident
+              { DropType (name, ie) }
 
 parameter_default_: DEFAULT | EQUAL { }
 parameter_default: parameter_default_ e=expr { e }
-func_parameter: n=IDENT AS? t=located_sql_type e=parameter_default? { (n,t,e) }
+func_parameter: n=ident AS? t=located_sql_type e=parameter_default? { (n,t,e) }
 parameter_mode: IN | OUT | INOUT { }
 proc_parameter: parameter_mode? p=func_parameter { p }
 
@@ -210,10 +215,14 @@ compound_stmt: BEGIN statement+ END { } (* mysql *)
 routine_extra: LANGUAGE IDENT { }
              | COMMENT TEXT { }
 
-%inline table_name: name=IDENT { Sql.make_table_name name }
-                  | db=IDENT DOT name=IDENT { Sql.make_table_name ~db name }
+(* cf. ColId / unreserved_keyword in PostgreSQL's gram.y (TYPE_P is unreserved there too):
+   https://github.com/postgres/postgres/blob/REL_18_0/src/backend/parser/gram.y#L17632 *)
+ident: x=IDENT | x=TYPE { x }
+
+%inline table_name: name=ident { Sql.make_table_name name }
+                  | db=ident DOT name=ident { Sql.make_table_name ~db name }
 index_prefix: LPAREN n=INTEGER RPAREN { n }
-index_column: name=IDENT index_prefix? c=collate? order_type? { make_collated ?collation:c ~collated:name ()}
+index_column: name=ident index_prefix? c=collate? order_type? { make_collated ?collation:c ~collated:name ()}
 
 table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
                       { 
@@ -273,7 +282,7 @@ join_source: COMMA src=source c=join_cond { src, make_located ~value:Schema.Join
            | j=cond(located(inner_join)) { j }
            | j=straight_cond(located(straight_join)) { j }
 join_cond: ON e=expr { On e }
-         | USING l=sequence(IDENT) { Using l }
+         | USING l=sequence(ident) { Using l }
          | (* *) { Default }
 
 source1: table_name { `Table $1 }
@@ -317,7 +326,7 @@ select_row_locking:
 for_update_or_share:
   FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
 
-update_or_share_of: OF commas(IDENT) { }
+update_or_share_of: OF commas(ident) { }
 
 with_lock: WITH LOCK { }
 
@@ -348,27 +357,35 @@ column1_kind:
        | ASTERISK { Sql.All }
        | c=pair(located(expr), maybe_as) { let (e, m) = c in Sql.Expr (e, m) }
 
-maybe_as: AS? name=IDENT { Some name }
+maybe_as: AS? name=ident { Some name }
         | { None }
 
-maybe_as_with_detupled: AS? name=IDENT names=sequence(IDENT)? { name, names }
+maybe_as_with_detupled: AS? name=ident names=sequence(ident)? { name, names }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
+alter_column_pg_spec:
+  | TYPE t=located_sql_type { Alter_column_pg.Set_type t }
+  | SET NOT NULL { Alter_column_pg.Set_not_null }
+  | DROP NOT NULL { Alter_column_pg.Drop_not_null }
+  | SET DEFAULT default_value { Alter_column_pg.Set_default }
+  | DROP DEFAULT { Alter_column_pg.Drop_default }
+
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
-            | ADD PRIMARY KEY cols=sequence(IDENT) { `AddPrimaryKey cols }
-            | ADD k=index_type name=IDENT? cols=sequence(IDENT) { `AddIndex { add_idx_name = name; add_idx_kind = k; add_idx_cols = cols } }
-            | ADD CONSTRAINT name=IDENT? table_constraint_1 index_options { `AddConstraint name }
+            | ADD PRIMARY KEY cols=sequence(ident) { `AddPrimaryKey cols }
+            | ADD k=index_type name=ident? cols=sequence(ident) { `AddIndex { add_idx_name = name; add_idx_kind = k; add_idx_cols = cols } }
+            | ADD CONSTRAINT name=ident? table_constraint_1 index_options { `AddConstraint name }
             | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
-            | RENAME COLUMN old_name=IDENT TO new_name=IDENT { `RenameColumn (old_name, new_name) }
-            | RENAME index_or_key old_name=IDENT TO new_name=IDENT { `RenameIndex (old_name, new_name) }
-            | DROP INDEX name=IDENT { `DropIndex name }
+            | RENAME COLUMN old_name=ident TO new_name=ident { `RenameColumn (old_name, new_name) }
+            | RENAME index_or_key old_name=ident TO new_name=ident { `RenameIndex (old_name, new_name) }
+            | DROP INDEX name=ident { `DropIndex name }
             | DROP PRIMARY KEY { `DropPrimaryKey }
-            | DROP COLUMN? col=IDENT drop_behavior? { `Drop col } (* FIXME behavior? *)
-            | DROP FOREIGN KEY name=IDENT { `DropConstraint name }
-            | DROP CHECK name=IDENT { `DropConstraint name }
-            | CHANGE COLUMN? old_name=IDENT column=column_def pos=alter_pos { `Change (old_name,column,pos) }
+            | DROP COLUMN? col=ident drop_behavior? { `Drop col } (* FIXME behavior? *)
+            | DROP FOREIGN KEY name=ident { `DropConstraint name }
+            | DROP CHECK name=ident { `DropConstraint name }
+            | CHANGE COLUMN? old_name=ident column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name,column,pos) }
+            | ALTER COLUMN? col=ident spec=located(alter_column_pg_spec) { `AlterColumnPG (col, spec) }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }
@@ -379,7 +396,7 @@ alter_action_or_ignored: a=alter_action { Some a }
             | ALGORITHM EQUAL algorithm { None }
             | LOCK EQUAL lock { None }
 
-ttl_option: TTL EQUAL col=IDENT PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
+ttl_option: TTL EQUAL col=ident PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
               { `TtlSet (col, n, unit) }
           | TTL_ENABLE EQUAL v=TEXT { `TtlEnable v }
 index_or_key: INDEX | KEY { }
@@ -388,12 +405,12 @@ index_type:
   | UNIQUE index_or_key? { Sql.Unique_idx }
   | FULLTEXT index_or_key? { Sql.Fulltext_idx }
   | SPATIAL index_or_key? { Sql.Spatial_idx }
-alter_pos: AFTER col=IDENT { `After col }
+alter_pos: AFTER col=ident { `After col }
          | FIRST { `First }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=IDENT sql_kind=located_sql_type? extra=located(column_def_extra)*
+column_def: name=ident sql_kind=located_sql_type? extra=located(column_def_extra)*
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
@@ -407,22 +424,22 @@ inline_idx_kind:
   | SPATIAL index_or_key?  { Sql.Spatial }
 
 column_def1: c=column_def { `Attr c }
-           | pair(CONSTRAINT,IDENT?)? l=table_constraint_1 index_options { `Constraint l }
+           | pair(CONSTRAINT,ident?)? l=table_constraint_1 index_options { `Constraint l }
            | kind=inline_idx_kind t=table_index { let (idx_name, idx_cols) = t in `Index (make_located ~value:{ idx_kind = kind; idx_name; idx_cols; idx_unique = false } ~pos:($startofs, $endofs)) }
 
 int_arg: LPAREN n=INTEGER RPAREN { n }
 
-key_part: n=IDENT int_arg? either(ASC,DESC)? { n }
+key_part: n=ident int_arg? either(ASC,DESC)? { n }
 
 index_options: list(IDENT)? { }
 
-table_index: name=IDENT? l=sequence(key_part) index_options { (name, l) }
+table_index: name=ident? l=sequence(key_part) index_options { (name, l) }
 
 (* FIXME check columns *)
 table_constraint_1:
       | PRIMARY KEY l=sequence(key_part) { `Primary l }
-      | UNIQUE index_or_key? name=IDENT? l=sequence(key_part) { `Unique (name, l) }
-      | FOREIGN KEY IDENT? sequence(IDENT) REFERENCES IDENT sequence(IDENT)?
+      | UNIQUE index_or_key? name=ident? l=sequence(key_part) { `Unique (name, l) }
+      | FOREIGN KEY ident? sequence(ident) REFERENCES ident sequence(ident)?
         reference_action_clause*
           { `Ignore }
       | CHECK LPAREN expr RPAREN { `Ignore }
@@ -467,8 +484,8 @@ anyall: ANY | ALL | SOME { }
 
 mnot(X): NOT x = X | x = X { x }
 
-attr_name: cname=IDENT { { cname; tname=None} }
-         | table=table_name DOT cname=IDENT { {cname; tname=Some table} } (* FIXME database identifier *)
+attr_name: cname=ident { { cname; tname=None} }
+         | table=table_name DOT cname=ident { {cname; tname=Some table} } (* FIXME database identifier *)
 
 distinct_from: DISTINCT FROM { }
 
@@ -498,7 +515,7 @@ expr:
     | INTERVAL e=expr interval_unit { Fun { fn_name = "interval"; kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
     | LPAREN e=expr RPAREN { e }
     | a=attr_name c=collate? { Column (make_collated ?collation:c ~collated:a ()) }
-    | VALUES LPAREN n=IDENT RPAREN { Of_values n }
+    | VALUES LPAREN n=ident RPAREN { Of_values n }
     | v=literal_value | v=datetime_value { v }
     | INTERVAL_UNIT { Value (make_collated ~collated:(strict Datetime) ()) }
     | e1=expr mnot(IN) l=sequence(expr) { poly "in" (depends Bool) (e1::l) }
@@ -698,6 +715,7 @@ sql_type_flavor:
   | NATIONAL? f=text_var VARYING? charset?              { Source_type.Text f }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
+  | name=ident { Source_type.Infer (User_types.get name) }
 
 binary: BINARY | BINARY VARYING { }
 text: CHARACTER { }

@@ -1,0 +1,526 @@
+module Sqlgg (T : Sqlgg_traits.M) = struct
+
+  module IO = Sqlgg_io.Blocking
+  module Ref_in_group = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
+
+    let select db (col : _ t) callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY p.bio")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY p.bio")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY p.bio")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Ref_in_order = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
+
+    let select db (col : _ t) callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY p.bio")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY p.bio")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id ORDER BY p.bio")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Ref_in_having = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
+
+    let select db (col : _ t) callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY u.id HAVING MAX(p.user_id) > 0")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY u.id HAVING MAX(p.user_id) > 0")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id GROUP BY u.id HAVING MAX(p.user_id) > 0")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Complex_proj = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let shout : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("CONCAT(p.bio, '!')");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method shout = Cols.shout
+    end
+
+    let select db (col : _ t) ~uid callback =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + col.count) in
+        col.set p;
+        T.set_param_Int p uid;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) ~uid callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p uid;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) ~uid callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p uid;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Subq_in_where = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
+
+    let select db (col : _ t) callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id IN (SELECT user_id FROM profiles)")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id IN (SELECT user_id FROM profiles)")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id IN (SELECT user_id FROM profiles)")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Unqualified_where = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let bio : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("p.bio");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method bio = Cols.bio
+    end
+
+    let select db (col : _ t) callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE bio = 'x'")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE bio = 'x'")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) callback =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE bio = 'x'")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Join_unreferenced = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("u.id");
+          count = 0;
+          deps = [];
+        }
+      let name : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          column = ("u.name");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method name = Cols.name
+    end
+
+    let select db (col : _ t) ~uid callback =
+      let set_params stmt =
+        let p = T.start_params stmt (1 + col.count) in
+        col.set p;
+        T.set_param_Int p uid;
+        T.finish_params p
+      in
+      T.select db
+      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) ~uid callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p uid;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) ~uid callback =
+        let set_params stmt =
+          let p = T.start_params stmt (1 + col.count) in
+          col.set p;
+          T.set_param_Int p uid;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ?")
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+
+  let create_users db  =
+    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") T.no_params
+
+  let create_profiles db  =
+    T.execute db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") T.no_params
+
+  module Fold = struct
+  end (* module Fold *)
+  
+  module List = struct
+  end (* module List *)
+end (* module Sqlgg *)

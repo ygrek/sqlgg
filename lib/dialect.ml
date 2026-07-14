@@ -21,6 +21,8 @@ type feature =
   | RowLocking
   | DefaultExpr
   | Ttl
+  | AlterColumn
+  | UserDefinedType
 [@@deriving show { with_path = false }]
 
 let show_feature x = 
@@ -43,6 +45,8 @@ let feature_to_string = function
   | RowLocking -> "row_locking"
   | DefaultExpr -> "default_expr"
   | Ttl -> "ttl"
+  | AlterColumn -> "alter_column"
+  | UserDefinedType -> "user_defined_type"
 
 let feature_of_string s =
   match String.lowercase_ascii s with
@@ -60,6 +64,8 @@ let feature_of_string s =
   | "row_locking" -> RowLocking
   | "default_expr" -> DefaultExpr
   | "ttl" -> Ttl
+  | "alter_column" -> AlterColumn
+  | "user_defined_type" -> UserDefinedType
   | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
@@ -151,6 +157,13 @@ let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
 
 let get_ttl pos = only Ttl [TiDB] pos
 
+let get_alter_column (change : Sql.Alter_column_pg.t) pos =
+  match change with
+  | Set_type _ | Set_not_null | Drop_not_null -> only AlterColumn [PostgreSQL] pos
+  | Set_default | Drop_default -> only AlterColumn [MySQL; PostgreSQL; TiDB] pos
+
+let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
+
 let get_default_expr ~kind ~expr pos =
   let open Sql in
   let tidb_only_functions =
@@ -164,25 +177,18 @@ let get_default_expr ~kind ~expr pos =
   let rec analyze = function
     | Value _ -> (true, false, true)
     | Column _ -> (true, true, false)
-    | Case { case; branches; else_ } ->
-        let parts = option_list case @ option_list else_ in
-        let parts = parts @ List.concat_map (fun { Sql.when_; then_ } -> [when_; then_]) branches in
-        List.fold_left
-          (fun (v_acc, c_acc, o_acc) e ->
-            let v, c, o = analyze e in
-            (v_acc && v, c_acc || c, o_acc && o))
-          (true, false, true)
-          parts
-    | Fun { parameters; _ } ->
-        List.fold_left
-          (fun (v_acc, c_acc, o_acc) e ->
-            let v, c, o = analyze e in
-            (v_acc && v, c_acc || c, o_acc && o))
-          (true, false, true)
-          parameters
-    | ( Param _ | Inparam _ | Choices _ | InChoice _
-      | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ ) ->
+    | Case _ as e -> fold_parts (sub_exprs e)
+    | Fun { parameters; _ } -> fold_parts parameters
+    | Param _ | Inparam _ | Choices _ | InChoice _
+    | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ ->
         (false, false, false)
+  and fold_parts parts =
+    List.fold_left
+      (fun (v_acc, c_acc, o_acc) e ->
+        let v, c, o = analyze e in
+        (v_acc && v, c_acc || c, o_acc && o))
+      (true, false, true)
+      parts
   in
   let valid, has_column, only_value = analyze expr in
   if not valid then only DefaultExpr [] pos
@@ -205,11 +211,7 @@ let get_default_expr ~kind ~expr pos =
       | _ -> all
     in
     let dialects =
-      base_dialects
-      |> List.to_seq
-      |> Seq.filter (fun d -> not (has_column && d = PostgreSQL))
-      |> Seq.filter (fun d -> only_value || d <> SQLite)
-      |> List.of_seq
+      List.filter (fun d -> not (has_column && d = PostgreSQL) && (only_value || d <> SQLite)) base_dialects
     in
     only DefaultExpr dialects pos
 
@@ -239,26 +241,12 @@ let rec analyze_expr acc exprs k = match exprs with
   | [] -> k acc
   | expr :: rest ->
     match expr with
-    | Value _ | Param _ | Inparam _ | Column _ | Of_values _ -> 
-        analyze_expr acc rest k
-    | Choices (_, choices) ->
-        let new_exprs = List.filter_map (fun (_, expr_opt) -> expr_opt) choices in
-        analyze_expr acc (new_exprs @ rest) k
-    | InChoice (_, _, e) -> 
-        analyze_expr acc (e :: rest) k
     | Fun { parameters; _ } ->
         analyze_expr acc (parameters @ rest) k
     | SelectExpr (select_full, _) -> 
         analyze_select_full acc [select_full] (fun acc -> analyze_expr acc rest k)
-    | InTupleList { value = { exprs; _ }; _ } -> 
-        analyze_expr acc (exprs @ rest) k
-    | OptionActions { choice; _ } -> 
-        analyze_expr acc (choice :: rest) k
-    | Case { case; branches; else_ } ->
-        let case_exprs = option_list case in
-        let branches_exprs = List.concat_map (fun { when_; then_ } -> [when_; then_]) branches in
-        let else_exprs = option_list else_ in
-        analyze_expr acc (case_exprs @ branches_exprs @ else_exprs @ rest) k
+    | e ->
+        analyze_expr acc (sub_exprs e @ rest) k
 
 and analyze_column acc cols k = match cols with
   | [] -> k acc
@@ -403,8 +391,10 @@ and analyze_alter_action acc actions k = match actions with
     | `TtlOptions (_, pos) | `RemoveTtl pos ->
         let acc = get_ttl pos :: acc in
         analyze_alter_action acc rest k
+    | `AlterColumnPG (_, { value; pos }) ->
+        let acc = get_alter_column value pos :: acc in
+        analyze_alter_action acc rest k
     | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _ ->
-
         analyze_alter_action acc rest k
 
 and analyze_insert_action acc ias k = match ias with
@@ -496,5 +486,5 @@ let rec analyze stmt =
             analyze_expr acc (option_list default_expr_opt) (fun acc -> process_params acc rest)
       in
       process_params acc params
-
-    
+  | CreateType _ -> [get_user_defined_type (0, 0)]
+  | DropType _ -> [get_user_defined_type (0, 0)]
