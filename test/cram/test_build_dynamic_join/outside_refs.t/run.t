@@ -1,14 +1,7 @@
-References outside the projection (GROUP BY / ORDER BY / HAVING / complex
-projection expression / subquery in WHERE / unqualified column) pin the join;
-a droppable join never referenced by the projection gets no hole and stays
-static.
-
-Generated code matches the golden file:
+References outside the projection (GROUP BY/ORDER BY/HAVING/WHERE-subquery) pin the join.
 
   $ cat outside_refs.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > outside_refs.ml
   $ diff outside_refs.ml outside_refs.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

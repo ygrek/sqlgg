@@ -1,14 +1,7 @@
-Subquery sources: a LEFT JOIN of a subquery is never droppable (its columns
-inherit the underlying table's UNIQUE/PRIMARY marks but the subquery may
-multiply rows); a subquery as the BASE source does not poison a droppable
-table join on top of it.
-
-Generated code matches the golden file:
+Subquery join is never droppable; subquery base does not poison joins above it.
 
   $ cat subquery_sources.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > subquery_sources.ml
   $ diff subquery_sources.ml subquery_sources.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

@@ -1,13 +1,7 @@
-The README/PR example: one wide reusable query definition acts as a whole
-family of queries — pick fewer columns and the SQL narrows accordingly,
-dropping the joins whose columns were not picked.
-
-Generated code matches the golden file:
+README example: one wide query, fewer picks -> narrower SQL.
 
   $ cat example.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > example.ml
   $ diff example.ml example.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

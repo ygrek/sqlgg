@@ -1,12 +1,7 @@
-Self-joins are matched by their alias key, not the bare table name: non-unique
-key keeps the join, PK self-join is droppable.
-
-Generated code matches the golden file:
+Self-joins matched by alias key: non-unique keeps the join, PK is droppable.
 
   $ cat self_join.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > self_join.ml
   $ diff self_join.ml self_join.compare.ml
-
-Runtime (print_impl mock):
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

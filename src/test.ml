@@ -32,8 +32,8 @@ let parse sql =
   | Some (buffer, _) ->
       match Main.parse_one (buffer,[]) with
       | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
-      | None -> assert_failure @@ sprintf "Failed to parse : %s" sql
-      | Some stmt -> stmt
+      | [] -> assert_failure @@ sprintf "Failed to parse : %s" sql
+      | stmt :: _ -> stmt
 let assert_params_with_meta stmt meta = 
     let meta = List.map (fun (p, m) -> p, Meta.of_list m) meta in
     assert_equal 
@@ -1740,7 +1740,7 @@ let test_meta_insert_update _ =
   |} in
   assert_params_with_meta stmt [
     (named_nullable "param1" (Decimal { precision = Some 10; scale = Some 2; }), []);  (* no meta from col_4 *)
-    (named "param2" Text, []);  (* no meta from от col_2 *)
+    (named "param2" Text, []);  (* no meta from col_2 *)
     (named "param3" Int, ["module", "Module1"]);
   ]
 

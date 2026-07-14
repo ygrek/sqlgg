@@ -17,6 +17,8 @@ let gen_header : [ `Full | `Without_timestamp | `Static ] option ref = ref (Some
 
 let include_category : [ `All | `None | `Only of Stmt.category list | `Except of Stmt.category list ] ref = ref `All
 
+let dynamic_select = ref false
+
 let no_check_features: Dialect.feature list ref = ref []
 
 let set_no_check_features l = no_check_features := l

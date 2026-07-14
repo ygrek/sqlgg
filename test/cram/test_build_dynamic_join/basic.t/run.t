@@ -1,12 +1,7 @@
-Basic: droppable PK join / non-unique key / table referenced in WHERE.
-
-Generated code matches the golden file:
+Droppable PK join / non-unique key / table referenced in WHERE.
 
   $ cat basic.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > basic.ml
   $ diff basic.ml basic.compare.ml
-
-Runtime (print_impl mock): the join disappears only when safely droppable,
-and is always present when its column is picked:
 
   $ cp ../../print_impl.ml .
   $ ocamlfind ocamlc -package sqlgg.traits -I . -c print_impl.ml

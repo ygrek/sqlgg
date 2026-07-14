@@ -7,7 +7,7 @@ let run label f =
 module Whitespace = Whitespace.Sqlgg(Print_impl)
 
 let () =
-  let open Whitespace.Ws_col in
+  let open Whitespace.Ws in
   run "ws: pick id -> both joins dropped, no gaps" (fun () ->
     ignore (List.select () id ~uid:1L (fun x -> x)));
   run "ws: pick id + bio -> profiles kept, billing gap collapsed" (fun () ->
