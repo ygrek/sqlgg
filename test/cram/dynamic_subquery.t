@@ -83,7 +83,7 @@ Full generated code:
       end (* module Fold *)
   
       module List = struct
-        let select db (col : _ t) ~min callback =
+        let select db (col : _ t) ~min =
           let set_params stmt =
             let p = T.start_params stmt (1 + col.count) in
             col.set p;
@@ -93,8 +93,7 @@ Full generated code:
           let r_acc = ref [] in
           IO.(>>=) (T.select db
           ("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub")
-          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            __sqlgg_r_col) :: !r_acc))
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
       end (* module List *)
@@ -158,7 +157,7 @@ Full generated code:
       end (* module Fold *)
   
       module List = struct
-        let select db (col : _ t) ~id callback =
+        let select db (col : _ t) ~id =
           let set_params stmt =
             let p = T.start_params stmt (1 + col.count) in
             col.set p;
@@ -168,8 +167,7 @@ Full generated code:
           let r_acc = ref [] in
           IO.(>>=) (T.select db
           ("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?")
-          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-            __sqlgg_r_col) :: !r_acc))
+          set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
       end (* module List *)
@@ -202,7 +200,7 @@ Driver picking different fields at runtime:
   >   Printf.printf "=== %s ===\n%!" label;
   >   Print_impl.clear_mock_responses ();
   >   Print_impl.setup_select_response [];
-  >   ignore (List.select () col ~min:10L (fun x -> x))
+  >   ignore (List.select () col ~min:10L)
   > 
   > let () =
   >   run "pick id" id;

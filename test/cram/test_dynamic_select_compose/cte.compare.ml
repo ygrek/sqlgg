@@ -62,7 +62,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
     end (* module Fold *)
 
     module List = struct
-      let select db ~st (col : _ t) ~lo callback =
+      let select db ~st (col : _ t) ~lo =
         let set_params stmt =
           let p = T.start_params stmt (2 + col.count) in
           T.set_param_Int p st;
@@ -74,8 +74,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
         IO.(>>=) (T.select db
         ("WITH filtered AS (SELECT id, name FROM t WHERE status = ?)\n\
 SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -143,7 +142,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
     end (* module Fold *)
 
     module List = struct
-      let select db ~ids ~nm (col : _ t) ~lo callback =
+      let select db ~ids ~nm (col : _ t) ~lo =
         let set_params stmt =
           let p = T.start_params stmt (2 + (match ids with [] -> 0 | _ :: _ -> 0) + col.count) in
           T.set_param_Text p nm;
@@ -155,8 +154,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
         IO.(>>=) (T.select db
         ("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ " AND name = ?)\n\
 SELECT " ^ col.column ^ " FROM filtered WHERE id > ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -230,7 +228,7 @@ SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " (
     end (* module Fold *)
 
     module List = struct
-      let select db ~f (col : _ t) ~sort callback =
+      let select db ~f (col : _ t) ~sort =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match f with `All -> 0 | `ByStatus _ -> 1) + (match sort with `I -> 0 | `N -> 0) + col.count) in
           begin match f with
@@ -245,8 +243,7 @@ SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " (
         IO.(>>=) (T.select db
         ("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ")) ^ ")\n\
 SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -320,7 +317,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALS
     end (* module Fold *)
 
     module List = struct
-      let select db ~st (col : _ t) ~pairs callback =
+      let select db ~st (col : _ t) ~pairs =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match pairs with [] -> 0 | _ :: _ -> 0) + (match st with Some _ -> 1 | None -> 0) + col.count) in
           begin match st with
@@ -335,8 +332,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALS
         IO.(>>=) (T.select db
         ("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match st with Some _ -> " ( " ^ " status = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ ")\n\
 SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -420,7 +416,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~f callback =
+      let select db (col : _ t) ~f =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match f with `All -> 0 | `ById _ -> 1) + (match f with `All -> 0 | `ById _ -> 1) + col.count) in
           begin match f with
@@ -440,8 +436,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
         IO.(>>=) (T.select db
         ("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ ")\n\
 SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -520,7 +515,7 @@ SELECT " ^ col.column ^ " FROM recent")
     end (* module Fold *)
 
     module List = struct
-      let select db ~st (col : _ t) callback =
+      let select db ~st (col : _ t) =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           T.set_param_Int p st;
@@ -531,8 +526,7 @@ SELECT " ^ col.column ^ " FROM recent")
         IO.(>>=) (T.select db
         ("WITH recent AS (SELECT id, name, status FROM t WHERE status = ?)\n\
 SELECT " ^ col.column ^ " FROM recent")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -598,7 +592,7 @@ WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> 
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~st ~names callback =
+      let select db (col : _ t) ~st ~names =
         let set_params stmt =
           let p = T.start_params stmt (1 + (match names with [] -> 0 | _ :: _ -> 0) + col.count) in
           col.set p;
@@ -609,8 +603,7 @@ WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> 
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t\n\
 WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)

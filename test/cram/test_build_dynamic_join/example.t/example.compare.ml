@@ -143,7 +143,7 @@ WHERE u.org_id = ? AND u.deleted = FALSE")
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~org callback =
+      let select db (col : _ t) ~org =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           col.set p;
@@ -155,8 +155,7 @@ WHERE u.org_id = ? AND u.deleted = FALSE")
         ("SELECT " ^ col.column ^ "\n\
 FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Billing col.deps then " LEFT JOIN billing  b ON b.user_id = u.id" else "") ^ "\n\
 WHERE u.org_id = ? AND u.deleted = FALSE")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
