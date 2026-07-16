@@ -56,7 +56,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) callback =
+      let select db (col : _ t) =
         let set_params stmt =
           let p = T.start_params stmt (0 + col.count) in
           col.set p;
@@ -65,8 +65,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -128,7 +127,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) callback =
+      let select db (col : _ t) =
         let set_params stmt =
           let p = T.start_params stmt (0 + col.count) in
           col.set p;
@@ -137,8 +136,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else ""))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)

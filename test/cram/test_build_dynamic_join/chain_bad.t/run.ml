@@ -8,4 +8,4 @@ module Chain_bad = Chain_bad.Sqlgg(Print_impl)
 
 let () =
   let open Chain_bad.Chain_bad in
-  run "chain_bad: pick id -> both joins kept (child pins parent)" (fun () -> ignore (List.select () id ~uid:1L (fun x -> x)))
+  run "chain_bad: pick id -> both joins kept (child pins parent)" (fun () -> ignore (List.select () id ~uid:1L))
