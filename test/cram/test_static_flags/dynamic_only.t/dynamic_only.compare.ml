@@ -58,7 +58,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~id callback =
+      let select db (col : _ t) ~id =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           col.set p;
@@ -68,8 +68,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM users WHERE id = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)

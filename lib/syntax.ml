@@ -1005,13 +1005,9 @@ and infer_schema ~not_null_keys env columns =
     | OptionActions _ -> Meta.empty ()
   in
   let refine_column (col : table_name Schema.Source.Attr.t) =
-    let key = (col.sources, col.attr.name) in
-    if List.mem key not_null_keys && Type.is_nullable col.attr.domain then
-      { col with
-        attr = { col.attr with
-                 domain = Type.make_strict col.attr.domain } }
-    else
-      col
+    if List.mem (col.sources, col.attr.name) not_null_keys
+    then Schema.Source.Attr.map_attr (fun attr -> { attr with domain = Type.make_strict attr.domain }) col
+    else col
   in
   let resolve1 = function
     | { value = All; _ } -> List.map (fun x -> AttrWithSources (refine_column x)) env.schema
@@ -1022,32 +1018,28 @@ and infer_schema ~not_null_keys env columns =
           (fun n -> Schema.Source.Attr.map_attr (fun attr -> { attr with name = n }) col)
           col alias
       in
-      let make_col e =
-        let _, t = resolve_types env e in
-        let sources = match e with
-          | Column c -> (resolve_column ~env c.collated).sources
-          | _ -> []
-        in
-        let col = {
-          Schema.Source.Attr.attr = unnamed_attribute ~meta:(propagate_meta ~env e) (get_or_failwith t);
-          sources
-        } in 
-        let col = refine_column col in
-        apply_alias col
+      let resolve_expr = function
+        | Column c -> resolve_column ~env c.collated
+        | e ->
+          let _, t = resolve_types env e in
+          { Schema.Source.Attr.attr = unnamed_attribute ~meta:(propagate_meta ~env e) (get_or_failwith t);
+            sources = [] }
       in
       let col =
         match expr with
-        | Column col -> 
-          let col = resolve_column ~env col.collated in
-          let col = refine_column col in
-          AttrWithSources (apply_alias col)
         | Choices (p, choices) when dynamic_allowed env ->
           let dynamic = choices |> List.filter_map (fun (choice_p, e_opt) -> 
             Option.map (fun choice_e ->
-              { Sql.field_id = choice_p; field_attr = make_col choice_e; join_deps = [] }) e_opt
+              let field_attr =
+                choice_e
+                |> resolve_expr |> refine_column
+                |> Schema.Source.Attr.map_attr (fun attr -> unnamed_attribute ~meta:attr.meta attr.domain)
+                |> apply_alias
+              in
+              { Sql.field_id = choice_p; field_attr; join_deps = [] }) e_opt
           ) in 
           DynamicWithSources (p, dynamic)
-        | e -> AttrWithSources (make_col e)
+        | e -> AttrWithSources (e |> resolve_expr |> refine_column |> apply_alias)
       in
       [ col ]
   in
@@ -1896,10 +1888,11 @@ end = struct
     | Some n -> n
     | None -> let n = { name; state = Root None } in Hashtbl.add t name n; n
 
+  (* one node per variable, so nodes are compared physically *)
   let rec root n =
     match n.state with
     | Root typ -> n, typ
-    | Link p -> let (r, _) as res = root p in if r != p then n.state <- Link r; res
+    | Link p -> let (r, _) as res = root p in (* relink directly to root so next lookups are one step *) if r != p then n.state <- Link r; res
 
   let unify name t1 t2 =
     match Type.common_type t1 t2 with
@@ -1915,7 +1908,7 @@ end = struct
   let alias t n1 n2 =
     let (r1, _) = root (node t n1) in
     let (r2, t2) = root (node t n2) in
-    if r1 != r2 then begin
+    if r1 != r2 then begin (* physically same root = already aliased *)
       Option.may (note t r1.name) t2;
       r2.state <- Link r1
     end

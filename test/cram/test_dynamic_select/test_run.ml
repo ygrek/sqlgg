@@ -732,8 +732,7 @@ module M (T: Sqlgg_traits.M with
         and+ p = price_with_tax 10L in
         (i, n, c, s, p)
       in
-      let _ = List.select connection combined
-        (fun col -> ignore col) in
+      let _ = List.select connection combined in
       printf "[TEST 19] Completed\n\n"
 
     let run connection = test_all_fields connection

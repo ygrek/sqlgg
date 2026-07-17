@@ -1,6 +1,7 @@
 (cram
  (deps
   %{bin:sqlgg}
+  (package sqlgg)
   (glob_files *.sql)
   (glob_files *.ml)
   (glob_files *.mli)

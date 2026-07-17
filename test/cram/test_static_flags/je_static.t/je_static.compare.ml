@@ -71,7 +71,7 @@ WHERE i.id > ?")
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~min_id callback =
+      let select db (col : _ t) ~min_id =
         let set_params stmt =
           let p = T.start_params stmt (1 + col.count) in
           col.set p;
@@ -83,8 +83,7 @@ WHERE i.id > ?")
         ("SELECT " ^ col.column ^ "\n\
 FROM items i" ^ (if List.mem Stats col.deps then " LEFT JOIN stats s ON s.item_id = i.id" else "") ^ "\n\
 WHERE i.id > ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)

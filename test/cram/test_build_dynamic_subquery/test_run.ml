@@ -24,11 +24,11 @@ module M (T: Sqlgg_traits.M with
     open Sql.Star_over_subq
 
     let run c =
-      printf "[1.1] pick id\n";    prep (); ignore (List.select c id ~min:10L (fun x -> x));
-      printf "[1.2] pick name\n";  prep (); ignore (List.select c name ~min:10L (fun x -> x));
-      printf "[1.3] pick price\n"; prep (); ignore (List.select c price ~min:10L (fun x -> x));
+      printf "[1.1] pick id\n";    prep (); ignore (List.select c id ~min:10L);
+      printf "[1.2] pick name\n";  prep (); ignore (List.select c name ~min:10L);
+      printf "[1.3] pick price\n"; prep (); ignore (List.select c price ~min:10L);
       printf "[1.4] pick id + name + price\n"; prep ();
-        ignore (List.select c (let+ i = id and+ n = name and+ p = price in (i, n, p)) ~min:10L (fun x -> x))
+        ignore (List.select c (let+ i = id and+ n = name and+ p = price in (i, n, p)) ~min:10L)
   end
 
   (* Group 2: pass-through via explicit sub.* *)
@@ -36,9 +36,9 @@ module M (T: Sqlgg_traits.M with
     open Sql.Star_alias_over_subq
 
     let run c =
-      printf "[2.1] pick name\n";        prep (); ignore (List.select c name (fun x -> x));
+      printf "[2.1] pick name\n";        prep (); ignore (List.select c name);
       printf "[2.2] pick id + price\n";  prep ();
-        ignore (List.select c (let+ i = id and+ p = price in (i, p)) (fun x -> x))
+        ignore (List.select c (let+ i = id and+ p = price in (i, p)))
   end
 
   (* Group 3: pass-through over a LEFT JOIN subquery (nullable joined columns) *)
@@ -46,10 +46,10 @@ module M (T: Sqlgg_traits.M with
     open Sql.Star_over_join_subq
 
     let run c =
-      printf "[3.1] pick uid\n";                 prep (); ignore (List.select c uid (fun x -> x));
-      printf "[3.2] pick ototal (nullable)\n";   prep (); ignore (List.select c ototal (fun x -> x));
+      printf "[3.1] pick uid\n";                 prep (); ignore (List.select c uid);
+      printf "[3.2] pick ototal (nullable)\n";   prep (); ignore (List.select c ototal);
       printf "[3.3] pick uid + uname + ototal\n"; prep ();
-        ignore (List.select c (let+ a = uid and+ b = uname and+ d = ototal in (a, b, d)) (fun x -> x))
+        ignore (List.select c (let+ a = uid and+ b = uname and+ d = ototal in (a, b, d)))
   end
 
   (* Group 4: non-pass-through outer -> dynamic stays outside, subquery fixed *)
@@ -57,9 +57,9 @@ module M (T: Sqlgg_traits.M with
     open Sql.Cols_over_subq
 
     let run c =
-      printf "[4.1] pick id\n";          prep (); ignore (List.select c id ~id:1L (fun x -> x));
+      printf "[4.1] pick id\n";          prep (); ignore (List.select c id ~id:1L);
       printf "[4.2] pick id + name\n";   prep ();
-        ignore (List.select c (let+ i = id and+ n = name in (i, n)) ~id:1L (fun x -> x))
+        ignore (List.select c (let+ i = id and+ n = name in (i, n)) ~id:1L)
   end
 
   let run_all c =
