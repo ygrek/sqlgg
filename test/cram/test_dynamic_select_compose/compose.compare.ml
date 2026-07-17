@@ -58,7 +58,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~ids ~nm callback =
+      let select db (col : _ t) ~ids ~nm =
         let set_params stmt =
           let p = T.start_params stmt (1 + (match ids with [] -> 0 | _ :: _ -> 0) + col.count) in
           col.set p;
@@ -68,8 +68,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ " AND name = ?")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -131,7 +130,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~pairs callback =
+      let select db (col : _ t) ~pairs =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match pairs with [] -> 0 | _ :: _ -> 0) + col.count) in
           col.set p;
@@ -140,8 +139,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -213,7 +211,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~v callback =
+      let select db (col : _ t) ~v =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match v with Some _ -> 1 | None -> 0) + col.count) in
           col.set p;
@@ -227,8 +225,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match v with Some _ -> " ( " ^ " id = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -290,7 +287,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~sort callback =
+      let select db (col : _ t) ~sort =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match sort with `I -> 0 | `N -> 0) + col.count) in
           col.set p;
@@ -299,8 +296,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -362,7 +358,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~sort callback =
+      let select db (col : _ t) ~sort =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match sort with `I -> 0 | `N -> 0) + col.count) in
           col.set p;
@@ -371,8 +367,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t ORDER BY id" ^ "," ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -444,7 +439,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~f callback =
+      let select db (col : _ t) ~f =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match f with `All -> 0 | `ById _ -> 1) + col.count) in
           col.set p;
@@ -458,8 +453,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         ("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -545,7 +539,7 @@ WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~f callback =
+      let select db (col : _ t) ~f =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match f with `All -> 0 | `ById _ -> 1) + (match f with `All -> 0 | `ById _ -> 1) + col.count) in
           col.set p;
@@ -566,8 +560,7 @@ WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\
         ("SELECT " ^ col.column ^ " FROM t\n\
 WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\n\
   AND (" ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ " OR id = 0)")
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
@@ -671,7 +664,7 @@ ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
     end (* module Fold *)
 
     module List = struct
-      let select db (col : _ t) ~ids ~pairs ~nm ~f ~sort callback =
+      let select db (col : _ t) ~ids ~pairs ~nm ~f ~sort =
         let set_params stmt =
           let p = T.start_params stmt (0 + (match ids with [] -> 0 | _ :: _ -> 0) + (match pairs with [] -> 0 | _ :: _ -> 0) + (match f with `All -> 0 | `ById _ -> 1) + (match f with `All -> 0 | `ById _ -> 1) + (match sort with `I -> 0 | `N -> 0) + (match nm with Some _ -> 1 | None -> 0) + col.count) in
           col.set p;
@@ -701,8 +694,7 @@ WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.co
   AND " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\n\
   AND (" ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ " OR id = 0)\n\
 ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
-        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
-          __sqlgg_r_col) :: !r_acc))
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
     end (* module List *)
