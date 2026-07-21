@@ -1,10 +1,26 @@
-sqlgg changelog
----------------
-
-?
+# 20260721
+	+ sql: dynamic select, pick which columns to SELECT at runtime (caml only)
+	+ sql: eliminate unused JOINs and subqueries in dynamic select
+	+ ocaml: sqlgg.ppx to map query results to records
+	+ sql: dialect feature checks with -dialect mysql|sqlite|postgresql|tidb
+	+ cli: generate migrations from schema diff (-migrate, -diff)
+	+ sql: custom types for columns via [sqlgg] metadata
+	+ sql: ENUM as polymorphic variants
+	+ sql: BIGINT UNSIGNED as uint64 (requires mariadb > 1.3.0)
+	+ sql: JSON type and functions
 	+ sql: allow to type-annotate parameters with `:: SQLTYPE NULL?` to help type-checker
+	+ sql: bool choices `{ expr }?` and `@var?`
+	+ sql: reusable queries in CTEs, recursive CTEs
+	+ sql: ON CONFLICT DO NOTHING/DO UPDATE, GROUP_CONCAT, ORDER BY in function arguments,
+		more date and window functions, multi-table UPDATE with ORDER BY and LIMIT,
+		(a,b) IN @param, CASE as expression, REPLACE, STRAIGHT_JOIN, SET STATEMENT ... FOR,
+		parametrized ORDER BY and LIMIT, CREATE TYPE, ALTER COLUMN, DROP CHECK, TTL, LOCK
+	* typing: track nullability
+	* improve single-row detection using constraints
+	+ ocaml: cache prepared statements per connection
+	+ ocaml: Single module with labeled arguments
 
-20231201
+# 20231201
 	+ ocaml: support IN @x via text substitution
 	+ sql: support batch insert with syntax INSERT INTO x(...) VALUES @xs
 	+ sql: rudimentary NULL handling (direct column assignments)

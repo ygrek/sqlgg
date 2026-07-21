@@ -38,11 +38,5 @@ of output columns and query parameters to the host language, trying to be as uno
 as possible and leaving the choice of SQL database (and API to access it) to the developer."""
 
 conflicts: [
-  "mariadb" {<= "1.1.6"}
-]
-
-pin-depends: [
-  [ "mariadb.dev"
-    "git+https://github.com/ocaml-community/ocaml-mariadb.git#e9f9ac750abd5adebb589da5e553e5c45d8ec066"
-  ]
+  "mariadb" {<= "1.3.0"}
 ]
