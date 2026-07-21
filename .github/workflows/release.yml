@@ -25,7 +25,7 @@ jobs:
       - run: opam install . --deps-only --with-test
       - run: opam install dune-release -y
 
-      - uses: davesnx/dune-release-action@v0.3
+      - uses: davesnx/dune-release-action@v0.3.0
         with:
           packages: 'sqlgg'
           changelog: './changelog'
