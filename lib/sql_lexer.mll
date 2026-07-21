@@ -282,8 +282,8 @@ let cmnt = "--" | "//" | "#"
 rule ruleStatement = parse
   | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
   | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n, String.trim v)] }
-  | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as v) '\n' 
-    { 
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as v) '\n'
+    {
       let props = rulePropList [] (Lexing.from_string v) in
       let all_props = ("name", name) :: props in
       `Props all_props
@@ -302,8 +302,8 @@ rule ruleStatement = parse
 (* Parse a list of key:value properties *)
 and
 rulePropList acc = parse
-  | wsp* (ident+ as prop) wsp* ':' wsp* ([^',' '\n']+ as value) wsp* 
-    { 
+  | wsp* (ident+ as prop) wsp* ':' wsp* ([^',' '\n']+ as value) wsp*
+    {
       let new_acc = (String.trim prop, String.trim value) :: acc in
       rulePropListNext new_acc lexbuf
     }
@@ -312,7 +312,7 @@ rulePropList acc = parse
   | _ { error lexbuf "rulePropList" }
 (* Parse continuation after comma *)
 and
-rulePropListNext acc = parse  
+rulePropListNext acc = parse
   | ',' { rulePropList acc lexbuf }
   | wsp* '\n' { List.rev acc }
   | wsp* eof { List.rev acc }
@@ -346,13 +346,15 @@ ruleMain = parse
   | "+" { PLUS }
   | "-" { MINUS }
 
-  | "/" | "%" { NUM_DIV_OP }
+  | "/" | "%" { NUM_DIV_OP } (* FIXME: in PostgreSQL, "%" is both int modulo and a trigram comparison operator *)
   | "<<" | ">>" { NUM_BIT_SHIFT }
   | "|" { NUM_BIT_OR }
   | "&" { NUM_BIT_AND }
   | ">" | ">=" | "<=" | "<" { NUM_CMP_OP }
   | "<>" | "!=" | "==" { NUM_EQ_OP }
   | "<=>" { NOT_DISTINCT_OP }
+  | "<%" | "%>" | "<<%" | "%>>" { TEXT_CMP_OP }
+  | "<->" | "<<->" | "<->>" | "<<<->" | "<->>>" { TEXT_DIST_OP }
 
   | "->"  { JSON_EXTRACT_OP }
   | "->>" { JSON_UNQUOTE_EXTRACT_OP }
