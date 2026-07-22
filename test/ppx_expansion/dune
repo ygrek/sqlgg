@@ -1,0 +1,18 @@
+(executable
+ (name pp)
+ (libraries ppx_sqlgg ppxlib))
+
+(rule
+ (target cases.actual.ml)
+ (deps
+  (:pp pp.exe)
+  (:input cases.input.ml))
+ (action
+  (with-stdout-to
+   %{target}
+   (run ./%{pp} --impl %{input}))))
+
+(rule
+ (alias runtest)
+ (action
+  (diff cases.expected.ml cases.actual.ml)))
