@@ -26,8 +26,7 @@ The human-facing note goes to stderr, not stdout:
 
 migrations.sql stays empty - nothing is appended on a no-op:
 
-  $ wc -c < migrations.sql
-  0
+  $ test ! -s migrations.sql
 
 Running it again produces byte-identical stdout (true idempotency):
 
