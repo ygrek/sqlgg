@@ -11,3 +11,8 @@
   (glob_files test_cached_prepared_stmts.ml)
   (glob_files print_impl.ml)
   sqlgg_test.sh))
+
+(env
+ (_
+  (env-vars
+   (OCAMLFIND_LDCONF ignore))))

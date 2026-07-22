@@ -16,7 +16,7 @@
 %token LAST
 %token EOF
 
-%start <t> path_expression
+%start <Ast.t> path_expression
 %%
 
 path_expression:

@@ -49,26 +49,20 @@ let build ~loc tname first rest =
 
 let expand ~ctxt (_rec_flag, tds) =
   let loc = Expansion_context.Deriver.derived_item_loc ctxt in
-  let error msg _name =
+  let error msg =
     [ Ast_builder.Default.pstr_extension ~loc
         (Location.error_extensionf ~loc "deriving sqlgg: %s" msg)
         [] ]
   in
-  let build = build ~loc in
-  let td_pat =
-    Ast_pattern.(
-      let record = map2 (ptype_record (__ ^:: __)) ~f:(fun x xs name -> build name x xs) in
-      let fail msg = map1 __ ~f:(fun _ -> error msg) in
-      map_value ~f:(fun td -> (td.ptype_params, td.ptype_kind), td.ptype_name.txt)
-        (map1 ~f:(fun (f, name) -> f name)
-          (pack2
-            (pair
-              (alt
-                (pair nil (alt record (fail "only record types are supported")))
-                (fail "type parameters are not supported"))
-              __))))
+  let expand_td td =
+    match td.ptype_params with
+    | _ :: _ -> error "type parameters are not supported"
+    | [] ->
+      match td.ptype_kind with
+      | Ptype_record (first :: rest) -> build ~loc td.ptype_name.txt first rest
+      | _ -> error "only record types are supported"
   in
-  List.concat_map (fun td -> Ast_pattern.parse td_pat loc td Fun.id) tds
+  List.concat_map expand_td tds
 
 let () =
   Deriving.add "sqlgg"
