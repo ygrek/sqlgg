@@ -136,5 +136,4 @@ SELECT region, SUM(bonus) FROM orders GROUP BY region;
 
 See [Aggregation & Nullability](./aggregation-nullability.md) for detailed rules.
 
-**OCaml representation:** [Nullability → option](../ocaml/specifics.md#nullability-in-ocaml)
 

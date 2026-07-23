@@ -127,9 +127,3 @@ JOIN ( VALUES ROW('a', 1), ROW('b', 2), ROW('c', 3) ) AS x (product_name, entitl
 ON p.name = x.product_name;
 ```
 
-## See Also
-
-- [Parameters](./parameters.md) — `@param` syntax and type inference
-- [Expressions](./expressions.md) — `@choice`, `IN @list`, `{...}?`
-- [Nullability](./nullability.md) — nullability inference rules
-- [CTE](./cte.md) — Common Table Expressions

@@ -146,6 +146,21 @@ Key points:
 - `Ship_id.set_param` / `Light_years.set_param` wrap parameter writes
 - Nullable parameters use `match` to handle `None` → `T.set_param_null`
 
+### Other function names
+
+If the module has its own names, say so:
+
+```sql
+CREATE TABLE events (
+  -- [sqlgg] module=Event_id
+  -- [sqlgg] get_column=of_sql
+  -- [sqlgg] set_param=to_sql
+  id INT NOT NULL
+);
+```
+
+Nullable reads use `of_sql_nullable`. A fully qualified name like `get_column=My.Codec.decode` works without `module=`.
+
 ## `non_nullifiable=true`
 
 For `UPDATE`: once a column has been set to a non-NULL value, generated code will not allow writing `NULL` back, even if the physical column is nullable.
@@ -194,4 +209,19 @@ CREATE TABLE people_data_json_kind_never_null_and_col_strict (
   data JSON NOT NULL
 );
 ```
+
+## `text_as_json=true`
+
+For `TEXT` columns that store serialized JSON: applies the same JSON-null handling as for `JSON` columns (see `json_null_kind` above) to the `TEXT` column. Only valid on `TEXT` columns, sqlgg reports an error otherwise.
+
+```sql
+CREATE TABLE logs (
+  id INT PRIMARY KEY,
+  -- [sqlgg] text_as_json=true
+  -- [sqlgg] json_null_kind=false
+  payload TEXT NOT NULL
+);
+```
+
+See [JSON](../ocaml/json.md) for how JSON values map to OCaml.
 
