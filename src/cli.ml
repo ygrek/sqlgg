@@ -180,16 +180,20 @@ let usage_msg =
   let s3 = "Options are:" in
   s1 ^ s2 ^ s3
 
+type group = { title : string; opts : (Arg.key * Arg.spec * Arg.doc) list }
+
+let render groups =
+  let option (key, _spec, doc) = if doc = "" then None else Some (sprintf "  %s %s" key doc) in
+  let group g = sprintf " %s:\n%s" g.title (String.concat "\n" (List.filter_map option g.opts)) in
+  String.concat "\n\n" (List.map group groups)
+
 let show_version () = print_endline Sqlgg_config.version
 
-let set_dialect d =
+let set_dialect s =
   let d =
-    match d with
-    | "mysql" -> Dialect.MySQL
-    | "sqlite" -> Dialect.SQLite
-    | "postgresql" -> Dialect.PostgreSQL
-    | "tidb" -> Dialect.TiDB
-    | _ -> failwith (sprintf "Unknown dialect: %s" d)
+    match Dialect.of_string s with
+    | Some d -> d
+    | None -> failwith (sprintf "Unknown dialect: %s" s)
   in
   Dialect.set_selected d;
   match !Gen.params_mode with
@@ -201,8 +205,13 @@ let set_dialect d =
       | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
 
 let set_no_check = function
-  | "all" -> Sqlgg_config.set_no_check_features Dialect.[Collation; JoinOnSubquery; CreateTableAsSelect]
-  | s -> Sqlgg_config.set_no_check_features (List.map Dialect.feature_of_string (String.nsplit s ","))
+  | "all" -> Sqlgg_config.set_no_check_features Dialect.all_of_feature
+  | s ->
+    String.nsplit s "," |> List.map (fun name ->
+      match Dialect.feature_of_string name with
+      | Some f -> f
+      | None -> failwith (sprintf "Unknown feature: %s" name))
+    |> Sqlgg_config.set_no_check_features
 
 let abort_on_errors () = if !Error.errors then raise Cli_errors_found
 
@@ -292,42 +301,79 @@ let parse_args () =
   let now = ref None in
   let ddl_as_migration = ref false in
   let work s = inputs := each_input ~output s :: !inputs in
-  let args = Arg.align
+  let groups =
   [
-    "-version", Arg.Unit show_version, " Show version";
-    "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
-    "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|csharp|sql|none Set output language (default: none)";
-    "-diff", Arg.Set diff_mode, " Declarative mode: generate up/down from initial->current schema diff";
-    "-base", Arg.String (fun f -> base_files := f :: !base_files), "<file> Baseline schema / prior up migrations (repeatable)";
-    "-target", Arg.String (fun f -> target_files := f :: !target_files), "<file> Target schema (repeatable)";
-    "-migrate", Arg.Set migrate_mode, " All-in-one: diff initial+migrations against target, append the up/down delta to the migrations file and (re)generate code";
-    "-initial", Arg.String (fun f -> initial_files := f :: !initial_files), "<file> Baseline DDL for -migrate (repeatable)";
-    "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
-    "-extends", Arg.String (fun f -> extends_file := Some f), "<file> Hand-written migrations SQL, merged with generated ones by `id` (read-only)";
-    "-now", Arg.Int (fun n -> now := Some n), "<YYYYMMDDHHMMSS> Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>";
-    "-ddl-as-migration", Arg.Set ddl_as_migration, " Emit brand-new tables as CREATE TABLE migrations (default: off - new tables are schema DDL for a clean server, not migrations)";
-    "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-    "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
-    "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> set debug level";
-    "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
-      "do not put version header in generated output";
-    "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
-      "do not put timestamp in version header in generated output";
-    "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), "only output short static header without version/timestamp";
-    "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
-    "-show-table", Arg.String Tables.print1, "<name> Show specified table";
-    "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), "Treat writing NULL to NOT NULL columns as error";
-    "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
-    "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
-      " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
-    "-dialect", Arg.String set_dialect, "mysql|sqlite|postgresql|tidb Set SQL dialect - will only allow this dialect's features in SQL queries";
-    "-no-check", Arg.String set_no_check, "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select) - do not enforce dialect feature checks";
-    "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
-    "-test", Arg.Unit Test.run, " Run unit tests";
+    { title = "Code generation"; opts =
+    [
+      "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|csharp|sql|none Set output language (default: none)";
+      "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
+      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
+      "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
+      "-enum-poly-variant", Arg.Unit (fun () -> Sqlgg_config.enum_as_poly_variant := true), " Represent enums as variants in generated code";
+      "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
+        " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
+      "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
+    ] };
+
+    { title = "Schema and migrations"; opts =
+    [
+      "-diff", Arg.Set diff_mode, " Generate up/down migrations from the diff of -base schema against -target schema";
+      "-migrate", Arg.Set migrate_mode, " All-in-one: diff initial+migrations against target, append the up/down delta to the migrations file and (re)generate code";
+      "-base", Arg.String (fun f -> base_files := f :: !base_files), "<file> Baseline schema / prior up migrations (repeatable)";
+      "-target", Arg.String (fun f -> target_files := f :: !target_files), "<file> Target schema (repeatable)";
+      "-initial", Arg.String (fun f -> initial_files := f :: !initial_files), "<file> Baseline DDL for -migrate (repeatable)";
+      "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
+      "-extends", Arg.String (fun f -> extends_file := Some f), "<file> Hand-written migrations SQL, merged with generated ones by `id` (read-only)";
+      "-now", Arg.Int (fun n -> now := Some n), "<YYYYMMDDHHMMSS> Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>";
+      "-ddl-as-migration", Arg.Set ddl_as_migration, " Emit brand-new tables as CREATE TABLE migrations (default: off - new tables are schema DDL for a clean server, not migrations)";
+    ] };
+
+    { title = "Dialect and checks"; opts =
+    [
+      "-dialect", Arg.String set_dialect, sprintf "%s Set SQL dialect - will only allow this dialect's features in SQL queries" (Dialect.all |> List.map Dialect.to_string |> String.concat "|");
+      "-no-check", Arg.String set_no_check,
+        sprintf "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: %s)"
+          (Dialect.all_of_feature |> List.map Dialect.feature_to_string |> String.concat "|");
+      "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
+    ] };
+
+    { title = "Generated header"; opts =
+    [
+      "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
+        " Do not put version header in generated output";
+      "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
+        " Do not put timestamp in version header in generated output";
+      "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), " Only output short static header without version/timestamp";
+    ] };
+
+    { title = "Diagnostics"; opts =
+    [
+      "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
+      "-show-table", Arg.String Tables.print1, "<name> Show specified table";
+      "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> Set debug level";
+      "-version", Arg.Unit show_version, " Show version";
+      "-test", Arg.Unit Test.run, " Run unit tests";
+    ] };
+  ]
+  in
+  let groups =
+    let rec regroup aligned = function
+      | [] -> []
+      | g :: rest ->
+        let opts, tail = List.split_nth (List.length g.opts) aligned in
+        { g with opts } :: regroup tail rest
+    in
+    regroup (Arg.align (List.concat_map (fun g -> g.opts) groups)) groups
+  in
+  let show_help () = print_endline usage_msg; print_endline (render groups); exit 0 in
+  let args = List.concat_map (fun g -> g.opts) groups @ [
+    "-help", Arg.Unit show_help, " Display this list of options";
+    "--help", Arg.Unit show_help, "";
+    "-options-md", Arg.Unit (fun () -> printf "```text\n%s\n```\n" (render groups); exit 0), "";
   ]
   in
   Arg.parse args work usage_msg;
-  if Array.length Sys.argv = 1 then begin Arg.usage args usage_msg; exit 0 end;
+  if Array.length Sys.argv = 1 then show_help ();
   let now = !now in
   let ddl_as_migration = !ddl_as_migration in
   match !migrate_mode, !diff_mode with
