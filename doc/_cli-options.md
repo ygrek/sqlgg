@@ -16,10 +16,11 @@
   -migrations-file <file>                          Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)
   -extends <file>                                  Hand-written migrations SQL, merged with generated ones by `id` (read-only)
   -now <YYYYMMDDHHMMSS>                            Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>
-  -ddl-as-migration                                Emit brand-new tables as CREATE TABLE migrations (default: off - new tables are schema DDL for a clean server, not migrations)
+  -max-migration-id-length <N>                     Limit generated migration ids to N characters (default: no limit)
+  -ddl-as-migration                                Write new tables as CREATE TABLE migrations instead of plain schema DDL
 
  Dialect and checks:
-  -dialect mysql|postgresql|sqlite|tidb            Set SQL dialect - will only allow this dialect's features in SQL queries
+  -dialect mysql|postgresql|sqlite|tidb            Set SQL dialect. Queries can only use its features
   -no-check {all|<feature>{,<feature>}+}           Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select|on_duplicate_key|on_conflict|straight_join|lock_in_share_mode|fulltext_index|unsigned_types|autoincrement|replace_into|row_locking|default_expr|ttl|alter_column|user_defined_type)
   -allow-write-notnull-null                        Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)
 
