@@ -36,11 +36,27 @@ CREATE TABLE t(
   status ENUM('pending','sent') NOT NULL
 );
 
--- ✅ ok
+-- ok
 SELECT * FROM t WHERE status = 'pending';
 
--- ❌ type error (literal is not a valid enum constructor)
+-- type error (literal is not a valid enum constructor)
 SELECT * FROM t WHERE status = 'oops';
+```
+
+An enum goes where text is expected, but not the other way round. Once a value passes through a string function it is plain `Text`, and an enum column no longer accepts it:
+
+```sql
+CREATE TABLE tbl (
+  status_enum ENUM('A','B','C'),
+  status_text TEXT
+);
+
+-- ok, the enum is written as text
+INSERT INTO tbl (status_text) VALUES (@p { A { 'A' } | B { 'B' } });
+INSERT INTO tbl (status_text) SELECT CONCAT(@p { A { 'A' } | B { 'B' } }, '_suffix');
+
+-- type error: CONCAT returns Text, and the column wants the union
+INSERT INTO tbl (status_enum) SELECT CONCAT(@p { A { 'A' } | B { 'B' } }, '_suffix');
 ```
 
 ### JSON (JSON validity check)
@@ -50,10 +66,10 @@ When the context expects type `JSON` (e.g. a `JSON` column or a JSON-function ar
 Examples:
 
 ```sql
--- ✅ valid JSON (object)
+-- valid JSON (object)
 SELECT CAST('{"a": 1, "b": true}' AS JSON);
 
--- ❌ invalid JSON (sqlgg validation error): JSON syntax is broken (missing closing '}')
+-- invalid JSON (sqlgg validation error): JSON syntax is broken (missing closing '}')
 SELECT CAST('{"a": 1' AS JSON);
 ```
 
@@ -67,10 +83,10 @@ It is also a **string literal**, but additionally validated as a valid path.
 Example:
 
 ```sql
--- ✅ valid path
+-- valid path
 SELECT JSON_EXTRACT(CAST('{"a": 1}' AS JSON), '$.a');
 
--- ❌ invalid path (sqlgg validation error)
+-- invalid path (sqlgg validation error)
 SELECT JSON_EXTRACT(CAST('{"a": 1}' AS JSON), '$..[');
 ```
 
@@ -82,10 +98,10 @@ It is used, for example, in functions like `JSON_CONTAINS_PATH(...)`.
 Example:
 
 ```sql
--- ✅ ok
+-- ok
 SELECT JSON_CONTAINS_PATH(CAST('{"a": 1}' AS JSON), 'one', '$.a');
 
--- ❌ error: must be one/all
+-- error: must be one/all
 SELECT JSON_CONTAINS_PATH(CAST('{"a": 1}' AS JSON), 'any', '$.a');
 ```
 
@@ -96,10 +112,10 @@ The `DECIMAL(p,s)` type is defined via DDL/CAST, and numeric literals (integer/f
 Example:
 
 ```sql
--- ✅ ok
+-- ok
 SELECT CAST(12.34 AS DECIMAL(5,2));
 
--- ❌ error: value does not fit into DECIMAL(5,2)
+-- error: value does not fit into DECIMAL(5,2)
 SELECT CAST(123456.78 AS DECIMAL(5,2));
 ```
 

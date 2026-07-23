@@ -39,23 +39,14 @@ If a feature isn't supported by the selected dialect, sqlgg reports an error wit
 
 ## Disabling Checks
 
-To skip specific feature checks:
+Name the feature to skip its check, or several separated by commas:
 
 ```bash
-# Skip single feature check
 sqlgg -dialect sqlite -no-check=collation queries.sql
-
-# Skip multiple feature checks
 sqlgg -dialect sqlite -no-check=collation,join_on_subquery queries.sql
-
-# Skip all dialect checks
-sqlgg -dialect sqlite -no-check=all queries.sql
 ```
 
-Available features to skip:
-- `collation` — COLLATE syntax differences
-- `join_on_subquery` — subqueries in JOIN ON clause
-- `create_table_as_select` — CREATE TABLE AS SELECT syntax
+`-no-check=all` is a shorthand for the syntax-level checks. The [`-no-check` option](../cli.md#all-options) spells out which ones those are and lists every feature name sqlgg knows.
 
 ## Default Behavior
 

@@ -3,6 +3,8 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 const sidebars: SidebarsConfig = {
   docsSidebar: [
     'getting-started',
+    'cli',
+    'migrations',
     {
       type: 'category',
       label: 'SQL Reference',
@@ -15,8 +17,9 @@ const sidebars: SidebarsConfig = {
         'sql/queries',
         'sql/parameters',
         'sql/expressions',
-        'sql/nullability',
         'sql/cte',
+        'sql/dynamic-select',
+        'sql/nullability',
         'sql/aggregation-nullability',
         'sql/metadata',
         'sql/literals',
@@ -37,6 +40,7 @@ const sidebars: SidebarsConfig = {
           id: 'ocaml/specifics',
           label: 'Expressions',
         },
+        'ocaml/ppx',
         'ocaml/json',
       ],
     },

@@ -129,6 +129,19 @@ INSERT INTO test (k) VALUES (@k { None { NULL } | Some { @k } });
 - `None` — inserts SQL `NULL`
 - `Some` — inserts the provided value
 
+### Reusing a choice
+
+You can use the same `@choice_name` multiple times in a single query. All occurrences share one argument and switch branches together:
+
+```sql
+WITH recent AS (
+  SELECT id FROM t WHERE @f { All { TRUE } | ById { id = @a } }
+)
+SELECT id FROM recent WHERE @f { All { TRUE } | ById { id <> @b } };
+```
+
+If you select `ById`, both conditions activate at once (requiring both `@a` and `@b`). Occurrences must share the exact same branch names in the same order, with matching parameter shapes.
+
 **OCaml representation:** [Polymorphic Variants](../ocaml/specifics.md#choice-expression-types)
 
 ---
@@ -371,7 +384,3 @@ WHERE @param { None { TRUE } | Some { FALSE } };
 WITH base AS &base_query
 SELECT * FROM base WHERE price > @min_price;
 ```
-
----
-
-**See also:** [OCaml Expression Representations](../ocaml/specifics.md) for complete type mapping examples.

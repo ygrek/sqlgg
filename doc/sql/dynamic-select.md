@@ -12,9 +12,9 @@ Dynamic Select is currently supported **only in OCaml** code generation (`-gen c
 
 ## Overview
 
-Dynamic Select allows you to choose which columns to SELECT at runtime while maintaining full type safety. Just write a regular `SELECT` query and add the `dynamic_select=true` metadata flag — every column in the select list becomes a composable field that can be picked or combined at runtime using applicative combinators.
+Write one `SELECT` and let each call site pick the columns it needs. Only those columns go into the query, so a column you skip is never computed and never sent. The result type matches your pick exactly.
 
-Unlike simply ignoring unwanted columns in the callback, Dynamic Select builds the SQL query with only the selected columns. This means the database server processes and transfers less data — unused column expressions (subqueries, function calls, etc.) are never evaluated.
+Columns come from the query's own module, so what you build out of them works with that query only. A projection can also be matched structurally, by the columns it asks for, and then it works with any query that has them, see [PPX](../ocaml/ppx.md).
 
 ## Basic Syntax
 
@@ -26,10 +26,10 @@ Add a metadata comment before a regular SELECT query:
 SELECT id, name, price, category FROM products WHERE id = @id;
 ```
 
-This generates a module `Select_product_col` with a field for each column:
+This generates a module `Select_product` with a field for each column:
 
 ```ocaml
-module Select_product_col : sig
+module Select_product : sig
   type 'a t
   val pure : 'a -> 'a t
   val ( let+ ) : 'a t -> ('a -> 'b) -> 'b t
@@ -44,12 +44,12 @@ end
 
 ## Usage with Combinators
 
-The query function `select` is generated inside the `*_col` module — no need to open an extra module:
+`select` lives in the same module as the columns, so there is nothing extra to open:
 
 ### Single Field
 
 ```ocaml
-let* result = Db.Select_product_col.(select conn name ~id:1L)
+let* result = Db.Select_product.(select conn name ~id:1L)
 (* result : string option *)
 ```
 
@@ -58,14 +58,14 @@ let* result = Db.Select_product_col.(select conn name ~id:1L)
 Compose fields inline:
 
 ```ocaml
-let* result = Db.Select_product_col.(select conn (let+ n = name and+ p = price in (n, p)) ~id:1L)
+let* result = Db.Select_product.(select conn (let+ n = name and+ p = price in (n, p)) ~id:1L)
 (* result : (string * float) option *)
 ```
 
 Or bind the selector separately when it gets longer:
 
 ```ocaml
-open Db.Select_product_col
+open Db.Select_product
 
 let combined =
   let+ n = name
@@ -107,7 +107,7 @@ SELECT id, name, price FROM products WHERE stock > @min_stock;
 Inline style:
 
 ```ocaml
-Db.List_products_col.(select conn
+Db.List_products.(select conn
   (let+ i = id and+ n = name and+ p = price in (i, n, p))
   ~min_stock:5L
   (fun (i, n, p) -> printf "id=%Ld, name=%s, price=%.2f\n" i n p))
@@ -116,7 +116,7 @@ Db.List_products_col.(select conn
 Or with a separate binding:
 
 ```ocaml
-open Db.List_products_col
+open Db.List_products
 
 let combined =
   let+ i = id
@@ -141,7 +141,7 @@ FROM products WHERE id = @id;
 ```
 
 ```ocaml
-module Product_info_col : sig
+module Product_info : sig
   ...
   val label : string t
   val total_value : float t
@@ -173,7 +173,7 @@ SELECT id, name, @custom_value :: Text AS custom FROM products WHERE id = @id;
 ```
 
 ```ocaml
-module With_param_col : sig
+module With_param : sig
   ...
   val id : int64 t
   val name : string t
@@ -181,10 +181,10 @@ module With_param_col : sig
 end
 
 (* Usage *)
-let* r = Db.With_param_col.(select conn (custom "Hello") ~id:1L)
+let* r = Db.With_param.(select conn (custom "Hello") ~id:1L)
 
 (* Combine with other fields *)
-let* r = Db.With_param_col.(select conn
+let* r = Db.With_param.(select conn
   (let+ i = id and+ n = name and+ c = custom "Hello" in (i, n, c))
   ~id:1L)
 ```
@@ -363,6 +363,39 @@ SELECT id, name, price FROM products_wrapped WHERE id = @id;
 
 The `id` field will use the `Product_id` module type.
 
+## Unused JOIN Elimination
+
+You can write one large query with many joins and reuse it for different use cases. If a call site doesn't ask for any columns from a particular joined table, sqlgg removes that JOIN from the generated SQL to avoid unnecessary database work. This is a static implementation of Join Elimination (or Table Elimination).
+
+Specifically, sqlgg will automatically eliminate a `LEFT JOIN` when:
+1. None of its columns are selected at the call site.
+2. None of its columns are referenced in active `WHERE`, `ORDER BY`, or other clauses.
+3. The join is guaranteed not to multiply rows (e.g., joining on the target table's `PRIMARY KEY` or `UNIQUE` constraint).
+
+Because sqlgg understands your DDL schema, it safely proves that removing the table won't change the number of returned rows. Joins that could filter rows (`INNER JOIN`) or duplicate rows are strictly preserved:
+
+```sql
+CREATE TABLE items (id INT NOT NULL PRIMARY KEY, name TEXT NULL);
+CREATE TABLE stats (item_id INT NOT NULL PRIMARY KEY, sold INT NULL);
+
+-- [sqlgg] dynamic_select=both
+-- @wide
+SELECT i.id, i.name, s.sold
+FROM items i
+LEFT JOIN stats s ON s.item_id = i.id
+WHERE i.id > @min_id;
+```
+
+```ocaml
+(* picks only items columns, the LEFT JOIN to stats is eliminated *)
+let* r = Db.Wide.(select conn (let+ i = id and+ n = name in (i, n)) ~min_id:0L ...)
+
+(* picks sold, the JOIN is preserved *)
+let* r = Db.Wide.(select conn (let+ i = id and+ s = sold in (i, s)) ~min_id:0L ...)
+```
+
+With `dynamic_select=both`, the static companion function always keeps every join since its goal is to typecheck the entire raw query.
+
 ## Records for Readability
 
 You don't have to return tuples — use records:
@@ -370,10 +403,18 @@ You don't have to return tuples — use records:
 ```ocaml
 type product_info = { name: string; price: float }
 
-let* result = Db.Select_product_col.(select conn
+let* result = Db.Select_product.(select conn
   (let+ n = name and+ p = price in { name = n; price = p })
   ~id:1L)
 (* result : product_info option *)
+```
+
+`[@@deriving sqlgg]` generates the projection from the record type, matching fields to columns by name, see [PPX](../ocaml/ppx.md):
+
+```ocaml
+type product_info = { name : string option; price : float option } [@@deriving sqlgg]
+
+let* result = Db.Select_product.(select conn (product_info_of_cols cols) ~id:1L)
 ```
 
 ## How It Works
@@ -401,7 +442,3 @@ The generated query builds SQL dynamically:
 T.select db ("SELECT " ^ col.column ^ " FROM products WHERE id = ?") ...
 ```
 
-## See Also
-
-- [OCaml Traits](../ocaml/traits.md) — `DynamicSelect` module definition
-- [Expressions](./expressions.md) — `@choice` and other expressions

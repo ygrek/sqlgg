@@ -8,4 +8,4 @@
  (public_name sqlgg.lib)
  (libraries extlib yojson sqlgg_json_path)
  (preprocess
-  (pps ppx_deriving.std)))
+  (pps ppx_deriving.std ppx_enumerate ppx_deriving_variant_string)))

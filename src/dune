@@ -28,3 +28,10 @@
  (deps ./cli.exe)
  (action
    (run ./cli.exe -test)))
+
+(rule
+ (targets _cli-options.md)
+ (deps ./cli.exe)
+ (mode (promote (into ../doc)))
+ (action
+   (with-stdout-to %{targets} (run ./cli.exe -options-md))))

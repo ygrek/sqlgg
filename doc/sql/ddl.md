@@ -75,35 +75,50 @@ CREATE TABLE users (
 
 sqlgg infers nullability from `PRIMARY KEY` and `NOT NULL` (strict) vs `NULL` or no constraint (nullable). Other constraints (UNIQUE, CHECK, FOREIGN KEY, DEFAULT, AUTOINCREMENT) are parsed but don't affect generated types.
 
+## ALTER TABLE
+
+Queries written after an `ALTER TABLE` see the new types:
+
+```sql
+ALTER TABLE users ADD COLUMN age INT NOT NULL;
+ALTER TABLE users MODIFY COLUMN name VARCHAR(500) NOT NULL;
+ALTER TABLE users RENAME COLUMN name TO full_name;
+```
+
+Dialect-specific forms such as PostgreSQL `ALTER COLUMN ... TYPE` or TiDB `TTL` are checked against [`-dialect`](./dialects.md).
+
+## CREATE TYPE (PostgreSQL)
+
+User-defined enum types are supported with `-dialect postgresql` and can be used as column types:
+
+```sql
+CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
+
+CREATE TABLE person (
+    id INT PRIMARY KEY,
+    current_mood mood NOT NULL
+);
+
+DROP TYPE mood;
+```
+
+Enum types get the same treatment as inline `ENUM(...)` columns. See [Literals](./literals.md) for enum literal validation and the OCaml mapping to polymorphic variants.
+
 ## Metadata
 
 Metadata (`-- [sqlgg] key=value`) can be attached to columns and propagates through DDL/DML/DQL. See [Metadata](./metadata.md) for details.
 
-## Migration Strategy Recommendations
+## Keeping the schema in sync
 
-For maintaining type safety across database schema evolution:
-
-### Base Schema Creation
-It's recommended to use `CREATE TABLE IF NOT EXISTS` for your base tables to avoid duplication errors and maintain a single source of truth. This prevents maintaining separate schemas for sqlgg and your actual database, and eliminates errors from forgetting to add tables in different places:
+The same DDL files can be run against the database and fed to sqlgg, so there is one schema instead of two. Write them with `CREATE TABLE IF NOT EXISTS` and running them again is harmless:
 
 ```sql
--- @create_users
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     email TEXT UNIQUE
 );
-
--- @create_posts  
-CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content TEXT,
-    author_id INTEGER NOT NULL,
-    FOREIGN KEY (author_id) REFERENCES users(id)
-);
 ```
 
-### Schema Evolution
-Additional migrations can be added manually while maintaining type safety through the established schema. The DDL serves as the "source of truth" for type inference, ensuring your generated code stays synchronized with database changes.
+sqlgg can also generate migrations by diffing schemas, see [Migrations](../migrations.md).
 

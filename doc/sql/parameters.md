@@ -16,18 +16,21 @@ SELECT * FROM users WHERE id = @user_id AND status = @status;
 
 ## Dialect Output
 
-| Dialect | Input | Output |
-|---------|-------|--------|
-| mysql/sqlite | `@param` | `?` |
-| postgresql | `@param` | `$1, $2, ...` |
+| Mode | Input | Output |
+|------|-------|--------|
+| unnamed (mysql/sqlite/tidb default) | `@param` | `?` |
+| postgresql (postgresql default) | `@param` | `$1, $2, ...` |
 | oracle | `@param` | `:param` |
 | named | `@param` | `@param` |
 
 ## Configuration
 
+The substitution mode is auto-detected from `-dialect`, or set explicitly with `-params` (see [CLI Reference](../cli.md)):
+
 ```bash
 sqlgg -dialect postgresql queries.sql
 sqlgg -params named queries.sql
+sqlgg -params oracle queries.sql
 ```
 
 ## Type Inference
