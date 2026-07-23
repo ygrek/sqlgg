@@ -308,7 +308,8 @@ let migration_of_block (sql, props) =
       match Props.get stmt.props "name", Props.get props "id" with
       | None, Some raw ->
         (match Migration_id.parse raw with
-         | Some ({ name = Some _; _ } as id) -> Props.set stmt.props "name" (Migration_id.to_string id)
+         | Some id when Option.is_some (Migration_id.name id) ->
+           Props.set stmt.props "name" (Migration_id.to_string id)
          | _ -> stmt.props)
       | _ -> stmt.props
     in
