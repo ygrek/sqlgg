@@ -18,7 +18,9 @@ depends: [
   "menhir" {>= "20180523"}
   "mybuild" {> "3"}
   "ppx_deriving" {>= "4.3"}
-  "ppxlib" {>= "0.26.0"}
+  "ppx_enumerate" {>= "v0.15.0"}
+  "ppx_deriving_variant_string" {>= "1.0.1"}
+  "ppxlib" {>= "0.36.2"}
   ("extlib" {>= "1.7.8"} | "extlib-compat" {>= "1.7.8"})
   "base-unix"
   "odoc" {with-doc}
@@ -38,11 +40,5 @@ of output columns and query parameters to the host language, trying to be as uno
 as possible and leaving the choice of SQL database (and API to access it) to the developer."""
 
 conflicts: [
-  "mariadb" {<= "1.1.6"}
-]
-
-pin-depends: [
-  [ "mariadb.dev"
-    "git+https://github.com/ocaml-community/ocaml-mariadb.git#e9f9ac750abd5adebb589da5e553e5c45d8ec066"
-  ]
+  "mariadb" {<= "1.3.0"}
 ]

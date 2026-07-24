@@ -63,18 +63,22 @@ let check_dialect sql dialect_features =
   in
   let position_info ({ pos = (f, l); _ }: dialect_support) = String.slice ~first:f ~last:l sql in
   dialect_features |> List.iter (fun ds ->
-    match check_support_for_dialect ds !selected with
-    | `Supported -> ()
-    | `Unsupported ->
+    let skip = List.mem ds.feature !Sqlgg_config.no_check_features in
+    match check_support_for_dialect ds !selected, skip with
+    | `Supported, _ -> ()
+    | `Unsupported, true ->
+        Error.warn "Feature %s is not supported for dialect %s, proceeding anyway at %s\n"
+          (show_feature ds.feature) (show !selected) (position_info ds)
+    | `Unsupported, false ->
         let supported_dialects = String.concat ", " (List.map show ds.state.supported) in
         let supported_info =
           if ds.state.supported = [] then ""
-          else Printf.sprintf " (supported by: %s)" supported_dialects 
+          else Printf.sprintf " (supported by: %s)" supported_dialects
         in
         Error.log "Feature %s is not supported for dialect %s%s at %s"
-          (show_feature ds.feature) (show !selected) supported_info 
+          (show_feature ds.feature) (show !selected) supported_info
           (position_info ds)
-    | `Unknown when List.mem ds.feature !Sqlgg_config.no_check_features ->
+    | `Unknown, true ->
         (match ds.feature with
         | Collation ->
             Error.warn "Assuming custom collation implementation for %s\n"
@@ -83,7 +87,7 @@ let check_dialect sql dialect_features =
             Error.warn
               "Feature %s has unknown support for dialect %s at %s\n"
               (show_feature ds.feature) (show !selected) (position_info ds))
-    | `Unknown ->
+    | `Unknown, false ->
         Error.log
           "Unknown dialect support for feature %s with dialect %s at %s, use -no-check=all to skip all checks or -no-check=%s to skip this feature check"
           (show_feature ds.feature) (show !selected) (position_info ds) (feature_to_string ds.feature))

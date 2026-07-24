@@ -1,72 +1,39 @@
 open Prelude
 
-type t = MySQL | PostgreSQL | SQLite | TiDB [@@deriving eq, show { with_path = false }]
+type t =
+  | MySQL [@as "mysql"]
+  | PostgreSQL [@as "postgresql"]
+  | SQLite [@as "sqlite"]
+  | TiDB [@as "tidb"]
+[@@deriving eq, show { with_path = false }, enumerate, to_string, of_string]
 
 let selected = ref MySQL
 
 let set_selected d = selected := d
 
 type feature =
-  | Collation
-  | JoinOnSubquery
-  | CreateTableAsSelect
-  | OnDuplicateKey
-  | OnConflict
-  | StraightJoin
-  | LockInShareMode
-  | FulltextIndex
-  | UnsignedTypes
-  | AutoIncrement
-  | ReplaceInto
-  | RowLocking
-  | DefaultExpr
-  | Ttl
-  | AlterColumn
-  | UserDefinedType
-[@@deriving show { with_path = false }]
+  | Collation [@as "collation"]
+  | JoinOnSubquery [@as "join_on_subquery"]
+  | CreateTableAsSelect [@as "create_table_as_select"]
+  | OnDuplicateKey [@as "on_duplicate_key"]
+  | OnConflict [@as "on_conflict"]
+  | StraightJoin [@as "straight_join"]
+  | LockInShareMode [@as "lock_in_share_mode"]
+  | FulltextIndex [@as "fulltext_index"]
+  | UnsignedTypes [@as "unsigned_types"]
+  | AutoIncrement [@as "autoincrement"]
+  | ReplaceInto [@as "replace_into"]
+  | RowLocking [@as "row_locking"]
+  | DefaultExpr [@as "default_expr"]
+  | Ttl [@as "ttl"]
+  | AlterColumn [@as "alter_column"]
+  | UserDefinedType [@as "user_defined_type"]
+[@@deriving show { with_path = false }, enumerate, to_string, of_string]
 
 let show_feature x = 
   match x with 
   | DefaultExpr -> "with this kind of default expressions"
   | x -> show_feature x
-
-let feature_to_string = function
-  | Collation -> "collation"
-  | JoinOnSubquery -> "join_on_subquery"
-  | CreateTableAsSelect -> "create_table_as_select"
-  | OnDuplicateKey -> "on_duplicate_key"
-  | OnConflict -> "on_conflict"
-  | StraightJoin -> "straight_join"
-  | LockInShareMode -> "lock_in_share_mode"
-  | FulltextIndex -> "fulltext_index"
-  | UnsignedTypes -> "unsigned_types"
-  | AutoIncrement -> "autoincrement"
-  | ReplaceInto -> "replace_into"
-  | RowLocking -> "row_locking"
-  | DefaultExpr -> "default_expr"
-  | Ttl -> "ttl"
-  | AlterColumn -> "alter_column"
-  | UserDefinedType -> "user_defined_type"
-
-let feature_of_string s =
-  match String.lowercase_ascii s with
-  | "collation" -> Collation
-  | "join_on_subquery" -> JoinOnSubquery
-  | "create_table_as_select" -> CreateTableAsSelect
-  | "on_duplicate_key" -> OnDuplicateKey
-  | "on_conflict" -> OnConflict
-  | "straight_join" -> StraightJoin
-  | "lock_in_share_mode" -> LockInShareMode
-  | "fulltext_index" -> FulltextIndex
-  | "unsigned_types" -> UnsignedTypes
-  | "autoincrement" -> AutoIncrement
-  | "replace_into" -> ReplaceInto
-  | "row_locking" -> RowLocking
-  | "default_expr" -> DefaultExpr
-  | "ttl" -> Ttl
-  | "alter_column" -> AlterColumn
-  | "user_defined_type" -> UserDefinedType
-  | _ -> failwith (Printf.sprintf "Unknown feature: %s" s)
 
 type support_state = {
   supported : t list;
@@ -79,8 +46,6 @@ type dialect_support = {
   pos : Sql.pos;
   state : support_state;
 }
-
-let all = [MySQL; PostgreSQL; SQLite; TiDB]
 
 let all_except excluded = List.filter (fun d -> not (List.mem d excluded)) all
 
