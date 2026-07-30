@@ -2327,6 +2327,40 @@ let test_join_hole_whitespace =
       [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nWHERE note = '  two  spaces  '"];
   ]
 
+let test_migration_name =
+  let module Name = Migration_id.Name in
+  let head = Name.words "alter_blog_sync_jobs" in
+  let actions =
+    [ Name.action (Name.words "add_col") (Name.words "redirects_synced");
+      Name.action (Name.words "add_col") (Name.words "redirects_skipped");
+      Name.action (Name.words "add_pk") [] ]
+  in
+  let render limit expected =
+    assert_equal ~printer:(fun s -> s) expected (Name.render limit (Name.make head actions))
+  in
+  let uncapped expected = "uncapped" >:: (fun () -> render None expected) in
+  let cut n expected = sprintf "cap %d" n >:: (fun () -> render (Some n) expected) in
+  let flat limit before after =
+    sprintf "fit %S" before >:: (fun () ->
+      assert_equal ~printer:(fun s -> s) after (Name.fit limit before))
+  in
+  let whole = "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped_add_pk" in
+  [
+    uncapped whole;
+    cut 78 whole;
+    cut 77 "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped";
+    cut 60 "alter_blog_sync_jobs_add_col_redirects_synced_add_col";
+    cut 53 "alter_blog_sync_jobs_add_col_redirects_synced_add_col";
+    cut 52 "alter_blog_sync_jobs_add_col_redirects_synced";
+    cut 27 "alter_blog_sync_jobs";
+    cut 19 "alter_blog_sync";
+    cut 6 "alter";
+
+    flat None "whatever_it_is"            "whatever_it_is";
+    flat (Some 15)  "alter_users_add_col_email" "alter_users_add";
+    flat (Some 11)  "alter_users_add_col_email" "alter_users";
+  ]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -2371,6 +2405,7 @@ let run () =
     "test_nullability_rules" >::: test_nullability_rules;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
+    "migration name" >::: test_migration_name;
   ]
   in
   let test_suite = "main" >::: tests in

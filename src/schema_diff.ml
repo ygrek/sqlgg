@@ -2,6 +2,9 @@ open Printf
 open Sqlgg
 
 module SMap = Tables.SMap
+module Name = Migration_id.Name
+
+let mig_name naming head actions = Name.render naming (Name.make head actions)
 
 let index_by key xs =
   List.fold_left (fun m x -> SMap.add (key x) x m) SMap.empty xs
@@ -94,10 +97,7 @@ let materialize_inline_unique (t : Tables.stored_table) =
 type change =
   | Create_table of Tables.stored_table
   | Drop_table of Tables.stored_table
-  | Alter_table of { table : Sql.table_name; sql : string; mig_name : string }
-
-let safe_ident =
-  String.map (function ('a'..'z' | 'A'..'Z' | '0'..'9' | '_') as c -> c | _ -> '_')
+  | Alter_table of { table : Sql.table_name; sql : string; actions : Sql.alter_action list }
 
 let index_kind_slug = function
   | Sql.Plain_idx -> "index"
@@ -105,29 +105,33 @@ let index_kind_slug = function
   | Sql.Fulltext_idx -> "fulltext"
   | Sql.Spatial_idx -> "spatial"
 
-let rename_slug what o n = sprintf "rename_%s_%s_%s" what (safe_ident o) (safe_ident n)
+let verb spelling = Name.words spelling
+let action v = Name.action (verb v) []
+let action_on v target = Name.action (verb v) (Name.words target)
+let rename kind old_ new_ =
+  Name.action (verb "rename" @ verb kind) (Name.words old_ @ Name.words new_)
 
-let action_slug : Sql.alter_action -> string = function
-  | `Add (col, _) -> "add_col_" ^ safe_ident col.name
-  | `Drop name -> "drop_col_" ^ safe_ident name
+let action_of : Sql.alter_action -> Name.action = function
+  | `Add (col, _) -> action_on "add_col" col.name
+  | `Drop name -> action_on "drop_col" name
   | `Change (old_name, new_col, _) ->
-    if old_name = new_col.name then "change_col_" ^ safe_ident new_col.name
-    else rename_slug "col" old_name new_col.name
-  | `RenameTable t -> "rename_to_" ^ safe_ident t.tn
-  | `RenameColumn (o, n) -> rename_slug "col" o n
-  | `RenameIndex (o, n) -> rename_slug "index" o n
+    if old_name = new_col.name then action_on "change_col" new_col.name
+    else rename "col" old_name new_col.name
+  | `RenameTable t -> action_on "rename_to" t.tn
+  | `RenameColumn (o, n) -> rename "col" o n
+  | `RenameIndex (o, n) -> rename "index" o n
   | `AddIndex { add_idx_name; add_idx_kind; _ } ->
-    let base = "add_" ^ index_kind_slug add_idx_kind in
-    Option.map_default (fun n -> base ^ "_" ^ safe_ident n) base add_idx_name
-  | `DropIndex name -> "drop_index_" ^ safe_ident name
-  | `AddPrimaryKey _ -> "add_pk"
-  | `DropPrimaryKey -> "drop_pk"
-  | `AddConstraint _ -> "add_constraint"
-  | `DropConstraint name -> "drop_constraint_" ^ safe_ident name
-  | `Default_or_convert_to _ -> "set_charset"
-  | `TtlOptions _ -> "set_ttl"
-  | `RemoveTtl _ -> "remove_ttl"
-  | `AlterColumnPG (col, _) -> "alter_col_" ^ safe_ident col
+    let v = verb "add" @ verb (index_kind_slug add_idx_kind) in
+    Option.map_default (fun n -> Name.action v (Name.words n)) (Name.action v []) add_idx_name
+  | `DropIndex name -> action_on "drop_index" name
+  | `AddPrimaryKey _ -> action "add_pk"
+  | `DropPrimaryKey -> action "drop_pk"
+  | `AddConstraint _ -> action "add_constraint"
+  | `DropConstraint name -> action_on "drop_constraint" name
+  | `Default_or_convert_to _ -> action "set_charset"
+  | `TtlOptions _ -> action "set_ttl"
+  | `RemoveTtl _ -> action "remove_ttl"
+  | `AlterColumnPG (col, _) -> action_on "alter_col" col
 
 let diff_columns ~from_ ~to_ =
   let from_cols = columns_without_index_unique from_ in
@@ -203,10 +207,7 @@ let alter_change name target actions =
       (fun (c : Tables.column) -> c.default_sql)
   in
   Option.map
-    (fun sql ->
-      let slugs = List.map action_slug actions in
-      let mig_name = String.concat "_" ("alter" :: safe_ident name.Sql.tn :: slugs) in
-      Alter_table { table = name; sql; mig_name })
+    (fun sql -> Alter_table { table = name; sql; actions })
     (Gen_migrations.alter_table_sql ~default_sql_lookup name (Gen_migrations.Columns actions))
 
 let diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
@@ -250,10 +251,11 @@ let change_table = function
   | Drop_table t -> t.Tables.name
   | Alter_table { table; _ } -> table
 
-let change_name = function
-  | Create_table t -> "create_" ^ safe_ident t.Tables.name.tn
-  | Drop_table t -> "drop_" ^ safe_ident t.Tables.name.tn
-  | Alter_table { mig_name; _ } -> mig_name
+let change_name ~naming = function
+  | Create_table t -> mig_name naming (Name.words "create" @ Name.words t.Tables.name.tn) []
+  | Drop_table t -> mig_name naming (Name.words "drop" @ Name.words t.Tables.name.tn) []
+  | Alter_table { table; actions; _ } ->
+    mig_name naming (Name.words "alter" @ Name.words table.tn) (List.map action_of actions)
 
 let kind_of_change = function
   | Create_table t -> Stmt.Create t.Tables.name
@@ -283,13 +285,13 @@ let invert ~by_from ~by_to up =
         | Some down -> down
         | None -> irreversible "reverse diff renders to nothing"
 
-let generate ~ddl_as_migration ~from_ ~to_ =
+let generate ~naming ~ddl_as_migration ~from_ ~to_ =
   let from_ = List.map materialize_inline_unique from_ in
   let to_ = List.map materialize_inline_unique to_ in
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
   diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
-    { Gen_migrations.props = Props.set Props.empty "name" (change_name up);
+    { Gen_migrations.props = Props.set Props.empty "name" (change_name ~naming up);
       kind = kind_of_change up;
       apply = render_apply up;
       revert = render_apply (invert ~by_from ~by_to up) })
