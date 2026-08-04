@@ -9,7 +9,7 @@ type product = {
 type counted = {
   cid : int64;
   reply_count : int; [@sqlgg.map Int64.to_int]
-  label : string; [@sqlgg.set String.trim]
+  label : string;
 }
 [@@deriving sqlgg]
 
@@ -19,5 +19,11 @@ type post = {
   post_id : int64;
   content : content; [@sqlgg.nested]
   channel : Feed.channel; [@sqlgg.nested]
+}
+[@@deriving sqlgg]
+
+type feed_item = {
+  item_id : int64;
+  channel : Feed.channel option; [@sqlgg.nested]
 }
 [@@deriving sqlgg]

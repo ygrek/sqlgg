@@ -1,4 +1,5 @@
 (cram
  (deps
   %{bin:sqlgg}
+  (package sqlgg)
   ../print_impl.ml))

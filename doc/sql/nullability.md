@@ -61,6 +61,10 @@ LEFT JOIN profiles p ON u.id = p.user_id;
 -- p.bio: nullable (even if column is NOT NULL)
 ```
 
+The whole right side is nullable together: the row either matched or it did not.
+In OCaml, [`[@sqlgg.nested]`](../ocaml/ppx.md#sqlggjoined) folds that
+back into a single option on the joined record, instead of one per column.
+
 ### RIGHT JOIN
 
 Left side becomes nullable:

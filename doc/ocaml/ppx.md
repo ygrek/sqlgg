@@ -169,22 +169,6 @@ let with_warehouse db =
 
 Drop `warehouse` from the chain and the join to `stock_info` is [eliminated](../sql/dynamic-select.md#unused-join-elimination), nothing reads from it anymore.
 
-## What Gets Derived
-
-One function per record:
-
-```ocaml
-type product = { id : int64; name : string option } [@@deriving sqlgg]
-```
-
-```ocaml
-val product_of_cols :
-  < id : int64 col; name : string option col; .. > -> product col
-```
-
-It reads the record off a query's `cols`. A type named `t` drops the prefix and
-gives plain `of_cols`.
-
 ## Per-Field Attributes
 
 An attribute on a field changes where its value comes from, or what happens to
@@ -282,18 +266,137 @@ type post = {
 [@@deriving sqlgg]
 ```
 
-The derived chain calls `content_of_cols cols`, so the two records compose the
-same way a hand-written [composition](#composition) would. The nested record's
-columns do not appear in the outer object type — the inner call adds them:
+The reader calls the inner one on the same object:
 
 ```ocaml
-val post_of_cols :
-  < id : int64 col; body : string option col; reply_count : int64 col; .. > -> post col
+let post_of_cols cols =
+  let+ id = cols#id
+  and+ content = content_of_cols cols
+  and+ reply_count = cols#reply_count in
+  { id; content; reply_count = Int64.to_int reply_count }
 ```
 
-Since only the fields a record mentions reach the `SELECT` list, dropping a
-nested field drops its columns and any [join](../sql/dynamic-select.md#unused-join-elimination)
-that existed only to serve them.
+So the query must supply `content`'s columns too. The row type says that with a
+second constraint. It does not name those columns.
 
-A record from another module works too. `channel : Feed.channel [@sqlgg.nested]`
-calls `Feed.channel_of_cols`.
+```ocaml
+type (..., 'cols) post_cols = 'cols
+  constraint 'cols = < id : int64 col; reply_count : int64 col; .. >
+  constraint 'cols = (..., 'cols) content_cols
+
+val post_of_cols : (..., 'cols) post_cols -> post col
+```
+
+Nest one more record and you get one more constraint. A record from another
+module works the same way: `channel : Feed.channel [@sqlgg.nested]` calls
+`Feed.channel_of_cols`.
+
+#### Over an outer join
+
+Columns from the right side of an outer join arrive as options, so a record read
+straight off one gets an option per column:
+
+```sql
+-- [sqlgg] dynamic_select=true
+-- @q4
+SELECT p.id, p.name, s.product_id, s.place, s.warehouse
+FROM products p
+LEFT JOIN stock_info s ON s.product_id = p.id
+WHERE p.id = @id;
+```
+
+Make the field an option and the attribute puts the option on the relation
+instead:
+
+```ocaml
+type stock = { product_id : int64; place : string; warehouse : string option }
+[@@deriving sqlgg ~nullable_cols]
+
+type product = {
+  id : int64;
+  name : string option;
+  stock : stock option; [@sqlgg.nested]
+}
+[@@deriving sqlgg]
+
+let with_stock db = Q4.(select db (product_of_cols cols) ~id:1L)
+```
+
+The field's type picks the reading:
+
+```ocaml
+stock : stock          [@sqlgg.nested]   (* columns as declared *)
+stock : stock option   [@sqlgg.nested]   (* columns from an outer join *)
+```
+
+Pick the wrong one and it does not typecheck against that query.
+
+#### Present, absent, and neither
+
+A **strict** field is one that is not an option and has no
+[`[@sqlgg.default]`](#sqlggdefault-v). `[@sqlgg.nested]` reads the relation like
+this:
+
+```ocaml
+match product_id, place, warehouse with
+| Some product_id, Some place, _ -> Some { product_id; place; warehouse }
+| None, None, None -> None
+| None, _, _ -> failwith "sqlgg: stock.product_id is NULL"
+| _, None, _ -> failwith "sqlgg: stock.place is NULL"
+```
+
+A missing match nulls every column at once, so the failing arms are not a
+missing match. `default_none` gives `None` there instead:
+
+```ocaml
+Option.bind product_id (fun product_id ->
+  Option.bind place (fun place -> Some { product_id; place; warehouse }))
+```
+
+Optional and defaulted fields never raise. Conversions run only once the
+relation is there.
+
+#### `~nullable_cols`
+
+The two functions above are not derived by default. Ask for them:
+
+```ocaml
+type stock = { product_id : int64; place : string; warehouse : string option }
+[@@deriving sqlgg ~nullable_cols]
+```
+
+```ocaml
+type (..., 'cols) stock_nullable_cols
+
+val stock_of_nullable_cols     : (..., 'cols) stock_nullable_cols -> stock option col
+val stock_of_nullable_cols_exn : (..., 'cols) stock_nullable_cols -> stock option col
+```
+
+`[@sqlgg.nested]` calls the second, `default_none` the first. You can also call
+them yourself, which is the way to read a relation without inventing a record
+for it:
+
+```ocaml
+let product_and_stock cols =
+  let+ p = product_of_cols cols
+  and+ s = stock_of_nullable_cols_exn cols in
+  (p, s)
+```
+
+```ocaml
+val product_and_stock : < ... > -> (product * stock option) col
+```
+
+A tuple, and the folding still happens. Adding a `stock option` field to
+`product` would have changed every place that reads a product.
+
+Put the flag on the **inner** record. A record cannot see who will nest it. The
+deriver gets one type declaration at a time, so `stock` is expanded before the
+compiler reaches `product`. Forget the flag and the error points at the nesting:
+
+```
+Error: Unbound type constructor "stock_nullable_cols"
+```
+
+A record read as a relation reads its own nested fields the same way, so they
+need the flag too.
