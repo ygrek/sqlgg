@@ -145,7 +145,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, manager_id INT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, manager_id INT)")
 
   module Fold = struct
   end (* module Fold *)

@@ -10,10 +10,10 @@ CREATE TYPE
     module IO = Sqlgg_io.Blocking
   
     let create_type_color db  =
-      T.execute db ("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") T.no_params
+      T.execute_unprepared db ("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')")
   
     let create_shirt db  =
-      T.execute db ("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)")
   
     let select_2 db  callback =
       let invoke_callback stmt =
@@ -23,7 +23,7 @@ CREATE TYPE
       T.select db ("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") T.no_params invoke_callback
   
     let drop_type_color db  =
-      T.execute db ("DROP TYPE \"color\"") T.no_params
+      T.execute_unprepared db ("DROP TYPE \"color\"")
   
     module Fold = struct
       let select_2 db  callback acc =
@@ -89,16 +89,16 @@ CREATE DROP CREATE
     module IO = Sqlgg_io.Blocking
   
     let create_type_color db  =
-      T.execute db ("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") T.no_params
+      T.execute_unprepared db ("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')")
   
     let drop_type_color db  =
-      T.execute db ("DROP TYPE \"color\"") T.no_params
+      T.execute_unprepared db ("DROP TYPE \"color\"")
   
     let create_type_color db  =
-      T.execute db ("CREATE TYPE \"color\" AS ENUM ('black', 'white')") T.no_params
+      T.execute_unprepared db ("CREATE TYPE \"color\" AS ENUM ('black', 'white')")
   
     let create_shirt db  =
-      T.execute db ("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)")
   
     let select_4 db  callback =
       let invoke_callback stmt =

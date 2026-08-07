@@ -622,16 +622,16 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, user_id INT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, user_id INT)")
 
   let create_profiles db  =
-    T.execute db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)")
 
   let create_orders db  =
-    T.execute db ("CREATE TABLE orders (bio TEXT, amount INT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE orders (bio TEXT, amount INT)")
 
   let create_shipments db  =
-    T.execute db ("CREATE TABLE shipments (user_id INT, status TEXT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE shipments (user_id INT, status TEXT)")
 
   module Fold = struct
   end (* module Fold *)

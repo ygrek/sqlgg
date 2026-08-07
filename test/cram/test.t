@@ -919,7 +919,7 @@ Test Single style for SELECT 1/0..1 and hide empty modules:
     module IO = Sqlgg_io.Blocking
   
     let create_test20250902 db  =
-      T.execute db ("CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT)")
   
     let select_1 db  =
       let get_row stmt =
@@ -969,11 +969,11 @@ Test non_nullifiable when update:
     module IO = Sqlgg_io.Blocking
   
     let create_non_nullifiable db  =
-      T.execute db ("CREATE TABLE non_nullifiable (\n\
+      T.execute_unprepared db ("CREATE TABLE non_nullifiable (\n\
       name TEXT,\n\
           updated_at DATETIME NULL,\n\
       updated_at_not_nullable DATETIME NOT NULL\n\
-  )") T.no_params
+  )")
   
     let update_non_nullifiable_1 db ~updated_at =
       let set_params stmt =
@@ -1067,14 +1067,14 @@ Test non_nullifiable with multi-row INSERT (NULL allowed on insert):
     module IO = Sqlgg_io.Blocking
   
     let create_nn_insert_multi db  =
-      T.execute db ("CREATE TABLE nn_insert_multi (\n\
+      T.execute_unprepared db ("CREATE TABLE nn_insert_multi (\n\
       id INT PRIMARY KEY,\n\
       name TEXT,\n\
           published_at DATETIME\n\
-  )") T.no_params
+  )")
   
     let insert_nn_insert_multi_1 db  =
-      T.execute db ("INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL)") T.no_params
+      T.execute_unprepared db ("INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL)")
   
   end (* module Sqlgg *)
 
@@ -1121,11 +1121,11 @@ Test non_nullifiable with INSERT ... ON DUPLICATE KEY UPDATE (values nullable, N
     module IO = Sqlgg_io.Blocking
   
     let create_nn_upsert db  =
-      T.execute db ("CREATE TABLE nn_upsert (\n\
+      T.execute_unprepared db ("CREATE TABLE nn_upsert (\n\
       id INT PRIMARY KEY,\n\
           column1 INT NULL,\n\
           column2 VARCHAR(255) NULL\n\
-  )") T.no_params
+  )")
   
     let insert_nn_upsert_1 db ~v1 ~v2 =
       let set_params stmt =
@@ -1162,20 +1162,20 @@ Test non_nullifiable with INSERT ... SELECT (source may produce NULLs):
     module IO = Sqlgg_io.Blocking
   
     let create_nn_src db  =
-      T.execute db ("CREATE TABLE nn_src (\n\
+      T.execute_unprepared db ("CREATE TABLE nn_src (\n\
       id INT PRIMARY KEY,\n\
       ts DATETIME\n\
-  )") T.no_params
+  )")
   
     let create_nn_dst db  =
-      T.execute db ("CREATE TABLE nn_dst (\n\
+      T.execute_unprepared db ("CREATE TABLE nn_dst (\n\
       id INT PRIMARY KEY,\n\
           published_at DATETIME\n\
-  )") T.no_params
+  )")
   
     let insert_nn_dst_2 db  =
-      T.execute db ("INSERT INTO nn_dst (id, published_at)\n\
-  SELECT id, ts FROM nn_src") T.no_params
+      T.execute_unprepared db ("INSERT INTO nn_dst (id, published_at)\n\
+  SELECT id, ts FROM nn_src")
   
   end (* module Sqlgg *)
 
@@ -1194,14 +1194,14 @@ Test INSERT (.. ) VALUES @rows with non_nullifiable column (NULL allowed on inse
     module IO = Sqlgg_io.Blocking
   
     let create_nn_insert_param db  =
-      T.execute db ("CREATE TABLE nn_insert_param (\n\
+      T.execute_unprepared db ("CREATE TABLE nn_insert_param (\n\
       id INT PRIMARY KEY,\n\
       name TEXT,\n\
           published_at DATETIME\n\
-  )") T.no_params
+  )")
   
     let insert_nn_insert_param_1 db ~rows =
-      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db ("INSERT INTO nn_insert_param (id, name, published_at) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name, published_at) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match name with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match published_at with None -> "NULL" | Some v -> T.Types.Datetime.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) T.no_params )
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute_unprepared db ("INSERT INTO nn_insert_param (id, name, published_at) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name, published_at) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match name with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match published_at with None -> "NULL" | Some v -> T.Types.Datetime.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)))
   
   end (* module Sqlgg *)
 
@@ -1215,10 +1215,10 @@ Test INSERT (..) VALUES @rows with columns whose names are OCaml keywords (must 
     module IO = Sqlgg_io.Blocking
   
     let create_kw_rows db  =
-      T.execute db ("CREATE TABLE kw_rows (type INTEGER, val TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE kw_rows (type INTEGER, val TEXT)")
   
     let insert_kw_rows_1 db ~rows =
-      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db ("INSERT INTO kw_rows (type, val) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (type_, val_) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match type_ with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match val_ with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) T.no_params )
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute_unprepared db ("INSERT INTO kw_rows (type, val) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (type_, val_) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match type_ with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match val_ with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)))
   
   end (* module Sqlgg *)
 
@@ -1352,10 +1352,10 @@ order by and limit are supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)")
   
     let update_1 db  =
-      T.execute db ("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10") T.no_params
+      T.execute_unprepared db ("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10")
   
   end (* module Sqlgg *)
 
@@ -1369,7 +1369,7 @@ parametrized order by and limit are supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)")
   
     let update_1 db ~order ~direction ~limit =
       let set_params stmt =
@@ -1391,7 +1391,7 @@ limit is supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)")
   
     let update_1 db ~limit =
       let set_params stmt =
@@ -1414,10 +1414,10 @@ order by and limit are supported with update stmt + table alias + join:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)")
   
     let create_test2 db  =
-      T.execute db ("CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL)")
   
     let update_2 db ~value ~order ~direction ~limit =
       let set_params stmt =
@@ -1467,18 +1467,18 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
     module IO = Sqlgg_io.Blocking
   
     let create_table_1_2025_09_26 db  =
-      T.execute db ("CREATE TABLE table_1_2025_09_26 (\n\
+      T.execute_unprepared db ("CREATE TABLE table_1_2025_09_26 (\n\
       id INT PRIMARY KEY AUTO_INCREMENT,\n\
       date_1 DATE,\n\
       table_no INT\n\
-  )") T.no_params
+  )")
   
     let create_table_2_2025_09_26 db  =
-      T.execute db ("CREATE TABLE table_2_2025_09_26 (\n\
+      T.execute_unprepared db ("CREATE TABLE table_2_2025_09_26 (\n\
       id INT PRIMARY KEY AUTO_INCREMENT,\n\
       date_2 DATE,\n\
       table_no INT\n\
-  )") T.no_params
+  )")
   
     let select_2 db ~order_kind ~par callback =
       let invoke_callback stmt =
@@ -1605,9 +1605,9 @@ INSERT ... SELECT with UNION ALL and enum meta propagation (short):
     module IO = Sqlgg_io.Blocking
   
     let create_t_enum_union db  =
-      T.execute db ("CREATE TABLE t_enum_union (\n\
+      T.execute_unprepared db ("CREATE TABLE t_enum_union (\n\
       pending_type ENUM('downgrade','upgrade') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let insert_t_enum_union_1 db ~p =
       let set_params stmt =
@@ -1638,9 +1638,9 @@ INSERT ... SELECT with meta propagation:
     module IO = Sqlgg_io.Blocking
   
     let create_t_dst db  =
-      T.execute db ("CREATE TABLE t_dst (\n\
+      T.execute_unprepared db ("CREATE TABLE t_dst (\n\
     status ENUM('a','b') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let insert_t_dst_1 db ~s =
       let set_params stmt =
@@ -1711,7 +1711,7 @@ Test UINT64 mapping for UNSIGNED INT:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id BIGINT UNSIGNED, v INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id BIGINT UNSIGNED, v INT)")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1777,10 +1777,10 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (\n\
+      T.execute_unprepared db ("CREATE TABLE t1 (\n\
    id BIGINT UNSIGNED,\n\
    v INT\n\
-  )") T.no_params
+  )")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1843,7 +1843,7 @@ Test UINT64 in type spec:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT)")
   
     let insert_t1_1 db ~id =
       let set_params stmt =
@@ -1932,14 +1932,14 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     module IO = Sqlgg_io.Blocking
   
     let create_orders db  =
-      T.execute db ("CREATE TABLE orders (\n\
+      T.execute_unprepared db ("CREATE TABLE orders (\n\
     id INT PRIMARY KEY,\n\
     customer_id INT NOT NULL,\n\
     product TEXT NOT NULL,\n\
     quantity INT NOT NULL,\n\
     price DECIMAL(10,2) NOT NULL,\n\
     description TEXT\n\
-  )") T.no_params
+  )")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2369,19 +2369,19 @@ Test DEFAULT dialect feature valid for mysql:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_ts_interval db  =
-      T.execute db ("CREATE TABLE ok_ts_interval (\n\
+      T.execute_unprepared db ("CREATE TABLE ok_ts_interval (\n\
     ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
-  )") T.no_params
+  )")
   
     let create_ok_ts_func db  =
-      T.execute db ("CREATE TABLE ok_ts_func (\n\
+      T.execute_unprepared db ("CREATE TABLE ok_ts_func (\n\
     ts DATETIME DEFAULT (DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY))\n\
-  )") T.no_params
+  )")
   
     let create_ok_tidb_ts db  =
-      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db ("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2417,9 +2417,9 @@ Test DEFAULT dialect feature valid for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_tidb_ts db  =
-      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db ("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT NOW()\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2444,9 +2444,9 @@ Test DEFAULT dialect feature valid for sqlite:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_tidb_ts db  =
-      T.execute db ("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db ("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT NOW()\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2462,10 +2462,10 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_t4 db  =
-      T.execute db ("CREATE TABLE t4 (\n\
+      T.execute_unprepared db ("CREATE TABLE t4 (\n\
     id bigint PRIMARY KEY,\n\
     j json DEFAULT (JSON_OBJECT(\"a\", 1, \"b\", 2))\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2492,9 +2492,9 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_user_status db  =
-      T.execute db ("CREATE TABLE user_status (\n\
+      T.execute_unprepared db ("CREATE TABLE user_status (\n\
    status ENUM('active', 'inactive', 'banned') NOT NULL DEFAULT 'active'\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2510,9 +2510,9 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_tbl db  =
-      T.execute db ("CREATE TABLE tbl (\n\
+      T.execute_unprepared db ("CREATE TABLE tbl (\n\
    f1 INT NOT NULL DEFAULT 1\n\
-  )") T.no_params
+  )")
   
   end (* module Sqlgg *)
 
@@ -2537,7 +2537,7 @@ Test IS NOT NULL type refinement:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT, str TEXT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT, str TEXT, name TEXT)")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2584,7 +2584,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT, str TEXT, name TEXT NULL)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT, str TEXT, name TEXT NULL)")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2631,7 +2631,7 @@ Test IS NOT NULL type refinement with IS NULL:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db ("CREATE TABLE test (id INT, str TEXT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE test (id INT, str TEXT, name TEXT)")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2681,9 +2681,9 @@ Test meta propagation: IFNULL with ENUM column should propagate metadata to resu
     module IO = Sqlgg_io.Blocking
   
     let create_test_ifnull_enum db  =
-      T.execute db ("CREATE TABLE test_ifnull_enum (\n\
+      T.execute_unprepared db ("CREATE TABLE test_ifnull_enum (\n\
       priority ENUM('low','medium','high') NULL\n\
-  )") T.no_params
+  )")
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2730,9 +2730,9 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
     module IO = Sqlgg_io.Blocking
   
     let create_test_insert_choices db  =
-      T.execute db ("CREATE TABLE test_insert_choices (\n\
+      T.execute_unprepared db ("CREATE TABLE test_insert_choices (\n\
       status ENUM('pending','completed') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let insert_test_insert_choices_1 db ~x =
       let set_params stmt =
@@ -2851,7 +2851,7 @@ Test DynamicSelect with dynamic_select flag:
   
   
     let create_accounts db  =
-      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -2976,7 +2976,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -3143,7 +3143,7 @@ Test DynamicSelect with dynamic_select flag:
   
   
     let create_accounts db  =
-      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -3268,7 +3268,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id INT)")
   
     module Fold = struct
     end (* module Fold *)

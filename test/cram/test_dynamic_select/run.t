@@ -503,7 +503,7 @@ Test DynamicSelect edge: single column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -595,7 +595,7 @@ DynamicSelect: SELECT * remains static select:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -696,7 +696,7 @@ DynamicSelect: SELECT * with expression in same list:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -797,7 +797,7 @@ DynamicSelect: auto names for expressions without alias:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -880,7 +880,7 @@ Test DynamicSelect edge: expression at first position:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -972,7 +972,7 @@ Test DynamicSelect edge: literal only:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1091,7 +1091,7 @@ Test DynamicSelect edge: many columns:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b TEXT, c DECIMAL(10,2), d INT, e TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b TEXT, c DECIMAL(10,2), d INT, e TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1192,7 +1192,7 @@ Test DynamicSelect edge: no space after commas:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1284,7 +1284,7 @@ Test DynamicSelect edge: minimal spacing:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1367,7 +1367,7 @@ Test DynamicSelect edge: column without alias gets auto name:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1488,7 +1488,7 @@ Test DynamicSelect with dynamic_select flag:
   
   
     let create_accounts db  =
-      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1598,7 +1598,7 @@ Test DynamicSelect with two dynamic columns:
   
   
     let create_items db  =
-      T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1699,7 +1699,7 @@ Test DynamicSelect with Verbatim branches:
   
   
     let create_users db  =
-      T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE users (id INT, status TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1791,7 +1791,7 @@ Test DynamicSelect at beginning of SELECT:
   
   
     let create_data db  =
-      T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE data (a INT, b TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1883,7 +1883,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1958,11 +1958,11 @@ Test DynamicSelect with module annotation:
   
   
     let create_wrapped db  =
-      T.execute db ("CREATE TABLE wrapped (\n\
+      T.execute_unprepared db ("CREATE TABLE wrapped (\n\
           id INT PRIMARY KEY,\n\
       name TEXT,\n\
       price DECIMAL(10,2)\n\
-  )") T.no_params
+  )")
   
     module Single = struct
     end (* module Single *)
@@ -2020,7 +2020,7 @@ Test DynamicSelect with LIMIT 1 (select_one):
   
   
     let create_products db  =
-      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))")
   
     module Single = struct
     end (* module Single *)
@@ -2157,13 +2157,13 @@ Test DynamicSelect comprehensive list:
   
   
     let create_products db  =
-      T.execute db ("CREATE TABLE products (\n\
+      T.execute_unprepared db ("CREATE TABLE products (\n\
    id INT PRIMARY KEY,\n\
    name TEXT,\n\
    price DECIMAL(10,2),\n\
    category TEXT,\n\
    stock INT\n\
-  )") T.no_params
+  )")
   
     module Fold = struct
     end (* module Fold *)
@@ -2262,7 +2262,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, val TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, val TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2362,7 +2362,7 @@ Virtual select: consecutive params as columns:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2479,7 +2479,7 @@ Virtual select: mixed columns and params without spaces after commas:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -2571,7 +2571,7 @@ Virtual select: subquery expression as dynamic column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2663,7 +2663,7 @@ Virtual select: CASE WHEN as dynamic column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, status INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, status INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2755,7 +2755,7 @@ Virtual select: function call with multiple args as column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, first_name TEXT, last_name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, first_name TEXT, last_name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2854,7 +2854,7 @@ Virtual select: arithmetic with param at expression start:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -2953,7 +2953,7 @@ Virtual select: tab-separated columns (non-space whitespace):
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b TEXT)")
   
     module Fold = struct
     end (* module Fold *)

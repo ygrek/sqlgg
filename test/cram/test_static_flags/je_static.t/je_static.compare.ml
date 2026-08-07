@@ -92,10 +92,10 @@ WHERE i.id > ?")
 
 
   let create_items db  =
-    T.execute db ("CREATE TABLE items (id INT NOT NULL PRIMARY KEY, name TEXT NULL)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE items (id INT NOT NULL PRIMARY KEY, name TEXT NULL)")
 
   let create_stats db  =
-    T.execute db ("CREATE TABLE stats (item_id INT NOT NULL PRIMARY KEY, sold INT NULL)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE stats (item_id INT NOT NULL PRIMARY KEY, sold INT NULL)")
 
   let wide_static db ~min_id callback =
     let invoke_callback stmt =

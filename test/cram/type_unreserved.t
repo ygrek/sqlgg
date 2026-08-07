@@ -129,7 +129,7 @@ produce a bare `type` keyword clash):
     module IO = Sqlgg_io.Blocking
   
     let create_kw db  =
-      T.execute db ("CREATE TABLE kw (type INT NOT NULL)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE kw (type INT NOT NULL)")
   
     let select_1 db  callback =
       let invoke_callback stmt =

@@ -35,16 +35,16 @@ current, so -migrate only regenerates and prints the human note to stderr:
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users ADD COLUMN bio TEXT") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users ADD COLUMN bio TEXT")
   
     let revert_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users DROP COLUMN bio") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users DROP COLUMN bio")
   
     let apply_20260101000000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL")
   
     let revert_20260101000000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `age`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` DROP COLUMN `age`")
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

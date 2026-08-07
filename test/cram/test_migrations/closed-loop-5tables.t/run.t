@@ -17,10 +17,10 @@ Step 2 - day-to-day change: target.sql adds `posts.views`.
     module IO = T.IO
   
     let apply_20260101000000_alter_posts_add_col_views db  =
-      T.execute db ("ALTER TABLE `posts` ADD COLUMN `views` INT NOT NULL DEFAULT 0") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` ADD COLUMN `views` INT NOT NULL DEFAULT 0")
   
     let revert_20260101000000_alter_posts_add_col_views db  =
-      T.execute db ("ALTER TABLE `posts` DROP COLUMN `views`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` DROP COLUMN `views`")
   
     let migrations = [
       ("20260101000000_alter_posts_add_col_views", apply_20260101000000_alter_posts_add_col_views, revert_20260101000000_alter_posts_add_col_views);
