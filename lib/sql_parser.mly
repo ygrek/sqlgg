@@ -53,6 +53,7 @@
 %token GROUP_CONCAT SEPARATOR
 %token JSON_ARRAYAGG
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
+%token TEXT_CMP_OP TEXT_DIST_OP
 %token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 %token <Sql.int_size option> T_INTEGER
 %token T_TEXT T_TINYTEXT T_MEDIUMTEXT T_LONGTEXT T_CHAR T_VARCHAR T_VARCHAR2
@@ -73,7 +74,7 @@
 %nonassoc NOT
 %nonassoc BETWEEN CASE (* WHEN THEN ELSE *) (* never useful *)
 %nonassoc EQUAL NUM_EQ_OP NOT_DISTINCT_OP IS LIKE LIKE_OP IN
-%nonassoc NUM_CMP_OP
+%nonassoc NUM_CMP_OP TEXT_CMP_OP TEXT_DIST_OP
 %left NUM_BIT_OR
 %left NUM_BIT_AND
 %left NUM_BIT_SHIFT
@@ -495,6 +496,7 @@ expr:
       e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { fn_name = "numeric_bin_op"; kind = (Ret (Source_type.depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)
     | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun { fn_name = "mod"; kind = (Ret (Source_type.depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* mysql special *)
     | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { fn_name = "num_div"; kind = (Ret (Source_type.depends Float)); parameters = [e1;e2]; is_over_clause = false } }
+    | e1=expr TEXT_DIST_OP e2=expr { Fun { fn_name = "text_dist"; kind = (Ret (Source_type.depends Float)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr DIV e2=expr %prec PLUS { Fun { fn_name = "div"; kind = (Ret (Source_type.depends Int)); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr bool_op=boolean_bin_op e2=expr %prec AND { Fun { fn_name = "boolean_bin_op"; kind = (Logical bool_op); parameters = [e1;e2]; is_over_clause = false } }
     | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { fn_name = "comparison"; kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
@@ -641,6 +643,7 @@ numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_B
 comparison_op: 
     | EQUAL { Comp_equal }
     | NUM_CMP_OP { Comp_num_cmp }
+    | TEXT_CMP_OP { Comp_text_cmp }
     | NOT_DISTINCT_OP { Not_distinct_op }
     | NUM_EQ_OP { 
       (* it would be nice to go into num_eq_op, 
