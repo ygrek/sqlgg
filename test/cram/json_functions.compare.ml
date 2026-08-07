@@ -3,25 +3,25 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_people db  =
-    T.execute db ("CREATE TABLE people (\n\
+    T.execute_unprepared db ("CREATE TABLE people (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON\n\
-)") T.no_params
+)")
 
   let create_people_data_json_kind_never_null_but_col_nullable db  =
-    T.execute db ("CREATE TABLE people_data_json_kind_never_null_but_col_nullable (\n\
+    T.execute_unprepared db ("CREATE TABLE people_data_json_kind_never_null_but_col_nullable (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON\n\
-)") T.no_params
+)")
 
   let create_people_data_json_kind_never_null_and_col_strict db  =
-    T.execute db ("CREATE TABLE people_data_json_kind_never_null_and_col_strict (\n\
+    T.execute_unprepared db ("CREATE TABLE people_data_json_kind_never_null_and_col_strict (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON NOT NULL\n\
-)") T.no_params
+)")
 
   let one db  =
-    T.execute db ("INSERT INTO people (data) VALUES\n\
+    T.execute_unprepared db ("INSERT INTO people (data) VALUES\n\
   (JSON_OBJECT(\n\
     'name', 'Alice',\n\
     'age', 30,\n\
@@ -43,7 +43,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   (JSON_OBJECT(\n\
     'name', NULL,\n\
     'age', NULL\n\
-  ))") T.no_params
+  ))")
 
   let two db  callback =
     let invoke_callback stmt =

@@ -164,31 +164,31 @@ WHERE u.org_id = ? AND u.deleted = FALSE")
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (\n\
+    T.execute_unprepared db ("CREATE TABLE users (\n\
   id INT PRIMARY KEY,\n\
   org_id INT NOT NULL,\n\
   name TEXT NOT NULL,\n\
   email TEXT NOT NULL,\n\
   created_at TIMESTAMP NOT NULL,\n\
   deleted BOOLEAN NOT NULL\n\
-)") T.no_params
+)")
 
   let create_profiles db  =
-    T.execute db ("CREATE TABLE profiles (\n\
+    T.execute_unprepared db ("CREATE TABLE profiles (\n\
   user_id INT PRIMARY KEY,\n\
   bio TEXT,\n\
   avatar_url TEXT,\n\
   location TEXT,\n\
   website TEXT\n\
-)") T.no_params
+)")
 
   let create_billing db  =
-    T.execute db ("CREATE TABLE billing (\n\
+    T.execute_unprepared db ("CREATE TABLE billing (\n\
   user_id INT PRIMARY KEY,\n\
   plan TEXT NOT NULL,\n\
   paid_until DATETIME,\n\
   balance INT NOT NULL\n\
-)") T.no_params
+)")
 
   module Fold = struct
   end (* module Fold *)

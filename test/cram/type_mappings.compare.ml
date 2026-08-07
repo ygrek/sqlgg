@@ -3,16 +3,16 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_table_37 db  =
-    T.execute db ("CREATE TABLE table_37 (\n\
+    T.execute_unprepared db ("CREATE TABLE table_37 (\n\
                 col_1 INT PRIMARY KEY,\n\
                         col_2 INT NOT NULL\n\
-      )") T.no_params
+      )")
 
   let create_table_38 db  =
-    T.execute db ("CREATE TABLE table_38 (\n\
+    T.execute_unprepared db ("CREATE TABLE table_38 (\n\
                 col_3 INT PRIMARY KEY,\n\
         col_4 TEXT NOT NULL\n\
-      )") T.no_params
+      )")
 
   let select_2 db  callback =
     let invoke_callback stmt =

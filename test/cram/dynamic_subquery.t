@@ -176,7 +176,7 @@ Full generated code:
   
   
     let create_products db  =
-      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)")
   
     module Fold = struct
     end (* module Fold *)

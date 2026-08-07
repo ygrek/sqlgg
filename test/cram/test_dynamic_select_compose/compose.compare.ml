@@ -703,10 +703,10 @@ ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")))
 
 
   let create_t db  =
-    T.execute db ("CREATE TABLE t (\n\
+    T.execute_unprepared db ("CREATE TABLE t (\n\
     id INT,\n\
     name TEXT\n\
-)") T.no_params
+)")
 
   module Fold = struct
   end (* module Fold *)

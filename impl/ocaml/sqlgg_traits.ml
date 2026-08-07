@@ -66,6 +66,12 @@ module type FNS = sig
     @raise Oops on error
   *)
   val execute : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
+
+  (** Execute non-query without preparing it on the server:
+    single statement, no placeholders, no result set.
+    @raise Oops on error
+  *)
+  val execute_unprepared : [>`WR] connection -> string -> execute_response io_future
 end
 
 module type M = sig

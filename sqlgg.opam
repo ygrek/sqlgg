@@ -42,3 +42,9 @@ as possible and leaving the choice of SQL database (and API to access it) to the
 conflicts: [
   "mariadb" {<= "1.3.0"}
 ]
+
+# ocaml-mariadb with text-protocol `exec` (no server-side prepare) is not released yet,
+# so the mariadb traits need this fork pinned to a specific commit.
+pin-depends: [
+  [ "mariadb.dev" "git+https://github.com/ahrefs/ocaml-mariadb.git#b6fadd2579febee4abe1f682b97b05e7a4188b8d" ]
+]

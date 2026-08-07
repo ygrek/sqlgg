@@ -3,11 +3,11 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_t db  =
-    T.execute db ("CREATE TABLE t (\n\
+    T.execute_unprepared db ("CREATE TABLE t (\n\
     id INT NOT NULL,\n\
     name TEXT,\n\
     status INT\n\
-)") T.no_params
+)")
 
   let shared_const db ~x callback =
     let invoke_callback stmt =

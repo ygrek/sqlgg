@@ -57,10 +57,10 @@ The full -migrate cycle generates apply/revert code for the TTL change:
     module IO = T.IO
   
     let apply_20260101000000_alter_foo_set_ttl db  =
-      T.execute db ("ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON'")
   
     let revert_20260101000000_alter_foo_set_ttl db  =
-      T.execute db ("ALTER TABLE `foo` REMOVE TTL") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `foo` REMOVE TTL")
   
     let migrations = [
       ("20260101000000_alter_foo_set_ttl", apply_20260101000000_alter_foo_set_ttl, revert_20260101000000_alter_foo_set_ttl);

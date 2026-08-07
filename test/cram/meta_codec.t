@@ -18,10 +18,10 @@ no dead Enum_N module is emitted:
     module IO = Sqlgg_io.Blocking
   
     let create_orders db  =
-      T.execute db ("CREATE TABLE orders (\n\
+      T.execute_unprepared db ("CREATE TABLE orders (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -95,10 +95,10 @@ Same codec, IN-parameter: to_literal goes through set_param= codec:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_in db  =
-      T.execute db ("CREATE TABLE orders_in (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_in (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let find_orders db ~statuses callback =
       let invoke_callback stmt =
@@ -169,10 +169,10 @@ so it is emitted and referenced by get_column, while writes go through the codec
       end)
   
     let create_orders_partial db  =
-      T.execute db ("CREATE TABLE orders_partial (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_partial (\n\
     id INT NOT NULL,\n\
       status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -255,10 +255,10 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
       end)
   
     let create_orders_partial2 db  =
-      T.execute db ("CREATE TABLE orders_partial2 (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_partial2 (\n\
     id INT NOT NULL,\n\
       status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -334,9 +334,9 @@ representation (int64 for INT):
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db ("CREATE TABLE items (\n\
+      T.execute_unprepared db ("CREATE TABLE items (\n\
         id INT NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_item db  callback =
       let invoke_callback stmt =
@@ -397,10 +397,10 @@ module= with get_column=/set_param= renames still works as before:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_mod db  =
-      T.execute db ("CREATE TABLE orders_mod (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_mod (\n\
     id INT NOT NULL,\n\
           status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -477,10 +477,10 @@ to the codec function on reads, writes unwrap the option before the codec:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_null db  =
-      T.execute db ("CREATE TABLE orders_null (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_null (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =

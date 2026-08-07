@@ -320,6 +320,15 @@ let execute db sql set_params =
   with_stmt db sql (fun stmt ->
     execute_with_stmt stmt set_params)
 
+let execute_unprepared db sql =
+  test_ok sql (S.exec db sql);
+  let insert_id =
+    match S.last_insert_rowid db with
+    | 0L -> None
+    | x -> Some x
+  in
+  { affected_rows = Int64.of_int (S.changes db); insert_id }
+
 let select_one_maybe db sql set_params convert =
   with_stmt db sql (fun stmt ->
     select_one_maybe_with_stmt stmt set_params convert)

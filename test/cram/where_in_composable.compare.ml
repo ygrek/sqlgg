@@ -3,11 +3,11 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_random_table_1 db  =
-    T.execute db ("CREATE TABLE IF NOT EXISTS random_table_1 (\n\
+    T.execute_unprepared db ("CREATE TABLE IF NOT EXISTS random_table_1 (\n\
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   `id2` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   PRIMARY KEY (`id`)\n\
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") T.no_params
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 
   let select_1 db ~id ~ids2 callback =
     let invoke_callback stmt =

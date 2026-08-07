@@ -26,10 +26,10 @@ But the code is regenerated and contains the hand-written rename:
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users RENAME COLUMN email TO email_address") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users RENAME COLUMN email TO email_address")
   
     let revert_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users RENAME COLUMN email_address TO email") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users RENAME COLUMN email_address TO email")
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

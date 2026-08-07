@@ -101,13 +101,13 @@ WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)")
 
   let create_profiles db  =
-    T.execute db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)")
 
   let create_billing db  =
-    T.execute db ("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)")
 
   module Fold = struct
   end (* module Fold *)

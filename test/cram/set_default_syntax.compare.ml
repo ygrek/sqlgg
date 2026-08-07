@@ -3,12 +3,12 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_registration_feedbacks db  =
-    T.execute db ("CREATE TABLE IF NOT EXISTS registration_feedbacks (\n\
+    T.execute_unprepared db ("CREATE TABLE IF NOT EXISTS registration_feedbacks (\n\
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   `user_message` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT(''),\n\
   `grant_types` varchar(80) COLLATE utf8_bin NOT NULL DEFAULT 'implicit authorization_code',\n\
   PRIMARY KEY (`id`)\n\
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") T.no_params
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 
   let insert_registration_feedbacks_1 db ~user_message ~grant_types =
     let set_params stmt =

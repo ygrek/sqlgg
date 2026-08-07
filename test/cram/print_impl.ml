@@ -591,6 +591,9 @@ let execute (db : [> `WR ] connection) (sql : string) (set_params : statement ->
   | MockError msg -> raise (Oops msg)
   | _ -> failwith "Expected MockExecute response"
 
+let execute_unprepared (db : [> `WR ] connection) (sql : string) : execute_response =
+  execute db sql no_params
+
 let select_one_maybe (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (convert : row -> 'a) : 'a option =
   printf "[MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]\n";
   let stmt = prepare db sql in
