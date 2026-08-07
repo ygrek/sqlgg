@@ -2,7 +2,7 @@
 open Sqlgg
 
 (** Sqlgg version *)
-let version = Version.id
+let version = "%%VERSION%%"
 
 (** Debug level *)
 let debug_level = ref 0
