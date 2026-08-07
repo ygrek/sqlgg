@@ -1,17 +1,6 @@
 (executable
- (name gen_version)
- (libraries mybuild)
- (modules gen_version)
- (preprocess (pps ppx_deriving.std)))
-
-(rule
- (target version.ml)
- (deps (universe))
- (action (run ./gen_version.exe %{target})))
-
-(executable
   (public_name sqlgg)
-  (modules :standard \ gen_version)
+  (modules :standard)
   (name cli)
   (promote (until-clean))
   (libraries
