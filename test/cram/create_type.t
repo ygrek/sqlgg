@@ -140,7 +140,7 @@ CREATE TYPE misuse
   > SELECT "id" FROM "shirt" WHERE "color" = 'black';
   > EOF
   Failed : SELECT "id" FROM "shirt" WHERE "color" = 'black'
-  Fatal error: exception Failure("types Union (blue| green| red) and StringLiteral (black) for 'a do not match in 'a -> 'a -> Bool applied to (Union (blue| green| red), StringLiteral (black))")
+  Fatal error: exception Failure("types Union (blue| green| red) and StringLiteral (black) for 'a do not match in 'a -> 'a -> Bool?? applied to (Union (blue| green| red), StringLiteral (black))")
   [2]
 
 Only in PostgreSQL dialect

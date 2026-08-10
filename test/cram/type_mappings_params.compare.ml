@@ -29,7 +29,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   let select_3 db ~name ~name_2 ~id callback =
     let invoke_callback stmt =
       callback
-        ~id:(T.get_column_Int stmt 0)
+        ~id:(ExampleId.get_column (T.get_column_int64 stmt 0))
         ~name_2:(Name2.get_column (T.get_column_string stmt 1))
     in
     let set_params stmt =
@@ -59,7 +59,7 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
     let select_3 db ~name ~name_2 ~id callback acc =
       let invoke_callback stmt =
         callback
-          ~id:(T.get_column_Int stmt 0)
+          ~id:(ExampleId.get_column (T.get_column_int64 stmt 0))
           ~name_2:(Name2.get_column (T.get_column_string stmt 1))
       in
       let set_params stmt =
@@ -93,7 +93,7 @@ WHERE " ^ (match name with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.
     let select_3 db ~name ~name_2 ~id callback =
       let invoke_callback stmt =
         callback
-          ~id:(T.get_column_Int stmt 0)
+          ~id:(ExampleId.get_column (T.get_column_int64 stmt 0))
           ~name_2:(Name2.get_column (T.get_column_string stmt 1))
       in
       let set_params stmt =

@@ -58,9 +58,11 @@ let assert_params_with_meta stmt meta =
           ) 
         stmt.Gen.vars)
 
+let cmp_attrs = Stdlib.List.equal Sql.equal_attr
+
 let do_test ?kind sql schema params =
   let stmt = parse sql in
-  assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
+  assert_equal ~msg:"schema" ~cmp:cmp_attrs ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
   assert_equal ~msg:"params" ~cmp:cmp_params ~printer:Sql.show_params params
   (List.map (function Single (p, _) -> p | DynamicSelect _ -> failwith "dynamic selects not supported for this host language" | _ -> assert false) stmt.vars);
 
@@ -76,7 +78,7 @@ let tt sql ?kind schema params =
 let tt_schema_only sql ?kind schema =
   let test () =
     let stmt = parse sql in
-    assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
+    assert_equal ~msg:"schema" ~cmp:cmp_attrs ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
     match kind with
     | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
     | None -> ()
@@ -87,6 +89,8 @@ let wrong sql =
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
 let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
+let check name sql expected = name >:: (fun () -> assert_params_with_meta (parse sql) expected)
+
 let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =
   let domain: Type.t = { t = kind; nullability; } in
   {name;domain;extra=Constraints.of_list extra; meta = Meta.of_list meta; }
@@ -1557,7 +1561,7 @@ let test_type_mapping_params _ =
   assert_params_with_meta stmt [
     (named "param_1" Datetime, []);
     (named "param_2" (Decimal { precision = Some 10; scale = Some 2; }), ["module", "Module3"]);
-    (named "param_3" (Decimal { precision = Some 10; scale = Some 2; }), []);
+    (named "param_3" (Decimal { precision = Some 10; scale = Some 2; }), ["module", "Module3"]);
     (named "param_4" 
       (Type.(Union { ctors = (Enum_kind.Ctors.of_list ["status_a"; "status_b"; "status_c"]); is_closed = true })), 
       ["module", "Module6"]);
@@ -1743,6 +1747,546 @@ let test_meta_insert_update _ =
     (named "param2" Text, []);  (* no meta from col_2 *)
     (named "param3" Int, ["module", "Module1"]);
   ]
+
+let test_meta_loss_query =
+  let open_enum_t = Type.(Union { ctors = (Enum_kind.Ctors.of_list ["one"; "two"; "three"]); is_closed = false }) in
+  let closed_enum_t = Type.(Union { ctors = (Enum_kind.Ctors.of_list ["one"; "two"; "three"]); is_closed = true }) in
+  [
+  tt {|
+    CREATE TABLE test51 (
+      id INT PRIMARY KEY,
+      parent_id INT NOT NULL,
+      -- [sqlgg] module=T51Level
+      col_a ENUM('one', 'two', 'three') NOT NULL,
+      -- [sqlgg] module=T51Time
+      col_b DATETIME NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    WITH t1 AS (
+      SELECT
+        IFNULL(LAG(col_a) OVER (PARTITION BY parent_id ORDER BY col_b, id), 'one') AS prev_a,
+        col_a AS cur_a
+      FROM test51
+    )
+    SELECT prev_a, cur_a FROM t1
+  |} [
+    attr' ~meta:["module", "T51Level"] "prev_a" closed_enum_t;
+    attr' ~extra:[NotNull] ~meta:["module", "T51Level"] "cur_a" closed_enum_t;
+  ] [];
+
+  tt {|
+    WITH RECURSIVE d AS (
+      SELECT DATE(IFNULL(MIN(col_b), NOW())) AS date_ FROM test51
+      UNION ALL
+      SELECT DATE_ADD(date_, INTERVAL 1 DAY) FROM d WHERE date_ < DATE(NOW())
+    ),
+    t1 AS (
+      SELECT
+        IFNULL(LAG(col_a) OVER (PARTITION BY parent_id ORDER BY col_b, id), 'one') AS prev_a,
+        col_a AS cur_a
+      FROM test51
+    ),
+    t2 AS (
+      SELECT prev_a, cur_a, COUNT(1) AS cnt FROM t1 GROUP BY prev_a, cur_a
+    ),
+    dim AS (SELECT 'one' AS lvl UNION ALL SELECT 'two' UNION ALL SELECT 'three')
+    SELECT
+      d.date_,
+      d1.lvl AS from_a,
+      d2.lvl AS to_a,
+      IFNULL(t2.cnt, 0) AS cnt
+    FROM d
+    CROSS JOIN dim d1
+    CROSS JOIN dim d2
+    LEFT JOIN t2 ON d1.lvl = t2.prev_a AND d2.lvl = t2.cur_a
+    WHERE d1.lvl != d2.lvl
+  |} [
+    attr' "date_" Datetime;
+    attr' ~meta:["module", "T51Level"] "from_a" open_enum_t;
+    attr' ~meta:["module", "T51Level"] "to_a" open_enum_t;
+    attr' "cnt" Int;
+  ] [];
+
+  tt {|
+    WITH
+      t1 AS (SELECT col_a AS cur_a FROM test51),
+      dim AS (SELECT 'one' AS lvl UNION ALL SELECT 'two' UNION ALL SELECT 'three')
+    SELECT dim.lvl AS lvl
+    FROM dim
+    LEFT JOIN t1 ON dim.lvl = t1.cur_a OR t1.cur_a = 'one'
+  |} [
+    attr' "lvl" open_enum_t;
+  ] [];
+]
+
+let semilattice_laws ~show ~eq ~op ?unit ?absorbing elements =
+  let each f = List.iter f elements in
+  let pairs f = each (fun a -> each (fun b -> f a b)) in
+  let triples f = each (fun a -> each (fun b -> each (fun c -> f a b c))) in
+  let why l = String.concat " " (List.map show l) in
+  let law name f = name >:: (fun () -> f ()) in
+  [
+    law "commutative" (fun () -> pairs (fun a b -> assert_bool (why [a;b]) (eq (op a b) (op b a))));
+    law "associative" (fun () -> triples (fun a b c ->
+      assert_bool (why [a;b;c]) (eq (op (op a b) c) (op a (op b c)))));
+    law "idempotent" (fun () -> each (fun a -> assert_bool (why [a]) (eq (op a a) a)));
+    law "absorbs its own result" (fun () -> pairs (fun a b ->
+      let m = op a b in assert_bool (why [a;b]) (eq (op m a) m && eq (op m b) m)));
+  ]
+  @ Option.map_default (fun u ->
+      [ law "unit" (fun () -> each (fun a -> assert_bool (why [a]) (eq (op u a) a))) ]) [] unit
+  @ Option.map_default (fun z ->
+      [ law "absorbing" (fun () -> each (fun a -> assert_bool (why [a]) (eq (op z a) z))) ]) [] absorbing
+
+let test_meta_lattice =
+  let metas =
+    let singles = List.concat_map (fun k -> List.map (fun v -> [k, v]) ["a"; "b"]) ["k1"; "k2"] in
+    let pairs = List.concat_map (fun a -> List.filter_map (fun b ->
+      if String.equal (fst (List.hd a)) (fst (List.hd b)) then None else Some (a @ b)) singles) singles in
+    List.map Meta.of_list ([] :: singles @ pairs)
+  in
+  let elements = None :: List.map (fun m -> Some m) metas in
+  let eq a b =
+    match a, b with
+    | None, None -> true
+    | Some a, Some b -> Meta.equal a b
+    | None, Some _ | Some _, None -> false
+  in
+  let show = function None -> "top" | Some m -> Format.asprintf "%a" Meta.pp m in
+  semilattice_laws ~show ~eq ~op:Meta.common ~unit:None ~absorbing:(Some (Meta.empty ())) elements
+  @ [
+  "merge_right is associative" >:: (fun () -> List.iter (fun a -> List.iter (fun b -> List.iter (fun c ->
+    assert_bool (sprintf "%s %s %s" (show (Some a)) (show (Some b)) (show (Some c)))
+      (Meta.equal (Meta.merge_right (Meta.merge_right a b) c) (Meta.merge_right a (Meta.merge_right b c))))
+      metas) metas) metas);
+
+  "merge_right keeps the right side" >:: (fun () -> List.iter (fun a -> List.iter (fun b ->
+    assert_bool (sprintf "%s %s" (show (Some a)) (show (Some b)))
+      (Meta.equal (Meta.merge_right a (Meta.merge_right a b)) (Meta.merge_right a b)))
+      metas) metas);
+
+  "common_all folds common" >:: (fun () -> List.iter (fun a -> List.iter (fun b -> List.iter (fun c ->
+    assert_bool (sprintf "%s %s %s" (show a) (show b) (show c))
+      (eq (Meta.common_all [a; b; c]) (Meta.common a (Meta.common b c))))
+      elements) elements) elements);
+
+  "silence is not disagreement" >:: (fun () ->
+    List.iter (fun a -> List.iter (fun b ->
+      assert_bool "shared ignores empty"
+        (Meta.equal (Meta.shared [Meta.empty (); a; b]) (Meta.shared [a; b]))) metas) metas);
+]
+
+
+let test_meta_equality =
+  [
+  tt {|
+    CREATE TABLE branded (
+      -- [sqlgg] module=Cid
+      cid BIGINT NOT NULL,
+      -- [sqlgg] module=Cid
+      also_cid BIGINT NOT NULL,
+      -- [sqlgg] module=Money
+      amount DECIMAL(10,2) NOT NULL,
+      -- [sqlgg] module=Cid
+      -- [sqlgg] non_nullifiable=true
+      guarded BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE elsewhere (
+      -- [sqlgg] module=Other
+      other BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE plain (
+      cid BIGINT NOT NULL,
+      amount BIGINT NOT NULL,
+      n BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt "SELECT plain.cid FROM plain JOIN branded ON branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain, branded WHERE branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain, branded WHERE branded.cid = plain.cid AND plain.n > 0"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain LEFT JOIN branded ON plain.n = branded.cid WHERE branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain JOIN branded USING (cid)"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain NATURAL JOIN branded"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain, branded WHERE branded.cid = plain.cid OR plain.n = 0"
+    [attr' ~extra:[NotNull] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain JOIN branded ON branded.cid = plain.cid OR plain.cid = 0"
+    [attr' ~extra:[NotNull] "cid" Int] [];
+
+  tt "SELECT plain.amount FROM plain JOIN branded ON branded.amount = plain.amount"
+    [attr' ~extra:[NotNull] "amount" Int] [];
+
+  tt "SELECT plain.cid FROM branded LEFT JOIN plain ON branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] ~nullability:Nullable ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain LEFT JOIN branded ON branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain LEFT JOIN branded USING (cid)"
+    [attr' ~extra:[NotNull] "cid" Int] [];
+
+  tt "SELECT plain.cid FROM plain JOIN branded ON branded.guarded = plain.cid"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  tt "SELECT plain.* FROM plain JOIN branded ON branded.cid = plain.cid"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int;
+     attr' ~extra:[NotNull] "amount" Int;
+     attr' ~extra:[NotNull] "n" Int] [];
+
+  tt "SELECT p.cid FROM branded p LEFT JOIN branded q ON p.cid = q.amount"
+    [attr' ~extra:[NotNull] ~meta:["module", "Cid"] "cid" Int] [];
+
+  check "each param follows the column it stands next to"
+    "SELECT plain.n FROM plain JOIN branded ON branded.cid = plain.cid WHERE branded.amount = @money AND plain.n = @loose"
+    [ (named "money" (Decimal { precision = Some 10; scale = Some 2 }), ["module", "Money"]);
+      (named "loose" Int, []) ];
+
+  check "a param reaches the domain through the joined column"
+    "SELECT plain.n FROM plain JOIN branded ON branded.cid = plain.cid WHERE plain.cid = @p"
+    [ (named "p" Int, ["module", "Cid"]) ];
+
+  check "a param reaches it through an equality in where"
+    "SELECT plain.n FROM plain, branded WHERE branded.cid = plain.cid AND plain.cid = @p"
+    [ (named "p" Int, ["module", "Cid"]) ];
+
+  check "an outer join keeps the param silent"
+    "SELECT plain.n FROM plain LEFT JOIN branded ON branded.cid = plain.cid WHERE plain.cid = @p"
+    [ (named "p" Int, []) ];
+
+  check "each occurrence of one name is annotated where it stands"
+    "SELECT branded.cid FROM branded, elsewhere WHERE branded.cid = @p AND elsewhere.other = @p"
+    [ (named "p" Int, ["module", "Cid"]); (named "p" Int, ["module", "Other"]) ];
+
+  check "one domain reached twice stays itself"
+    "SELECT branded.cid FROM branded WHERE branded.cid = @p AND branded.also_cid = @p"
+    [ (named "p" Int, ["module", "Cid"]); (named "p" Int, ["module", "Cid"]) ];
+
+  check "an occurrence next to an unbranded column stays silent"
+    "SELECT plain.n FROM plain, branded WHERE branded.cid = @p AND plain.cid = @p"
+    [ (named "p" Int, ["module", "Cid"]); (named "p" Int, []) ];
+
+  check "a cast is about the type and leaves the domain alone"
+    "SELECT branded.cid FROM branded WHERE branded.cid = @p :: Int"
+    [ (named "p" Int, ["module", "Cid"]) ];
+]
+
+let test_meta_functions =
+  [
+  tt {|
+    CREATE TABLE rows_ (
+      id BIGINT NOT NULL,
+      -- [sqlgg] module=Cid
+      cid BIGINT NOT NULL,
+      -- [sqlgg] module=Status
+      status TEXT NOT NULL,
+      plain TEXT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE unbranded (
+      ref BIGINT NOT NULL,
+      cid BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt "SELECT COALESCE(rows_.cid, unbranded.cid) AS c FROM rows_ JOIN unbranded ON rows_.id = unbranded.ref"
+    [attr' ~meta:["module", "Cid"] "c" Int] [];
+
+  tt "SELECT COALESCE(unbranded.cid, rows_.cid) AS c FROM rows_ JOIN unbranded ON rows_.id = unbranded.ref"
+    [attr' ~meta:["module", "Cid"] "c" Int] [];
+
+  tt "SELECT GREATEST(cid, 0) AS c FROM rows_" [attr' ~meta:["module", "Cid"] "c" Int] [];
+
+  tt "SELECT LEAST(0, cid) AS c FROM rows_" [attr' ~meta:["module", "Cid"] "c" Int] [];
+
+  tt "SELECT NULLIF(status, 'active') AS s FROM rows_"
+    [attr' ~nullability:Nullable ~meta:["module", "Status"] "s" (Type.StringLiteral "active")] [];
+
+  tt "SELECT CONCAT(status, plain) AS s FROM rows_" [attr' "s" Text] [];
+
+  tt "SELECT GROUP_CONCAT(plain ORDER BY status) AS s FROM rows_"
+    [attr' ~nullability:Nullable "s" Text] [];
+
+  tt "SELECT (WITH c AS (SELECT cid FROM rows_) SELECT cid FROM c LIMIT 1) AS c FROM rows_"
+    [attr' ~nullability:Nullable ~meta:["module", "Cid"] "c" Int] [];
+
+  check "both ends of a comparison through a null handling call"
+    "SELECT id FROM rows_ WHERE IFNULL(@a, status) = @b"
+    [ (named "a" Text, ["module", "Status"]); (named "b" Text, ["module", "Status"]) ];
+
+  check "params nested in coalesce chains"
+    "SELECT COALESCE(COALESCE(cid, @a), @b) AS c FROM rows_"
+    [ (named "a" Int, ["module", "Cid"]); (named "b" Int, ["module", "Cid"]) ];
+
+  check "nullif shares one variable"
+    "SELECT NULLIF(status, @p) AS s FROM rows_"
+    [ (named "p" Text, ["module", "Status"]) ];
+
+  check "a variadic function shares one variable"
+    "SELECT id FROM rows_ WHERE cid = LEAST(@p, 0)"
+    [ (named "p" Int, ["module", "Cid"]) ];
+
+  check "a transforming function breaks the chain"
+    "SELECT id FROM rows_ WHERE LOWER(status) = @p"
+    [ (named "p" Text, []) ];
+
+  check "arithmetic breaks the chain"
+    "SELECT id FROM rows_ WHERE cid = @p + 1"
+    [ (named "p" Int, []) ];
+
+  check "an unbranded column leaves the param silent"
+    "SELECT id FROM rows_ WHERE plain = @p"
+    [ (named "p" Text, []) ];
+
+  tt "SELECT COALESCE(status, LOWER(status), @p) AS c FROM rows_" [attr' "c" Text]
+    [ named "p" Text ];
+
+  tt "SELECT MAX(cid) AS c FROM rows_"
+    [attr' ~nullability:Nullable ~meta:["module", "Cid"] "c" Int] [];
+
+  tt "SELECT SUM(cid) AS c FROM rows_"
+    [attr' ~nullability:Nullable ~meta:["module", "Cid"] "c" Int] [];
+
+  check "a param in a case branch reaches the domain of its sibling branch"
+    "SELECT CASE WHEN id = 1 THEN status ELSE @p END AS s FROM rows_"
+    [ (named "p" Text, ["module", "Status"]) ];
+
+  check "an opaque sibling withdraws the domain from the whole class"
+    "SELECT COALESCE(status, LOWER(status), @p) AS c FROM rows_"
+    [ (named "p" Text, []) ];
+
+  check "a param inside a function in an assignment"
+    "UPDATE rows_ SET status = IFNULL(@status, status) WHERE id = @id"
+    [ (named "status" Text, ["module", "Status"]); (named "id" Int, []) ];
+
+  check "both ends of a between"
+    "SELECT id FROM rows_ WHERE status BETWEEN @low AND @high"
+    [ (named "low" Text, ["module", "Status"]); (named "high" Text, ["module", "Status"]) ];
+
+  tt "SELECT CASE WHEN id = 1 THEN status ELSE status END AS s FROM rows_"
+    [attr' ~meta:["module", "Status"] "s" Text] [];
+]
+
+let test_meta_foreign_key =
+  [
+  tt {|
+    CREATE TABLE owners (
+      -- [sqlgg] module=Owner_id
+      id BIGINT NOT NULL PRIMARY KEY,
+      plain BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE owned (
+      owner_ref BIGINT NOT NULL,
+      plain_ref BIGINT NOT NULL,
+      loose BIGINT NOT NULL,
+      FOREIGN KEY (owner_ref) REFERENCES owners(id),
+      FOREIGN KEY (plain_ref) REFERENCES owners(plain)
+    )
+  |} [] [];
+
+  tt "SELECT owner_ref FROM owned"
+    [attr' ~extra:[NotNull] ~meta:["module", "Owner_id"] "owner_ref" Int] [];
+
+  tt {|
+    CREATE TABLE owned_annotated (
+      -- [sqlgg] module=Its_own
+      declared_ref BIGINT NOT NULL,
+      -- [sqlgg] non_nullifiable=true
+      partial_ref BIGINT NOT NULL,
+      FOREIGN KEY (declared_ref) REFERENCES owners(id),
+      FOREIGN KEY (partial_ref) REFERENCES owners(id)
+    )
+  |} [] [];
+
+  tt "SELECT declared_ref, partial_ref FROM owned_annotated"
+    [attr' ~extra:[NotNull] ~meta:["module", "Its_own"] "declared_ref" Int;
+     attr' ~extra:[NotNull] ~meta:["module", "Owner_id"; "non_nullifiable", "true"] "partial_ref" Int] [];
+
+  tt "SELECT loose FROM owned" [attr' ~extra:[NotNull] "loose" Int] [];
+
+  tt "SELECT plain_ref FROM owned" [attr' ~extra:[NotNull] "plain_ref" Int] [];
+
+  tt "SELECT owned.owner_ref FROM owned LEFT JOIN owners ON owners.id = owned.owner_ref"
+    [attr' ~extra:[NotNull] ~meta:["module", "Owner_id"] "owner_ref" Int] [];
+
+  check "param against a declared foreign key"
+    "SELECT loose FROM owned WHERE owner_ref = @p"
+    [ (named "p" Int, ["module", "Owner_id"]) ];
+
+  tt {|
+    CREATE TABLE other_owners (
+      -- [sqlgg] module=Other_id
+      id BIGINT NOT NULL PRIMARY KEY,
+      -- [sqlgg] module=Owner_id
+      agreeing BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE two_ways (
+      contested BIGINT NOT NULL,
+      agreed BIGINT NOT NULL,
+      FOREIGN KEY (contested) REFERENCES owners(id),
+      FOREIGN KEY (contested) REFERENCES other_owners(id),
+      FOREIGN KEY (agreed) REFERENCES owners(id),
+      FOREIGN KEY (agreed) REFERENCES other_owners(agreeing)
+    )
+  |} [] [];
+
+  tt "SELECT contested, agreed FROM two_ways"
+    [attr' ~extra:[NotNull] "contested" Int;
+     attr' ~extra:[NotNull] ~meta:["module", "Owner_id"] "agreed" Int] [];
+]
+
+let test_meta_union_null_placeholder = [
+  tt {|
+    CREATE TABLE left_rows (
+      -- [sqlgg] module=Left_id
+      id BIGINT NOT NULL,
+      -- [sqlgg] module=Owner_id
+      owner_id BIGINT NULL,
+      -- [sqlgg] module=Payload
+      payload JSON NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE right_rows (
+      -- [sqlgg] module=Right_id
+      id BIGINT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    SELECT l.id AS left_id, l.owner_id, l.payload, NULL AS right_id FROM left_rows l
+    UNION ALL
+    SELECT NULL AS left_id, NULL AS owner_id, NULL AS payload, r.id AS right_id FROM right_rows r
+  |} [
+    attr' ~nullability:Nullable ~extra:[NotNull] ~meta:["module", "Left_id"] "left_id" Int;
+    attr' ~nullability:Nullable ~extra:[Null] ~meta:["module", "Owner_id"] "owner_id" Int;
+    attr' ~nullability:Nullable ~extra:[Null] ~meta:["module", "Payload"] "payload" Json;
+    attr' ~nullability:Nullable ~meta:["module", "Right_id"] "right_id" Int;
+  ] [];
+
+  tt "SELECT id AS x FROM left_rows UNION ALL SELECT id AS x FROM right_rows"
+    [ attr' ~extra:[NotNull] "x" Int ] [];
+
+  tt "SELECT CASE WHEN id = 1 THEN owner_id ELSE NULL END AS s FROM left_rows"
+    [ attr' ~nullability:Nullable ~meta:["module", "Owner_id"] "s" Int ] [];
+]
+
+let test_meta_union_enum_literal =
+  let status_t = Type.(Union { ctors = (Enum_kind.Ctors.of_list ["draft"; "published"; "failed"]); is_closed = true }) in
+  [
+  tt {|
+    CREATE TABLE rows_with_status (
+      -- [sqlgg] module=Row_status
+      status ENUM('draft', 'published', 'failed') NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE rows_text (
+      label TEXT NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE rows_status_a (
+      -- [sqlgg] module=Status_a
+      status ENUM('draft', 'published') NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    CREATE TABLE rows_status_b (
+      -- [sqlgg] module=Status_b
+      status ENUM('draft', 'published') NOT NULL
+    )
+  |} [] [];
+
+  tt {|
+    SELECT status AS row_status FROM rows_with_status
+    UNION ALL
+    SELECT 'published' AS row_status
+  |} [ attr' ~extra:[NotNull] ~meta:["module", "Row_status"] "row_status" status_t ] [];
+
+  tt {|
+    SELECT 'published' AS row_status
+    UNION ALL
+    SELECT status AS row_status FROM rows_with_status
+  |} [ attr' ~meta:["module", "Row_status"] "row_status" status_t ] [];
+
+  tt {|
+    SELECT status AS x FROM rows_with_status
+    UNION ALL
+    SELECT label AS x FROM rows_text
+  |} [ attr' ~extra:[NotNull] ~meta:["module", "Row_status"] "x" Type.Text ] [];
+
+  tt {|
+    SELECT label AS x FROM rows_text
+    UNION ALL
+    SELECT status AS x FROM rows_with_status
+  |} [ attr' ~extra:[NotNull] ~meta:["module", "Row_status"] "x" Type.Text ] [];
+
+  tt {|
+    SELECT status FROM rows_status_a
+    UNION ALL
+    SELECT status FROM rows_status_b
+  |} [ attr' ~extra:[NotNull] "status" Type.(Union { ctors = (Enum_kind.Ctors.of_list ["draft"; "published"]); is_closed = true }) ] [];
+]
+
+let test_operand_order =
+  let narrow_t = Type.(Union { ctors = Enum_kind.Ctors.of_list ["draft"; "published"]; is_closed = true }) in
+  let price_t = Type.(Decimal { precision = Some 10; scale = Some 2 }) in
+  [
+  tt "CREATE TABLE narrow (s ENUM('draft','published') NOT NULL)" [] [];
+  tt "CREATE TABLE wide (s ENUM('draft','published','failed') NOT NULL)" [] [];
+  tt "CREATE TABLE txt (label TEXT NOT NULL)" [] [];
+  tt "CREATE TABLE prices (price DECIMAL(10,2) NOT NULL)" [] [];
+
+  (* TODO asymmetric on purpose: PostgreSQL enums are nominal and this join is an error there.
+     See the TODO in order_kind. *)
+  wrong "SELECT narrow.s AS x FROM narrow JOIN wide ON narrow.s = wide.s";
+  tt "SELECT narrow.s AS x FROM narrow JOIN wide ON wide.s = narrow.s" [ attr' ~extra:[NotNull] "x" narrow_t ] [];
+
+  tt "SELECT COALESCE(narrow.s, txt.label) AS x FROM narrow, txt" [ attr' "x" narrow_t ] [];
+  tt "SELECT COALESCE(txt.label, narrow.s) AS x FROM narrow, txt" [ attr' "x" narrow_t ] [];
+
+  tt "SELECT COALESCE(narrow.s, 'draft') AS x FROM narrow" [ attr' "x" narrow_t ] [];
+  tt "SELECT COALESCE('draft', narrow.s) AS x FROM narrow" [ attr' "x" narrow_t ] [];
+
+  tt "SELECT COALESCE(price, 1.5) AS x FROM prices" [ attr' "x" price_t ] [];
+  tt "SELECT COALESCE(1.5, price) AS x FROM prices" [ attr' "x" price_t ] [];
+
+  wrong "SELECT 1 AS x FROM narrow WHERE COALESCE(narrow.s, CASE WHEN 1=1 THEN 'draft' ELSE 'published' END) = 'failed'";
+  wrong "SELECT 1 AS x FROM narrow WHERE COALESCE(CASE WHEN 1=1 THEN 'draft' ELSE 'published' END, narrow.s) = 'failed'";
+]
 
 let test_multi_functions = [
   tt "CREATE TABLE test_multi (id INT, txt1 TEXT, txt2 TEXT NULL, txt3 TEXT NOT NULL)" [] [];
@@ -2361,6 +2905,113 @@ let test_migration_name =
     flat (Some 11)  "alter_users_add_col_email" "alter_users";
   ]
 
+let any_of l = QCheck.Gen.(oneof (List.map return l))
+
+let arb_type =
+  let open QCheck.Gen in
+  let simple = Type.[ Int; UInt64; Text; Blob; Float; Bool; Datetime; Json; Json_path; One_or_all; Any ] in
+  let ctors = list_size (int_range 1 3) (any_of [ "a"; "b"; "c" ]) in
+  let kind = oneof [
+    any_of simple;
+    map2 (fun ctors is_closed -> Type.Union { ctors = Type.Enum_kind.make ctors; is_closed }) ctors bool;
+    map (fun s -> Type.StringLiteral s) (any_of [ "a"; "b"; "{}" ]);
+    map (fun f -> Type.FloatingLiteral f) (any_of [ 0.; 1.5 ]);
+    map2 (fun precision scale -> Type.Decimal { precision; scale }) (option (int_range 1 10)) (option (int_range 0 4));
+  ] in
+  QCheck.make ~print:Type.show
+    (map2 (fun t nullability -> { Type.t; nullability }) kind (any_of Type.[ Nullable; Strict; Depends ]))
+
+let same_result a b =
+  match a, b with
+  | None, None -> true
+  | Some a, Some b -> Type.equal a b
+  | None, Some _ | Some _, None -> false
+
+let qcheck (QCheck2.Test.Test cell) =
+  QCheck2.Test.get_name cell >:: (fun () ->
+    try QCheck2.Test.check_cell_exn ~rand:(Random.State.make [| 42 |]) cell
+    with QCheck2.Test.Test_fail (_, msgs) -> assert_failure (String.concat "\n" msgs))
+
+let arb_meta =
+  let open QCheck.Gen in
+  let entry = pair (any_of [ "module"; "get_column"; "set_param" ]) (any_of [ "A"; "B" ]) in
+  QCheck.make ~print:(Format.asprintf "%a" Meta.pp)
+    (map Meta.of_list (list_size (int_range 0 3) entry))
+
+let arb_opt_meta = QCheck.option arb_meta
+
+let same_meta a b =
+  match a, b with
+  | None, None -> true
+  | Some a, Some b -> Meta.equal a b
+  | None, Some _ | Some _, None -> false
+
+let test_meta_laws = List.map qcheck [
+  QCheck.Test.make ~count:2000 ~name:"common is commutative"
+    (QCheck.pair arb_opt_meta arb_opt_meta)
+    (fun (a, b) -> same_meta (Meta.common a b) (Meta.common b a));
+  QCheck.Test.make ~count:2000 ~name:"common is associative"
+    (QCheck.triple arb_opt_meta arb_opt_meta arb_opt_meta)
+    (fun (a, b, c) -> same_meta (Meta.common a (Meta.common b c)) (Meta.common (Meta.common a b) c));
+  QCheck.Test.make ~count:2000 ~name:"common is idempotent"
+    arb_opt_meta (fun a -> same_meta (Meta.common a a) a);
+  QCheck.Test.make ~count:2000 ~name:"an absent meta is the identity"
+    arb_opt_meta (fun a -> same_meta (Meta.common None a) a);
+  QCheck.Test.make ~count:2000 ~name:"an empty meta absorbs"
+    arb_opt_meta
+    (fun a -> same_meta (Meta.common (Some (Meta.empty ())) a) (Some (Meta.empty ())));
+  QCheck.Test.make ~count:2000 ~name:"merge_right is associative"
+    (QCheck.triple arb_meta arb_meta arb_meta)
+    (fun (a, b, c) -> Meta.equal (Meta.merge_right a (Meta.merge_right b c)) (Meta.merge_right (Meta.merge_right a b) c));
+  QCheck.Test.make ~count:2000 ~name:"merge_right keeps every key of the right side"
+    (QCheck.pair arb_meta arb_meta)
+    (fun (a, b) ->
+      let m = Meta.merge_right a b in
+      Meta.StringMap.for_all (fun k v -> Option.map_default (String.equal v) false (Meta.find_opt m k)) b);
+  QCheck.Test.make ~count:2000 ~name:"merge_right keeps the left keys the right side does not mention"
+    (QCheck.pair arb_meta arb_meta)
+    (fun (a, b) ->
+      let m = Meta.merge_right a b in
+      Meta.StringMap.for_all (fun k v ->
+        Option.is_some (Meta.find_opt b k)
+        || Option.map_default (String.equal v) false (Meta.find_opt m k)) a);
+  QCheck.Test.make ~count:2000 ~name:"an undeclared side does not erase"
+    arb_meta (fun a -> Meta.equal (Meta.shared [ a; Meta.empty () ]) a);
+]
+
+let enums_of_different_shape a b =
+  match a.Type.t, b.Type.t with
+  | Type.Union x, Type.Union y -> not (Type.Enum_kind.Ctors.equal x.ctors y.ctors)
+  | _ -> false
+
+let test_type_laws = List.map qcheck [
+  (* TODO enums of different shape are excluded: we keep one direction failing on purpose,
+     see the TODO in order_kind. *)
+  QCheck.Test.make ~count:2000 ~name:"common_type is commutative"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      QCheck.assume (not (enums_of_different_shape a b));
+      same_result (Type.common_type a b) (Type.common_type b a));
+  QCheck.Test.make ~count:2000 ~name:"common_type is idempotent"
+    arb_type
+    (fun a -> same_result (Type.common_type a a) (Some a));
+  QCheck.Test.make ~count:2000 ~name:"subtype and supertype are defined together"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) -> Bool.equal (Option.is_some (Type.subtype a b)) (Option.is_some (Type.supertype a b)));
+  QCheck.Test.make ~count:2000 ~name:"a nullable side makes the result nullable"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      match Type.common_type a b with
+      | Some r -> not (Type.is_nullable a || Type.is_nullable b) || Type.is_nullable r
+      | None -> true);
+  QCheck.Test.make ~count:2000 ~name:"two strict sides stay strict"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      match Type.common_type a b with
+      | Some r -> not (Type.is_strict a && Type.is_strict b) || Type.is_strict r
+      | None -> true);
+]
+
 let run () =
   Gen.params_mode := Some Named;
   let tests =
@@ -2393,6 +3044,14 @@ let run () =
     "test_case_enum" >::: test_case_enum;
     "test_type_mapping_params" >:: test_type_mapping_params;
     "test_meta_insert_update" >:: test_meta_insert_update;
+    "test_meta_loss_query" >::: test_meta_loss_query;
+    "test_meta_lattice" >::: test_meta_lattice;
+    "test_meta_equality" >::: test_meta_equality;
+    "test_meta_functions" >::: test_meta_functions;
+    "test_meta_foreign_key" >::: test_meta_foreign_key;
+    "test_meta_union_null_placeholder" >::: test_meta_union_null_placeholder;
+    "test_meta_union_enum_literal" >::: test_meta_union_enum_literal;
+    "test_operand_order" >::: test_operand_order;
     "test_multi_functions" >::: test_multi_functions;
     "test_on_conflict_do_update" >::: test_on_conflict_do_update;
     "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
@@ -2406,8 +3065,10 @@ let run () =
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
     "migration name" >::: test_migration_name;
+    "test_type_laws" >::: test_type_laws;
+    "test_meta_laws" >::: test_meta_laws;
   ]
   in
-  let test_suite = "main" >::: tests in
+let test_suite = "main" >::: tests in
   let results = run_test_tt test_suite in
   exit @@ if List.exists (function RFailure _ | RError _ -> true | _ -> false) results then 1 else 0

@@ -116,7 +116,7 @@ struct
       let b = u.ctors in
       let b' = Enum_kind.Ctors.add a b in
       begin match Enum_kind.Ctors.mem a b, u.is_closed with
-      | true, true -> `Equal
+      | true, true -> `Order (Union u, Union u)
       | true, false -> `Order (StringLiteral a, Union { u with ctors = b' })
       | false, false -> `StringLiteralUnion (Union { ctors = b'; is_closed = false })
       | false, true -> `No
@@ -124,7 +124,10 @@ struct
     | StringLiteral _  as x , Text -> `Order (x, Text)
     | Text, (StringLiteral _ as x) -> `Order (x, Text)
 
-    | Text, (Union _ as x) -> `Order (x, Text)
+    (* TODO enums are compared structurally, which is MySQL. In PostgreSQL they are nominal. *)
+    | Text, (Union _ as x) | (Union _ as x), Text -> `Order (x, Text)
+    | (Union u1 as x1), (Union u2 as x2) when Enum_kind.Ctors.equal u1.ctors u2.ctors ->
+      if u1.is_closed then `Order (x1, x2) else `Order (x2, x1)
     | Union { ctors = a; _ } as x1, (Union { ctors = b ;_ } as x2)  when Enum_kind.Ctors.subset b a -> `Order (x2, x1)
 
     | StringLiteral x, Datetime | Datetime, StringLiteral x -> `Order (Datetime, StringLiteral x)
@@ -144,7 +147,7 @@ struct
     | FloatingLiteral _, Int | Int, FloatingLiteral _ -> `Order (Int, Float)
     | FloatingLiteral x, Float | Float, FloatingLiteral x -> `Order (FloatingLiteral x, Float)
     | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f -> 
-        if check_exact_exact_number f dec then `Equal else `No
+        if check_exact_exact_number f dec then `Order (Decimal dec, Decimal dec) else `No
     (* UInt64 cannot be a subtype of Float: double precision only guarantees exact 
      representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
      Converting large UInt64 values to Float would lose precision *)
@@ -287,46 +290,44 @@ end
 module Meta = struct
 
   module StringMap = Map.Make(String)
+
   
   type t = string StringMap.t
   
   let of_list list = List.fold_left (fun map (k, v) -> StringMap.add k v map) StringMap.empty list
   
   let empty () = StringMap.empty
-  let find_opt k map = StringMap.find_opt map k
+  let is_empty = StringMap.is_empty
+  let find_opt map key = StringMap.find_opt key map
   
-  let mem k map = StringMap.mem map k
   let pp fmt t =
-    if StringMap.is_empty t then
-      Format.fprintf fmt "{}"
-    else begin
-      Format.fprintf fmt "{";
-      let first_key = fst (StringMap.min_binding t) in
-      StringMap.iter (fun k v ->
-        if k = first_key then
-          Format.fprintf fmt "%s = %s" k v
-        else
-          Format.fprintf fmt "; %s = %s" k v
-      ) t;
-      Format.fprintf fmt "}"
-    end
+    Format.fprintf fmt "{%s}"
+      (String.concat "; " (List.map (fun (k, v) -> sprintf "%s = %s" k v) (StringMap.bindings t)))
 
   let equal = StringMap.equal String.equal
 
-  let merge_right t1 t2 =
-    StringMap.merge (fun _ v1 v2 ->
-      match v1, v2 with
-      | Some v, None -> Some v
-      | Some _, Some v2 -> Some v2
-      | None, Some v -> Some v
-      | None, None -> None
-    ) t1 t2
+  let merge_right a b = StringMap.union (fun _ _ v -> Some v) a b
 
-  let get_is_non_nullifiable meta = Option.default "false" (find_opt meta "non_nullifiable") = "true" 
+  let inter a b = StringMap.filter (fun k v -> Option.map_default (String.equal v) false (find_opt b k)) a
+
+  let common x y =
+    match x, y with
+    | None, m | m, None -> m
+    | Some a, Some b -> Some (inter a b)
+
+  let common_all = List.fold_left common None
+  let of_option = Option.default (empty ())
+  let declared m = if is_empty m then None else Some m
+  let shared metas = of_option (common_all (List.map declared metas))
+  let internal_keys = [ "non_nullifiable"; "json_null_kind"; "text_as_json" ]
+
+  let of_domain m = List.fold_left (fun m k -> StringMap.remove k m) m internal_keys
+
+  let get_is_non_nullifiable meta = String.equal (Option.default "false" (find_opt meta "non_nullifiable")) "true" 
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
-  [@@deriving show {with_path=false}]
+  [@@deriving eq, show {with_path=false}]
 
 let unique_keys schema =
   let keys_of a =
@@ -367,23 +368,25 @@ struct
 
     type 'a t = 'a Attr.t list
 
+    let to_schema list = List.map (fun sattr -> sattr.Attr.attr) list
+
+    let of_schema ?(sources = []) list = List.map (fun attr -> { Attr.attr; sources }) list
+
     let find_by_name t name = List.find_all (Attr.by_name name) t
 
     let find t name =
       match find_by_name t name with
       | [x] -> x
-      | [] -> raise (Error (List.map (fun i -> i.Attr.attr) t,"missing attribute : " ^ name))
-      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ name))
+      | [] -> raise (Error (to_schema t, "missing attribute : " ^ name))
+      | _ -> raise (Error (to_schema t, "duplicate attribute : " ^ name))
 
     let mem_by_name t a =
       match find_by_name t a.Attr.attr.name with
       | [_] -> true
       | [] -> false
-      | _ -> raise (Error (List.map (fun i -> i.Attr.attr) t,"duplicate attribute : " ^ a.attr.name))
+      | _ -> raise (Error (to_schema t, "duplicate attribute : " ^ a.attr.name))
 
     let sub_by_name l del = List.filter (fun x -> not (mem_by_name del x)) l
-
-    let from_schema list = List.map (fun sattr -> sattr.Attr.attr) list
   end
 
   let raise_error t fmt = Printf.ksprintf (fun s -> raise (Error (t,s))) fmt
@@ -432,20 +435,27 @@ struct
 
     let cross t1 t2 = t1 @ t2
 
+    let common_columns cond t1 t2 =
+      let with_counterpart a = a, Source.find t2 a.Source.Attr.attr.name in
+      match cond with
+      | Natural -> t1 |> List.filter (Source.mem_by_name t2) |> List.map with_counterpart
+      | Using l -> List.map (fun name -> with_counterpart (Source.find t1 name)) l
+      | On _ | Default -> []
+
     (* TODO check that attribute types match (ignoring nullability)? *)
     let natural t1 t2 =
-      let (common,t1only) = List.partition (fun a -> Source.mem_by_name t2 a) t1 in
-      Source.Attr.(
-        if 0 = List.length common then
-          let t1_attrs = List.map (fun i -> i.attr) t1 in
-          raise (Error (t1_attrs,"no common attributes for natural join of " ^
-           (names (t1_attrs)) ^ " and " ^ (names (List.map (fun i -> i.attr) t2))))
-      );
+      let common = List.map fst (common_columns Natural t1 t2) in
+      let t1only = Source.sub_by_name t1 common in
+      begin match common with
+      | _ :: _ -> ()
+      | [] ->
+        raise (Error (Source.to_schema t1, "no common attributes for natural join of " ^
+          names (Source.to_schema t1) ^ " and " ^ names (Source.to_schema t2)))
+      end;
       common @ t1only @ Source.sub_by_name t2 common
 
     let using l t1 t2 =
-      let common = List.map (Source.find t1) l in
-      List.iter (fun a -> let _ = Source.find t2 a.Source.Attr.attr.name in ()) common;
+      let common = List.map fst (common_columns (Using l) t1 t2) in
       common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
     let join typ cond a b =
@@ -465,9 +475,9 @@ struct
   let compound t1 t2 =
     let open Source in
     let open Attr in
-    if List.length t1 <> List.length t2 then
-      raise (Error (List.map (fun i -> i.attr) t1, (to_string (List.map (fun i -> i.attr) t1))
-          ^ " differs in size to " ^ (to_string (List.map (fun i -> i.attr) t2))));
+    if List.compare_lengths t1 t2 <> 0 then
+      raise (Error (to_schema t1, to_string (to_schema t1)
+          ^ " differs in size to " ^ to_string (to_schema t2)));
     let show_name i a =
       match a.name with
       | "" -> sprintf "column %d (of %d)" (i+1) (List.length t1)
@@ -476,8 +486,10 @@ struct
     List.combine t1 t2
     |> List.mapi begin fun i (a1,a2) ->
       match Type.supertype a1.attr.domain a2.attr.domain with
-      | Some t -> Attr.map_attr (fun attr -> { attr with domain = t }) a1
-      | None -> raise (Error (List.map (fun i -> i.attr) t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
+      | Some t ->
+        let meta = Meta.shared [ a1.attr.meta; a2.attr.meta ] in
+        Attr.map_attr (fun attr -> { attr with domain = t; meta }) a1
+      | None -> raise (Error (to_schema t1, sprintf "Attributes do not match : %s of type %s and %s of type %s"
         (show_name i a1.attr) (Type.show a1.attr.domain)
         (show_name i a2.attr) (Type.show a2.attr.domain)))
     end
@@ -513,7 +525,7 @@ struct
 
 end
 
-type table_name = { db : string option; tn : string } [@@deriving show]
+type table_name = { db : string option; tn : string } [@@deriving eq, ord, show]
 let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn | None -> tn
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
@@ -655,7 +667,7 @@ type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
 } [@@deriving show]
-type logical_op = And | Or | Xor [@@deriving show]
+type logical_op = And | Or | Xor [@@deriving eq, show]
 type comparison_op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
 type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
@@ -692,7 +704,7 @@ and order = (expr * direction option) list
 and agg_with_order_kind = 
     | Group_concat
     | Json_arrayagg
-and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min *) 
+and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min, sum *) 
     | Count (* count it's count function which never returns null  *) 
     | Avg (* avg it's avg function that returns float *)
     | With_order of {
@@ -753,6 +765,47 @@ and column_kind =
 
 type columns = column list [@@deriving show]
 
+let comparison_signature op =
+  let open Type in
+  match op with
+  | Is_null | Is_not_null -> Typ (strict Bool), [Var 0]
+  | Not_distinct_op -> Typ (strict Bool), [Var 0; Var 0]
+  | Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq -> Typ (depends Bool), [Var 0; Var 0]
+
+let null_handling_signature nulls arity =
+  let open Type in
+  match nulls with
+  | If_null | Null_if -> Var 0, [Var 0; Var 0]
+  | Coalesce (ret, each) -> ret, List.make arity each
+
+let agg_same_type = Type.(Var 0, [Var 0])
+
+let multi_args ~fixed_args ~repeating_pattern arity =
+  let rec aux acc len =
+    match compare len arity, repeating_pattern with
+    | 0, _ -> Some (List.concat (List.rev acc))
+    | n, _ when n > 0 -> None
+    | _, [] -> None
+    | _, pattern -> aux (pattern :: acc) (len + List.length pattern)
+  in
+  aux [fixed_args] (List.length fixed_args)
+
+let signature kind arity =
+  let sign =
+    match kind with
+    | F (ret, args) -> Some (ret, args)
+    | Comparison op -> Some (comparison_signature op)
+    | Null_handling nulls -> Some (null_handling_signature nulls arity)
+    | Agg Self -> Some agg_same_type
+    | Col_assign { ret_t; col_t; arg_t } -> Some (ret_t, [col_t; arg_t])
+    | Multi { ret; fixed_args; repeating_pattern } ->
+      Option.map (fun args -> ret, args) (multi_args ~fixed_args ~repeating_pattern arity)
+    | Agg _ | Logical _ | Negation | Ret _ -> None
+  in
+  match sign with
+  | Some (_, args) when not (Int.equal (List.length args) arity) -> None
+  | Some _ | None as sign -> sign
+
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
   | Agg (Self | Count | Avg | With_order _) 
@@ -761,6 +814,12 @@ let source_fun_kind_to_infer = function
   | Col_assign _ | Multi _ as fn -> fn
 
 let expr_to_string = show_expr
+
+let map_kind_exprs f = function
+  | Agg (With_order ({ order; _ } as wo)) ->
+    Agg (With_order { wo with order = List.map (fun (e, dir) -> f e, dir) order })
+  | Agg (Self | Count | Avg) | Null_handling _ | Comparison _
+  | Logical _ | Negation | Ret _ | F _ | Col_assign _ | Multi _ as kind -> kind
 
 let sub_exprs = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ -> []
@@ -780,11 +839,8 @@ let map_sub_exprs f = function
   | Choices (n, l) -> Choices (n, List.map (fun (n, e) -> n, Option.map f e) l)
   | InChoice (n, k, e) -> InChoice (n, k, f e)
   | OptionActions ({ choice; _ } as o) -> OptionActions { o with choice = f choice }
-  | Fun ({ kind = Agg (With_order ({ order; _ } as wo)); parameters; _ } as fn) ->
-    Fun { fn with
-          kind = Agg (With_order { wo with order = List.map (fun (e, dir) -> f e, dir) order });
-          parameters = List.map f parameters }
-  | Fun ({ parameters; _ } as fn) -> Fun { fn with parameters = List.map f parameters }
+  | Fun ({ kind; parameters; _ } as fn) ->
+    Fun { fn with kind = map_kind_exprs f kind; parameters = List.map f parameters }
   | InTupleList ({ value = { exprs; _ } as tl; _ } as loc) ->
     InTupleList { loc with value = { tl with exprs = List.map f exprs } }
   | Case { case; branches; else_ } ->
@@ -828,7 +884,8 @@ type insert_action =
   on_conflict_clause : conflict_clause located option;
 } [@@deriving show {with_path=false}]
 
-type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list ] [@@deriving show {with_path=false}]
+type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list
+  | `Foreign of string list * table_name * string list ] [@@deriving show {with_path=false}]
 
 type index_kind  = 
   | Regular_idx
@@ -864,7 +921,7 @@ module Alter_action_attr = struct
     ) col.extra
 
   let to_attr (x: t): attr = make_attribute x.name 
-    (Option.map_default (fun k -> Some (Source_type.kind_to_type_kind k.value.collated)) None x.kind)
+    (Option.map (fun k -> Source_type.kind_to_type_kind k.value.collated) x.kind)
     (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
 
@@ -1033,8 +1090,8 @@ let pp_func pp f =
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map Type.string_of_tyvar args) (Type.string_of_tyvar ret)
   | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
   | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (Type.string_of_tyvar each_arg) (Type.string_of_tyvar ret)
-  | Null_handling _ -> fprintf pp "'a -> 'a -> 'a"
-  | Comparison _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
+  | Null_handling nulls -> let ret, args = null_handling_signature nulls 2 in aux (F (ret, args))
+  | Comparison op -> let ret, args = comparison_signature op in aux (F (ret, args))
   | Logical _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
   | Negation -> fprintf pp "'a -> %s" (Type.show_kind Bool)
   | Multi { ret; fixed_args; repeating_pattern } ->

@@ -2457,7 +2457,7 @@ Test decimal to float - allowed:
   > SELECT * FROM items WHERE price_float = price;
   > EOF
   Failed : SELECT * FROM items WHERE price_float = price
-  Fatal error: exception Failure("types Float? and Decimal(10,2)? for 'a do not match in 'a -> 'a -> Bool applied to (Float?, Decimal(10,2)?)")
+  Fatal error: exception Failure("types Float? and Decimal(10,2)? for 'a do not match in 'a -> 'a -> Bool?? applied to (Float?, Decimal(10,2)?)")
   [2]
 
 Test decimal to float - allowed:
