@@ -3,8 +3,8 @@ type content = { text : string option [@sqlgg.col "body"] } [@@deriving sqlgg]
 type post = {
   id : int64;
   content : content; [@sqlgg.nested]
-  reply_count : int; [@sqlgg.map Int64.to_int] [@sqlgg.set Int64.of_int]
-  hits : int64; [@sqlgg.default 0L] [@sqlgg.set (fun h -> Some h)]
+  reply_count : int; [@sqlgg.map Int64.to_int]
+  hits : int64; [@sqlgg.default 0L]
 }
 [@@deriving sqlgg]
 
@@ -40,9 +40,12 @@ let () =
   run "the same post, columns picked by hand" (fun () ->
     rows [ [ mock_int 1L; mock_text "hi"; mock_int 7L; mock_null ] ];
     let col =
-      post_of_cols_gen ~id:cols#id ~content:(content_of_cols cols)
-        ~reply_count:(Sqlgg_scope.map Int64.to_int cols#reply_count)
-        ~hits:(Sqlgg_scope.map (fun h -> Option.value h ~default:(-1L)) cols#hits)
+      let open Sqlgg_scope in
+      let+ id = cols#id
+      and+ content = content_of_cols cols
+      and+ reply_count = map Int64.to_int cols#reply_count
+      and+ hits = map (fun h -> Option.value h ~default:(-1L)) cols#hits in
+      { id; content; reply_count; hits }
     in
     Stdlib.List.iter print_post (List.select () col ~min_id:0L))
 
@@ -76,4 +79,4 @@ let () =
     let p : post =
       { id = 5L; content = { text = Some "hello" }; reply_count = 2; hits = 11L }
     in
-    ignore (post_apply (Db.add_post ()) p))
+    ignore (Db.add_post () ~id:p.id ~body:p.content.text ~reply_count:(Int64.of_int p.reply_count) ~hits:(Some p.hits)))

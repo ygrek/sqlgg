@@ -1,21 +1,37 @@
 open Ppxlib
 module D = Ast_builder.Default
 
-let derived_name ~suffix = Expansion_helpers.mangle (Suffix suffix)
+let error ~loc fmt =
+  Printf.ksprintf (fun msg -> Location.Error.createf ~loc "deriving sqlgg: %s" msg) fmt
 
-let derived_lid ~suffix lid =
-  Loc.map lid ~f:(Expansion_helpers.mangle_lid (Suffix suffix))
+type reader =
+  | Read_direct
+  | Read_nullable
+  | Read_nullable_exn
+
+let nullable_row = function
+  | Read_direct -> false
+  | Read_nullable | Read_nullable_exn -> true
+
+type suffix =
+  | Cols of { is_nullable : bool }
+  | Read of reader
+
+let string_of_suffix = function
+  | Cols { is_nullable = false } -> "cols"
+  | Cols { is_nullable = true } -> "nullable_cols"
+  | Read Read_direct -> "of_cols"
+  | Read Read_nullable -> "of_nullable_cols"
+  | Read Read_nullable_exn -> "of_nullable_cols_exn"
+
+let derived_name suffix = Expansion_helpers.mangle (Suffix (string_of_suffix suffix))
+
+let derived_lid suffix lid =
+  Loc.map lid ~f:(Expansion_helpers.mangle_lid (Suffix (string_of_suffix suffix)))
 
 let cols_arg = "sqlgg__cols"
-let fn_arg = "sqlgg__f"
-let rec_arg = "sqlgg__r"
-let col_arg = Printf.sprintf "sqlgg__c_%s"
 let val_arg = Printf.sprintf "sqlgg__v_%s"
 let conv_arg = Printf.sprintf "sqlgg__conv_%s"
-
-type spec =
-  | Fn of expression
-  | Raw of core_type
 
 let ctx = Attribute.Context.label_declaration
 
@@ -23,455 +39,572 @@ let located name pat =
   Attribute.declare_with_attr_loc name ctx pat (fun ~attr_loc x ->
       Loc.make ~loc:attr_loc x)
 
-let spec_attr name =
-  located name
-    Ast_pattern.(
-      map1 (single_expr_payload __) ~f:(fun e -> Fn e)
-      ||| map1 (ptyp __) ~f:(fun t -> Raw t))
-
 let col_attr = located "sqlgg.col" Ast_pattern.(single_expr_payload (estring __))
-let map_attr = spec_attr "sqlgg.map"
-let set_attr = spec_attr "sqlgg.set"
+
+let map_attr =
+  located "sqlgg.map"
+    Ast_pattern.(
+      map1 (single_expr_payload __) ~f:(fun e -> Either.Left e)
+      ||| map1 (ptyp __) ~f:(fun t -> Either.Right t))
 let default_attr = located "sqlgg.default" Ast_pattern.(single_expr_payload __)
 let by_attr = Attribute.declare_flag "sqlgg.by" ctx
-let nested_attr = Attribute.declare_flag "sqlgg.nested" ctx
+
+let nested_attr =
+  Attribute.declare "sqlgg.nested" ctx
+    Ast_pattern.(
+      map0 (pstr nil) ~f:false
+      ||| map0
+            (single_expr_payload (pexp_ident (lident (string "default_none"))))
+            ~f:true)
+    (fun x -> x)
 
 let attributes =
-  [ Attribute.T col_attr; Attribute.T map_attr; Attribute.T set_attr
-  ; Attribute.T default_attr; Attribute.T by_attr; Attribute.T nested_attr ]
+  [ Attribute.T col_attr
+  ; Attribute.T map_attr
+  ; Attribute.T default_attr
+  ; Attribute.T by_attr
+  ; Attribute.T nested_attr
+  ]
 
 type 'a how =
   | Plain
   | Defaulted of expression
   | Mapped of 'a
 
-type 'a conv = { by : bool; how : 'a how }
+type 'a conv =
+  { by : bool
+  ; is_nullable : bool
+  ; how : 'a how
+  }
+
+type nesting =
+  | Nested
+  | Joined_opt
+  | Joined_default_none
+
+type 'a column =
+  { col : string loc
+  ; conv : 'a conv
+  ; fty : core_type
+  }
+
+type sub_ref =
+  { nesting : nesting
+  ; lid : longident loc
+  }
 
 type 'a source =
-  | Column of { col : string loc; conv : 'a conv; set : 'a option }
-  | Group of longident loc
+  | Column of 'a column
+  | Sub of sub_ref
 
-type 'a field =
+type 'src fld =
   { fname : string
   ; floc : location
-  ; fty : core_type
-  ; src : 'a source
+  ; src : 'src
   }
 
-type binder =
-  | Anon
-  | Named of string
-  | Named_opt of string * expression
+let columns fields =
+  List.filter_map
+    (fun f -> match f.src with Column c -> Some { f with src = c } | Sub _ -> None)
+    fields
 
-type param =
-  { pkind : binder
-  ; ppat : pattern
-  ; ploc : location
-  }
-
-let efun params body =
-  List.fold_right
-    (fun { pkind; ppat; ploc = loc } acc ->
-      let lbl, def =
-        match pkind with
-        | Anon -> Nolabel, None
-        | Named n -> Labelled n, None
-        | Named_opt (n, d) -> Optional n, Some d
-      in
-      D.pexp_fun ~loc lbl def ppat acc)
-    params body
+let subs fields =
+  List.filter_map
+    (fun f -> match f.src with Sub s -> Some { f with src = s } | Column _ -> None)
+    fields
 
 let col_ty ~loc t =
   [%type: ([%t t], 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params) Sqlgg_scope.col]
 
-let scope_vars ~loc =
-  [ [%type: 'sqlgg__brand]; [%type: 'sqlgg__row]; [%type: 'sqlgg__params] ]
+let cols_var ~loc = [%type: 'sqlgg__cols]
 
-let row_var ~loc = [%type: 'sqlgg__cols]
-
-let record_ty ~loc tname = D.ptyp_constr ~loc (Loc.make ~loc (Lident tname)) []
+let cols_params ~loc =
+  [ [%type: 'sqlgg__brand]
+  ; [%type: 'sqlgg__row]
+  ; [%type: 'sqlgg__params]
+  ; cols_var ~loc
+  ]
+let record_ty ~loc tname = D.ptyp_constr ~loc (D.Located.lident ~loc tname) []
 let opaque f = D.ptyp_var ~loc:f.floc (Printf.sprintf "sqlgg__raw_%s" f.fname)
-
-let intrinsic ~loc f = function
-  | { by = false; how = Plain } -> Some f.fty
-  | { by = false; how = Defaulted _ } -> Some [%type: [%t f.fty] option]
-  | { by = true; _ } | { how = Mapped _; _ } -> None
 let fill_default ~loc e = [%expr Stdlib.Option.value ~default:[%e e]]
 
-let analyze_field ~err ~pick ld =
-  let loc = ld.pld_loc in
-  let is_option ty =
-    match ty.ptyp_desc with
-    | Ptyp_constr ({ txt = Lident "option" | Ldot (_, "option"); _ }, [ _ ]) -> true
-    | _ -> false
+let match_ pat (ty : core_type) =
+  Ast_pattern.parse_res pat ty.ptyp_loc ty (fun r -> r) |> Result.to_option
+
+let option_arg =
+  match_
+    Ast_pattern.(
+      ptyp_constr
+        (lident (string "option") ||| ldot (lident (string "Stdlib")) (string "option"))
+        (__ ^:: nil))
+
+type presence =
+  | Witnesses
+  | Votes
+  | Silent
+
+let conv_presence { by; is_nullable; how } =
+  match how, is_nullable, by with
+  | Defaulted _, _, _ -> Votes
+  | (Plain | Mapped _), false, _ -> Witnesses
+  | Plain, true, false -> Votes
+  | Plain, true, true -> Silent
+  | Mapped _, true, _ -> Silent
+
+let presence f =
+  match f.src with
+  | Sub { nesting = Nested; _ } -> Witnesses
+  | Sub { nesting = Joined_opt | Joined_default_none; _ } -> Votes
+  | Column c -> conv_presence c.conv
+
+type 'a raw_kind =
+  | As_is
+  | Optional
+  | Opaque of 'a option
+
+let raw_kind { by; how; _ } =
+  match how, by with
+  | Plain, false -> As_is
+  | Defaulted _, _ -> Optional
+  | Plain, true -> Opaque None
+  | Mapped conv, _ -> Opaque (Some conv)
+
+let raw_ty ~loc ~converted f c =
+  match raw_kind c with
+  | As_is -> f.src.fty
+  | Optional -> [%type: [%t f.src.fty] option]
+  | Opaque x -> converted f x
+
+let impl_raw ~loc = raw_ty ~loc ~converted:(fun f _ -> opaque f)
+let sig_raw ~loc = raw_ty ~loc ~converted:(fun f t -> Option.value t ~default:(opaque f))
+
+let cols_obj ~loc ~is_nullable ~raw cols =
+  D.ptyp_object ~loc
+    (List.map
+       (fun c ->
+         let loc = c.src.col.loc in
+         let t = raw ~loc c c.src.conv in
+         let t =
+           match is_nullable, conv_presence c.src.conv with
+           | false, _ | true, (Votes | Silent) -> t
+           | true, Witnesses -> [%type: [%t t] option]
+         in
+         D.otag ~loc c.src.col (col_ty ~loc t))
+       cols)
+    Open
+
+let by_cols cols = List.filter (fun c -> c.src.conv.by) cols
+
+let by_label c =
+  match c.src.conv.how with
+  | Plain -> Labelled c.fname
+  | Mapped _ | Defaulted _ -> Optional c.fname
+
+let by_default ~loc = function
+  | Plain -> None
+  | Mapped conv -> Some conv
+  | Defaulted e -> Some (fill_default ~loc e)
+
+let child_reader rd nesting =
+  match rd, nesting with
+  | Read_direct, Nested -> Read_direct
+  | Read_nullable, _ -> Read_nullable
+  | _, Joined_opt -> Read_nullable_exn
+  | _, (Nested | Joined_default_none) -> Read_nullable
+
+type 'a witness =
+  { strict : 'a source fld list
+  ; extra : 'a source fld list
+  }
+
+let witness fields =
+  let strict, extra =
+    List.fold_right
+      (fun f (strict, extra) ->
+        match presence f with
+        | Witnesses -> f :: strict, extra
+        | Votes -> strict, f :: extra
+        | Silent -> strict, extra)
+      fields ([], [])
   in
-  let nullary_constr ty =
-    match ty.ptyp_desc with Ptyp_constr (lid, []) -> Some lid | _ -> None
-  in
-  let errf ~loc fmt =
+  match strict with
+  | [] -> None
+  | _ -> Some { strict; extra }
+
+let resolve_field ~pick_spec ld =
+  let ferr ~loc fmt =
     Printf.ksprintf
-      (fun msg -> err (loc, Printf.sprintf "field %s: %s" ld.pld_name.txt msg))
+      (fun m -> Error (error ~loc "field %s: %s" ld.pld_name.txt m))
       fmt
-  in
-  let picked name { txt; loc } =
-    match pick txt with
-    | Ok x -> Some x
-    | Error why ->
-      errf ~loc "%s: %s" name why;
-      None
   in
   let col = Attribute.get col_attr ld in
   let map = Attribute.get map_attr ld in
   let default = Attribute.get default_attr ld in
-  let set_attr_value = Attribute.get set_attr ld in
   let by = Attribute.has_flag by_attr ld in
-  let how =
-    match map, default with
-    | Some _, Some { loc; _ } ->
-      errf ~loc "[@sqlgg.map] and [@sqlgg.default] cannot be combined";
-      Some Plain
-    | Some m, None -> Option.map (fun x -> Mapped x) (picked "[@sqlgg.map]" m)
-    | None, Some { txt; loc } ->
-      if is_option ld.pld_type then
-        errf ~loc "[@sqlgg.default] replaces NULL, so the field cannot be an option";
-      Some (Defaulted txt)
-    | None, None -> Some Plain
+  let opt_ty = option_arg ld.pld_type in
+  let is_nullable = Option.is_some opt_ty in
+  let column how =
+    Column
+      { col = Option.value col ~default:ld.pld_name
+      ; conv = { by; is_nullable; how }
+      ; fty = ld.pld_type
+      }
   in
-  let set =
-    match set_attr_value with
-    | None -> Some None
-    | Some s -> Option.map Option.some (picked "[@sqlgg.set]" s)
-  in
-  let used =
-    List.filter_map
-      (fun (name, present) -> if present then Some name else None)
-      [ "[@sqlgg.col]", Option.is_some col
-      ; "[@sqlgg.map]", Option.is_some map
-      ; "[@sqlgg.default]", Option.is_some default
-      ; "[@sqlgg.set]", Option.is_some set_attr_value
-      ; "[@sqlgg.by]", by ]
-  in
-  match how, set with
-  | None, _ | _, None -> None
-  | Some how, Some set ->
-    let column () =
-      Column { col = Option.value col ~default:ld.pld_name; conv = { by; how }; set }
+  let nested nesting ty =
+    let clash =
+      List.filter_map
+        (fun (name, present) -> if present then Some name else None)
+        [ "[@sqlgg.col]", Option.is_some col
+        ; "[@sqlgg.map]", Option.is_some map
+        ; "[@sqlgg.default]", Option.is_some default
+        ; "[@sqlgg.by]", by
+        ]
     in
-    let src =
-      match Attribute.has_flag nested_attr ld, used, nullary_constr ld.pld_type with
-      | false, _, _ -> column ()
-      | true, (_ :: _ as names), _ ->
-        errf ~loc "[@sqlgg.nested] cannot be combined with %s"
-          (String.concat ", " names);
-        column ()
-      | true, [], Some lid -> Group lid
-      | true, [], None ->
-        errf ~loc "[@sqlgg.nested] needs a record type deriving sqlgg";
-        column ()
-    in
-    Some { fname = ld.pld_name.txt; floc = loc; fty = ld.pld_type; src }
-
-let cols_type ~loc tname fields =
-  let (module B) = Ast_builder.make loc in
-  let row = row_var ~loc in
-  let vars = scope_vars ~loc @ [ row ] in
-  let meth f conv = Option.map (col_ty ~loc) (intrinsic ~loc f conv) in
-  let step f acc =
-    Option.bind acc (fun (meths, cstrs) ->
-        match f.src with
-        | Group lid ->
-          Some
-            ( meths
-            , (row, B.ptyp_constr (derived_lid ~suffix:"cols" lid) vars, loc) :: cstrs )
-        | Column { col; conv; _ } ->
-          Option.map (fun t -> B.otag col t :: meths, cstrs) (meth f conv))
+    match clash, match_ Ast_pattern.(ptyp_constr __' nil) ty with
+    | (_ :: _ as names), _ ->
+      ferr ~loc:ld.pld_loc "[@sqlgg.nested] cannot be combined with %s"
+        (String.concat ", " names)
+    | [], Some lid -> Ok (Sub { nesting; lid })
+    | [], None ->
+      ferr ~loc:ld.pld_loc "[@sqlgg.nested] needs a record type deriving sqlgg"
   in
-  List.fold_right step fields (Some ([], []))
-  |> Option.map (fun (meths, cstrs) ->
-         B.type_declaration
-           ~name:(B.Located.mk (derived_name ~suffix:"cols" tname))
-           ~params:(List.map (fun v -> v, (NoVariance, NoInjectivity)) vars)
-           ~cstrs:((row, B.ptyp_object meths Open, loc) :: cstrs)
-           ~kind:Ptype_abstract ~private_:Public ~manifest:(Some row))
+  let source =
+    let default_none = Attribute.get nested_attr ld in
+    match default_none, opt_ty with
+    | Some false, None -> nested Nested ld.pld_type
+    | Some false, Some inner -> nested Joined_opt inner
+    | Some true, Some inner -> nested Joined_default_none inner
+    | Some true, None ->
+      ferr ~loc:ld.pld_loc "[@sqlgg.nested default_none] needs an option field"
+    | None, _ ->
+      match map, default with
+      | Some _, Some { loc; _ } ->
+        ferr ~loc "[@sqlgg.map] and [@sqlgg.default] cannot be combined"
+      | Some m, None ->
+        pick_spec m.txt
+        |> Result.map_error (fun why ->
+               error ~loc:m.loc "field %s: [@sqlgg.map]: %s" ld.pld_name.txt why)
+        |> Result.map (fun conv -> column (Mapped conv))
+      | None, Some { txt; loc } ->
+        if is_nullable then
+          ferr ~loc "[@sqlgg.default] replaces NULL, so the field cannot be an option"
+        else Ok (column (Defaulted txt))
+      | None, None -> Ok (column Plain)
+  in
+  Result.map
+    (fun src -> { fname = ld.pld_name.txt; floc = ld.pld_loc; src })
+    source
 
-let build ~loc tname first rest =
-  let fields = first :: rest in
-  let (module B) = Ast_builder.make loc in
+let cols_decls ~loc ~nullable tname subs cols =
+  let open (val Ast_builder.make loc) in
+  let cols_ty = cols_var ~loc in
+  let vars = cols_params ~loc in
+  let decl rd =
+    type_declaration
+      ~name:(Loc.make ~loc (derived_name (Cols { is_nullable = nullable_row rd }) tname))
+      ~params:(List.map (fun v -> v, (NoVariance, NoInjectivity)) vars)
+      ~cstrs:
+        ((cols_ty, cols_obj ~loc ~is_nullable:(nullable_row rd) ~raw:impl_raw cols, loc)
+        :: List.map
+             (fun { src = { nesting; lid }; _ } ->
+               ( cols_ty
+               , ptyp_constr
+                   (derived_lid
+                      (Cols { is_nullable = nullable_row (child_reader rd nesting) })
+                      lid)
+                   vars
+               , loc ))
+             subs)
+      ~kind:Ptype_abstract ~private_:Public ~manifest:(Some cols_ty)
+  in
+  let nameable c =
+    match c.src.conv.by, c.src.conv.how with true, Plain -> false | _ -> true
+  in
+  match List.for_all nameable cols, nullable with
+  | false, _ -> []
+  | true, false -> [ decl Read_direct ]
+  | true, true -> [ decl Read_direct; decl Read_nullable_exn ]
+
+type 'a resolved =
+  { loc : location
+  ; tname : string
+  ; first : 'a source fld
+  ; rest : 'a source fld list
+  ; fields : 'a source fld list
+  ; cols : 'a column fld list
+  ; subs : sub_ref fld list
+  ; witness : 'a witness option
+  ; decls : type_declaration list
+  }
+
+let build { loc; tname; first; rest; fields; cols; witness; decls; _ } =
+  let open (val Ast_builder.make loc) in
   let record_ty = record_ty ~loc tname in
-  let item ~suffix body =
-    [%stri let [%p B.pvar (derived_name ~suffix tname)] = [%e body]]
-  in
-
-  let gen_item =
+  let item suffix body = [%stri let [%p pvar (derived_name suffix tname)] = [%e body]] in
+  let scoped ~exp ~body =
     let bind op f =
-      let loc = f.floc in
-      let (module B) = Ast_builder.make loc in
-      B.binding_op ~op:(B.Located.mk op)
-        ~pat:(B.pvar (val_arg f.fname))
-        ~exp:(B.evar (col_arg f.fname))
-    in
-    let record =
-      B.pexp_record
-        (List.map (fun f -> B.Located.lident f.fname, B.evar (val_arg f.fname)) fields)
-        None
+      D.binding_op ~loc:f.floc
+        ~op:(Loc.make ~loc:f.floc op)
+        ~pat:(D.pvar ~loc:f.floc (val_arg f.fname))
+        ~exp:(exp f)
     in
     let letop =
-      B.pexp_letop
-        (B.letop ~let_:(bind "let+" first) ~ands:(List.map (bind "and+") rest)
-           ~body:[%expr ([%e record] : [%t record_ty])])
+      pexp_letop
+        (letop ~let_:(bind "let+" first) ~ands:(List.map (bind "and+") rest) ~body)
     in
-    let params =
-      List.map
-        (fun f ->
-          let loc = f.floc in
-          let (module B) = Ast_builder.make loc in
-          { pkind = Named f.fname
-          ; ppat = [%pat? ([%p B.pvar (col_arg f.fname)] : [%t col_ty ~loc f.fty])]
-          ; ploc = loc
-          })
-        fields
-    in
-    item ~suffix:"of_cols_gen"
-      (efun params
-         [%expr
-           ((let open Sqlgg_scope in
-             [%e letop])
-             : [%t col_ty ~loc record_ty])])
+    [%expr
+      let open Sqlgg_scope in
+      [%e letop]]
   in
-
-  let of_cols_item =
-    let column f col ({ by; how } as conv) =
-      let loc = col.loc in
-      let (module B) = Ast_builder.make loc in
-      let get = B.pexp_send (B.evar cols_arg) col in
-      let via e = [%expr Sqlgg_scope.map [%e e] [%e get]] in
-      let read =
-        match by, how with
-        | false, Plain -> get
-        | false, Defaulted e -> via (fill_default ~loc e)
-        | false, Mapped g -> via g
-        | true, _ -> via (B.evar (conv_arg f.fname))
-      in
-      let ty = Option.value (intrinsic ~loc f conv) ~default:(opaque f) in
-      Some (B.otag col (col_ty ~loc ty)), read
-    in
-    let meths, args =
-      List.split
-        (List.map
-           (fun f ->
-             let loc = f.floc in
-             let (module B) = Ast_builder.make loc in
-             let meth, read =
-               match f.src with
-               | Group lid ->
-                 ( None
-                 , [%expr
-                     [%e B.pexp_ident (derived_lid ~suffix:"of_cols" lid)]
-                       [%e B.evar cols_arg]] )
-               | Column { col; conv; _ } -> column f col conv
-             in
-             meth, (Labelled f.fname, read))
-           fields)
-    in
-    let params =
-      List.filter_map
-        (fun f ->
-          let loc = f.floc in
-          match f.src with
-          | Group _ | Column { conv = { by = false; _ }; _ } -> None
-          | Column { conv = { by = true; how }; _ } ->
-            let pkind =
-              match how with
-              | Plain -> Named f.fname
-              | Mapped e -> Named_opt (f.fname, e)
-              | Defaulted e -> Named_opt (f.fname, fill_default ~loc e)
-            in
-            Some { pkind; ppat = D.pvar ~loc (conv_arg f.fname); ploc = loc })
-        fields
-    in
-    let row =
-      { pkind = Anon
-      ; ppat =
-          B.ppat_constraint (B.pvar cols_arg)
-            (B.ptyp_object (List.filter_map Fun.id meths) Open)
-      ; ploc = loc
-      }
-    in
-    let call = B.pexp_apply (B.evar (derived_name ~suffix:"of_cols_gen" tname)) args in
-    item ~suffix:"of_cols"
-      (efun (params @ [ row ]) [%expr ([%e call] : [%t col_ty ~loc record_ty])])
+  let record ~value =
+    [%expr
+      ([%e
+         pexp_record
+           (List.map (fun f -> D.Located.lident ~loc:f.floc f.fname, value f) fields)
+           None]
+        : [%t record_ty])]
   in
-
-  let apply_item =
-    let field_of ?set f =
-      let loc = f.floc in
-      let (module B) = Ast_builder.make loc in
-      let v = B.pexp_field (B.evar rec_arg) (B.Located.lident f.fname) in
-      match set with None -> v | Some g -> [%expr [%e g] [%e v]]
-    in
-    let flush acc = function
-      | [] -> acc
-      | pending ->
-        B.pexp_apply acc
-          (List.rev_map (fun (f, col, set) -> Labelled col.txt, field_of ?set f) pending)
-    in
-    let rec chain acc pending = function
-      | [] -> flush acc pending
-      | ({ src = Group lid; _ } as f) :: tl ->
+  let readers =
+    let read rd f =
+      match f.src with
+      | Sub { nesting; lid } ->
         let loc = f.floc in
-        chain
-          [%expr
-            [%e D.pexp_ident ~loc (derived_lid ~suffix:"apply" lid)]
-              [%e flush acc pending] [%e field_of f]]
-          [] tl
-      | ({ src = Column { col; set; _ }; _ } as f) :: tl ->
-        chain acc ((f, col, set) :: pending) tl
+        [%expr
+          [%e
+            D.pexp_ident ~loc
+              (derived_lid (Read (child_reader rd nesting)) lid)]
+            [%e D.evar ~loc cols_arg]]
+      | Column { col; _ } -> D.pexp_send ~loc:col.loc (D.evar ~loc:col.loc cols_arg) col
     in
-    item ~suffix:"apply"
-      [%expr
-        fun [%p B.pvar fn_arg] ([%p B.pvar rec_arg] : [%t record_ty]) ->
-          [%e chain (B.evar fn_arg) [] fields]]
+    let value f =
+      let v = D.evar ~loc:f.floc (val_arg f.fname) in
+      match f.src with
+      | Sub _ -> v
+      | Column { col = { loc; _ }; conv; _ } ->
+        match conv with
+        | { by = false; how = Plain; _ } -> v
+        | { by = false; how = Defaulted e; _ } -> [%expr [%e fill_default ~loc e] [%e v]]
+        | { by = false; how = Mapped conv; _ } -> [%expr [%e conv] [%e v]]
+        | { by = true; _ } -> [%expr [%e D.evar ~loc (conv_arg f.fname)] [%e v]]
+    in
+    let bare = record ~value in
+    let reader_item rd ~result body =
+      item (Read rd)
+        (List.fold_right
+           (fun (lbl, default, p) acc -> D.pexp_fun ~loc:p.ppat_loc lbl default p acc)
+           (List.map
+              (fun c ->
+                ( by_label c
+                , by_default ~loc:c.floc c.src.conv.how
+                , D.pvar ~loc:c.floc (conv_arg c.fname) ))
+              (by_cols cols)
+           @ [ ( Nolabel
+               , None
+               , [%pat?
+                   ([%p pvar cols_arg]
+                     : [%t
+                         cols_obj ~loc ~is_nullable:(nullable_row rd) ~raw:impl_raw cols])]
+               )
+             ])
+           [%expr ([%e scoped ~exp:(read rd) ~body] : [%t col_ty ~loc result])])
+    in
+    let tuple_pat ~strict:pat ~rest strict extra =
+      ppat_tuple (List.map pat strict @ List.map rest extra)
+    in
+    let none f = let loc = f.floc in [%pat? None] in
+    let present =
+      tuple_pat
+        ~strict:(fun f ->
+          let loc = f.floc in
+          [%pat? Some [%p D.pvar ~loc (val_arg f.fname)]])
+        ~rest:(fun f -> D.ppat_any ~loc:f.floc)
+    in
+    let arm lhs rhs = case ~lhs ~guard:None ~rhs in
+    let missing strict extra =
+      List.mapi
+        (fun i f ->
+          let loc = f.floc in
+          arm
+            (ppat_tuple
+               (List.mapi
+                  (fun j g -> if i = j then [%pat? None] else D.ppat_any ~loc:g.floc)
+                  strict
+               @ List.map (fun g -> D.ppat_any ~loc:g.floc) extra))
+            [%expr
+              failwith
+                [%e
+                  D.estring ~loc (Printf.sprintf "sqlgg: %s.%s is NULL" tname f.fname)]])
+        strict
+    in
+    let opt_result = [%type: [%t record_ty] option] in
+    let witnessed =
+      match witness with
+      | None -> []
+      | Some { strict; extra } ->
+        let opt_arms =
+          [ arm (present strict extra) [%expr Some [%e bare]]
+          ; arm (tuple_pat ~strict:none ~rest:none strict extra) [%expr None]
+          ]
+          @
+          match strict, extra with
+          | [ _ ], [] -> []
+          | _ -> missing strict extra
+        in
+        [ reader_item Read_nullable ~result:opt_result
+            (List.fold_right
+               (fun f acc ->
+                 let loc = f.floc in
+                 [%expr
+                   Stdlib.Option.bind [%e D.evar ~loc (val_arg f.fname)] (fun
+                       [%p D.pvar ~loc (val_arg f.fname)] -> [%e acc])])
+               strict
+               [%expr Some [%e bare]])
+        ; reader_item Read_nullable_exn ~result:opt_result
+            (pexp_match
+               (pexp_tuple
+                  (List.map (fun f -> evar (val_arg f.fname)) (strict @ extra)))
+               opt_arms)
+        ]
+    in
+    reader_item Read_direct ~result:record_ty bare :: witnessed
   in
+  List.map (fun d -> pstr_type Recursive [ d ]) decls @ readers
 
-  let cols_item =
-    match cols_type ~loc tname fields with
-    | None -> []
-    | Some decl -> [ B.pstr_type Recursive [ decl ] ]
-  in
-  cols_item @ [ gen_item; of_cols_item; apply_item ]
-
-let sig_items ~loc tname first rest =
-  let fields = first :: rest in
-  let (module B) = Ast_builder.make loc in
+let sig_body { loc; tname; cols; subs; witness; decls; _ } =
+  let open (val Ast_builder.make loc) in
   let record_ty = record_ty ~loc tname in
-  let sraw f = function
-    | { how = Mapped t; _ } -> t
-    | { by = true; how = Plain } -> opaque f
-    | { how = Plain | Defaulted _; _ } as conv ->
-      Option.value (intrinsic ~loc f conv) ~default:[%type: [%t f.fty] option]
+  let value suffix type_ =
+    psig_value
+      (value_description
+         ~name:(Loc.make ~loc (derived_name suffix tname))
+         ~type_ ~prim:[])
   in
-  let cols_decl = cols_type ~loc tname fields in
-  let groups =
-    List.filter (fun f -> match f.src with Group _ -> true | Column _ -> false) fields
+  let reader ~is_nullable result =
+    List.fold_right
+      (fun c acc ->
+        ptyp_arrow (by_label c)
+          [%type: [%t sig_raw ~loc:c.floc c c.src.conv] -> [%t c.src.fty]]
+          acc)
+      (by_cols cols)
+      [%type:
+        [%t
+          match subs with
+          | [] -> cols_obj ~loc ~is_nullable ~raw:sig_raw cols
+          | _ :: _ ->
+            ptyp_constr
+              (D.Located.lident ~loc (derived_name (Cols { is_nullable }) tname))
+              (cols_params ~loc)]
+        -> [%t col_ty ~loc result]]
   in
-  match cols_decl, groups with
-  | None, (_ :: _ as blocked) ->
+  let opt_result = [%type: [%t record_ty] option] in
+  let witnessed =
+    match witness with
+    | None -> []
+    | Some _ ->
+      [ value (Read Read_nullable) (reader ~is_nullable:true opt_result)
+      ; value (Read Read_nullable_exn) (reader ~is_nullable:true opt_result)
+      ]
+  in
+  List.map (fun d -> psig_type Recursive [ d ]) decls
+  @ value (Read Read_direct) (reader ~is_nullable:false record_ty) :: witnessed
+
+let sig_items ({ loc; tname; subs; decls; _ } as a) =
+  let open (val Ast_builder.make loc) in
+  match subs, decls with
+  | (_ :: _ as ss), [] ->
     List.map
       (fun f ->
-        D.psig_extension ~loc:f.floc
-          (Location.error_extensionf ~loc:f.floc
-             "deriving sqlgg: [@sqlgg.nested] needs %s, which a converted column \
-              rules out"
-             (derived_name ~suffix:"cols" tname))
+        psig_extension
+          (Location.Error.to_extension
+             (error ~loc:f.floc
+                "[@sqlgg.nested] needs %s, and the parent cannot pass the \
+                 [@sqlgg.by] argument"
+                (derived_name (Cols { is_nullable = false }) tname)))
           [])
-      blocked
-  | _ ->
-    let nests = groups <> [] in
-    let value name type_ =
-      B.psig_value (B.value_description ~name:(B.Located.mk name) ~type_ ~prim:[])
-    in
-    let gen =
-      List.fold_right
-        (fun f acc -> B.ptyp_arrow (Labelled f.fname) (col_ty ~loc f.fty) acc)
-        fields (col_ty ~loc record_ty)
-    in
-    let of_cols =
-      let row =
-        if nests then
-          B.ptyp_constr
-            (B.Located.lident (derived_name ~suffix:"cols" tname))
-            (scope_vars ~loc @ [ row_var ~loc ])
-        else
-          B.ptyp_object
-            (List.filter_map
-               (fun f ->
-                 match f.src with
-                 | Group _ -> None
-                 | Column { col; conv; _ } ->
-                   Some (B.otag col (col_ty ~loc (sraw f conv))))
-               fields)
-            Open
-      in
-      let arg f conv =
-        let lbl =
-          match conv with
-          | { by = false; _ } -> None
-          | { by = true; how = Plain } -> Some (Labelled f.fname)
-          | { by = true; how = Defaulted _ | Mapped _ } -> Some (Optional f.fname)
-        in
-        Option.map (fun l -> l, [%type: [%t sraw f conv] -> [%t f.fty]]) lbl
-      in
-      List.fold_right
-        (fun f acc ->
-          match f.src with
-          | Group _ -> acc
-          | Column { conv; _ } ->
-            Option.fold (arg f conv) ~none:acc ~some:(fun (l, ty) ->
-                B.ptyp_arrow l ty acc))
-        fields
-        [%type: [%t row] -> [%t col_ty ~loc record_ty]]
-    in
-    let apply =
-      let callback =
-        List.fold_right
-          (fun f acc ->
-            match f.src with
-            | Group _ -> acc
-            | Column { col; set; _ } ->
-              B.ptyp_arrow (Labelled col.txt) (Option.value set ~default:f.fty) acc)
-          fields [%type: 'sqlgg__res]
-      in
-      [%type: [%t callback] -> [%t record_ty] -> 'sqlgg__res]
-    in
-    let cols_item =
-      match cols_decl with None -> [] | Some d -> [ B.psig_type Recursive [ d ] ]
-    in
-    cols_item
-    @ value (derived_name ~suffix:"of_cols_gen" tname) gen
-      :: value (derived_name ~suffix:"of_cols" tname) of_cols
-      :: (if nests then [] else [ value (derived_name ~suffix:"apply" tname) apply ])
+      ss
+  | _, _ -> sig_body a
 
-let dispatch ~loc ~ext ~pick ~record tds =
-  let reject ~loc msg =
-    [ ext ~loc (Location.error_extensionf ~loc "deriving sqlgg: %s" msg) ]
-  in
-
-  let derive ~tname ld lds =
-    let errs = ref [] in
-    let err e = errs := e :: !errs in
-    let first = analyze_field ~err ~pick ld in
-    let rest = List.filter_map (analyze_field ~err ~pick) lds in
-    match List.rev !errs, first with
-    | [], Some first -> record ~loc tname first rest
-    | msgs, _ -> List.concat_map (fun (loc, msg) -> reject ~loc msg) msgs
+let dispatch ~loc ~ext ~pick_spec ~record ~nullable tds =
+  let emit errs =
+    List.map
+      (fun e -> ext ~loc:(Location.Error.get_location e) (Location.Error.to_extension e))
+      errs
   in
   List.concat_map
     (fun td ->
       match td.ptype_params, td.ptype_kind with
-      | _ :: _, _ -> reject ~loc:td.ptype_loc "type parameters are not supported"
-      | [], Ptype_record [] -> reject ~loc:td.ptype_loc "record has no fields"
-      | [], Ptype_record (ld :: lds) -> derive ~tname:td.ptype_name.txt ld lds
+      | _ :: _, _ -> emit [ error ~loc:td.ptype_loc "type parameters are not supported" ]
+      | [], Ptype_record [] -> emit [ error ~loc:td.ptype_loc "record has no fields" ]
       | [], (Ptype_abstract | Ptype_variant _ | Ptype_open) ->
-        reject ~loc:td.ptype_loc "only record types are supported")
+        emit [ error ~loc:td.ptype_loc "only record types are supported" ]
+      | [], Ptype_record (ld :: lds) ->
+        let step ld (fs, es) =
+          match resolve_field ~pick_spec ld with
+          | Ok f -> f :: fs, es
+          | Error e -> fs, e :: es
+        in
+        match resolve_field ~pick_spec ld, List.fold_right step lds ([], []) with
+        | Error e, (_, es) -> emit (e :: es)
+        | Ok _, (_, (_ :: _ as es)) -> emit es
+        | Ok f, (fs, []) ->
+        let fields = f :: fs in
+        let witness =
+          match nullable, witness fields with
+          | false, _ -> Ok None
+          | true, (Some _ as w) -> Ok w
+          | true, None ->
+            Error
+              (error ~loc:td.ptype_loc
+                 "~nullable_cols needs a column that cannot be NULL, or drop the option")
+        in
+        match witness with
+        | Error e -> emit [ e ]
+        | Ok witness ->
+          let cols = columns fields in
+          let subs = subs fields in
+          record
+            { loc
+            ; tname = td.ptype_name.txt
+            ; first = f
+            ; rest = fs
+            ; fields
+            ; cols
+            ; subs
+            ; witness
+            ; decls =
+                cols_decls ~loc ~nullable:(Option.is_some witness) td.ptype_name.txt
+                  subs cols
+            })
     tds
 
-let expand ~ctxt (_rec_flag, tds) =
+let expand ~ctxt (_rec_flag, tds) nullable =
   dispatch
     ~loc:(Expansion_context.Deriver.derived_item_loc ctxt)
     ~ext:(fun ~loc e -> D.pstr_extension ~loc e [])
-    ~pick:(function Fn e -> Ok e | Raw _ -> Error "expected a conversion function")
-    ~record:build tds
+    ~pick_spec:
+      (function
+      | Either.Left e -> Ok e
+      | Either.Right _ -> Error "expected a conversion function")
+    ~record:build ~nullable tds
 
-let expand_sig ~ctxt (_rec_flag, tds) =
+let expand_sig ~ctxt (_rec_flag, tds) nullable =
   dispatch
     ~loc:(Expansion_context.Deriver.derived_item_loc ctxt)
     ~ext:(fun ~loc e -> D.psig_extension ~loc e [])
-    ~pick:
-      (function Raw t -> Ok t | Fn _ -> Error "expected a column type after a colon")
-    ~record:sig_items tds
+    ~pick_spec:
+      (function
+      | Either.Right t -> Ok t
+      | Either.Left _ -> Error "expected a column type after a colon")
+    ~record:sig_items ~nullable tds
 
 let () =
   Deriving.add "sqlgg"
-    ~str_type_decl:(Deriving.Generator.V2.make_noarg ~attributes expand)
-    ~sig_type_decl:(Deriving.Generator.V2.make_noarg ~attributes expand_sig)
+    ~str_type_decl:
+      (Deriving.Generator.V2.make ~attributes
+         Deriving.Args.(empty +> flag "nullable_cols")
+         expand)
+    ~sig_type_decl:
+      (Deriving.Generator.V2.make ~attributes
+         Deriving.Args.(empty +> flag "nullable_cols")
+         expand_sig)
   |> Deriving.ignore

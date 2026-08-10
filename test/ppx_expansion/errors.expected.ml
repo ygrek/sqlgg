@@ -9,32 +9,19 @@ include
                     <
                       id: (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
                             Sqlgg_scope.col   ;.. > 
-    let product_of_cols_gen
-      ~id:(sqlgg__c_id :
-            (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-              Sqlgg_scope.col)
-      =
-      (let open Sqlgg_scope in
-         let+ sqlgg__v_id = sqlgg__c_id
-          in ({ id = sqlgg__v_id } : product) : (product, 'sqlgg__brand,
-                                                  'sqlgg__row,
-                                                  'sqlgg__params)
-                                                  Sqlgg_scope.col)
-    let _ = product_of_cols_gen
     let product_of_cols
       (sqlgg__cols :
         <
           id: (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
                 Sqlgg_scope.col   ;.. > )
       =
-      (product_of_cols_gen ~id:(sqlgg__cols#id) : (product, 'sqlgg__brand,
-                                                    'sqlgg__row,
-                                                    'sqlgg__params)
-                                                    Sqlgg_scope.col)
+      (let open Sqlgg_scope in
+         let+ sqlgg__v_id = sqlgg__cols#id
+          in ({ id = sqlgg__v_id } : product) : (product, 'sqlgg__brand,
+                                                  'sqlgg__row,
+                                                  'sqlgg__params)
+                                                  Sqlgg_scope.col)
     let _ = product_of_cols
-    let product_apply sqlgg__f (sqlgg__r : product) =
-      sqlgg__f ~id:(sqlgg__r.id)
-    let _ = product_apply
   end[@@ocaml.doc "@inline"][@@merlin.hide ]
 type map_and_default =
   {
@@ -70,4 +57,41 @@ include
     let _ = fun (_ : nested_not_a_record) -> ()
     [%%ocaml.error
       "deriving sqlgg: field dimensions: [@sqlgg.nested] needs a record type deriving sqlgg"]
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type nested_option_not_a_record =
+  {
+  dimensions: (int64 * int64) option [@sqlgg.nested ]}[@@deriving sqlgg]
+include
+  struct
+    let _ = fun (_ : nested_option_not_a_record) -> ()
+    [%%ocaml.error
+      "deriving sqlgg: field dimensions: [@sqlgg.nested] needs a record type deriving sqlgg"]
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type nested_option_and_col =
+  {
+  product: product option [@sqlgg.nested ][@sqlgg.col "product_id"]}[@@deriving
+                                                                    sqlgg]
+include
+  struct
+    let _ = fun (_ : nested_option_and_col) -> ()
+    [%%ocaml.error
+      "deriving sqlgg: field product: [@sqlgg.nested] cannot be combined with [@sqlgg.col]"]
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type default_none_needs_option =
+  {
+  product: product [@sqlgg.nested default_none]}[@@deriving sqlgg]
+include
+  struct
+    let _ = fun (_ : default_none_needs_option) -> ()
+    [%%ocaml.error
+      "deriving sqlgg: field product: [@sqlgg.nested default_none] needs an option field"]
+  end[@@ocaml.doc "@inline"][@@merlin.hide ]
+type map_without_a_function = {
+  id: int64 ;
+  n: int [@sqlgg.map : int64 -> int]}[@@deriving sqlgg]
+include
+  struct
+    let _ = fun (_ : map_without_a_function) -> ()
+    [%%ocaml.error
+      "deriving sqlgg: field n: [@sqlgg.map]: expected a conversion function"]
   end[@@ocaml.doc "@inline"][@@merlin.hide ]

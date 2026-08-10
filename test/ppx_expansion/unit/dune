@@ -1,0 +1,4 @@
+(test
+ (name test_readers)
+ (libraries oUnit sqlgg.traits)
+ (preprocess (pps sqlgg.ppx)))
