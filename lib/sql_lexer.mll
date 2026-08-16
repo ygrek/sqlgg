@@ -146,6 +146,7 @@ let keywords =
    "rename",RENAME;
    "replace",REPLACE;
    "restrict",RESTRICT;
+   "returning",RETURNING;
    "returns", RETURNS;
    "row", ROW;
    "rows", ROWS;

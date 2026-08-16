@@ -753,6 +753,8 @@ and column_kind =
 
 type columns = column list [@@deriving show]
 
+type returning = columns located [@@deriving show]
+
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
   | Agg (Self | Count | Avg | With_order _) 
@@ -826,6 +828,7 @@ type insert_action =
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_conflict_clause : conflict_clause located option;
+  returning : returning option;
 } [@@deriving show {with_path=false}]
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list ] [@@deriving show {with_path=false}]
@@ -971,10 +974,10 @@ type stmt =
   | Rename of (table_name * table_name) list
   | CreateIndex of create_index_def
   | Insert of insert_action
-  | Delete of table_name * expr option
+  | Delete of table_name * expr option * returning option
   | DeleteMulti of table_name list * nested * expr option
   | Set of (string * expr) list * stmt option
-  | Update of table_name * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
+  | Update of table_name * assignments * expr option * order * Source_type.t param list * returning option (* where, order, limit, returning *)
   | UpdateMulti of nested list * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)

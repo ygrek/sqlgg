@@ -1590,11 +1590,33 @@ let with_constraints attrs constraints : Schema.t =
   ) attrs
 
 
+let with_returning env (returning : Sql.returning option) ((schema, params, kind) as stmt) =
+  match returning with
+  | None -> stmt
+  | Some returning ->
+    let projection = make_dynamic_select ~env returning.value in
+    schema @ List.map drop_sources (infer_schema ~not_null_keys:[] env projection),
+    params @ get_params_of_columns env projection,
+    kind
+
+let single_row_insert_cardinality (on_conflict_clause : Sql.conflict_clause Sql.located option) =
+  match on_conflict_clause with
+  | Some { value = On_conflict { action = Do_nothing; _ }; _ } -> `Zero_one
+  | Some { value = (On_conflict { action = Do_update _; _ } | On_duplicate _); _ }
+  | None -> `One
+
 let rec eval (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
   let open Attr in
   match stmt with
+  | Insert { action = (`Values (_, None) | `Set None); returning = Some { pos; _ }; _ } ->
+    (* currently not handled as generated VALUES tuple require shifting indices *)
+    failed ~at:pos "RETURNING is not supported when inserted columns are inferred"
+  | Insert { action = (`Values (_, None) | `Set None); on_conflict_clause = Some { pos; value }; _ } ->
+    (* currently not handled as generated VALUES tuple require shifting indices *)
+    let what = match value with On_conflict _ -> "ON CONFLICT" | On_duplicate _ -> "ON DUPLICATE KEY UPDATE" in
+    failed ~at:pos "%s is not supported when inserted columns are inferred" what
   | Create (name, Schema { schema; constraints; indexes }) ->
       let attrs = List.map Alter_action_attr.to_attr schema in
       let attrs = with_constraints attrs constraints in
@@ -1684,14 +1706,14 @@ let rec eval (stmt:Sql.stmt) =
       Sql.Schema.project cols (Tables.get_schema ci_table) |> ignore;
       Tables.index_add ci_table ~index_name:ci_name ~kind:ci_kind ~cols;
       [],[],CreateIndex ci_name
-  | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
+  | Insert { target=table; action=`Values (names, values); on_conflict_clause; returning; _ } ->
     let expect = values_or_all table names in
     let t = Tables.get_schema table in
     let schema = List.map (fun attr -> { sources=[table]; attr }) t in
     let env = { empty_env with tables = [Tables.get table]; schema; } in
     begin match values with
-    | None -> 
-      [], [], Insert(Some (Values, expect), table)
+    | None ->
+      [], [], Insert (Some (Values, expect), table, `One)
     | Some values ->
       let vl = List.map List.length values in
       let cl = List.length expect in
@@ -1746,9 +1768,14 @@ let rec eval (stmt:Sql.stmt) =
       let p1 = List.concat_map (fun (_c, p, _t) -> p) resolved in
       let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
       let params2 = params_of_assigns { env with is_update = true; } conflict_assigns in
-      [], p1 @ params2, Insert (None, table)
+      let cardinality =
+        match values with
+        | [_] -> single_row_insert_cardinality on_conflict_clause
+        | _ -> `Nat
+      in
+      with_returning env returning ([], p1 @ params2, Insert (None, table, cardinality))
     end
-  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; _ } ->
+  | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; returning; _ } ->
     let schema = List.map (fun attr -> { Schema.Source.Attr.sources=[table]; attr }) (Tables.get_schema table) in
     let env = { empty_env with tables = [Tables.get table]; schema; } in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
@@ -1756,8 +1783,8 @@ let rec eval (stmt:Sql.stmt) =
     List.iter (fun a -> Hashtbl.add env.insert_resolved_types a.attr.name a.attr.domain ) schema;
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
     let params = [ TupleList (param_id, Insertion expect) ] in
-    [], params @ params2, Insert (None, table)
-  | Insert { target=table; action=`Select (names, select); on_conflict_clause; _ } ->
+    with_returning env returning ([], params @ params2, Insert (None, table, `Nat))
+  | Insert { target=table; action=`Select (names, select); on_conflict_clause; returning; _ } ->
     let expect = values_or_all table names in
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table); 
@@ -1775,8 +1802,8 @@ let rec eval (stmt:Sql.stmt) =
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
     List.iter2 (fun a1 a2 -> Hashtbl.add env.insert_resolved_types a2.name a1.attr.domain ) schema expect;
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
-    [], params @ params2, Insert (None,table)
-  | Insert { target=table; action=`Set ss; on_conflict_clause; _ } ->
+    with_returning env returning ([], params @ params2, Insert (None, table, `Nat))
+  | Insert { target=table; action=`Set ss; on_conflict_clause; returning; _ } ->
     let env = { empty_env with tables = [Tables.get table]; 
       schema = List.map (fun attr -> { sources=[table]; attr }) (Tables.get_schema table);
     } in
@@ -1786,14 +1813,15 @@ let rec eval (stmt:Sql.stmt) =
     in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
     let params2 = params_of_assigns { env with is_update = true } conflict_assigns in
-    [], params @ params2, Insert (inferred,table)
-  | Delete (table, where) ->
+    with_returning env returning
+      ([], params @ params2, Insert (inferred, table, single_row_insert_cardinality on_conflict_clause))
+  | Delete (table, where, returning) ->
     let t = Tables.get table in
-    let p = get_params_opt { empty_env with tables=[t]; 
-      schema=List.map (fun attr -> { Schema.Source.Attr.sources=[t |> fst]; attr }) (t |> snd); 
-      set_tyvar_strict = true 
-    } where in
-    [], p, Delete [table]
+    let env = { empty_env with tables=[t];
+      schema=List.map (fun attr -> { Schema.Source.Attr.sources=[t |> fst]; attr }) (t |> snd);
+    } in
+    let p = get_params_opt { env with set_tyvar_strict = true } where in
+    with_returning env returning ([], p, Delete [table])
   | DeleteMulti (targets, tables, where) ->
     (* use dummy columns to verify targets match the provided tables  *)
     let select = ({ columns = [dummy_loc All]; from = Some tables; where; group = []; having = None }, []) in
@@ -1811,7 +1839,7 @@ let rec eval (stmt:Sql.stmt) =
     | None -> [], p, Other
     | Some stmt -> let (schema,p2,kind) = eval stmt in (schema, p @ p2, kind)
     end
-  | Update (table,ss,w,o,lim) ->
+  | Update (table,ss,w,o,lim,returning) ->
     let f, s = Tables.get table in
     let env = { empty_env with is_update = true } in
     let r = List.map (fun attr -> {Schema.Source.Attr.attr; sources=[f] }) s in
@@ -1820,7 +1848,8 @@ let rec eval (stmt:Sql.stmt) =
     let env = { env with schema = update_schema_with_aliases [] r; is_update = true } in
     let p3 = params_of_order o [] { env with tables = [(f, s)] } in
     let lim = List.map (fun p -> make_param ~id:p.id ~typ:(Source_type.to_infer_type p.typ)) lim in
-    [], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update (Some table)
+    with_returning { empty_env with tables = [(f, s)]; schema = r } returning
+      ([], params @ p3 @ (List.map (fun p -> Single (p, Meta.empty())) lim), Update (Some table))
   | UpdateMulti (tables,ss,w,o,lim) ->
     let env = { empty_env with is_update = true } in
     let sources = List.map (fun src -> resolve_source { env with scope = Subquery } ((`Nested src), None)) tables in
@@ -1991,7 +2020,7 @@ let common_prefix = function
 (* fill inferred sql for VALUES or SET *)
 let complete_sql kind sql =
   match kind with
-  | Stmt.Insert (Some (kind,schema), _) ->
+  | Stmt.Insert (Some (kind,schema), _, _) ->
     let (pre,each,post) = match kind with
     | Values -> "(", (fun _ -> ""), ")"
     | Assign -> "", (fun name -> name ^" = "), ""

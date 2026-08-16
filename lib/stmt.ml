@@ -13,7 +13,7 @@ type cardinality = [`Zero_one | `One | `Nat] [@@deriving show]
 let cardinality_to_string = show_cardinality
 
 type kind = | Select of cardinality
-            | Insert of inferred * Sql.table_name
+            | Insert of inferred * Sql.table_name * cardinality
             | Create of Sql.table_name
             | CreateIndex of string
             | Update of Sql.table_name option (** name for single-table UPDATEs *)
@@ -25,6 +25,12 @@ type kind = | Select of cardinality
             | DropType of string
             | Other
             [@@deriving show {with_path=false}]
+
+let cardinality_of_kind = function
+| Select c -> c
+| Insert (_, _, c) -> c
+| Create _ | CreateIndex _ | Update _ | Delete _ | Alter _ | Drop _
+| CreateRoutine _ | CreateType _ | DropType _ | Other -> `Nat
 
 type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
 

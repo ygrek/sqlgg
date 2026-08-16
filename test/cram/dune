@@ -3,6 +3,7 @@
   %{bin:sqlgg}
   (glob_files *.sql)
   (glob_files *.compare.ml)
+  (glob_files *.compare.mli)
   (source_tree test_build_json_functions)
   (source_tree test_build_enum_literals)
   (source_tree test_build_dynamic_subquery)
