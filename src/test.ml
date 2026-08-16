@@ -68,12 +68,20 @@ let do_test ?kind sql schema params =
   | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
   | None -> ()
 
-let tt sql ?kind schema params =
+let in_dialect ?dialect f =
+  match dialect with
+  | None -> f
+  | Some d -> fun () ->
+    let old = !Dialect.selected in
+    Dialect.set_selected d;
+    Fun.protect ~finally:(fun () -> Dialect.set_selected old) f
+
+let tt sql ?kind ?dialect schema params =
   let test () = do_test sql ?kind schema params in
-  sql >:: test
+  sql >:: in_dialect ?dialect test
 
 (** Test helper for queries with Choice parameters - only checks schema *)
-let tt_schema_only sql ?kind schema =
+let tt_schema_only sql ?kind ?dialect schema =
   let test () =
     let stmt = parse sql in
     assert_equal ~msg:"schema" ~printer:Sql.Schema.to_string schema (schema_to_attrs stmt.schema);
@@ -81,10 +89,11 @@ let tt_schema_only sql ?kind schema =
     | Some k -> assert_equal ~msg:"kind" ~printer:[%derive.show: Stmt.kind] k stmt.kind
     | None -> ()
   in
-  sql >:: test
+  sql >:: in_dialect ?dialect test
 
-let wrong sql =
-  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
+let wrong ?dialect sql =
+  sql >:: in_dialect ?dialect
+    (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
 
 let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
 let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =
@@ -1815,6 +1824,83 @@ let test_on_conflict_do_update = [
   |};
 ]
 
+let tt_pg sql ?kind schema params = tt sql ?kind ~dialect:Dialect.PostgreSQL schema params
+let wrong_pg sql = wrong ~dialect:Dialect.PostgreSQL sql
+
+let returning_table = make_table_name "table_returning"
+
+let test_returning = [
+  tt {|
+    CREATE TABLE table_returning (
+      id INT PRIMARY KEY,
+      name TEXT NOT NULL,
+      nick TEXT
+    )
+  |} [] [];
+  tt_pg "INSERT INTO table_returning (id, name, nick) VALUES (@id, @name, @nick) RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `One))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "id" Int; named "name" Text; named_nullable "nick" Text];
+  tt_pg "INSERT INTO table_returning (id, name, nick) VALUES (@id, @name, @nick) RETURNING *"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' ~extra:[NotNull] "name" Text; attr' ~nullability:Nullable "nick" Text]
+    [named "id" Int; named "name" Text; named_nullable "nick" Text];
+  tt_pg "INSERT INTO table_returning (id, name, nick) VALUES (@id, @name, @nick) RETURNING id + 1 AS next_id"
+    [attr' "next_id" Int]
+    [named "id" Int; named "name" Text; named_nullable "nick" Text];
+  tt_pg "INSERT INTO table_returning (id, name, nick) VALUES (@id, @name, @nick) RETURNING id, CONCAT(name, @suffix) AS tagged"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' "tagged" Text]
+    [named "id" Int; named "name" Text; named_nullable "nick" Text; named "suffix" Text];
+  tt_pg "INSERT INTO table_returning SET id = @id, name = @name RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `One))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "id" Int; named "name" Text];
+  tt_pg "INSERT INTO table_returning (id, name) VALUES (@id1, @name1), (@id2, @name2) RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `Nat))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "id1" Int; named "name1" Text; named "id2" Int; named "name2" Text];
+  (* ON CONFLICT DO NOTHING may swallow the row : zero or one *)
+  tt_pg "INSERT INTO table_returning (id, name) VALUES (@id, @name) ON CONFLICT(id) DO NOTHING RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `Zero_one))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "id" Int; named "name" Text];
+  tt_pg "INSERT INTO table_returning (id, name) VALUES (@id, @name) ON CONFLICT(id) DO UPDATE SET name = excluded.name RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `One))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "id" Int; named "name" Text];
+  tt_pg "INSERT INTO table_returning (id, name) SELECT id, name FROM table_returning WHERE id > @min RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `Nat))
+    [attr' ~extra:[PrimaryKey] "id" Int]
+    [named "min" Int];
+  tt_schema_only "INSERT INTO table_returning (id, name) VALUES @values RETURNING id"
+    ~kind:(Stmt.Insert (None, returning_table, `Nat)) ~dialect:Dialect.PostgreSQL
+    [attr' ~extra:[PrimaryKey] "id" Int];
+  tt_pg "UPDATE table_returning SET name = @name WHERE id = @id RETURNING id, nick"
+    ~kind:(Stmt.Update (Some returning_table))
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' ~nullability:Nullable "nick" Text]
+    [named "name" Text; named "id" Int];
+  tt_pg "UPDATE table_returning SET name = @name WHERE id = @id RETURNING *"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' ~extra:[NotNull] "name" Text; attr' ~nullability:Nullable "nick" Text]
+    [named "name" Text; named "id" Int];
+  tt_pg "UPDATE table_returning SET name = @name WHERE id = @id RETURNING id, CONCAT(name, @suffix) AS tagged"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' "tagged" Text]
+    [named "name" Text; named "id" Int; named "suffix" Text];
+  tt_pg "DELETE FROM table_returning WHERE id = @id RETURNING id, name"
+    ~kind:(Stmt.Delete [returning_table])
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' ~extra:[NotNull] "name" Text]
+    [named "id" Int];
+  tt_pg "DELETE FROM table_returning WHERE id = @id RETURNING *"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' ~extra:[NotNull] "name" Text; attr' ~nullability:Nullable "nick" Text]
+    [named "id" Int];
+  tt_pg "DELETE FROM table_returning WHERE id = @id RETURNING id, CONCAT(name, @suffix) AS tagged"
+    [attr' ~extra:[PrimaryKey] "id" Int; attr' "tagged" Text]
+    [named "id" Int; named "suffix" Text];
+  wrong_pg "DELETE FROM table_returning WHERE id = @id RETURNING no_such_column";
+  wrong_pg "INSERT INTO table_returning VALUES RETURNING id";
+  wrong_pg "INSERT INTO table_returning VALUES ON CONFLICT(id) DO NOTHING";
+  wrong "INSERT INTO table_returning VALUES ON DUPLICATE KEY UPDATE name = @name";
+]
+
+
 let test_enum_with_in_and_between = [
   tt {|
     CREATE TABLE table_20250807 (
@@ -2395,6 +2481,7 @@ let run () =
     "test_meta_insert_update" >:: test_meta_insert_update;
     "test_multi_functions" >::: test_multi_functions;
     "test_on_conflict_do_update" >::: test_on_conflict_do_update;
+    "test_returning" >::: test_returning;
     "test_enum_with_in_and_between" >::: test_enum_with_in_and_between;
     "test_datefns" >::: test_datefns;
     "test_json_and_fixed_then_pairs_fn_kind" >::: test_json_and_fixed_then_pairs_fn_kind;

@@ -256,20 +256,21 @@ let output_select1_cb _ schema =
   emit_row_binder "get_row" (fun () ->
     List.mapi get_column attrs |> String.concat ", " |> indent_endline)
 
-let select_func_of_kind = function
-| Stmt.Select `Zero_one -> "select_one_maybe"
-| Stmt.Select `One -> "select_one"
-| _ -> "select"
+let select_func_of_kind kind =
+  match Stmt.cardinality_of_kind kind with
+  | `Zero_one -> "select_one_maybe"
+  | `One -> "select_one"
+  | `Nat -> "select"
 
-let is_single_row_select stmt =
-  match stmt.Gen.kind, stmt.Gen.schema with
-  | Stmt.Select (`One | `Zero_one), _ :: _ -> true
+let is_single_row_result stmt =
+  match stmt.Gen.schema, Stmt.cardinality_of_kind stmt.Gen.kind with
+  | _ :: _, (`One | `Zero_one) -> true
   | _ -> false
 
 let has_row_callback stmt =
-  match stmt.Gen.schema, stmt.Gen.kind with
+  match stmt.Gen.schema, Stmt.cardinality_of_kind stmt.Gen.kind with
   | [], _ -> false
-  | _, Stmt.Select (`Zero_one | `One) -> false
+  | _, (`Zero_one | `One) -> false
   | _ -> true
 
 let module_kind_name = function
@@ -281,7 +282,7 @@ let module_kind_name = function
 let supports_module_kind module_kind stmt =
   match module_kind with
   | `List | `Fold -> has_row_callback stmt
-  | `Single -> is_single_row_select stmt
+  | `Single -> is_single_row_result stmt
   | `Direct -> true
 
 let emit_module_gen ~footer name body =
@@ -924,26 +925,27 @@ let emit_sql_with_subst subst stmt =
     output "in";
     "__sqlgg_sql"
 
-let empty_exec_result = {|IO.return { T.affected_rows = 0L; insert_id = None }|}
-
 let generate_stmt ~module_kind index stmt =
   if not (supports_module_kind module_kind stmt) then () else
   let c = consumer module_kind in
+  let returns_rows = Gen.returns_rows stmt in
+  let empty_result =
+    if returns_rows then {|IO.return ()|} else {|IO.return { T.affected_rows = 0L; insert_id = None }|}
+  in
   if Props.get stmt.props "noop" <> None then begin
     let _ = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
     output "ignore db;";
-    output "%s" empty_exec_result;
+    output "%s" empty_result;
     complete_func c
   end else
   let subst = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
   let sql = emit_sql_with_subst subst stmt in
   let (func, callback) =
-    match stmt.schema with
-    | [] -> "execute", ""
-    | _ ->
+    if not returns_rows then "execute", ""
+    else
       select_func_of_kind stmt.kind,
-      match module_kind, stmt.kind with
-      | (`Direct | `Fold | `List), Stmt.Select (`Zero_one | `One) -> output_select1_cb index stmt.schema
+      match module_kind, Stmt.cardinality_of_kind stmt.kind with
+      | (`Direct | `Fold | `List), (`Zero_one | `One) -> output_select1_cb index stmt.schema
       | _ -> output_schema_binder_labeled index stmt.schema
   in
   let params_binder_name = output_params_binder index stmt.vars in
@@ -968,7 +970,7 @@ let generate_stmt ~module_kind index stmt =
     | None -> exec
     | Some { value = None; _ } -> failwith "empty label in tuple substitution"
     | Some { value = Some value; _ } ->
-      sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|} value empty_exec_result exec
+      sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|} value empty_result exec
   in
   output "%s%s" bind exec;
   complete_func c

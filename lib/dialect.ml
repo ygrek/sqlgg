@@ -28,6 +28,7 @@ type feature =
   | Ttl [@as "ttl"]
   | AlterColumn [@as "alter_column"]
   | UserDefinedType [@as "user_defined_type"]
+  | Returning [@as "returning"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string]
 
 let show_feature x = 
@@ -105,6 +106,8 @@ let get_create_table_as_select pos = {
 let get_on_duplicate_key pos = only OnDuplicateKey [MySQL; TiDB] pos
 
 let get_on_conflict pos = only OnConflict [SQLite; PostgreSQL] pos
+
+let get_returning pos = only Returning [PostgreSQL; SQLite] pos
 
 let get_straight_join pos = only StraightJoin [MySQL; TiDB] pos
 
@@ -219,6 +222,10 @@ and analyze_column acc cols k = match cols with
     match col with
     | { value = (All | AllOf _); _ } -> analyze_column acc rest k
     | { value = Expr ({ value = expr; _ }, _); _ } -> analyze_expr acc [expr] (fun acc -> analyze_column acc rest k)
+
+and analyze_returning acc returning k = match returning with
+  | None -> k acc
+  | Some { value = cols; pos } -> analyze_column (get_returning pos :: acc) cols k
 
 and analyze_source acc srcs k = match srcs with
   | [] -> k acc
@@ -364,7 +371,7 @@ and analyze_alter_action acc actions k = match actions with
 
 and analyze_insert_action acc ias k = match ias with
   | [] -> k acc
-  | { action; on_conflict_clause; insert_action_kind; _ } :: rest ->
+  | { action; on_conflict_clause; insert_action_kind; returning; _ } :: rest ->
     let acc = match insert_action_kind with
       | Replace_into pos -> get_replace_into pos :: acc
       | Insert_into -> acc
@@ -391,7 +398,8 @@ and analyze_insert_action acc ias k = match ias with
     analyze_action acc (fun acc ->
       let conflict_aes = List.map snd conflict_assignments in
       analyze_assignment_expr acc conflict_aes (fun acc ->
-        analyze_insert_action acc rest k))
+        analyze_returning acc returning (fun acc ->
+          analyze_insert_action acc rest k)))
 
 let analyze_schema_index idx = match idx.value.Sql.idx_kind with
   | Regular_idx -> None
@@ -414,8 +422,9 @@ let rec analyze stmt =
   | CreateIndex { ci_cols; _ } -> List.concat_map check_collated ci_cols
   | Insert insert_action ->
       analyze_insert_action acc [insert_action] List.rev
-  | Delete (_, where_opt) ->
-      analyze_expr acc (option_list where_opt) List.rev
+  | Delete (_, where_opt, returning) ->
+      analyze_expr acc (option_list where_opt) (fun acc ->
+        analyze_returning acc returning List.rev)
   | DeleteMulti (_, nested, where_opt) ->
       analyze_nested acc [nested] (fun acc ->
         analyze_expr acc (option_list where_opt) List.rev)
@@ -424,11 +433,12 @@ let rec analyze stmt =
       analyze_expr acc exprs (fun acc ->
         let stmt_features = Option.map_default analyze [] stmt_opt in
         List.rev (List.rev_append stmt_features acc))
-  | Update (_, assignments, where_opt, order, _) ->
+  | Update (_, assignments, where_opt, order, _, returning) ->
       let aes = List.map snd assignments in
       analyze_assignment_expr acc aes (fun acc ->
         let exprs = option_list where_opt @ List.map fst order in
-        analyze_expr acc exprs List.rev)
+        analyze_expr acc exprs (fun acc ->
+          analyze_returning acc returning List.rev))
   | UpdateMulti (nesteds, assignments, where_opt, order, _) ->
       analyze_nested acc nesteds (fun acc ->
         let aes = List.map snd assignments in

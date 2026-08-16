@@ -35,7 +35,7 @@
        LIMIT ORDER BY DESC ASC EQUAL DELETE FROM DEFAULT OFFSET SET STRAIGHT_JOIN JOIN LIKE_OP LIKE
        EXCL TILDE NOT BETWEEN AND XOR ESCAPE USING UNION EXCEPT INTERSECT AS TO
        CONCAT_OP LEFT RIGHT FULL INNER OUTER NATURAL CROSS REPLACE IN GROUP HAVING
-       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS
+       UNIQUE PRIMARY KEY FOREIGN AUTOINCREMENT ON CONFLICT DO NOTHING TEMPORARY IF EXISTS RETURNING
        PRECISION SIGNED UNSIGNED ZEROFILL VARYING CHARSET NATIONAL ASCII UNICODE COLLATE BINARY CHARACTER
        DATETIME_FUNC DATE TIME TIMESTAMP ALTER RENAME ADD COLUMN CASCADE RESTRICT DROP
        GLOBAL LOCAL REFERENCES CHECK CONSTRAINT IGNORED AFTER INDEX FULLTEXT SPATIAL FIRST
@@ -141,34 +141,34 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind }
               }
          | select_stmt { Select $1 }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)? r=located(returning)?
               {
-                Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; returning=r; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES p=param ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES p=param ss=located(conflict_clause)? r=located(returning)?
               {
-                Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; returning=r; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)? r=located(returning)?
               {
-                Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; returning=r; }
               }
-         | insert_action_kind=insert_cmd target=table_name SET set=commas(set_column)? ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name SET set=commas(set_column)? ss=located(conflict_clause)? r=located(returning)?
               {
-                Insert { insert_action_kind; target; action=`Set set; on_conflict_clause=ss; }
+                Insert { insert_action_kind; target; action=`Set set; on_conflict_clause=ss; returning=r; }
               }
-         | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
+         | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit) r=located(returning)?
               {
-                Update (table,ss,w,o,lim)
+                Update (table,ss,w,o,lim,r)
               }
          /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
          | update_cmd tables=commas(table_list) SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 UpdateMulti (tables,ss,w,o,lim)
               }
-         | DELETE FROM table=table_name w=where?
+         | DELETE FROM table=table_name w=where? r=located(returning)?
               {
-                Delete (table,w)
+                Delete (table,w,r)
               }
          /* https://dev.mysql.com/doc/refman/5.7/en/delete.html multi-table syntax */
          | DELETE targets=commas(table_name) FROM tables=table_list w=where?
@@ -349,6 +349,7 @@ from: FROM t=table_list { t }
 where: WHERE e=expr { e }
 group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
+returning: RETURNING r=commas(column1) { r }
 
 column1:
        | c=located(column1_kind) { c }

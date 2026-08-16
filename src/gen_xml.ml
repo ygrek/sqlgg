@@ -103,6 +103,8 @@ let get_sql_string stmt =
   in
   String.concat "" @@ List.mapi map @@ get_sql stmt
 
+let show_cardinality = function `Nat -> "n" | `Zero_one -> "0,1" | `One -> "1"
+
 let rec params_only l =
   List.concat @@
   List.map
@@ -121,17 +123,18 @@ let generate_code (x,_) index stmt =
   in
   let output = Node ("out",[],schema_to_values (schema_to_attrs stmt.schema)) in
   let sql = get_sql_string stmt in
+  let dml_cardinality =
+    if Gen.returns_rows stmt then show_cardinality (Stmt.cardinality_of_kind stmt.kind) else "0"
+  in
   let attrs =
     match stmt.kind with
-    | Select `Nat      -> ["kind", "select"; "cardinality", "n"]
-    | Select `Zero_one -> ["kind", "select"; "cardinality", "0,1"]
-    | Select `One      -> ["kind", "select"; "cardinality", "1"]
-    | Insert (_, t)    -> ["kind", "insert"; "target", Sql.show_table_name t; "cardinality", "0"]
+    | Select c         -> ["kind", "select"; "cardinality", show_cardinality c]
+    | Insert (_, t, _) -> ["kind", "insert"; "target", Sql.show_table_name t; "cardinality", dml_cardinality]
     | Create t         -> ["kind", "create"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateIndex t    -> ["kind", "create_index"; "target",t;"cardinality","0"]
-    | Update None      -> ["kind", "update"; "cardinality", "0"]
-    | Update (Some t)  -> ["kind", "update"; "target", Sql.show_table_name t; "cardinality", "0"]
-    | Delete t         -> ["kind", "delete"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
+    | Update None      -> ["kind", "update"; "cardinality", dml_cardinality]
+    | Update (Some t)  -> ["kind", "update"; "target", Sql.show_table_name t; "cardinality", dml_cardinality]
+    | Delete t         -> ["kind", "delete"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", dml_cardinality]
     | Alter t          -> ["kind", "alter"; "target", String.concat "," @@ List.map Sql.show_table_name t; "cardinality", "0"]
     | Drop t           -> ["kind", "drop"; "target", Sql.show_table_name t; "cardinality", "0"]
     | CreateRoutine s  -> ["kind", "create_routine"; "target", Sql.show_table_name s]
