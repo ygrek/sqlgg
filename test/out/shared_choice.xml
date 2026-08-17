@@ -8,8 +8,8 @@
  <stmt name="select_1" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="a" type="Int" nullable="true"/>
-   <value name="b" type="Int" nullable="true"/>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
   </out>
  </stmt>
  <stmt name="select_2" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
@@ -17,8 +17,8 @@
    <value name="v" type="Int"/>
   </in>
   <out>
-   <value name="a" type="Int" nullable="true"/>
-   <value name="b" type="Int" nullable="true"/>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
   </out>
  </stmt>
  <stmt name="select_3" sql="SELECT * FROM test&#x0A;WHERE a = {TODO dynamic choice}&#x0A;  AND b = {TODO dynamic choice}" category="DQL" kind="select" cardinality="n">
@@ -27,8 +27,8 @@
    <value name="q" type="Int"/>
   </in>
   <out>
-   <value name="a" type="Int" nullable="true"/>
-   <value name="b" type="Int" nullable="true"/>
+   <value name="a" type="Int"/>
+   <value name="b" type="Int"/>
   </out>
  </stmt>
  <table name="test">

@@ -1483,7 +1483,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
     let select_2 db ~order_kind ~par callback =
       let invoke_callback stmt =
         callback
-          ~table_no:(T.get_column_Int_nullable stmt 0)
+          ~table_no:(T.get_column_Int stmt 0)
           ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
           ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
           ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
@@ -1516,7 +1516,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
       let select_2 db ~order_kind ~par callback acc =
         let invoke_callback stmt =
           callback
-            ~table_no:(T.get_column_Int_nullable stmt 0)
+            ~table_no:(T.get_column_Int stmt 0)
             ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
             ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
             ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
@@ -1553,7 +1553,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
       let select_2 db ~order_kind ~par callback =
         let invoke_callback stmt =
           callback
-            ~table_no:(T.get_column_Int_nullable stmt 0)
+            ~table_no:(T.get_column_Int stmt 0)
             ~dates_from_t1:(T.get_column_Text_nullable stmt 1)
             ~dates_from_t2:(T.get_column_Text_nullable stmt 2)
             ~dates_from_t2_2:(T.get_column_Text_nullable stmt 3)
@@ -2457,7 +2457,7 @@ Test decimal to float - allowed:
   > SELECT * FROM items WHERE price_float = price;
   > EOF
   Failed : SELECT * FROM items WHERE price_float = price
-  Fatal error: exception Failure("types Float? and Decimal(10,2)? for 'a do not match in 'a -> 'a -> Bool?? applied to (Float?, Decimal(10,2)?)")
+  Fatal error: exception Failure("types Float and Decimal(10,2) for 'a do not match in 'a -> 'a -> Bool?? applied to (Float, Decimal(10,2))")
   [2]
 
 Test decimal to float - allowed:
@@ -2476,7 +2476,7 @@ Test decimal to float - allowed:
       let invoke_callback stmt =
         callback
           ~price:(T.get_column_Decimal_nullable stmt 0)
-          ~price_float:(T.get_column_Float_nullable stmt 1)
+          ~price_float:(T.get_column_Float stmt 1)
       in
       T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
@@ -2485,7 +2485,7 @@ Test decimal to float - allowed:
         let invoke_callback stmt =
           callback
             ~price:(T.get_column_Decimal_nullable stmt 0)
-            ~price_float:(T.get_column_Float_nullable stmt 1)
+            ~price_float:(T.get_column_Float stmt 1)
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
@@ -2498,7 +2498,7 @@ Test decimal to float - allowed:
         let invoke_callback stmt =
           callback
             ~price:(T.get_column_Decimal_nullable stmt 0)
-            ~price_float:(T.get_column_Float_nullable stmt 1)
+            ~price_float:(T.get_column_Float stmt 1)
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM items WHERE price_float = CAST(price AS FLOAT)") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))

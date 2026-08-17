@@ -24,7 +24,7 @@ depends: [
   "base-unix"
   "odoc" {with-doc}
   "ounit"
-  "qcheck-ounit" {>= "0.25"}
+  "qcheck-core" {with-test & >= "0.25"}
 ]
 depopts: [
   "mariadb"

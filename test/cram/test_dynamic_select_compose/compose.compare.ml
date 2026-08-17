@@ -8,7 +8,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let id : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
           column = ("id");
           count = 0;
           deps = [];
@@ -16,7 +16,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let name : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("name");
           count = 0;
           deps = [];
@@ -82,6 +82,77 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let id : _ t =
         {
           set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
+          column = ("id");
+          count = 0;
+          deps = [];
+        }
+      let name : _ t =
+        {
+          set = (fun _p -> ());
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
+          column = ("name");
+          count = 0;
+          deps = [];
+        }
+    end
+    include Cols
+    let cols = object
+      method id = Cols.id
+      method name = Cols.name
+    end
+
+    let select db (col : _ t) ~pairs callback =
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match pairs with [] -> 0 | _ :: _ -> 0) + col.count) in
+        col.set p;
+        T.finish_params p
+      in
+      T.select db
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+      set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col)
+
+    module Fold = struct
+      let select db (col : _ t) ~pairs callback acc =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match pairs with [] -> 0 | _ :: _ -> 0) + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
+          __sqlgg_r_col !r_acc)))
+        (fun () -> IO.return !r_acc)
+
+    end (* module Fold *)
+
+    module List = struct
+      let select db (col : _ t) ~pairs =
+        let set_params stmt =
+          let p = T.start_params stmt (0 + (match pairs with [] -> 0 | _ :: _ -> 0) + col.count) in
+          col.set p;
+          T.finish_params p
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+        set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+
+    end (* module List *)
+
+  end
+
+  module Tuple_list_not_in = struct
+    type brand
+    include Sqlgg_scope.Make (struct type nonrec brand = brand type row = T.row type params = T.params end)
+    module Cols = struct
+      let id : _ t =
+        {
+          set = (fun _p -> ());
           read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
           column = ("id");
           count = 0;
@@ -109,7 +180,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "TRUE" | _ :: _ -> "(id, name) NOT IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list_not_in" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -122,7 +193,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "TRUE" | _ :: _ -> "(id, name) NOT IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list_not_in" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -138,7 +209,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "TRUE" | _ :: _ -> "(id, name) NOT IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list_not_in" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -574,7 +645,7 @@ WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\
       let id : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
           column = ("id");
           count = 0;
           deps = [];
@@ -582,7 +653,7 @@ WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\
       let name : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("name");
           count = 0;
           deps = [];
@@ -618,7 +689,7 @@ WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\
       T.select db
       (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
 WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ "\n\
-  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
+  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
   AND " ^ ((match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ "\n\
   AND " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\n\
   AND (" ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ " OR id = 0)\n\
@@ -652,7 +723,7 @@ ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"k
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
 WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ "\n\
-  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
+  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
   AND " ^ ((match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ "\n\
   AND " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\n\
   AND (" ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ " OR id = 0)\n\
@@ -689,7 +760,7 @@ ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"k
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
 WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ "\n\
-  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
+  AND " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal pairs_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal pairs_1n); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ^ "\n\
   AND " ^ ((match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ "\n\
   AND " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ "\n\
   AND (" ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ " OR id = 0)\n\

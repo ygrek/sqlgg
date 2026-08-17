@@ -527,7 +527,7 @@ module M (T: Sqlgg_traits.M with
       ));
       let combined =
         let+ i = id
-        and+ p = pairs [ (1L, Some 10L) ] in
+        and+ p = pairs [ (1L, 10L) ] in
         (i, p)
       in
       let _ = select connection combined ~id:1L in
@@ -599,7 +599,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 42L
         ]
       ));
-      let col = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
+      let col = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, 10L)] in
       let _ = select connection col ~id:1L in
       printf "[TEST 17.1] Completed\n\n"
 
@@ -614,7 +614,7 @@ module M (T: Sqlgg_traits.M with
       ));
       let combined =
         let+ i = id
-        and+ m = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, Some 10L)] in
+        and+ m = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, 10L)] in
         (i, m)
       in
       let _ = select connection combined ~id:1L in
@@ -693,7 +693,7 @@ module M (T: Sqlgg_traits.M with
         and+ il = with_in_list [1L; 2L]
         and+ wo = with_optional (Some 5L)
         and+ wc = with_case 1L ["foo"]
-        and+ wt = with_tuple_list [(1L, Some 10L)]
+        and+ wt = with_tuple_list [(1L, 10L)]
         and+ fc = full_combo (Some 5L) ["x"] 100.0 in
         (i, p, il, wo, wc, wt, fc)
       in

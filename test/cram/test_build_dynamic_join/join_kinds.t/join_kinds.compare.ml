@@ -238,7 +238,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let bio : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("p.bio");
           count = 0;
           deps = [];
@@ -321,7 +321,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let bio : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("p.bio");
           count = 0;
           deps = [];
@@ -396,7 +396,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let id : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
           column = ("u.id");
           count = 0;
           deps = [];

@@ -10,8 +10,8 @@
    <value name="in_" type="list(Int, Text, Int, Text, Int, Int, Text)"/>
   </in>
   <out>
-   <value name="col1" type="Text" nullable="true"/>
-   <value name="col2" type="Int" nullable="true"/>
+   <value name="col1" type="Text"/>
+   <value name="col2" type="Int"/>
   </out>
  </stmt>
  <table name="table1">

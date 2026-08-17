@@ -3,5 +3,5 @@
  (libraries
    extlib
    oUnit
-   qcheck-ounit
+   qcheck-core
    sqlgg))

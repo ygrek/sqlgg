@@ -26,8 +26,14 @@ Run the generated code against the printing mock and check the final SQL strings
   -- tuple_list: empty pairs
   [SQL] SELECT id FROM t WHERE FALSE
   
-  -- tuple_list: two pairs with null
-  [SQL] SELECT id FROM t WHERE (id, name) IN ((1, 'a'), (NULL, 'b'))
+  -- tuple_list: two pairs
+  [SQL] SELECT id FROM t WHERE (id, name) IN ((1, 'a'), (2, 'b'))
+  
+  -- tuple_list_not_in: empty pairs
+  [SQL] SELECT id FROM t WHERE TRUE
+  
+  -- tuple_list_not_in: two pairs with null
+  [SQL] SELECT id FROM t WHERE (id, name) NOT IN ((1, 'a'), (NULL, 'b'))
   
   -- opt_filter: none
   [SQL] SELECT name FROM t WHERE  TRUE 
