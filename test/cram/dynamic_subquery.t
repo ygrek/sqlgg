@@ -40,7 +40,7 @@ Full generated code:
         let price : _ t =
           {
             set = (fun _p -> ());
-            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
             column = ("price");
             count = 0;
             deps = [];

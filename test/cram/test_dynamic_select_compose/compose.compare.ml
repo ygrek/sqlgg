@@ -16,7 +16,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let name : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("name");
           count = 0;
           deps = [];

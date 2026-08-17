@@ -72,7 +72,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invo
       callback
         ~id:(T.get_column_Int stmt 0)
         ~name:(T.get_column_Text stmt 1)
-        ~category_id:(T.get_column_Int_nullable stmt 2)
+        ~category_id:(T.get_column_Int stmt 2)
         ~category_name:(T.get_column_Text stmt 3)
     in
     T.select db (Sqlgg_traits.Query.make ~sql:("WITH inner_cte AS (\n\
@@ -89,7 +89,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
       callback
         ~id:(T.get_column_Int stmt 0)
         ~name:(T.get_column_Text stmt 1)
-        ~category_id:(T.get_column_Int_nullable stmt 2)
+        ~category_id:(T.get_column_Int stmt 2)
         ~category_name:(T.get_column_Text stmt 3)
     in
     let set_params stmt =
@@ -166,7 +166,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun
         callback
           ~id:(T.get_column_Int stmt 0)
           ~name:(T.get_column_Text stmt 1)
-          ~category_id:(T.get_column_Int_nullable stmt 2)
+          ~category_id:(T.get_column_Int stmt 2)
           ~category_name:(T.get_column_Text stmt 3)
       in
       let r_acc = ref acc in
@@ -185,7 +185,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
         callback
           ~id:(T.get_column_Int stmt 0)
           ~name:(T.get_column_Text stmt 1)
-          ~category_id:(T.get_column_Int_nullable stmt 2)
+          ~category_id:(T.get_column_Int stmt 2)
           ~category_name:(T.get_column_Text stmt 3)
       in
       let set_params stmt =
@@ -266,7 +266,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun
         callback
           ~id:(T.get_column_Int stmt 0)
           ~name:(T.get_column_Text stmt 1)
-          ~category_id:(T.get_column_Int_nullable stmt 2)
+          ~category_id:(T.get_column_Int stmt 2)
           ~category_name:(T.get_column_Text stmt 3)
       in
       let r_acc = ref [] in
@@ -285,7 +285,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
         callback
           ~id:(T.get_column_Int stmt 0)
           ~name:(T.get_column_Text stmt 1)
-          ~category_id:(T.get_column_Int_nullable stmt 2)
+          ~category_id:(T.get_column_Int stmt 2)
           ~category_name:(T.get_column_Text stmt 3)
       in
       let set_params stmt =
