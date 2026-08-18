@@ -266,12 +266,12 @@ let try_finally final f x =
 
 let close_stmt (stmt, sql, _) = test_ok sql (S.finalize stmt)
 
-let prepare db (sql: string) = 
+let prepare db (sql : string) = 
   let stmt = S.prepare db sql in
   (stmt, sql, db)
 
-let with_stmt db sql f =
-  let full_stmt = prepare db sql in
+let with_stmt db (q : Sqlgg_traits.Query.t) f =
+  let full_stmt = prepare db q.sql in
   try_finally
     (fun () -> close_stmt full_stmt)
     f full_stmt
@@ -312,12 +312,12 @@ let select_one_with_stmt full_stmt set_params convert =
   else
     raise (Oops (sprintf "no row but one expected : %s" sql))
 
-let select db sql set_params callback =
-  with_stmt db sql (fun stmt ->
+let select db q set_params callback =
+  with_stmt db q (fun stmt ->
     select_with_stmt stmt set_params callback)
 
-let execute db sql set_params =
-  with_stmt db sql (fun stmt ->
+let execute db q set_params =
+  with_stmt db q (fun stmt ->
     execute_with_stmt stmt set_params)
 
 let execute_unprepared db sql =
@@ -329,12 +329,12 @@ let execute_unprepared db sql =
   in
   { affected_rows = Int64.of_int (S.changes db); insert_id }
 
-let select_one_maybe db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let select_one_maybe db q set_params convert =
+  with_stmt db q (fun stmt ->
     select_one_maybe_with_stmt stmt set_params convert)
 
-let select_one db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let select_one db q set_params convert =
+  with_stmt db q (fun stmt ->
     select_one_with_stmt stmt set_params convert)
 
 end

@@ -54,7 +54,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select_one_maybe db
-      ("SELECT " ^ col.column ^ " FROM products WHERE id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM products WHERE id = ?") ~name:"scope_q1" ~kind:Sqlgg_traits.Query.(Select Zero_one))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
 
   end
@@ -103,7 +103,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM products WHERE stock > ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM products WHERE stock > ?") ~name:"scope_q2" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -117,7 +117,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM products WHERE stock > ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM products WHERE stock > ?") ~name:"scope_q2" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -134,7 +134,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM products WHERE stock > ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM products WHERE stock > ?") ~name:"scope_q2" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 

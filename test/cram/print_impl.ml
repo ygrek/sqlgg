@@ -261,11 +261,11 @@ module IO = struct
   end
 end
 
-let prepare _conn sql =
+let prepare _conn (sql : string) =
   incr stmt_counter;
   let stmt = { id = !stmt_counter; sql; is_closed = false } in
   prepared_statements := stmt :: !prepared_statements;
-  log_operation (sprintf "PREPARE[%d]: %s" stmt.id sql);
+  log_operation (sprintf "PREPARE[%d]: %s" stmt.id stmt.sql);
   match List.find_opt (function MockError _ -> true | _ -> false) !response_queue with
   | Some (MockError msg) -> raise (Oops msg)
   | _ -> stmt
@@ -550,9 +550,9 @@ module Make_enum (E: Enum) = struct
   let to_literal v = Types.Text.to_literal (E.proj v)
 end
 
-let select (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (callback : row -> unit) : unit =
+let select (db : [> `RO ] connection) (q : Sqlgg_traits.Query.t) (set_params : statement -> result) (callback : row -> unit) : unit =
   printf "[MOCK SELECT] Connection type: [> `RO ]\n";
-  let stmt = prepare db sql in
+  let stmt = prepare db q.Sqlgg_traits.Query.sql in
   let _ = set_params stmt in
   match get_next_response () with
   | MockSelect rows ->
@@ -577,9 +577,9 @@ let select (db : [> `RO ] connection) (sql : string) (set_params : statement -> 
   | MockError msg -> raise (Oops msg)
   | _ -> failwith "Expected MockSelect response"
 
-let execute (db : [> `WR ] connection) (sql : string) (set_params : statement -> result) : execute_response =
+let execute (db : [> `WR ] connection) (q : Sqlgg_traits.Query.t) (set_params : statement -> result) : execute_response =
   printf "[MOCK EXECUTE] Connection type: [> `WR ]\n";
-  let stmt = prepare db sql in
+  let stmt = prepare db q.Sqlgg_traits.Query.sql in
   let _ = set_params stmt in
   match get_next_response () with
   | MockExecute { affected_rows; insert_id } ->
@@ -592,11 +592,11 @@ let execute (db : [> `WR ] connection) (sql : string) (set_params : statement ->
   | _ -> failwith "Expected MockExecute response"
 
 let execute_unprepared (db : [> `WR ] connection) (sql : string) : execute_response =
-  execute db sql no_params
+  execute db (Sqlgg_traits.Query.make ~sql ~name:"execute_unprepared" ~kind:Sqlgg_traits.Query.Other) no_params
 
-let select_one_maybe (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (convert : row -> 'a) : 'a option =
+let select_one_maybe (db : [> `RO ] connection) (q : Sqlgg_traits.Query.t) (set_params : statement -> result) (convert : row -> 'a) : 'a option =
   printf "[MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]\n";
-  let stmt = prepare db sql in
+  let stmt = prepare db q.Sqlgg_traits.Query.sql in
   let _ = set_params stmt in
   match get_next_response () with
   | MockSelectOne (Some row) ->
@@ -610,9 +610,9 @@ let select_one_maybe (db : [> `RO ] connection) (sql : string) (set_params : sta
   | MockError msg -> raise (Oops msg)
   | _ -> failwith "Expected MockSelectOne response"
 
-let select_one (db : [> `RO ] connection) (sql : string) (set_params : statement -> result) (convert : row -> 'a) : 'a =
+let select_one (db : [> `RO ] connection) (q : Sqlgg_traits.Query.t) (set_params : statement -> result) (convert : row -> 'a) : 'a =
   printf "[MOCK SELECT_ONE] Connection type: [> `RO ]\n";
-  let stmt = prepare db sql in
+  let stmt = prepare db q.Sqlgg_traits.Query.sql in
   let _ = set_params stmt in
   match get_next_response () with
   | MockSelectOne (Some row) ->

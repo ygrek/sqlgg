@@ -203,8 +203,9 @@ module Make_with_clock (Clock : Clock) (Config : Cache_config) (Impl : Cached_m)
     let state = { cache; ops_count = 0 } in
     { original; state }
 
-  let with_prepared_stmt cached_conn sql f =
+  let with_prepared_stmt cached_conn (q : Sqlgg_traits.Query.t) f =
     let open Impl.IO in
+    let sql = q.sql in
     let state = cached_conn.state in
     state.ops_count <- succ state.ops_count;
 
@@ -236,20 +237,20 @@ module Make_with_clock (Clock : Clock) (Config : Cache_config) (Impl : Cached_m)
         with_stmt_cleanup stmt
     end
 
-  let select cached_conn sql set_params callback =
-    with_prepared_stmt cached_conn sql (fun stmt ->
+  let select cached_conn q set_params callback =
+    with_prepared_stmt cached_conn q (fun stmt ->
       Impl.select_with_stmt stmt set_params callback)
 
-  let select_one cached_conn sql set_params convert =
-    with_prepared_stmt cached_conn sql (fun stmt ->
+  let select_one cached_conn q set_params convert =
+    with_prepared_stmt cached_conn q (fun stmt ->
       Impl.select_one_with_stmt stmt set_params convert)
 
-  let select_one_maybe cached_conn sql set_params convert =
-    with_prepared_stmt cached_conn sql (fun stmt ->
+  let select_one_maybe cached_conn q set_params convert =
+    with_prepared_stmt cached_conn q (fun stmt ->
       Impl.select_one_maybe_with_stmt stmt set_params convert)
 
-  let execute cached_conn sql set_params =
-    with_prepared_stmt cached_conn sql (fun stmt ->
+  let execute cached_conn q set_params =
+    with_prepared_stmt cached_conn q (fun stmt ->
       Impl.execute_with_stmt stmt set_params)
 
   let execute_unprepared cached_conn sql =
@@ -305,21 +306,21 @@ module SharedConnectionCache (MutexImpl : Mutex_intf) (Config : Cache_config)
       mutex = MutexImpl.create ();
     }
   
-  let select conn sql set_params callback =
+  let select conn q set_params callback =
     MutexImpl.with_lock conn.mutex (fun () -> 
-      select conn.base_conn sql set_params callback)
+      select conn.base_conn q set_params callback)
     
-  let select_one conn sql set_params convert =
+  let select_one conn q set_params convert =
     MutexImpl.with_lock conn.mutex (fun () -> 
-      select_one conn.base_conn sql set_params convert)
+      select_one conn.base_conn q set_params convert)
     
-  let select_one_maybe conn sql set_params convert =
+  let select_one_maybe conn q set_params convert =
     MutexImpl.with_lock conn.mutex (fun () -> 
-      select_one_maybe conn.base_conn sql set_params convert)
+      select_one_maybe conn.base_conn q set_params convert)
     
-  let execute conn sql set_params =
+  let execute conn q set_params =
     MutexImpl.with_lock conn.mutex (fun () ->
-      execute conn.base_conn sql set_params)
+      execute conn.base_conn q set_params)
 
   let execute_unprepared conn sql =
     MutexImpl.with_lock conn.mutex (fun () ->

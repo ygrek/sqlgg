@@ -20,9 +20,9 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       end;
       T.finish_params p
     in
-    T.execute db ("INSERT INTO `registration_feedbacks`\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO `registration_feedbacks`\n\
 SET\n\
   `user_message` = " ^ (match user_message with Some _ -> " ( " ^ " CONCAT(" ^ "?" ^ ", '22222') " ^ " ) " | None -> " DEFAULT ") ^ ",\n\
-  `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> " ('2') " | `B -> " ('2') ") ^ " " ^ " ) " | None -> " DEFAULT ")) set_params
+  `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> " ('2') " | `B -> " ('2') ") ^ " " ^ " ) " | None -> " DEFAULT ")) ~name:"insert_registration_feedbacks_1" ~kind:Sqlgg_traits.Query.(Insert "registration_feedbacks")) set_params
 
 end (* module Sqlgg *)

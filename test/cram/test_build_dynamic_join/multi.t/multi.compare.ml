@@ -45,7 +45,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?") ~name:"two_indep" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -59,7 +59,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?") ~name:"two_indep" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -76,7 +76,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = u.id" else "") ^ " WHERE u.id = ?") ~name:"two_indep" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -128,7 +128,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?") ~name:"subq_in_on" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -142,7 +142,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?") ~name:"subq_in_on" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -159,7 +159,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = (SELECT MAX(id) FROM avatars) WHERE u.id = ?") ~name:"subq_in_on" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -211,7 +211,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?") ~name:"same_twice" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -225,7 +225,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?") ~name:"same_twice" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -242,7 +242,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles_p1 col.deps then " LEFT JOIN profiles p1 ON p1.user_id = u.id" else "") ^ (if List.mem Profiles_p2 col.deps then " LEFT JOIN profiles p2 ON p2.user_id = u.mentor_id" else "") ^ " WHERE u.id = ?") ~name:"same_twice" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 

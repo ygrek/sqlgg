@@ -527,9 +527,9 @@ let no_params stmt =
 
 let close_stmt stmt = let open IO in M.Stmt.close stmt >>= fun _ -> return ()
 
-let with_stmt db sql f =
+let with_stmt db (q : Sqlgg_traits.Query.t) f =
   let open IO in
-  M.prepare db sql >>=
+  M.prepare db q.sql >>=
   check >>=
   fun stmt -> bracket (return stmt) close_stmt f
 
@@ -574,17 +574,17 @@ let execute_with_stmt stmt set_params =
     in
     return { affected_rows = Int64.of_int (M.Res.affected_rows res); insert_id }
 
-let select db sql set_params callback =
-  with_stmt db sql (fun stmt -> select_with_stmt stmt set_params callback)
+let select db q set_params callback =
+  with_stmt db q (fun stmt -> select_with_stmt stmt set_params callback)
 
-let select_one_maybe db sql set_params convert =
-  with_stmt db sql (fun stmt -> select_one_maybe_with_stmt stmt set_params convert)
+let select_one_maybe db q set_params convert =
+  with_stmt db q (fun stmt -> select_one_maybe_with_stmt stmt set_params convert)
 
-let select_one db sql set_params convert =
-  with_stmt db sql (fun stmt -> select_one_with_stmt stmt set_params convert)
+let select_one db q set_params convert =
+  with_stmt db q (fun stmt -> select_one_with_stmt stmt set_params convert)
 
-let execute db sql set_params =
-  with_stmt db sql (fun stmt -> execute_with_stmt stmt set_params)
+let execute db q set_params =
+  with_stmt db q (fun stmt -> execute_with_stmt stmt set_params)
 
 let execute_unprepared db sql =
   let open IO in

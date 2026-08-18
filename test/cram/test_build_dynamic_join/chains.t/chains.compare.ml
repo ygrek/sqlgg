@@ -45,7 +45,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?") ~name:"chain" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -59,7 +59,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?") ~name:"chain" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -76,7 +76,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ " WHERE u.id = ?") ~name:"chain" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -137,7 +137,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?") ~name:"chain3" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -151,7 +151,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?") ~name:"chain3" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -168,7 +168,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = a.badge_id" else "") ^ " WHERE u.id = ?") ~name:"chain3" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -220,7 +220,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?") ~name:"diamond" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -234,7 +234,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?") ~name:"diamond" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -251,7 +251,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Avatars col.deps then " LEFT JOIN avatars a ON a.id = p.avatar_id" else "") ^ (if List.mem Badges col.deps then " LEFT JOIN badges b ON b.id = p.user_id" else "") ^ " WHERE u.id = ?") ~name:"diamond" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -312,7 +312,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?") ~name:"chain_pinned" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -326,7 +326,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?") ~name:"chain_pinned" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -343,7 +343,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN profiles p ON p.user_id = u.id LEFT JOIN avatars a ON a.id = p.avatar_id LEFT JOIN badges b ON b.id = a.badge_id WHERE b.label = ?") ~name:"chain_pinned" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 

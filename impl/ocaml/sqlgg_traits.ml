@@ -15,6 +15,8 @@
 
 open Sqlgg_trait_types
 
+module Query = Sqlgg_query
+
 module type Value = sig
   type t
 
@@ -48,24 +50,24 @@ module type FNS = sig
     Perform query (cardinality "any") and return results via callback for each row
     @raise Oops on error
   *)
-  val select : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> unit) -> unit io_future
+  val select : [>`RO] connection -> Query.t -> (statement -> result io_future) -> (row -> unit) -> unit io_future
 
   (**
     Perform query (cardinality "zero or one") and return first row if available
     @raise Oops on error
   *)
-  val select_one_maybe : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> 'b) -> 'b option io_future
+  val select_one_maybe : [>`RO] connection -> Query.t -> (statement -> result io_future) -> (row -> 'b) -> 'b option io_future
 
   (**
     Perform query (cardinality "one") and return first row
     @raise Oops on error
   *)
-  val select_one : [>`RO] connection -> string -> (statement -> result io_future) -> (row -> 'b) -> 'b io_future
+  val select_one : [>`RO] connection -> Query.t -> (statement -> result io_future) -> (row -> 'b) -> 'b io_future
 
   (** Execute non-query.
     @raise Oops on error
   *)
-  val execute : [>`WR] connection -> string -> (statement -> result io_future) -> execute_response io_future
+  val execute : [>`WR] connection -> Query.t -> (statement -> result io_future) -> execute_response io_future
 
   (** Execute non-query without preparing it on the server:
     single statement, no placeholders, no result set.

@@ -22,7 +22,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         ~col_3:(FooBar.get_column_nullable (T.get_column_int64_nullable stmt 2))
         ~col_4:(T.get_column_Text_nullable stmt 3)
     in
-    T.select db ("SELECT \n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \n\
   (\n\
     SELECT MAX(x.col_val)\n\
     FROM (\n\
@@ -41,7 +41,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   col_4\n\
 FROM table_37\n\
 LEFT JOIN table_38\n\
-  ON table_37.col_1 = table_38.col_3") T.no_params invoke_callback
+  ON table_37.col_1 = table_38.col_3") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   module Fold = struct
     let select_2 db  callback acc =
@@ -53,7 +53,7 @@ LEFT JOIN table_38\n\
           ~col_4:(T.get_column_Text_nullable stmt 3)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT \n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \n\
   (\n\
     SELECT MAX(x.col_val)\n\
     FROM (\n\
@@ -72,7 +72,7 @@ LEFT JOIN table_38\n\
   col_4\n\
 FROM table_37\n\
 LEFT JOIN table_38\n\
-  ON table_37.col_1 = table_38.col_3") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  ON table_37.col_1 = table_38.col_3") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -87,7 +87,7 @@ LEFT JOIN table_38\n\
           ~col_4:(T.get_column_Text_nullable stmt 3)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT \n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \n\
   (\n\
     SELECT MAX(x.col_val)\n\
     FROM (\n\
@@ -106,7 +106,7 @@ LEFT JOIN table_38\n\
   col_4\n\
 FROM table_37\n\
 LEFT JOIN table_38\n\
-  ON table_37.col_1 = table_38.col_3") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  ON table_37.col_1 = table_38.col_3") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)
