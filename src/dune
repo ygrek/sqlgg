@@ -6,6 +6,7 @@
   (libraries
     extlib
     oUnit
+    qcheck-ounit
     sqlgg
     unix
   )

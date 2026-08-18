@@ -2,8 +2,10 @@
 
 SQL_FILE=$1
 COMPARE_FILE=$2
+FLAGS=$3
+TABLES_FILE=$4
 
-cat "$SQL_FILE" | sqlgg -no-header -gen caml_io -params unnamed -gen caml - > output.ml
+cat $TABLES_FILE "$SQL_FILE" | sqlgg -no-header -gen caml_io -params unnamed $FLAGS -gen caml - > output.ml
 
 # Note: We normalize line endings before comparison to ensure consistent results
 # across different operating systems (Windows CRLF vs Unix LF)

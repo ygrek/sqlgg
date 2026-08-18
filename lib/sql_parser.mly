@@ -440,9 +440,9 @@ table_index: name=ident? l=sequence(key_part) index_options { (name, l) }
 table_constraint_1:
       | PRIMARY KEY l=sequence(key_part) { `Primary l }
       | UNIQUE index_or_key? name=ident? l=sequence(key_part) { `Unique (name, l) }
-      | FOREIGN KEY ident? sequence(ident) REFERENCES ident sequence(ident)?
+      | FOREIGN KEY ident? cols=sequence(ident) REFERENCES t=table_name refs=sequence(ident)?
         reference_action_clause*
-          { `Ignore }
+          { `Foreign (cols, t, Option.default [] refs) }
       | CHECK LPAREN expr RPAREN { `Ignore }
 
 reference_action_clause:
