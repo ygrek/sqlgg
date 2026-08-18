@@ -14,11 +14,11 @@ the whole apply string, so it shows the result.)
     module IO = T.IO
   
     let apply_20260101000000_create_u db  =
-      T.execute db ("CREATE TABLE `u` (`id` INT, `email` VARCHAR(255), PRIMARY KEY (`id`));\n\
-  ALTER TABLE `u` ADD UNIQUE INDEX `uniq_email` (`email`)") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE `u` (`id` INT, `email` VARCHAR(255), PRIMARY KEY (`id`));\n\
+  ALTER TABLE `u` ADD UNIQUE INDEX `uniq_email` (`email`)") ~name:"apply_20260101000000_create_u" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_20260101000000_create_u db  =
-      T.execute db ("DROP TABLE `u`") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("DROP TABLE `u`") ~name:"revert_20260101000000_create_u" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let migrations = [
       ("20260101000000_create_u", apply_20260101000000_create_u, revert_20260101000000_create_u);

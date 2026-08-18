@@ -34,16 +34,16 @@ The code merges both by id (manual day 20251231 first, generated 20260101000000_
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users ADD COLUMN bio TEXT") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users ADD COLUMN bio TEXT") ~name:"apply_alter_users_0" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users DROP COLUMN bio") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users DROP COLUMN bio") ~name:"revert_alter_users_0" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let apply_20260101000000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") ~name:"apply_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_20260101000000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `age`") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` DROP COLUMN `age`") ~name:"revert_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

@@ -27,6 +27,8 @@ module Small_Cache = Sqlgg_stmt_cache.Make(Small_Cache_Config)(Print_impl)
 module Medium_Cache = Sqlgg_stmt_cache.Make(Medium_Cache_Config)(Print_impl)
 module Large_Cache = Sqlgg_stmt_cache.Make(Large_Cache_Config)(Print_impl)
 
+let q sql = Sqlgg_traits.Query.make ~sql ~name:"test" ~kind:Sqlgg_traits.Query.(Select Nat)
+
 let setup_mock_responses n =
   for i = 1 to n do
     Print_impl.setup_select_response [Print_impl.make_mock_row [Print_impl.mock_int (Int64.of_int i)]]
@@ -39,7 +41,7 @@ let () =
   Print_impl.clear_mock_responses ();
   
   setup_mock_responses 1;
-  Tiny_Cache.select tiny_conn "SELECT 1" 
+  Tiny_Cache.select tiny_conn (q "SELECT 1") 
     (fun stmt -> Tiny_Cache.finish_params (Tiny_Cache.start_params stmt 0)) 
     (fun _ -> ());
   printf "After query 1: %d prepared, %s\n" !Print_impl.stmt_counter (Tiny_Cache.cache_stats tiny_conn);
@@ -49,7 +51,7 @@ let () =
   printf "Filled tiny cache: %d/1\n" after_fill;
   
   Print_impl.setup_select_response [Print_impl.make_mock_row [Print_impl.mock_int 1L]];
-  Tiny_Cache.select tiny_conn "SELECT 1" 
+  Tiny_Cache.select tiny_conn (q "SELECT 1") 
     (fun stmt -> Tiny_Cache.finish_params (Tiny_Cache.start_params stmt 0)) 
     (fun _ -> ());
   
@@ -66,7 +68,7 @@ let () =
   setup_mock_responses 2;
   for i = 1 to 2 do
     let sql = sprintf "SELECT %d" i in
-    Small_Cache.select small_conn sql 
+    Small_Cache.select small_conn (q sql) 
       (fun stmt -> Small_Cache.finish_params (Small_Cache.start_params stmt 0)) 
       (fun _ -> ());
     printf "  After query %d: %d prepared, %s\n" i !Print_impl.stmt_counter (Small_Cache.cache_stats small_conn);
@@ -87,7 +89,7 @@ let () =
   
   for i = 1 to total_queries do
     let sql = sprintf "SELECT %d" i in
-    Small_Cache.select small_conn2 sql 
+    Small_Cache.select small_conn2 (q sql) 
       (fun stmt -> Small_Cache.finish_params (Small_Cache.start_params stmt 0)) 
       (fun _ -> ());
     
@@ -106,7 +108,7 @@ let () =
   for i = 1 to 3 do
     let sql = sprintf "SELECT %d" i in
     let before_prep = !Print_impl.stmt_counter in
-    Small_Cache.select small_conn2 sql 
+    Small_Cache.select small_conn2 (q sql) 
       (fun stmt -> Small_Cache.finish_params (Small_Cache.start_params stmt 0)) 
       (fun _ -> ());
     let after_prep = !Print_impl.stmt_counter in
@@ -126,27 +128,27 @@ let () =
   
   for i = 1 to 5 do
     let sql = sprintf "SELECT %d" i in
-    Medium_Cache.select medium_conn sql 
+    Medium_Cache.select medium_conn (q sql) 
       (fun stmt -> Medium_Cache.finish_params (Medium_Cache.start_params stmt 0)) 
       (fun _ -> ());
   done;
   
   printf "Filled cache: %d prepared\n" !Print_impl.stmt_counter;
   
-  Medium_Cache.select medium_conn "SELECT 1" 
+  Medium_Cache.select medium_conn (q "SELECT 1") 
     (fun stmt -> Medium_Cache.finish_params (Medium_Cache.start_params stmt 0)) 
     (fun _ -> ());
   
   printf "Used first query (made it recent)\n";
   
-  Medium_Cache.select medium_conn "SELECT 6"
+  Medium_Cache.select medium_conn (q "SELECT 6")
     (fun stmt -> Medium_Cache.finish_params (Medium_Cache.start_params stmt 0)) 
     (fun _ -> ());
   
   printf "Added new query: %d prepared, %s\n" !Print_impl.stmt_counter (Medium_Cache.cache_stats medium_conn);
   
   let before_first = !Print_impl.stmt_counter in
-  Medium_Cache.select medium_conn "SELECT 1" 
+  Medium_Cache.select medium_conn (q "SELECT 1") 
     (fun stmt -> Medium_Cache.finish_params (Medium_Cache.start_params stmt 0)) 
     (fun _ -> ());
   let after_first = !Print_impl.stmt_counter in
@@ -155,7 +157,7 @@ let () =
   assert (after_first = before_first);
   
   let before_second = !Print_impl.stmt_counter in
-  Medium_Cache.select medium_conn "SELECT 2" 
+  Medium_Cache.select medium_conn (q "SELECT 2") 
     (fun stmt -> Medium_Cache.finish_params (Medium_Cache.start_params stmt 0)) 
     (fun _ -> ());
   let after_second = !Print_impl.stmt_counter in
@@ -177,7 +179,7 @@ let () =
   for cycle = 1 to cycle_count do
     for i = 1 to cache_size do
       let sql = sprintf "SELECT %d" i in
-      Large_Cache.select large_conn sql 
+      Large_Cache.select large_conn (q sql) 
         (fun stmt -> Large_Cache.finish_params (Large_Cache.start_params stmt 0)) 
         (fun _ -> ());
     done;
@@ -201,13 +203,13 @@ let () =
   Print_impl.clear_mock_responses ();
 
   setup_mock_responses 1;
-  TTL3_Cache.select ttl3_conn "SELECT 42"
+  TTL3_Cache.select ttl3_conn (q "SELECT 42")
     (fun stmt -> TTL3_Cache.finish_params (TTL3_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
 
   setup_mock_responses 1;
-  TTL3_Cache.select ttl3_conn "SELECT 42"
+  TTL3_Cache.select ttl3_conn (q "SELECT 42")
     (fun stmt -> TTL3_Cache.finish_params (TTL3_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
@@ -223,7 +225,7 @@ let () =
   Print_impl.Clock.set 0.0;
 
   setup_mock_responses 1;
-  TTL2_Cache.select ttl2_conn "SELECT 7"
+  TTL2_Cache.select ttl2_conn (q "SELECT 7")
     (fun stmt -> TTL2_Cache.finish_params (TTL2_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
@@ -231,14 +233,14 @@ let () =
   Print_impl.Clock.travel 0.6;
 
   setup_mock_responses 1;
-  TTL2_Cache.select ttl2_conn "SELECT 7"
+  TTL2_Cache.select ttl2_conn (q "SELECT 7")
     (fun stmt -> TTL2_Cache.finish_params (TTL2_Cache.start_params stmt 0))
     (fun _ -> ());
     Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:1 ~expected_open:0 ();
   printf "TTL=0.5s reuse after >0.5s closed cached — OK\n";
  
   setup_mock_responses 1;
-  TTL2_Cache.select ttl2_conn "SELECT 7"
+  TTL2_Cache.select ttl2_conn (q "SELECT 7")
     (fun stmt -> TTL2_Cache.finish_params (TTL2_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:2 ~expected_closed:1 ~expected_open:1 ();
@@ -259,19 +261,19 @@ let () =
 
   setup_mock_responses 8;
 
-  TTL2B_Cache.select ttl2b_conn q1
+  TTL2B_Cache.select ttl2b_conn (q q1)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
   printf "MISS (prepare) %s — OK\n" q1;
 
-  TTL2B_Cache.select ttl2b_conn q1
+  TTL2B_Cache.select ttl2b_conn (q q1)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
   printf "HIT within TTL %s — OK\n" q1;
 
-  TTL2B_Cache.select ttl2b_conn q2
+  TTL2B_Cache.select ttl2b_conn (q q2)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:2 ~expected_closed:0 ~expected_open:2 ();
@@ -279,25 +281,25 @@ let () =
 
   Print_impl.Clock.travel 0.6;
 
-  TTL2B_Cache.select ttl2b_conn q1
+  TTL2B_Cache.select ttl2b_conn (q q1)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:2 ~expected_closed:1 ~expected_open:1 ();
   printf "EXPIRED-USE (closed, no prepare) %s — OK\n" q1;
 
-  TTL2B_Cache.select ttl2b_conn q2
+  TTL2B_Cache.select ttl2b_conn (q q2)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:2 ~expected_closed:2 ~expected_open:0 ();
   printf "EXPIRED-USE (closed, no prepare) %s — OK\n" q2;
 
-  TTL2B_Cache.select ttl2b_conn q1
+  TTL2B_Cache.select ttl2b_conn (q q1)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:3 ~expected_closed:2 ~expected_open:1 ();
   printf "MISS after expiry (re-prepare) %s — OK\n" q1;
 
-  TTL2B_Cache.select ttl2b_conn q2
+  TTL2B_Cache.select ttl2b_conn (q q2)
     (fun stmt -> TTL2B_Cache.finish_params (TTL2B_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:4 ~expected_closed:2 ~expected_open:2 ();
@@ -315,7 +317,7 @@ let () =
   setup_mock_responses 10;
   for i = 1 to cache_size do
     let sql = sprintf "SELECT %d" i in
-    TTL_LRU_Cache.select lru_conn sql
+    TTL_LRU_Cache.select lru_conn (q sql)
       (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
       (fun _ -> ());
   done;
@@ -324,7 +326,7 @@ let () =
   Print_impl.Clock.travel 10.0;
 
   setup_mock_responses 1;
-  TTL_LRU_Cache.select lru_conn "SELECT 11"
+  TTL_LRU_Cache.select lru_conn (q "SELECT 11")
     (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
     (fun _ -> ());
   printf "Added 11th (should evict one old): %s\n" (TTL_LRU_Cache.cache_stats lru_conn);
@@ -332,7 +334,7 @@ let () =
 
   let before_hit10 = !Print_impl.stmt_counter in
   setup_mock_responses 1;
-  TTL_LRU_Cache.select lru_conn "SELECT 10"
+  TTL_LRU_Cache.select lru_conn (q "SELECT 10")
     (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
     (fun _ -> ());
   let after_hit10 = !Print_impl.stmt_counter in
@@ -341,7 +343,7 @@ let () =
 
   let before_hit11 = !Print_impl.stmt_counter in
   setup_mock_responses 1;
-  TTL_LRU_Cache.select lru_conn "SELECT 11"
+  TTL_LRU_Cache.select lru_conn (q "SELECT 11")
     (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
     (fun _ -> ());
   let after_hit11 = !Print_impl.stmt_counter in
@@ -353,12 +355,12 @@ let () =
   setup_mock_responses 8;
   for i = 2 to 9 do
     let sql = sprintf "SELECT %d" i in
-    TTL_LRU_Cache.select lru_conn sql
+    TTL_LRU_Cache.select lru_conn (q sql)
       (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
       (fun _ -> ());
   done;
   setup_mock_responses 1;
-  TTL_LRU_Cache.select lru_conn "SELECT 10"
+  TTL_LRU_Cache.select lru_conn (q "SELECT 10")
     (fun stmt -> TTL_LRU_Cache.finish_params (TTL_LRU_Cache.start_params stmt 0))
     (fun _ -> ());
 
@@ -376,19 +378,19 @@ let () =
   Print_impl.clear_mock_responses ();
 
   setup_mock_responses 1;
-  TTL_Cache.select ttl_conn "SELECT 1"
+  TTL_Cache.select ttl_conn (q "SELECT 1")
     (fun stmt -> TTL_Cache.finish_params (TTL_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:0 ~expected_open:1 ();
 
   setup_mock_responses 1;
-  TTL_Cache.select ttl_conn "SELECT 1"
+  TTL_Cache.select ttl_conn (q "SELECT 1")
     (fun stmt -> TTL_Cache.finish_params (TTL_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:1 ~expected_closed:1 ~expected_open:0 ();
 
   setup_mock_responses 1;
-  TTL_Cache.select ttl_conn "SELECT 1"
+  TTL_Cache.select ttl_conn (q "SELECT 1")
     (fun stmt -> TTL_Cache.finish_params (TTL_Cache.start_params stmt 0))
     (fun _ -> ());
   Print_impl.assert_mock_stats ~expected_prepared:2 ~expected_closed:1 ~expected_open:1 ();
@@ -409,7 +411,7 @@ let () =
 
   (* Fill the cache *)
   setup_mock_responses 1;
-  Sync_Cache.select sync_conn "SELECT 1"
+  Sync_Cache.select sync_conn (q "SELECT 1")
     (fun stmt -> Sync_Cache.finish_params (Sync_Cache.start_params stmt 0))
     (fun _ -> ());
   
@@ -417,7 +419,7 @@ let () =
   
   (* Trigger eviction by adding second entry *)
   setup_mock_responses 1;
-  Sync_Cache.select sync_conn "SELECT 2"
+  Sync_Cache.select sync_conn (q "SELECT 2")
     (fun stmt -> Sync_Cache.finish_params (Sync_Cache.start_params stmt 0))
     (fun _ -> ());
   

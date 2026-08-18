@@ -54,9 +54,9 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ "\n\
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Billing col.deps then " LEFT JOIN billing b ON b.user_id = u.id" else "") ^ "\n\
-WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
+WHERE u.note = '  two  spaces  inside  ' AND u.id = ?") ~name:"ws" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -70,9 +70,9 @@ WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ "\n\
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Billing col.deps then " LEFT JOIN billing b ON b.user_id = u.id" else "") ^ "\n\
-WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
+WHERE u.note = '  two  spaces  inside  ' AND u.id = ?") ~name:"ws" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -89,9 +89,9 @@ WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ "\n\
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM users u" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = u.id" else "") ^ (if List.mem Billing col.deps then " LEFT JOIN billing b ON b.user_id = u.id" else "") ^ "\n\
-WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
+WHERE u.note = '  two  spaces  inside  ' AND u.id = ?") ~name:"ws" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -101,13 +101,13 @@ WHERE u.note = '  two  spaces  inside  ' AND u.id = ?")
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)") T.no_params
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users")) T.no_params
 
   let create_profiles db  =
-    T.execute db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") T.no_params
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles")) T.no_params
 
   let create_billing db  =
-    T.execute db ("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)") T.no_params
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)") ~name:"create_billing" ~kind:Sqlgg_traits.Query.(Create "billing")) T.no_params
 
   module Fold = struct
   end (* module Fold *)

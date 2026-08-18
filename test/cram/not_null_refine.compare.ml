@@ -35,7 +35,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL") ~name:"dynamic_not_null" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -48,7 +48,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL") ~name:"dynamic_not_null" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -64,7 +64,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL AND descr IS NOT NULL") ~name:"dynamic_not_null" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -106,7 +106,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL") ~name:"dynamic_or_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -119,7 +119,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL") ~name:"dynamic_or_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -135,7 +135,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items WHERE name IS NOT NULL OR descr IS NOT NULL") ~name:"dynamic_or_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -145,18 +145,18 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_items db  =
-    T.execute db ("CREATE TABLE items (\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (\n\
   id INT NOT NULL,\n\
   name TEXT NULL,\n\
   descr TEXT NULL\n\
-)") T.no_params
+)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items")) T.no_params
 
   let static_not_null db  callback =
     let invoke_callback stmt =
       callback
         ~name:(T.get_column_Text stmt 0)
     in
-    T.select db ("SELECT name FROM items WHERE name IS NOT NULL") T.no_params invoke_callback
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   module Fold = struct
     let static_not_null db  callback acc =
@@ -165,7 +165,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
           ~name:(T.get_column_Text stmt 0)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT name FROM items WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -177,7 +177,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
           ~name:(T.get_column_Text stmt 0)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT name FROM items WHERE name IS NOT NULL") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

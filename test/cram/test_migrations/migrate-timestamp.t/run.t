@@ -42,22 +42,22 @@ The code merges all three by id, so the manual `status` sits between `age` and
     module IO = T.IO
   
     let apply_20260101120000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") ~name:"apply_20260101120000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_20260101120000_alter_users_add_col_age db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `age`") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` DROP COLUMN `age`") ~name:"revert_20260101120000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let apply_alter_users_1 db  =
-      T.execute db ("ALTER TABLE users ADD COLUMN status INT NOT NULL DEFAULT 1") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users ADD COLUMN status INT NOT NULL DEFAULT 1") ~name:"apply_alter_users_1" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_alter_users_1 db  =
-      T.execute db ("ALTER TABLE users DROP COLUMN status") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users DROP COLUMN status") ~name:"revert_alter_users_1" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let apply_20260102000000_alter_users_add_col_city db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `city` TEXT") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` ADD COLUMN `city` TEXT") ~name:"apply_20260102000000_alter_users_add_col_city" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let revert_20260102000000_alter_users_add_col_city db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `city`") T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` DROP COLUMN `city`") ~name:"revert_20260102000000_alter_users_add_col_city" ~kind:Sqlgg_traits.Query.Other) T.no_params
   
     let migrations = [
       ("20260101120000_alter_users_add_col_age", apply_20260101120000_alter_users_add_col_age, revert_20260101120000_alter_users_add_col_age);
