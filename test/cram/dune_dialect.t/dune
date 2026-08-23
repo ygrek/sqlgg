@@ -1,0 +1,3 @@
+(library
+ (name queries)
+ (libraries sqlgg.traits))

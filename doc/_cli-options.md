@@ -4,6 +4,7 @@
   -name <identifier>                               Set output module name (default: sqlgg)
   -params named|unnamed|oracle|postgresql|none     Output query parameters substitution (default: auto-detected from dialect, can be overridden)
   -category {all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: DDL DQL DML DCL TCL)
+  -open <file>                                     Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)
   -dynamic-select                                  Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)
   -                                                Read sql from stdin
 

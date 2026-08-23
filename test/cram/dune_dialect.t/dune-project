@@ -1,0 +1,7 @@
+(lang dune 3.9)
+(dialect
+ (name sqlgg)
+ (implementation
+  (extension sql)
+  (preprocess
+   (run sqlgg -no-header -open %{dep:ddl.sql} -open %{dep:shared.sql} -gen caml %{input-file}))))
