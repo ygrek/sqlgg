@@ -14,11 +14,11 @@ the whole apply string, so it shows the result.)
     module IO = T.IO
   
     let apply_20260101000000_create_u db  =
-      T.execute db ("CREATE TABLE `u` (`id` INT, `email` VARCHAR(255), PRIMARY KEY (`id`));\n\
-  ALTER TABLE `u` ADD UNIQUE INDEX `uniq_email` (`email`)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE `u` (`id` INT, `email` VARCHAR(255), PRIMARY KEY (`id`));\n\
+  ALTER TABLE `u` ADD UNIQUE INDEX `uniq_email` (`email`)")
   
     let revert_20260101000000_create_u db  =
-      T.execute db ("DROP TABLE `u`") T.no_params
+      T.execute_unprepared db ("DROP TABLE `u`")
   
     let migrations = [
       ("20260101000000_create_u", apply_20260101000000_create_u, revert_20260101000000_create_u);

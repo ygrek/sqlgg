@@ -3,11 +3,11 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_t db  =
-    T.execute db ("CREATE TABLE t (\n\
+    T.execute_unprepared db ("CREATE TABLE t (\n\
     id INT NOT NULL,\n\
     name TEXT,\n\
     status INT\n\
-)") T.no_params
+)")
 
   let shared_const db ~x callback =
     let invoke_callback stmt =
@@ -18,9 +18,9 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let p = T.start_params stmt (0 + (match x with `Small -> 0 | `Big -> 0) + (match x with `Small -> 0 | `Big -> 0)) in
       T.finish_params p
     in
-    T.select db ("SELECT id FROM t\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
-   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) set_params invoke_callback
+   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) ~name:"shared_const" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let shared_param_same_name db ~x callback =
     let invoke_callback stmt =
@@ -41,9 +41,9 @@ WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
       end;
       T.finish_params p
     in
-    T.select db ("SELECT id FROM t\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
-   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) set_params invoke_callback
+   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) ~name:"shared_param_same_name" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let shared_params_diff_names db ~f callback =
     let invoke_callback stmt =
@@ -64,9 +64,9 @@ WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
       end;
       T.finish_params p
     in
-    T.select db ("SELECT id FROM t\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
-  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) set_params invoke_callback
+  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) ~name:"shared_params_diff_names" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let shared_cte db ~f callback =
     let invoke_callback stmt =
@@ -87,10 +87,10 @@ WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) "
       end;
       T.finish_params p
     in
-    T.select db ("WITH recent AS (\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("WITH recent AS (\n\
   SELECT id FROM t WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ") ^ "\n\
 )\n\
-SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) set_params invoke_callback
+SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ~name:"shared_cte" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let shared_mixed db ~ids ~nm ~f ~sort callback =
     let invoke_callback stmt =
@@ -116,12 +116,12 @@ SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> 
       end;
       T.finish_params p
     in
-    T.select db ("SELECT id FROM t\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")") ^ "\n\
   AND " ^ (match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ") ^ "\n\
   AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
   AND (" ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ " OR id = 0)\n\
-ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) set_params invoke_callback
+ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ~name:"shared_mixed" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   module Fold = struct
     let shared_const db ~x callback acc =
@@ -134,9 +134,9 @@ ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) set_params
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
-   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) ~name:"shared_const" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let shared_param_same_name db ~x callback acc =
@@ -159,9 +159,9 @@ WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
-   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) ~name:"shared_param_same_name" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let shared_params_diff_names db ~f callback acc =
@@ -184,9 +184,9 @@ WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
-  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) ~name:"shared_params_diff_names" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let shared_cte db ~f callback acc =
@@ -209,10 +209,10 @@ WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) "
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("WITH recent AS (\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("WITH recent AS (\n\
   SELECT id FROM t WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ") ^ "\n\
 )\n\
-SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ~name:"shared_cte" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let shared_mixed db ~ids ~nm ~f ~sort callback acc =
@@ -240,12 +240,12 @@ SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> 
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")") ^ "\n\
   AND " ^ (match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ") ^ "\n\
   AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
   AND (" ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ " OR id = 0)\n\
-ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ~name:"shared_mixed" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -261,9 +261,9 @@ ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) set_params
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
-   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+   OR status = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ")) ~name:"shared_const" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let shared_param_same_name db ~x callback =
@@ -286,9 +286,9 @@ WHERE id = " ^ (match x with `Small -> " ( 1 ) " | `Big -> " ( 100 ) ") ^ "\n\
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
-   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+   OR status = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ")) ~name:"shared_param_same_name" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let shared_params_diff_names db ~f callback =
@@ -311,9 +311,9 @@ WHERE id = " ^ (match x with `Const -> " ( 1 ) " | `Param _ -> " ( ? ) ") ^ "\n\
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
-  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( id <> ? ) ")) ~name:"shared_params_diff_names" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let shared_cte db ~f callback =
@@ -336,10 +336,10 @@ WHERE " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) "
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("WITH recent AS (\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("WITH recent AS (\n\
   SELECT id FROM t WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ") ^ "\n\
 )\n\
-SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ~name:"shared_cte" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let shared_mixed db ~ids ~nm ~f ~sort callback =
@@ -367,12 +367,12 @@ SELECT id FROM recent WHERE " ^ (match f with `All -> " ( TRUE ) " | `ById _ -> 
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM t\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM t\n\
 WHERE " ^ (match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")") ^ "\n\
   AND " ^ (match nm with Some _ -> " ( " ^ " name = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ") ^ "\n\
   AND " ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ "\n\
   AND (" ^ (match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ") ^ " OR id = 0)\n\
-ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+ORDER BY " ^ (match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ~name:"shared_mixed" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

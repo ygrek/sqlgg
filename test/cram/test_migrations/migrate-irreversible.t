@@ -30,17 +30,17 @@ delta keeps a real one:
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db ("ALTER TABLE users DROP COLUMN legacy") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users DROP COLUMN legacy")
   
     let revert_alter_users_0 db  =
       ignore db;
       IO.return { T.affected_rows = 0L; insert_id = None }
   
     let apply_20260101000000_alter_users_add_col_name db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `name` TEXT") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` ADD COLUMN `name` TEXT")
   
     let revert_20260101000000_alter_users_add_col_name db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `name`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` DROP COLUMN `name`")
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

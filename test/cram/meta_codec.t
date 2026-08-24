@@ -18,10 +18,10 @@ no dead Enum_N module is emitted:
     module IO = Sqlgg_io.Blocking
   
     let create_orders db  =
-      T.execute db ("CREATE TABLE orders (\n\
+      T.execute_unprepared db ("CREATE TABLE orders (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -33,7 +33,7 @@ no dead Enum_N module is emitted:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.select db ("SELECT status FROM orders WHERE id = ?") set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     let set_status db ~status ~id =
       let set_params stmt =
@@ -42,7 +42,7 @@ no dead Enum_N module is emitted:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE orders SET status = ? WHERE id = ?") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE orders SET status = ? WHERE id = ?") ~name:"set_status" ~kind:Sqlgg_traits.Query.(Update (Some "orders"))) set_params
   
     module Fold = struct
       let get_status db ~id callback acc =
@@ -56,7 +56,7 @@ no dead Enum_N module is emitted:
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT status FROM orders WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -73,7 +73,7 @@ no dead Enum_N module is emitted:
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT status FROM orders WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -95,10 +95,10 @@ Same codec, IN-parameter: to_literal goes through set_param= codec:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_in db  =
-      T.execute db ("CREATE TABLE orders_in (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_in (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let find_orders db ~statuses callback =
       let invoke_callback stmt =
@@ -109,7 +109,7 @@ Same codec, IN-parameter: to_literal goes through set_param= codec:
         let p = T.start_params stmt (0 + (match statuses with [] -> 0 | _ :: _ -> 0)) in
         T.finish_params p
       in
-      T.select db ("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) ~name:"find_orders" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     module Fold = struct
       let find_orders db ~statuses callback acc =
@@ -122,7 +122,7 @@ Same codec, IN-parameter: to_literal goes through set_param= codec:
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) ~name:"find_orders" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -138,7 +138,7 @@ Same codec, IN-parameter: to_literal goes through set_param= codec:
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM orders_in WHERE " ^ (match statuses with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map (fun v -> T.Types.Text.string_to_literal (Order_status.to_db v)) statuses) ^ ")")) ~name:"find_orders" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -169,10 +169,10 @@ so it is emitted and referenced by get_column, while writes go through the codec
       end)
   
     let create_orders_partial db  =
-      T.execute db ("CREATE TABLE orders_partial (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_partial (\n\
     id INT NOT NULL,\n\
       status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -184,7 +184,7 @@ so it is emitted and referenced by get_column, while writes go through the codec
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.select db ("SELECT status FROM orders_partial WHERE id = ?") set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     let set_status db ~status ~id =
       let set_params stmt =
@@ -193,7 +193,7 @@ so it is emitted and referenced by get_column, while writes go through the codec
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE orders_partial SET status = ? WHERE id = ?") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE orders_partial SET status = ? WHERE id = ?") ~name:"set_status" ~kind:Sqlgg_traits.Query.(Update (Some "orders_partial"))) set_params
   
     module Fold = struct
       let get_status db ~id callback acc =
@@ -207,7 +207,7 @@ so it is emitted and referenced by get_column, while writes go through the codec
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_partial WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -224,7 +224,7 @@ so it is emitted and referenced by get_column, while writes go through the codec
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_partial WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -255,10 +255,10 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
       end)
   
     let create_orders_partial2 db  =
-      T.execute db ("CREATE TABLE orders_partial2 (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_partial2 (\n\
     id INT NOT NULL,\n\
       status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -270,7 +270,7 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.select db ("SELECT status FROM orders_partial2 WHERE id = ?") set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial2 WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     let set_status db ~status ~id =
       let set_params stmt =
@@ -279,7 +279,7 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE orders_partial2 SET status = ? WHERE id = ?") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE orders_partial2 SET status = ? WHERE id = ?") ~name:"set_status" ~kind:Sqlgg_traits.Query.(Update (Some "orders_partial2"))) set_params
   
     module Fold = struct
       let get_status db ~id callback acc =
@@ -293,7 +293,7 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_partial2 WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial2 WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -310,7 +310,7 @@ the codec, writes still need Enum_N, so it is emitted and referenced by set_para
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_partial2 WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_partial2 WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -334,16 +334,16 @@ representation (int64 for INT):
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db ("CREATE TABLE items (\n\
+      T.execute_unprepared db ("CREATE TABLE items (\n\
         id INT NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_item db  callback =
       let invoke_callback stmt =
         callback
           ~id:(Item_id.of_int (T.get_column_int64 stmt 0))
       in
-      T.select db ("SELECT id FROM items") T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM items") ~name:"get_item" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
   
     let insert_item db ~id =
       let set_params stmt =
@@ -351,7 +351,7 @@ representation (int64 for INT):
         T.set_param_int64 p (Item_id.to_int id);
         T.finish_params p
       in
-      T.execute db ("INSERT INTO items (id) VALUES (?)") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items (id) VALUES (?)") ~name:"insert_item" ~kind:Sqlgg_traits.Query.(Insert "items")) set_params
   
     module Fold = struct
       let get_item db  callback acc =
@@ -360,7 +360,7 @@ representation (int64 for INT):
             ~id:(Item_id.of_int (T.get_column_int64 stmt 0))
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT id FROM items") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM items") ~name:"get_item" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -372,7 +372,7 @@ representation (int64 for INT):
             ~id:(Item_id.of_int (T.get_column_int64 stmt 0))
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT id FROM items") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM items") ~name:"get_item" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -397,10 +397,10 @@ module= with get_column=/set_param= renames still works as before:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_mod db  =
-      T.execute db ("CREATE TABLE orders_mod (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_mod (\n\
     id INT NOT NULL,\n\
           status ENUM('new','paid','shipped') NOT NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -412,7 +412,7 @@ module= with get_column=/set_param= renames still works as before:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.select db ("SELECT status FROM orders_mod WHERE id = ?") set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_mod WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     let set_status db ~status ~id =
       let set_params stmt =
@@ -421,7 +421,7 @@ module= with get_column=/set_param= renames still works as before:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE orders_mod SET status = ? WHERE id = ?") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE orders_mod SET status = ? WHERE id = ?") ~name:"set_status" ~kind:Sqlgg_traits.Query.(Update (Some "orders_mod"))) set_params
   
     module Fold = struct
       let get_status db ~id callback acc =
@@ -435,7 +435,7 @@ module= with get_column=/set_param= renames still works as before:
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_mod WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_mod WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -452,7 +452,7 @@ module= with get_column=/set_param= renames still works as before:
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_mod WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_mod WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -477,10 +477,10 @@ to the codec function on reads, writes unwrap the option before the codec:
     module IO = Sqlgg_io.Blocking
   
     let create_orders_null db  =
-      T.execute db ("CREATE TABLE orders_null (\n\
+      T.execute_unprepared db ("CREATE TABLE orders_null (\n\
     id INT NOT NULL,\n\
         status ENUM('new','paid','shipped') NULL\n\
-  )") T.no_params
+  )")
   
     let get_status db ~id callback =
       let invoke_callback stmt =
@@ -492,7 +492,7 @@ to the codec function on reads, writes unwrap the option before the codec:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.select db ("SELECT status FROM orders_null WHERE id = ?") set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_null WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
   
     let set_status db ~status ~id =
       let set_params stmt =
@@ -501,7 +501,7 @@ to the codec function on reads, writes unwrap the option before the codec:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db ("UPDATE orders_null SET status = ? WHERE id = ?") set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE orders_null SET status = ? WHERE id = ?") ~name:"set_status" ~kind:Sqlgg_traits.Query.(Update (Some "orders_null"))) set_params
   
     module Fold = struct
       let get_status db ~id callback acc =
@@ -515,7 +515,7 @@ to the codec function on reads, writes unwrap the option before the codec:
           T.finish_params p
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_null WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_null WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -532,7 +532,7 @@ to the codec function on reads, writes unwrap the option before the codec:
           T.finish_params p
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db ("SELECT status FROM orders_null WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT status FROM orders_null WHERE id = ?") ~name:"get_status" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)

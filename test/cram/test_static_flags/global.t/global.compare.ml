@@ -36,7 +36,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users WHERE id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users WHERE id = ?") ~name:"get_user" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -50,7 +50,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users WHERE id = ?") ~name:"get_user" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -67,7 +67,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users WHERE id = ?") ~name:"get_user" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -109,7 +109,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"list_users" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -122,7 +122,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"list_users" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -138,7 +138,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"list_users" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -148,7 +148,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT NOT NULL, name TEXT NULL)") T.no_params
+    T.execute_unprepared db ("CREATE TABLE users (id INT NOT NULL, name TEXT NULL)")
 
   let get_user_static db ~id callback =
     let invoke_callback stmt =
@@ -161,7 +161,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       T.set_param_Int p id;
       T.finish_params p
     in
-    T.select db ("SELECT id, name FROM users WHERE id = ?") set_params invoke_callback
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users WHERE id = ?") ~name:"get_user_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let list_users_static db  callback =
     let invoke_callback stmt =
@@ -169,7 +169,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         ~id:(T.get_column_Int stmt 0)
         ~name:(T.get_column_Text_nullable stmt 1)
     in
-    T.select db ("SELECT id, name FROM users") T.no_params invoke_callback
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users") ~name:"list_users_static" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   module Fold = struct
     let get_user_static db ~id callback acc =
@@ -184,7 +184,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id, name FROM users WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users WHERE id = ?") ~name:"get_user_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let list_users_static db  callback acc =
@@ -194,7 +194,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
           ~name:(T.get_column_Text_nullable stmt 1)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id, name FROM users") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users") ~name:"list_users_static" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -212,7 +212,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id, name FROM users WHERE id = ?") set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users WHERE id = ?") ~name:"get_user_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let list_users_static db  callback =
@@ -222,7 +222,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
           ~name:(T.get_column_Text_nullable stmt 1)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id, name FROM users") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, name FROM users") ~name:"list_users_static" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

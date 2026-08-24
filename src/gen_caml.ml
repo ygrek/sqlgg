@@ -262,6 +262,32 @@ let select_func_of_kind = function
 | Stmt.Select `One -> "select_one"
 | _ -> "select"
 
+let query_expr ~sql index stmt =
+  let table t = quote (Sql.show_table_name t) in
+  let tables ts = sprintf "[%s]" (String.concat "; " (List.map table ts)) in
+  let k fmt = ksprintf (fun s -> sprintf "Sqlgg_traits.Query.(%s)" s) fmt in
+  let kind =
+    match stmt.Gen.kind with
+    | Stmt.Select `Zero_one -> k "Select Zero_one"
+    | Stmt.Select `One -> k "Select One"
+    | Stmt.Select `Nat -> k "Select Nat"
+    | Stmt.Insert (_, t) -> k "Insert %s" (table t)
+    | Stmt.Create t -> k "Create %s" (table t)
+    | Stmt.CreateIndex s -> k "CreateIndex %s" (quote s)
+    | Stmt.Update (Some t) -> k "Update (Some %s)" (table t)
+    | Stmt.Update None -> k "Update None"
+    | Stmt.Delete ts -> k "Delete %s" (tables ts)
+    | Stmt.Alter ts -> k "Alter %s" (tables ts)
+    | Stmt.Drop t -> k "Drop %s" (table t)
+    | Stmt.CreateRoutine t -> k "CreateRoutine %s" (table t)
+    | Stmt.CreateType s -> k "CreateType %s" (quote s)
+    | Stmt.DropType s -> k "DropType %s" (quote s)
+    | Stmt.Other -> "Sqlgg_traits.Query.Other"
+  in
+  let name = choose_name stmt.Gen.props stmt.Gen.kind index |> String.uncapitalize_ascii in
+  sprintf "(Sqlgg_traits.Query.make ~sql:%s ~name:%s ~kind:%s)"
+    sql (quote name) kind
+
 let is_single_row_select stmt =
   match stmt.Gen.kind, stmt.Gen.schema with
   | Stmt.Select (`One | `Zero_one), _ :: _ -> true
@@ -614,6 +640,14 @@ let output_params_binder _ vars =
   | [] -> "T.no_params"
   | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri set_var vars)
 
+let rec has_bound_params vars =
+  List.exists (function
+    | Sql.Single _ -> true
+    | v -> has_bound_params (Sql.sub_vars v)) vars
+
+let can_execute_unprepared stmt =
+  stmt.Gen.schema = [] && not (has_bound_params stmt.Gen.vars)
+
 
 let make_to_literal meta typ =
   match resolve_codec codec_set_param typ meta with
@@ -753,7 +787,7 @@ type callback_build_state = {
   idx_expr: string option;
 }
 
-let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callback stmt =
+let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callback index stmt =
   let sql_pieces = get_sql stmt in
   let join_ctors = join_ctors_of_vars stmt.Gen.vars in
 
@@ -888,11 +922,11 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
   let (bind_start, bind_end) = c.c_bind in
 
   output "%sT.%s db" bind_start (select_func_of_kind stmt.kind);
-  output "  (%s)" sql_expr;
+  output "  %s" (query_expr ~sql:(sprintf "(%s)" sql_expr) index stmt);
   output "  set_params %s%s" full_callback bind_end;
   complete_func c
 
-let emit_dynamic_module_select ~module_kind ~dynamic_infos stmt =
+let emit_dynamic_module_select ~module_kind ~dynamic_infos index stmt =
   if not (supports_module_kind module_kind stmt) then () else
   let dynamic_names = List.map (fun di -> di.param_name) dynamic_infos in
   let format_input = format_func_input dynamic_names ~dyn_annot:(fun _ -> "_ t") in
@@ -905,7 +939,7 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos stmt =
     emit_func_header ~name:"select" ~extra_params:""
       ~has_callback:with_callback ~format_input ~module_kind stmt
   in
-  emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback stmt
+  emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback index stmt
 
 let emit_sql_with_subst subst stmt =
   let sql = make_sql ~join_ctors:(join_ctors_of_vars stmt.Gen.vars) @@ get_sql stmt in
@@ -947,7 +981,8 @@ let generate_stmt ~module_kind index stmt =
       | (`Direct | `Fold | `List), Stmt.Select (`Zero_one | `One) -> output_select1_cb index stmt.schema
       | _ -> output_schema_binder_labeled index stmt.schema
   in
-  let params_binder_name = output_params_binder index stmt.vars in
+  let unprepared = can_execute_unprepared stmt in
+  let params_binder_name = if unprepared then "" else output_params_binder index stmt.vars in
   c.c_init ();
   let callback =
     c.c_callback
@@ -956,7 +991,12 @@ let generate_stmt ~module_kind index stmt =
       ~list:(sprintf "(fun x -> r_acc := %s x :: !r_acc)" callback)
   in
   let (bind, bind_end) = c.c_bind in
-  let exec = sprintf "T.%s db %s %s %s%s" func sql params_binder_name callback bind_end in
+  let exec =
+    if unprepared then
+      sprintf "T.execute_unprepared db %s%s" sql bind_end
+    else
+      sprintf "T.%s db %s %s %s%s" func (query_expr ~sql index stmt) params_binder_name callback bind_end
+  in
   let exec =
     match
       List.find_map
@@ -1150,9 +1190,9 @@ let generate_dynamic_select_modules stmts =
 
         if single_di then begin
           empty_line ();
-          emit_dynamic_module_select ~module_kind:`Direct ~dynamic_infos:[di] stmt;
+          emit_dynamic_module_select ~module_kind:`Direct ~dynamic_infos:[di] index stmt;
           emit_module_kind_variants stmt (fun module_kind ->
-            emit_dynamic_module_select ~module_kind ~dynamic_infos:[di] stmt)
+            emit_dynamic_module_select ~module_kind ~dynamic_infos:[di] index stmt)
         end);
       empty_line ()
     )
@@ -1166,7 +1206,7 @@ let generate_stmt_wrapper ~module_kind index stmt =
   | _ :: _ :: _ ->
     if supports_module_kind module_kind stmt then begin
       let _subst = gen_func_signature ~dynamic_infos ~module_kind ~index stmt in
-      emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:false ~with_callback:true stmt
+      emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:false ~with_callback:true index stmt
     end
 
 let generate ~gen_io ~migration_names name stmts =

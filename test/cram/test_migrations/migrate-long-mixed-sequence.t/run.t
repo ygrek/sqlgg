@@ -76,40 +76,40 @@ The generated code merges everything by id: manual (day-pinned) and generated
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `email` TEXT") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` ADD COLUMN `email` TEXT")
   
     let revert_alter_users_0 db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `email`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` DROP COLUMN `email`")
   
     let apply_alter_users_1 db  =
-      T.execute db ("ALTER TABLE users ADD COLUMN bio TEXT") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users ADD COLUMN bio TEXT")
   
     let revert_alter_users_1 db  =
-      T.execute db ("ALTER TABLE users DROP COLUMN bio") T.no_params
+      T.execute_unprepared db ("ALTER TABLE users DROP COLUMN bio")
   
     let apply_alter_posts_2 db  =
-      T.execute db ("ALTER TABLE `posts` ADD COLUMN `author_id` INT NOT NULL") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` ADD COLUMN `author_id` INT NOT NULL")
   
     let revert_alter_posts_2 db  =
-      T.execute db ("ALTER TABLE `posts` DROP COLUMN `author_id`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` DROP COLUMN `author_id`")
   
     let apply_alter_posts_3 db  =
-      T.execute db ("ALTER TABLE posts ADD COLUMN body TEXT") T.no_params
+      T.execute_unprepared db ("ALTER TABLE posts ADD COLUMN body TEXT")
   
     let revert_alter_posts_3 db  =
-      T.execute db ("ALTER TABLE posts DROP COLUMN body") T.no_params
+      T.execute_unprepared db ("ALTER TABLE posts DROP COLUMN body")
   
     let apply_20260101000000_alter_posts_add_col_published db  =
-      T.execute db ("ALTER TABLE `posts` ADD COLUMN `published` INT NOT NULL") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` ADD COLUMN `published` INT NOT NULL")
   
     let revert_20260101000000_alter_posts_add_col_published db  =
-      T.execute db ("ALTER TABLE `posts` DROP COLUMN `published`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `posts` DROP COLUMN `published`")
   
     let apply_20260101000000_alter_users_add_col_created_at db  =
-      T.execute db ("ALTER TABLE `users` ADD COLUMN `created_at` INT NOT NULL") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` ADD COLUMN `created_at` INT NOT NULL")
   
     let revert_20260101000000_alter_users_add_col_created_at db  =
-      T.execute db ("ALTER TABLE `users` DROP COLUMN `created_at`") T.no_params
+      T.execute_unprepared db ("ALTER TABLE `users` DROP COLUMN `created_at`")
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

@@ -3,12 +3,12 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_registration_feedbacks db  =
-    T.execute db ("CREATE TABLE IF NOT EXISTS registration_feedbacks (\n\
+    T.execute_unprepared db ("CREATE TABLE IF NOT EXISTS registration_feedbacks (\n\
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   `user_message` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n\
   `user_message_2` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,\n\
   PRIMARY KEY (`id`)\n\
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") T.no_params
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 
   let test_name db ~id ~search =
     let get_row stmt =
@@ -32,7 +32,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       end;
       T.finish_params p
     in
-    T.select_one_maybe db ("SELECT * FROM registration_feedbacks WHERE\n\
+    T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM registration_feedbacks WHERE\n\
   id = ? AND\n\
  " ^ (match search with Some (_, _, xs, xss) -> " ( " ^ " \n\
   `user_message` = " ^ "?" ^ " \n\
@@ -40,7 +40,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     OR `user_message_2` = " ^ "?" ^ " \n\
     OR " ^ (match xs with [] -> "FALSE" | _ :: _ -> "`user_message_2` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal xs) ^ ")") ^ "\n\
     OR " ^ (match xss with `A _ -> " ( user_message_2 = ? ) " | `B _ -> " ( user_message_2 = ? ) ") ^ "\n\
- " ^ " ) " | None -> " TRUE ")) set_params get_row
+ " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params get_row
 
   module Single = struct
     let test_name db ~id ~search callback =
@@ -68,7 +68,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         end;
         T.finish_params p
       in
-      T.select_one_maybe db ("SELECT * FROM registration_feedbacks WHERE\n\
+      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM registration_feedbacks WHERE\n\
   id = ? AND\n\
  " ^ (match search with Some (_, _, xs, xss) -> " ( " ^ " \n\
   `user_message` = " ^ "?" ^ " \n\
@@ -76,7 +76,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     OR `user_message_2` = " ^ "?" ^ " \n\
     OR " ^ (match xs with [] -> "FALSE" | _ :: _ -> "`user_message_2` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal xs) ^ ")") ^ "\n\
     OR " ^ (match xss with `A _ -> " ( user_message_2 = ? ) " | `B _ -> " ( user_message_2 = ? ) ") ^ "\n\
- " ^ " ) " | None -> " TRUE ")) set_params invoke_callback
+ " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params invoke_callback
 
   end (* module Single *)
 end (* module Sqlgg *)

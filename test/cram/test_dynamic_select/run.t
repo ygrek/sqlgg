@@ -464,7 +464,7 @@ Test DynamicSelect edge: single column:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"single_col" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -477,7 +477,7 @@ Test DynamicSelect edge: single column:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"single_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -493,7 +493,7 @@ Test DynamicSelect edge: single column:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"single_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -503,7 +503,7 @@ Test DynamicSelect edge: single column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -556,7 +556,7 @@ DynamicSelect: SELECT * remains static select:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -569,7 +569,7 @@ DynamicSelect: SELECT * remains static select:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -585,7 +585,7 @@ DynamicSelect: SELECT * remains static select:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -595,7 +595,7 @@ DynamicSelect: SELECT * remains static select:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -657,7 +657,7 @@ DynamicSelect: SELECT * with expression in same list:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols_plus_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -670,7 +670,7 @@ DynamicSelect: SELECT * with expression in same list:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols_plus_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -686,7 +686,7 @@ DynamicSelect: SELECT * with expression in same list:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"all_cols_plus_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -696,7 +696,7 @@ DynamicSelect: SELECT * with expression in same list:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -758,7 +758,7 @@ DynamicSelect: auto names for expressions without alias:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"auto_names" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -771,7 +771,7 @@ DynamicSelect: auto names for expressions without alias:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"auto_names" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -787,7 +787,7 @@ DynamicSelect: auto names for expressions without alias:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"auto_names" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -797,7 +797,7 @@ DynamicSelect: auto names for expressions without alias:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -841,7 +841,7 @@ Test DynamicSelect edge: expression at first position:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"expr_first" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -854,7 +854,7 @@ Test DynamicSelect edge: expression at first position:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"expr_first" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -870,7 +870,7 @@ Test DynamicSelect edge: expression at first position:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"expr_first" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -880,7 +880,7 @@ Test DynamicSelect edge: expression at first position:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -933,7 +933,7 @@ Test DynamicSelect edge: literal only:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"literal_only" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -946,7 +946,7 @@ Test DynamicSelect edge: literal only:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"literal_only" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -962,7 +962,7 @@ Test DynamicSelect edge: literal only:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"literal_only" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -972,7 +972,7 @@ Test DynamicSelect edge: literal only:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1052,7 +1052,7 @@ Test DynamicSelect edge: many columns:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"many_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1065,7 +1065,7 @@ Test DynamicSelect edge: many columns:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"many_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1081,7 +1081,7 @@ Test DynamicSelect edge: many columns:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"many_cols" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1091,7 +1091,7 @@ Test DynamicSelect edge: many columns:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b TEXT, c DECIMAL(10,2), d INT, e TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b TEXT, c DECIMAL(10,2), d INT, e TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1153,7 +1153,7 @@ Test DynamicSelect edge: no space after commas:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_space" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1166,7 +1166,7 @@ Test DynamicSelect edge: no space after commas:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_space" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1182,7 +1182,7 @@ Test DynamicSelect edge: no space after commas:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_space" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1192,7 +1192,7 @@ Test DynamicSelect edge: no space after commas:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1245,7 +1245,7 @@ Test DynamicSelect edge: minimal spacing:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tight" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1258,7 +1258,7 @@ Test DynamicSelect edge: minimal spacing:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tight" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1274,7 +1274,7 @@ Test DynamicSelect edge: minimal spacing:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tight" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1284,7 +1284,7 @@ Test DynamicSelect edge: minimal spacing:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1328,7 +1328,7 @@ Test DynamicSelect edge: column without alias gets auto name:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_alias" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1341,7 +1341,7 @@ Test DynamicSelect edge: column without alias gets auto name:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_alias" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1357,7 +1357,7 @@ Test DynamicSelect edge: column without alias gets auto name:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"no_alias" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1367,7 +1367,7 @@ Test DynamicSelect edge: column without alias gets auto name:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1447,7 +1447,7 @@ Test DynamicSelect with dynamic_select flag:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1461,7 +1461,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1478,7 +1478,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1488,7 +1488,7 @@ Test DynamicSelect with dynamic_select flag:
   
   
     let create_accounts db  =
-      T.execute db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE accounts (id INT PRIMARY KEY, balance DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1559,7 +1559,7 @@ Test DynamicSelect with two dynamic columns:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM items")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items") ~name:"multi_dynamic" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1572,7 +1572,7 @@ Test DynamicSelect with two dynamic columns:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM items")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items") ~name:"multi_dynamic" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1588,7 +1588,7 @@ Test DynamicSelect with two dynamic columns:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM items")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM items") ~name:"multi_dynamic" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1598,7 +1598,7 @@ Test DynamicSelect with two dynamic columns:
   
   
     let create_items db  =
-      T.execute db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE items (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -1660,7 +1660,7 @@ Test DynamicSelect with Verbatim branches:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM users")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"with_verbatim" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1673,7 +1673,7 @@ Test DynamicSelect with Verbatim branches:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM users")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"with_verbatim" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1689,7 +1689,7 @@ Test DynamicSelect with Verbatim branches:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM users")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users") ~name:"with_verbatim" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1699,7 +1699,7 @@ Test DynamicSelect with Verbatim branches:
   
   
     let create_users db  =
-      T.execute db ("CREATE TABLE users (id INT, status TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE users (id INT, status TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1752,7 +1752,7 @@ Test DynamicSelect at beginning of SELECT:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM data")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM data") ~name:"first_col" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1765,7 +1765,7 @@ Test DynamicSelect at beginning of SELECT:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM data")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM data") ~name:"first_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1781,7 +1781,7 @@ Test DynamicSelect at beginning of SELECT:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM data")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM data") ~name:"first_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1791,7 +1791,7 @@ Test DynamicSelect at beginning of SELECT:
   
   
     let create_data db  =
-      T.execute db ("CREATE TABLE data (a INT, b TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE data (a INT, b TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1844,7 +1844,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t1")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -1857,7 +1857,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t1")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -1873,7 +1873,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t1")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -1883,7 +1883,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
   
   
     let create_t1 db  =
-      T.execute db ("CREATE TABLE t1 (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t1 (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -1951,18 +1951,18 @@ Test DynamicSelect with module annotation:
           T.finish_params p
         in
         T.select_one_maybe db
-        ("SELECT " ^ col.column ^ " FROM wrapped WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM wrapped WHERE id = ?") ~name:"with_module" ~kind:Sqlgg_traits.Query.(Select Zero_one))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
   
     end
   
   
     let create_wrapped db  =
-      T.execute db ("CREATE TABLE wrapped (\n\
+      T.execute_unprepared db ("CREATE TABLE wrapped (\n\
           id INT PRIMARY KEY,\n\
       name TEXT,\n\
       price DECIMAL(10,2)\n\
-  )") T.no_params
+  )")
   
     module Single = struct
     end (* module Single *)
@@ -2013,14 +2013,14 @@ Test DynamicSelect with LIMIT 1 (select_one):
           T.finish_params p
         in
         T.select_one_maybe db
-        ("SELECT " ^ col.column ^ " FROM products WHERE id = ? LIMIT 1")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM products WHERE id = ? LIMIT 1") ~name:"select_one_product" ~kind:Sqlgg_traits.Query.(Select Zero_one))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col))
   
     end
   
   
     let create_products db  =
-      T.execute db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price DECIMAL(10,2))")
   
     module Single = struct
     end (* module Single *)
@@ -2112,9 +2112,9 @@ Test DynamicSelect comprehensive list:
           T.finish_params p
         in
         T.select db
-        ("SELECT\n\
+        (Sqlgg_traits.Query.make ~sql:("SELECT\n\
      " ^ col.column ^ "\n\
-  FROM products")
+  FROM products") ~name:"ultimate_combo_simple2" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2127,9 +2127,9 @@ Test DynamicSelect comprehensive list:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT\n\
+          (Sqlgg_traits.Query.make ~sql:("SELECT\n\
      " ^ col.column ^ "\n\
-  FROM products")
+  FROM products") ~name:"ultimate_combo_simple2" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2145,9 +2145,9 @@ Test DynamicSelect comprehensive list:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT\n\
+          (Sqlgg_traits.Query.make ~sql:("SELECT\n\
      " ^ col.column ^ "\n\
-  FROM products")
+  FROM products") ~name:"ultimate_combo_simple2" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2157,13 +2157,13 @@ Test DynamicSelect comprehensive list:
   
   
     let create_products db  =
-      T.execute db ("CREATE TABLE products (\n\
+      T.execute_unprepared db ("CREATE TABLE products (\n\
    id INT PRIMARY KEY,\n\
    name TEXT,\n\
    price DECIMAL(10,2),\n\
    category TEXT,\n\
    stock INT\n\
-  )") T.no_params
+  )")
   
     module Fold = struct
     end (* module Fold *)
@@ -2221,7 +2221,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"bare_param" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2235,7 +2235,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"bare_param" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2252,7 +2252,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"bare_param" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2262,7 +2262,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, val TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, val TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2323,7 +2323,7 @@ Virtual select: consecutive params as columns:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"multi_param" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2336,7 +2336,7 @@ Virtual select: consecutive params as columns:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"multi_param" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2352,7 +2352,7 @@ Virtual select: consecutive params as columns:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"multi_param" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2362,7 +2362,7 @@ Virtual select: consecutive params as columns:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2438,7 +2438,7 @@ Virtual select: mixed columns and params without spaces after commas:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"tight_commas" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2452,7 +2452,7 @@ Virtual select: mixed columns and params without spaces after commas:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"tight_commas" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2469,7 +2469,7 @@ Virtual select: mixed columns and params without spaces after commas:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"tight_commas" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2479,7 +2479,7 @@ Virtual select: mixed columns and params without spaces after commas:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -2532,7 +2532,7 @@ Virtual select: subquery expression as dynamic column:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"subquery_col" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2545,7 +2545,7 @@ Virtual select: subquery expression as dynamic column:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"subquery_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2561,7 +2561,7 @@ Virtual select: subquery expression as dynamic column:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"subquery_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2571,7 +2571,7 @@ Virtual select: subquery expression as dynamic column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2624,7 +2624,7 @@ Virtual select: CASE WHEN as dynamic column:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"case_col" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2637,7 +2637,7 @@ Virtual select: CASE WHEN as dynamic column:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"case_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2653,7 +2653,7 @@ Virtual select: CASE WHEN as dynamic column:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"case_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2663,7 +2663,7 @@ Virtual select: CASE WHEN as dynamic column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, status INT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, status INT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2716,7 +2716,7 @@ Virtual select: function call with multiple args as column:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"func_col" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2729,7 +2729,7 @@ Virtual select: function call with multiple args as column:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"func_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2745,7 +2745,7 @@ Virtual select: function call with multiple args as column:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"func_col" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2755,7 +2755,7 @@ Virtual select: function call with multiple args as column:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, first_name TEXT, last_name TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, first_name TEXT, last_name TEXT)")
   
     module Fold = struct
     end (* module Fold *)
@@ -2813,7 +2813,7 @@ Virtual select: arithmetic with param at expression start:
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"param_start_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2827,7 +2827,7 @@ Virtual select: arithmetic with param at expression start:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"param_start_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2844,7 +2844,7 @@ Virtual select: arithmetic with param at expression start:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t WHERE id = ?")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE id = ?") ~name:"param_start_expr" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2854,7 +2854,7 @@ Virtual select: arithmetic with param at expression start:
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (id INT, price DECIMAL(10,2))") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (id INT, price DECIMAL(10,2))")
   
     module Fold = struct
     end (* module Fold *)
@@ -2914,7 +2914,7 @@ Virtual select: tab-separated columns (non-space whitespace):
           T.finish_params p
         in
         T.select db
-        ("SELECT " ^ col.column ^ " FROM t")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tab_sep" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2927,7 +2927,7 @@ Virtual select: tab-separated columns (non-space whitespace):
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tab_sep" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2943,7 +2943,7 @@ Virtual select: tab-separated columns (non-space whitespace):
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          ("SELECT " ^ col.column ^ " FROM t")
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t") ~name:"tab_sep" ~kind:Sqlgg_traits.Query.(Select Nat))
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2953,7 +2953,7 @@ Virtual select: tab-separated columns (non-space whitespace):
   
   
     let create_t db  =
-      T.execute db ("CREATE TABLE t (a INT, b TEXT)") T.no_params
+      T.execute_unprepared db ("CREATE TABLE t (a INT, b TEXT)")
   
     module Fold = struct
     end (* module Fold *)

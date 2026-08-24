@@ -3,11 +3,11 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_random_table_1 db  =
-    T.execute db ("CREATE TABLE IF NOT EXISTS random_table_1 (\n\
+    T.execute_unprepared db ("CREATE TABLE IF NOT EXISTS random_table_1 (\n\
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   `id2` int(10) unsigned NOT NULL AUTO_INCREMENT,\n\
   PRIMARY KEY (`id`)\n\
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") T.no_params
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin")
 
   let select_1 db ~id ~ids2 callback =
     let invoke_callback stmt =
@@ -24,10 +24,10 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       end;
       T.finish_params p
     in
-    T.select db ("SELECT id FROM random_table_1\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
 WHERE \n\
   " ^ (match id with `Another (ids) -> " ( " ^ (match ids with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids_0n, ids_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_1n); Buffer.add_char _sqlgg_b ')') ids; Buffer.contents _sqlgg_b) ^ ")") ^ " ) " | `Andanother _ -> " ( ? > 2 ) " | `Lol (idss) -> " ( " ^ (match idss with [] -> "FALSE" | _ :: _ -> "`id` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal idss) ^ ")") ^ " ) ") ^ " \n\
-  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) set_params invoke_callback
+  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   let select_2 db ~ids2 callback =
     let invoke_callback stmt =
@@ -38,8 +38,8 @@ WHERE \n\
       let p = T.start_params stmt (0 + (match ids2 with [] -> 0 | _ :: _ -> 0)) in
       T.finish_params p
     in
-    T.select db ("SELECT id FROM random_table_1\n\
-WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) set_params invoke_callback
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
+WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
 
   module Fold = struct
     let select_1 db ~id ~ids2 callback acc =
@@ -58,10 +58,10 @@ WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM random_table_1\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
 WHERE \n\
   " ^ (match id with `Another (ids) -> " ( " ^ (match ids with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids_0n, ids_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_1n); Buffer.add_char _sqlgg_b ')') ids; Buffer.contents _sqlgg_b) ^ ")") ^ " ) " | `Andanother _ -> " ( ? > 2 ) " | `Lol (idss) -> " ( " ^ (match idss with [] -> "FALSE" | _ :: _ -> "`id` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal idss) ^ ")") ^ " ) ") ^ " \n\
-  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let select_2 db ~ids2 callback acc =
@@ -74,8 +74,8 @@ WHERE \n\
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id FROM random_table_1\n\
-WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
+WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -97,10 +97,10 @@ WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM random_table_1\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
 WHERE \n\
   " ^ (match id with `Another (ids) -> " ( " ^ (match ids with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids_0n, ids_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids_1n); Buffer.add_char _sqlgg_b ')') ids; Buffer.contents _sqlgg_b) ^ ")") ^ " ) " | `Andanother _ -> " ( ? > 2 ) " | `Lol (idss) -> " ( " ^ (match idss with [] -> "FALSE" | _ :: _ -> "`id` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal idss) ^ ")") ^ " ) ") ^ " \n\
-  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let select_2 db ~ids2 callback =
@@ -113,8 +113,8 @@ WHERE \n\
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id FROM random_table_1\n\
-WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM random_table_1\n\
+WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

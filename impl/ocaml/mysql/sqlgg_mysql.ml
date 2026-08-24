@@ -433,23 +433,37 @@ let select_one_with_stmt stmt set_params convert =
   | Some row -> convert row
   | None -> oops "no row but one expected in select_one_with_stmt"
 
-let with_stmt db sql f = 
-  bracket (prepare db sql) close_stmt f
+let with_stmt db (q : Sqlgg_traits.Query.t) f = 
+  bracket (prepare db q.sql) close_stmt f
 
-let select db sql set_params callback =
-  with_stmt db sql (fun stmt ->
+let select db q set_params callback =
+  with_stmt db q (fun stmt ->
     select_with_stmt stmt set_params callback)
 
-let execute db sql set_params =
-  with_stmt db sql (fun stmt ->
+let execute db q set_params =
+  with_stmt db q (fun stmt ->
     execute_with_stmt stmt set_params)
 
-let select_one_maybe db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let execute_unprepared db sql =
+  let (_ : Mysql.result) = Mysql.exec db sql in
+  begin match Mysql.status db with
+  | Mysql.StatusError _ ->
+    oops "execute_unprepared (%s)" (match Mysql.errmsg db with Some e -> e | None -> "unknown error")
+  | Mysql.StatusOK | Mysql.StatusEmpty -> ()
+  end;
+  let insert_id =
+    match Mysql.insert_id db with
+    | 0L -> None
+    | x -> Some x
+  in
+  { affected_rows = Mysql.affected db; insert_id }
+
+let select_one_maybe db q set_params convert =
+  with_stmt db q (fun stmt ->
     select_one_maybe_with_stmt stmt set_params convert)
 
-let select_one db sql set_params convert =
-  with_stmt db sql (fun stmt ->
+let select_one db q set_params convert =
+  with_stmt db q (fun stmt ->
     select_one_with_stmt stmt set_params convert)
 
 end
