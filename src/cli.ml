@@ -87,18 +87,15 @@ let parse_output s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
-let each_input ~output =
-  let run input =
-    (* parse always runs for its schema-registration side effects, even in -gen none *)
-    let stmts = match input with Some ch -> Main.get_statements ch | None -> [] in
-    match !output with
-    | None -> []
-    | Some _ ->
-      stmts |> List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind))
-  in
-  function
-  | "-" -> run (Some stdin)
-  | filename -> Main.with_channel filename run
+(* parse always runs for its schema-registration side effects, even in -gen none *)
+let read_statements = function
+  | "-" -> Main.get_statements stdin
+  | filename -> Main.with_channel filename (Option.map_default Main.get_statements [])
+
+let filter_stmts ~output stmts =
+  match output with
+  | None -> []
+  | Some _ -> List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind)) stmts
 
 let generate ~output ~name results =
   match output with
@@ -307,7 +304,25 @@ let parse_args () =
   let now = ref None in
   let max_id_length = ref None in
   let ddl_as_migration = ref false in
-  let work s = inputs := each_input ~output s :: !inputs in
+  let files : (string, [ `Open of Gen.stmt list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
+  let canonical = function
+    | "-" -> "-"
+    | f -> (try Unix.realpath f with Unix.Unix_error _ -> fatal "cannot open file : %s" f)
+  in
+  let open_input f =
+    let key = canonical f in
+    if not (Hashtbl.mem files key) then Hashtbl.replace files key (`Open (read_statements f))
+  in
+  let work s =
+    let key = canonical s in
+    let stmts =
+      match Hashtbl.find_opt files key with
+      | Some (`Open stmts) -> (* was used with -open before so we reuse *) stmts
+      | Some `Positional | None -> read_statements s
+    in
+    Hashtbl.replace files key `Positional;
+    inputs := filter_stmts ~output:!output stmts :: !inputs
+  in
   let groups =
   [
     { title = "Code generation"; opts =
@@ -316,6 +331,7 @@ let parse_args () =
       "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
       "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
       "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
+      "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
         " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
       "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
@@ -389,6 +405,13 @@ let parse_args () =
       max_id_length = !max_id_length;
       ddl_as_migration = !ddl_as_migration }
   in
+  (* these modes reset the schema and rebuild it from -base/-target/-initial,
+     silently discarding whatever -open loaded *)
+  let has_open =
+    Hashtbl.fold (fun _ v acc -> acc || (match v with `Open _ -> true | `Positional -> false)) files false
+  in
+  if has_open && (!migrate_mode || !diff_mode) then
+    fatal "-open is not supported with -diff/-migrate";
   match !migrate_mode, !diff_mode with
   | true, true -> fatal "-migrate and -diff are mutually exclusive"
   | true, false ->
