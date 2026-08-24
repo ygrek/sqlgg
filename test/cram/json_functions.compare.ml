@@ -3,25 +3,25 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_people db  =
-    T.execute db ("CREATE TABLE people (\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE people (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON\n\
-)") T.no_params
+)") ~name:"create_people" ~kind:Sqlgg_traits.Query.(Create "people")) T.no_params
 
   let create_people_data_json_kind_never_null_but_col_nullable db  =
-    T.execute db ("CREATE TABLE people_data_json_kind_never_null_but_col_nullable (\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE people_data_json_kind_never_null_but_col_nullable (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON\n\
-)") T.no_params
+)") ~name:"create_people_data_json_kind_never_null_but_col_nullable" ~kind:Sqlgg_traits.Query.(Create "people_data_json_kind_never_null_but_col_nullable")) T.no_params
 
   let create_people_data_json_kind_never_null_and_col_strict db  =
-    T.execute db ("CREATE TABLE people_data_json_kind_never_null_and_col_strict (\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE people_data_json_kind_never_null_and_col_strict (\n\
   id INT AUTO_INCREMENT PRIMARY KEY,\n\
   data JSON NOT NULL\n\
-)") T.no_params
+)") ~name:"create_people_data_json_kind_never_null_and_col_strict" ~kind:Sqlgg_traits.Query.(Create "people_data_json_kind_never_null_and_col_strict")) T.no_params
 
   let one db  =
-    T.execute db ("INSERT INTO people (data) VALUES\n\
+    T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO people (data) VALUES\n\
   (JSON_OBJECT(\n\
     'name', 'Alice',\n\
     'age', 30,\n\
@@ -43,7 +43,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   (JSON_OBJECT(\n\
     'name', NULL,\n\
     'age', NULL\n\
-  ))") T.no_params
+  ))") ~name:"one" ~kind:Sqlgg_traits.Query.(Insert "people")) T.no_params
 
   let two db  callback =
     let invoke_callback stmt =
@@ -51,9 +51,9 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         ~id:(T.get_column_Int stmt 0)
         ~name:(T.get_column_Json_nullable stmt 1)
     in
-    T.select db ("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
 FROM people\n\
-WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params invoke_callback
+WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") ~name:"two" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   let three db  callback =
     let invoke_callback stmt =
@@ -61,10 +61,10 @@ WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params
         ~id:(T.get_column_Int stmt 0)
         ~data_with_active:(T.get_column_Json_nullable stmt 1)
     in
-    T.select db ("SELECT\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people") T.no_params invoke_callback
+FROM people") ~name:"three" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   let four db  callback =
     let invoke_callback stmt =
@@ -72,10 +72,10 @@ FROM people") T.no_params invoke_callback
         ~id:(T.get_column_Int stmt 0)
         ~data_with_active:(T.get_column_Json_nullable stmt 1)
     in
-    T.select db ("SELECT\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_but_col_nullable") T.no_params invoke_callback
+FROM people_data_json_kind_never_null_but_col_nullable") ~name:"four" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   let five db  callback =
     let invoke_callback stmt =
@@ -83,10 +83,10 @@ FROM people_data_json_kind_never_null_but_col_nullable") T.no_params invoke_call
         ~id:(T.get_column_Int stmt 0)
         ~data_with_active:(T.get_column_Json stmt 1)
     in
-    T.select db ("SELECT\n\
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_and_col_strict") T.no_params invoke_callback
+FROM people_data_json_kind_never_null_and_col_strict") ~name:"five" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
 
   module Fold = struct
     let two db  callback acc =
@@ -96,9 +96,9 @@ FROM people_data_json_kind_never_null_and_col_strict") T.no_params invoke_callba
           ~name:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
 FROM people\n\
-WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") ~name:"two" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let three db  callback acc =
@@ -108,10 +108,10 @@ WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params
           ~data_with_active:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+FROM people") ~name:"three" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let four db  callback acc =
@@ -121,10 +121,10 @@ FROM people") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
           ~data_with_active:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_but_col_nullable") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+FROM people_data_json_kind_never_null_but_col_nullable") ~name:"four" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let five db  callback acc =
@@ -134,10 +134,10 @@ FROM people_data_json_kind_never_null_but_col_nullable") T.no_params (fun x -> r
           ~data_with_active:(T.get_column_Json stmt 1)
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_and_col_strict") T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+FROM people_data_json_kind_never_null_and_col_strict") ~name:"five" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -150,9 +150,9 @@ FROM people_data_json_kind_never_null_and_col_strict") T.no_params (fun x -> r_a
           ~name:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, JSON_EXTRACT(data, '$.name') AS name\n\
 FROM people\n\
-WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") ~name:"two" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let three db  callback =
@@ -162,10 +162,10 @@ WHERE JSON_UNQUOTE(JSON_EXTRACT(data, '$.address.city')) = 'Paris'") T.no_params
           ~data_with_active:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+FROM people") ~name:"three" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let four db  callback =
@@ -175,10 +175,10 @@ FROM people") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
           ~data_with_active:(T.get_column_Json_nullable stmt 1)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_but_col_nullable") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+FROM people_data_json_kind_never_null_but_col_nullable") ~name:"four" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let five db  callback =
@@ -188,10 +188,10 @@ FROM people_data_json_kind_never_null_but_col_nullable") T.no_params (fun x -> r
           ~data_with_active:(T.get_column_Json stmt 1)
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db ("SELECT\n\
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT\n\
   id,\n\
   JSON_SET(data, '$.active', TRUE) AS data_with_active\n\
-FROM people_data_json_kind_never_null_and_col_strict") T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+FROM people_data_json_kind_never_null_and_col_strict") ~name:"five" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

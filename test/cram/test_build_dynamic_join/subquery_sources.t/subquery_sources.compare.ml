@@ -36,7 +36,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"join_subq_source" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -50,7 +50,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"join_subq_source" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -67,7 +67,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"join_subq_source" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -110,7 +110,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_join_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -124,7 +124,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_join_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -141,7 +141,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT p.user_id, p.bio FROM profiles p, users x) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_join_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -184,7 +184,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_union_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -198,7 +198,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_union_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -215,7 +215,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?")
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u LEFT JOIN (SELECT user_id, bio FROM profiles UNION ALL SELECT user_id, bio FROM profiles) s ON s.user_id = u.id WHERE u.id = ?") ~name:"subq_union_dup" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -257,7 +257,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      ("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else ""))
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else "")) ~name:"subq_base_join" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -270,7 +270,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else ""))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else "")) ~name:"subq_base_join" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -286,7 +286,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        ("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else ""))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id FROM users) s" ^ (if List.mem Profiles col.deps then " LEFT JOIN profiles p ON p.user_id = s.id" else "")) ~name:"subq_base_join" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -296,10 +296,10 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db ("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") T.no_params
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users")) T.no_params
 
   let create_profiles db  =
-    T.execute db ("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") T.no_params
+    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles")) T.no_params
 
   module Fold = struct
   end (* module Fold *)
