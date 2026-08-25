@@ -87,10 +87,14 @@ let parse_output s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
+let stamp_source filename stmts =
+  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.set stmt.props "file" filename }) stmts
+
 let each_input ~output =
-  let run input =
+  let run ?filename input =
     (* parse always runs for its schema-registration side effects, even in -gen none *)
     let stmts = match input with Some ch -> Main.get_statements ch | None -> [] in
+    let stmts = match filename with None -> stmts | Some file -> stamp_source (Filename.basename file) stmts in
     match !output with
     | None -> []
     | Some _ ->
@@ -98,7 +102,7 @@ let each_input ~output =
   in
   function
   | "-" -> run (Some stdin)
-  | filename -> Main.with_channel filename run
+  | filename -> Main.with_channel filename (run ~filename)
 
 let generate ~output ~name results =
   match output with

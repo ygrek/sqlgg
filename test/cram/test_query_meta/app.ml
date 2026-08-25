@@ -27,12 +27,12 @@ module Annotating_impl = struct
     match q.kind with
     | Create _ | Alter _ | Drop _ -> q
     | _ ->
-      Sqlgg_traits.Query.Sqlcommenter.annotate [
+      Sqlgg_traits.Query.Sqlcommenter.annotate ([
         "app", "users api";
         "query", q.name;
         "kind", kind_name q.kind;
         "request_id", !current_request;
-      ] q
+      ] @ (match q.filename with None -> [] | Some file -> [ "file", file ])) q
 
   let select db q = Print_ocaml_impl.select db (annotate q)
   let select_one db q = Print_ocaml_impl.select_one db (annotate q)

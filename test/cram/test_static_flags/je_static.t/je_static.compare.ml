@@ -47,7 +47,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       T.select db
       (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM items i" ^ (if List.mem Stats col.deps then " LEFT JOIN stats s ON s.item_id = i.id" else "") ^ "\n\
-WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -63,7 +63,7 @@ WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM items i" ^ (if List.mem Stats col.deps then " LEFT JOIN stats s ON s.item_id = i.id" else "") ^ "\n\
-WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -82,7 +82,7 @@ WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ "\n\
 FROM items i" ^ (if List.mem Stats col.deps then " LEFT JOIN stats s ON s.item_id = i.id" else "") ^ "\n\
-WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -112,7 +112,7 @@ WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat))
     T.select db (Sqlgg_traits.Query.make ~sql:("SELECT i.id, i.name, s.sold\n\
 FROM items i\n\
 LEFT JOIN stats s ON s.item_id = i.id\n\
-WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   module Fold = struct
     let wide_static db ~min_id callback acc =
@@ -131,7 +131,7 @@ WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_
       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT i.id, i.name, s.sold\n\
 FROM items i\n\
 LEFT JOIN stats s ON s.item_id = i.id\n\
-WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -153,7 +153,7 @@ WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_
       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT i.id, i.name, s.sold\n\
 FROM items i\n\
 LEFT JOIN stats s ON s.item_id = i.id\n\
-WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+WHERE i.id > ?") ~name:"wide_static" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

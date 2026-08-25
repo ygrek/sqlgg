@@ -20,7 +20,7 @@ CREATE TYPE
         callback
           ~id:(T.get_column_Int stmt 0)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let drop_type_color db  =
       T.execute_unprepared db ("DROP TYPE \"color\"")
@@ -32,7 +32,7 @@ CREATE TYPE
             ~id:(T.get_column_Int stmt 0)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -44,7 +44,7 @@ CREATE TYPE
             ~id:(T.get_column_Int stmt 0)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -105,7 +105,7 @@ CREATE DROP CREATE
         callback
           ~id:(T.get_column_Int stmt 0)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_4 db  callback acc =
@@ -114,7 +114,7 @@ CREATE DROP CREATE
             ~id:(T.get_column_Int stmt 0)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -126,7 +126,7 @@ CREATE DROP CREATE
             ~id:(T.get_column_Int stmt 0)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'black'") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)

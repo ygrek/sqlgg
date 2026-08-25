@@ -40,7 +40,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     OR `user_message_2` = " ^ "?" ^ " \n\
     OR " ^ (match xs with [] -> "FALSE" | _ :: _ -> "`user_message_2` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal xs) ^ ")") ^ "\n\
     OR " ^ (match xss with `A _ -> " ( user_message_2 = ? ) " | `B _ -> " ( user_message_2 = ? ) ") ^ "\n\
- " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params get_row
+ " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
 
   module Single = struct
     let test_name db ~id ~search callback =
@@ -76,7 +76,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     OR `user_message_2` = " ^ "?" ^ " \n\
     OR " ^ (match xs with [] -> "FALSE" | _ :: _ -> "`user_message_2` IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal xs) ^ ")") ^ "\n\
     OR " ^ (match xss with `A _ -> " ( user_message_2 = ? ) " | `B _ -> " ( user_message_2 = ? ) ") ^ "\n\
- " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params invoke_callback
+ " ^ " ) " | None -> " TRUE ")) ~name:"test_name" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params invoke_callback
 
   end (* module Single *)
 end (* module Sqlgg *)

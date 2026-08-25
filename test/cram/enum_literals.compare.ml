@@ -17,7 +17,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   let create_test_status db  =
     T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_status (\n\
   status ENUM('Failed','Skipped','Passed') NOT NULL\n\
-)") ~name:"create_test_status" ~kind:Sqlgg_traits.Query.(Create "test_status")) T.no_params
+)") ~name:"create_test_status" ~kind:Sqlgg_traits.Query.(Create "test_status") ()) T.no_params
 
   let test1 db ~status_list callback =
     let invoke_callback stmt =
@@ -28,16 +28,16 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let p = T.start_params stmt (0 + (match status_list with [] -> 0 | _ :: _ -> 0)) in
       T.finish_params p
     in
-    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   let create_users db  =
     T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (\n\
   id INT NOT NULL,\n\
   status ENUM('Active','Inactive','Pending') NOT NULL\n\
-)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users")) T.no_params
+)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
 
   let test2 db ~rows =
-    ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO users (id, status) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, status) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (Enum_1.to_literal status); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"test2" ~kind:Sqlgg_traits.Query.(Insert "users")) T.no_params )
+    ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO users (id, status) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, status) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (Enum_1.to_literal status); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b) ()) ~name:"test2" ~kind:Sqlgg_traits.Query.(Insert "users") ()) T.no_params )
 
   module Fold = struct
     let test1 db ~status_list callback acc =
@@ -50,7 +50,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       let r_acc = ref acc in
-      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -66,7 +66,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       let r_acc = ref [] in
-      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT * FROM test_status WHERE " ^ (match status_list with [] -> "FALSE" | _ :: _ -> "status IN " ^  "(" ^ String.concat ", " (List.map Enum_0.to_literal status_list) ^ ")")) ~name:"test1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

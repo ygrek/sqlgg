@@ -19,6 +19,31 @@ Implement set default feature, no way to set DEFAULT for fields without DEFAULT:
 
 WHERE IN tuples composable with the rest:
   $ /bin/sh ./sqlgg_test.sh where_in_composable.sql where_in_composable.compare.ml
+  30c30
+  <   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
+  ---
+  >   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE " ())) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  42c42
+  < WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
+  ---
+  > WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  64c64
+  <   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  ---
+  >   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE " ())) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  78c78
+  < WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  ---
+  > WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  103c103
+  <   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  ---
+  >   OR " ^ (match ids2 with Some (ids2) -> " ( " ^ " " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ^ " " ^ " ) " | None -> " TRUE " ())) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  117c117
+  < WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  ---
+  > WHERE " ^ (match ids2 with [] -> "FALSE" | _ :: _ -> "(`id`, `id2`) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (ids2_0n, ids2_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Int.to_literal ids2_1n); Buffer.add_char _sqlgg_b ')') ids2; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  [1]
   $ echo $?
   0
 
@@ -29,6 +54,19 @@ Implement type mappings, fst part, no insert, no update, no params, only select:
 
 Implement type mappings, snd part, comparison op, IN, IN with tuples:
   $ /bin/sh ./sqlgg_test.sh type_mappings_params.sql type_mappings_params.compare.ml  
+  21c21
+  <     T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
+  ---
+  >     T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  56c56
+  <       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  ---
+  >       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  90c90
+  <       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  ---
+  >       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id FROM example WHERE " ^ (match x with [] -> "FALSE" | _ :: _ -> "(name, id) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (x_0n, x_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b ((fun v -> T.Types.Text.string_to_literal (Name.set_param v)) x_0n); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b ((fun v -> T.Types.Int.int64_to_literal (ExampleId.set_param v)) x_1n); Buffer.add_char _sqlgg_b ')') x; Buffer.contents _sqlgg_b) ^ ")") ()) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  [1]
   $ echo $?
   0
  
@@ -925,7 +963,7 @@ Test Single style for SELECT 1/0..1 and hide empty modules:
       let get_row stmt =
         (T.get_column_Int stmt 0)
       in
-      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT COUNT(*) FROM test20250902") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params get_row
+      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT COUNT(*) FROM test20250902") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
   
     module Single = struct
       let select_1 db  callback =
@@ -933,7 +971,7 @@ Test Single style for SELECT 1/0..1 and hide empty modules:
           callback
             ~r:(T.get_column_Int stmt 0)
         in
-        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT COUNT(*) FROM test20250902") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params invoke_callback
+        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT COUNT(*) FROM test20250902") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
   
     end (* module Single *)
   end (* module Sqlgg *)
@@ -981,7 +1019,7 @@ Test non_nullifiable when update:
         T.set_param_Datetime p updated_at;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE non_nullifiable SET updated_at = ? WHERE name = 'example'") ~name:"update_non_nullifiable_1" ~kind:Sqlgg_traits.Query.(Update (Some "non_nullifiable"))) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE non_nullifiable SET updated_at = ? WHERE name = 'example'") ~name:"update_non_nullifiable_1" ~kind:Sqlgg_traits.Query.(Update (Some "non_nullifiable")) ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1138,7 +1176,7 @@ Test non_nullifiable with INSERT ... ON DUPLICATE KEY UPDATE (values nullable, N
   VALUES (1, ?, ?)\n\
   ON DUPLICATE KEY UPDATE \n\
     column1 = VALUES(column1),\n\
-    column2 = VALUES(column2)") ~name:"insert_nn_upsert_1" ~kind:Sqlgg_traits.Query.(Insert "nn_upsert")) set_params
+    column2 = VALUES(column2)") ~name:"insert_nn_upsert_1" ~kind:Sqlgg_traits.Query.(Insert "nn_upsert") ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1377,7 +1415,7 @@ parametrized order by and limit are supported with update stmt + table alias:
         T.set_param_Int p limit;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' ORDER BY " ^ (match order with `Id -> " (t.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None)) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' ORDER BY " ^ (match order with `Id -> " (t.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None) ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1399,7 +1437,7 @@ limit is supported with update stmt + table alias:
         T.set_param_Int p limit;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' LIMIT ?") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None)) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' LIMIT ?") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None) ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1427,7 +1465,7 @@ order by and limit are supported with update stmt + table alias + join:
         T.set_param_Int p limit;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> " (t.id) " | `Id_2 -> " (t2.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") ~name:"update_2" ~kind:Sqlgg_traits.Query.(Update None)) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t JOIN test2 t2 ON t.id = t2.test_id SET t.column_a = ?, t2.column_a = ? ORDER BY " ^ (match order with `Id_1 -> " (t.id) " | `Id_2 -> " (t2.id) ") ^ " " ^ (match direction with `ASC -> "ASC" | `DESC -> "DESC") ^ " LIMIT ?") ~name:"update_2" ~kind:Sqlgg_traits.Query.(Update None) ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1510,7 +1548,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
   FROM table_1_2025_09_26 t1\n\
   JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
   GROUP BY t1.table_no\n\
-  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
   
     module Fold = struct
       let select_2 db ~order_kind ~par callback acc =
@@ -1544,7 +1582,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
   FROM table_1_2025_09_26 t1\n\
   JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
   GROUP BY t1.table_no\n\
-  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -1581,7 +1619,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
   FROM table_1_2025_09_26 t1\n\
   JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > ?\n\
   GROUP BY t1.table_no\n\
-  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  ORDER BY dates_from_t1") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -1619,7 +1657,7 @@ INSERT ... SELECT with UNION ALL and enum meta propagation (short):
       T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t_enum_union (pending_type)\n\
   SELECT pending_type FROM t_enum_union WHERE pending_type = ?\n\
   UNION ALL\n\
-  SELECT ?") ~name:"insert_t_enum_union_1" ~kind:Sqlgg_traits.Query.(Insert "t_enum_union")) set_params
+  SELECT ?") ~name:"insert_t_enum_union_1" ~kind:Sqlgg_traits.Query.(Insert "t_enum_union") ()) set_params
   
   end (* module Sqlgg *)
   $ echo $?
@@ -1649,7 +1687,7 @@ INSERT ... SELECT with meta propagation:
         T.finish_params p
       in
       T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t_dst (status)\n\
-  SELECT ?") ~name:"insert_t_dst_1" ~kind:Sqlgg_traits.Query.(Insert "t_dst")) set_params
+  SELECT ?") ~name:"insert_t_dst_1" ~kind:Sqlgg_traits.Query.(Insert "t_dst") ()) set_params
   
   end (* module Sqlgg *)
   $ echo $?
@@ -1721,7 +1759,7 @@ Test UINT64 mapping for UNSIGNED INT:
           ~calc_2:(T.get_column_Float_nullable stmt 2)
           ~v:(T.get_column_Int_nullable stmt 3)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let insert_t1_2 db ~id =
       let set_params stmt =
@@ -1729,7 +1767,7 @@ Test UINT64 mapping for UNSIGNED INT:
         begin match id with None -> T.set_param_null p | Some v -> T.set_param_UInt64 p v end;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1") ()) set_params
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -1741,7 +1779,7 @@ Test UINT64 mapping for UNSIGNED INT:
             ~v:(T.get_column_Int_nullable stmt 3)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -1756,7 +1794,7 @@ Test UINT64 mapping for UNSIGNED INT:
             ~v:(T.get_column_Int_nullable stmt 3)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -1790,7 +1828,7 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
           ~calc_2:(T.get_column_Float_nullable stmt 2)
           ~v:(T.get_column_Int_nullable stmt 3)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let insert_t1_2 db ~id =
       let set_params stmt =
@@ -1798,7 +1836,7 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
         begin match id with None -> T.set_param_null p | Some id -> T.set_param_uint64 p (Wrap_it.set_param id); end;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1") ()) set_params
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -1810,7 +1848,7 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
             ~v:(T.get_column_Int_nullable stmt 3)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -1825,7 +1863,7 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
             ~v:(T.get_column_Int_nullable stmt 3)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT id, id + 669 - 2 as id_with_calc, id / 2 + 300000 as calc_2, v FROM t1") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -1851,7 +1889,7 @@ Test UINT64 in type spec:
         T.set_param_UInt64 p id;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_1" ~kind:Sqlgg_traits.Query.(Insert "t1")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_1" ~kind:Sqlgg_traits.Query.(Insert "t1") ()) set_params
   
     let insert_t1_2 db ~id =
       let set_params stmt =
@@ -1859,7 +1897,7 @@ Test UINT64 in type spec:
         begin match id with None -> T.set_param_null p | Some v -> T.set_param_UInt64 p v end;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_2" ~kind:Sqlgg_traits.Query.(Insert "t1") ()) set_params
   
     let insert_t1_3 db ~id =
       let set_params stmt =
@@ -1867,7 +1905,7 @@ Test UINT64 in type spec:
         T.set_param_Int p id;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_3" ~kind:Sqlgg_traits.Query.(Insert "t1")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO t1 (id, v) VALUES (?, 123)") ~name:"insert_t1_3" ~kind:Sqlgg_traits.Query.(Insert "t1") ()) set_params
   
   end (* module Sqlgg *)
 
@@ -1951,7 +1989,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_2 db  callback =
       let invoke_callback stmt =
@@ -1963,7 +2001,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_3 db  callback =
       let invoke_callback stmt =
@@ -1975,7 +2013,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product) as products_json\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_4 db  callback =
       let invoke_callback stmt =
@@ -1987,7 +2025,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_5 db  callback =
       let invoke_callback stmt =
@@ -1999,7 +2037,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_6 db  callback =
       let invoke_callback stmt =
@@ -2011,7 +2049,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_7 db  callback =
       let invoke_callback stmt =
@@ -2023,7 +2061,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_8 db  callback =
       let invoke_callback stmt =
@@ -2035,7 +2073,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description) as descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let select_9 db  callback =
       let invoke_callback stmt =
@@ -2047,7 +2085,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -2061,7 +2099,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_2 db  callback acc =
@@ -2075,7 +2113,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_3 db  callback acc =
@@ -2089,7 +2127,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product) as products_json\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_4 db  callback acc =
@@ -2103,7 +2141,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_5 db  callback acc =
@@ -2117,7 +2155,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_6 db  callback acc =
@@ -2131,7 +2169,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_7 db  callback acc =
@@ -2145,7 +2183,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_8 db  callback acc =
@@ -2159,7 +2197,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description) as descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
       let select_9 db  callback acc =
@@ -2173,7 +2211,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -2190,7 +2228,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(product, ':', quantity) as products_with_qty\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_2 db  callback =
@@ -2204,7 +2242,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     GROUP_CONCAT(DISTINCT product, ':', quantity ORDER BY product) as unique_combos\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_3 db  callback =
@@ -2218,7 +2256,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product) as products_json\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_4 db  callback =
@@ -2232,7 +2270,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product) as unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_4" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_5 db  callback =
@@ -2246,7 +2284,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC) as products_by_price\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_5" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_6 db  callback =
@@ -2260,7 +2298,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(DISTINCT product ORDER BY product ASC) as sorted_unique_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_6" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_7 db  callback =
@@ -2274,7 +2312,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(product ORDER BY price DESC LIMIT 3) as top_3_products\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_7" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_8 db  callback =
@@ -2288,7 +2326,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description) as descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_8" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
       let select_9 db  callback =
@@ -2302,7 +2340,7 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     customer_id,\n\
     JSON_ARRAYAGG(description ORDER BY id) as ordered_descriptions\n\
   FROM orders\n\
-  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+  GROUP BY customer_id") ~name:"select_9" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -2321,14 +2359,14 @@ Test test date functions that are both expressions and functions:
       let get_row stmt =
         (T.get_column_Datetime stmt 0), (T.get_column_Datetime stmt 1), (T.get_column_Datetime stmt 2)
       in
-      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params get_row
+      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
   
     let select_1 db  =
       let get_row stmt =
         (T.get_column_Int stmt 0)
       in
       T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)\n\
-  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params get_row
+  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
   
     module Single = struct
       let select_0 db  callback =
@@ -2338,7 +2376,7 @@ Test test date functions that are both expressions and functions:
             ~r0:(T.get_column_Datetime stmt 1)
             ~r1:(T.get_column_Datetime stmt 2)
         in
-        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params invoke_callback
+        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT CURRENT_DATE(), CURRENT_TIME(), CURRENT_TIMESTAMP()") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
   
       let select_1 db  callback =
         let invoke_callback stmt =
@@ -2346,7 +2384,7 @@ Test test date functions that are both expressions and functions:
             ~r:(T.get_column_Int stmt 0)
         in
         T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)\n\
-  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One)) T.no_params invoke_callback
+  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
   
     end (* module Single *)
   end (* module Sqlgg *)
@@ -2545,7 +2583,7 @@ Test IS NOT NULL type refinement:
           ~str:(T.get_column_Text_nullable stmt 0)
           ~name:(T.get_column_Text stmt 1)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -2555,7 +2593,7 @@ Test IS NOT NULL type refinement:
             ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -2568,7 +2606,7 @@ Test IS NOT NULL type refinement:
             ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -2592,7 +2630,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
           ~str:(T.get_column_Text_nullable stmt 0)
           ~name:(T.get_column_Text stmt 1)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -2602,7 +2640,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
             ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -2615,7 +2653,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
             ~name:(T.get_column_Text stmt 1)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NOT NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -2639,7 +2677,7 @@ Test IS NOT NULL type refinement with IS NULL:
           ~str:(T.get_column_Text_nullable stmt 0)
           ~name:(T.get_column_Text_nullable stmt 1)
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -2649,7 +2687,7 @@ Test IS NOT NULL type refinement with IS NULL:
             ~name:(T.get_column_Text_nullable stmt 1)
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -2662,7 +2700,7 @@ Test IS NOT NULL type refinement with IS NULL:
             ~name:(T.get_column_Text_nullable stmt 1)
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT str, name FROM test WHERE name IS NULL") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -2690,7 +2728,7 @@ Test meta propagation: IFNULL with ENUM column should propagate metadata to resu
         callback
           ~r:(Priority.get_column (T.get_column_string stmt 0))
       in
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     module Fold = struct
       let select_1 db  callback acc =
@@ -2699,7 +2737,7 @@ Test meta propagation: IFNULL with ENUM column should propagate metadata to resu
             ~r:(Priority.get_column (T.get_column_string stmt 0))
         in
         let r_acc = ref acc in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
         (fun () -> IO.return !r_acc)
   
     end (* module Fold *)
@@ -2711,7 +2749,7 @@ Test meta propagation: IFNULL with ENUM column should propagate metadata to resu
             ~r:(Priority.get_column (T.get_column_string stmt 0))
         in
         let r_acc = ref [] in
-        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT IFNULL(priority, 'medium') FROM test_ifnull_enum") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
   
     end (* module List *)
@@ -2744,7 +2782,7 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
         end;
         T.finish_params p
       in
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " ( ? ) " | `Default -> " ( 'pending' ) ")) ~name:"insert_test_insert_choices_1" ~kind:Sqlgg_traits.Query.(Insert "test_insert_choices")) set_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO test_insert_choices SET status = " ^ (match x with `Set _ -> " ( ? ) " | `Default -> " ( 'pending' ) ")) ~name:"insert_test_insert_choices_1" ~kind:Sqlgg_traits.Query.(Insert "test_insert_choices") ()) set_params
   
   end (* module Sqlgg *)
 Test DynamicSelect with dynamic_select flag:
@@ -2810,7 +2848,7 @@ Test DynamicSelect with dynamic_select flag:
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2824,7 +2862,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2841,7 +2879,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -2937,7 +2975,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -2950,7 +2988,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -2966,7 +3004,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -3102,7 +3140,7 @@ Test DynamicSelect with dynamic_select flag:
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -3116,7 +3154,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -3133,7 +3171,7 @@ Test DynamicSelect with dynamic_select flag:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM accounts WHERE id > ?") ~name:"select_ids2" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -3229,7 +3267,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -3242,7 +3280,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -3258,7 +3296,7 @@ Test DynamicSelect disabled in subquery (fallback to Choice):
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t1") ~name:"with_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -3355,7 +3393,7 @@ independently, so precedence is protected at each depth:
   $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE FALSE AND' | head -1
   > SELECT 1 WHERE FALSE AND @a { Outer { @b { P { TRUE } | Q { FALSE OR TRUE } } } | Other { 1 = 1 } };
   > EOF
-      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match a with `Outer (b) -> " ( " ^ (match b with `P -> " ( TRUE ) " | `Q -> " ( FALSE OR TRUE ) ") ^ " ) " | `Other -> " ( 1 = 1 ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params get_row
+      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match a with `Outer (b) -> " ( " ^ (match b with `P -> " ( TRUE ) " | `Q -> " ( FALSE OR TRUE ) ") ^ " ) " | `Other -> " ( 1 = 1 ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
 
 Composite: a choice branch with bound params and a compound AND body is wrapped
 as a whole:
@@ -3363,7 +3401,7 @@ as a whole:
   > CREATE TABLE t (a INT, b INT, c INT);
   > SELECT a FROM t WHERE TRUE OR @b { S { a = @p AND b = @q } | T { c > @r } };
   > EOF
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT a FROM t WHERE TRUE OR " ^ (match b with `S _ -> " ( a = ? AND b = ? ) " | `T _ -> " ( c > ? ) ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT a FROM t WHERE TRUE OR " ^ (match b with `S _ -> " ( a = ? AND b = ? ) " | `T _ -> " ( c > ? ) ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
 Composite: a bool-choice ({...}?) whose body itself contains a nested choice —
 the bool-choice wraps the active branch and the inner choice wraps each branch:
@@ -3371,19 +3409,19 @@ the bool-choice wraps the active branch and the inner choice wraps each branch:
   > CREATE TABLE t (a INT, b INT);
   > SELECT a FROM t WHERE FALSE AND { a = @v OR @c { A { b = 1 } | B { b = 2 } } }?;
   > EOF
-      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT a FROM t WHERE FALSE AND " ^ (match v with Some (_, c) -> " ( " ^ " a = " ^ "?" ^ " OR " ^ (match c with `A -> " ( b = 1 ) " | `B -> " ( b = 2 ) ") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT a FROM t WHERE FALSE AND " ^ (match v with Some (_, c) -> " ( " ^ " a = " ^ "?" ^ " OR " ^ (match c with `A -> " ( b = 1 ) " | `B -> " ( b = 2 ) ") ^ " " ^ " ) " | None -> " TRUE ")) ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
 PoC: without hand-written parentheses, the branch body is grouped correctly as
 FALSE AND ( FALSE OR TRUE ) instead of leaking into FALSE AND FALSE OR TRUE:
   $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'SELECT 1 WHERE' | head -1
   > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { FALSE OR TRUE } };
   > EOF
-      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( FALSE OR TRUE ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params get_row
+      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( FALSE OR TRUE ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
 
 PoC: hand-written parentheses are now redundant — same semantics, just an extra
 harmless pair:
   $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'SELECT 1 WHERE' | head -1
   > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { (FALSE OR TRUE) } };
   > EOF
-      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one)) set_params get_row
+      T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
 

@@ -2,12 +2,50 @@ Dynamic select composed with other parameter constructs.
 
   $ cat compose.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > compose.ml
   $ diff compose.ml compose.compare.ml
+  112c112
+  <       (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  >       (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+  125c125
+  <         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  >         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+  141c141
+  <         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  >         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"tuple_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+  625c625
+  < ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ()) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat))
+  659c659
+  < ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ()) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat))
+  696c696
+  < ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) ")) ()) ~name:"kitchen_sink" ~kind:Sqlgg_traits.Query.(Select Nat))
+  [1]
   $ ocamlfind ocamlc -package sqlgg.traits,sqlgg -I . -c compose.ml
 
 Dynamic select on top of parameterized CTEs and subqueries.
 
   $ cat cte.sql | sqlgg -no-header -gen caml_io -params unnamed -gen caml -dialect mysql - > cte.ml
   $ diff cte.ml cte.compare.ml
+  293c293
+  < SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+  312c312
+  < SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+  334c334
+  < SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat) ())
+  ---
+  > SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+  [1]
   $ ocamlfind ocamlc -package sqlgg.traits,sqlgg -I . -c cte.ml
 
 Run the generated code against the printing mock and check the final SQL strings.
