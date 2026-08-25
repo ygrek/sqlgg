@@ -18,9 +18,10 @@ type t = private {
   sql : string;
   name : string;
   kind : kind;
+  filename : string option;
 }
 
-val make : sql:string -> name:string -> kind:kind -> t
+val make : ?filename:string -> sql:string -> name:string -> kind:kind -> unit -> t
 
 (** https://google.github.io/sqlcommenter/spec/ *)
 module Sqlcommenter : sig

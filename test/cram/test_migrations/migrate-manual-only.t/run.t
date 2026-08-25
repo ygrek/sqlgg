@@ -26,10 +26,10 @@ But the code is regenerated and contains the hand-written rename:
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users RENAME COLUMN email TO email_address") ~name:"apply_alter_users_0" ~kind:Sqlgg_traits.Query.Other) T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users RENAME COLUMN email TO email_address") ~name:"apply_alter_users_0" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
   
     let revert_alter_users_0 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users RENAME COLUMN email_address TO email") ~name:"revert_alter_users_0" ~kind:Sqlgg_traits.Query.Other) T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users RENAME COLUMN email_address TO email") ~name:"revert_alter_users_0" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

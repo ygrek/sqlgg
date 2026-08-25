@@ -6,7 +6,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE categories (\n\
     id SERIAL PRIMARY KEY,\n\
     name VARCHAR(255) NOT NULL\n\
-)") ~name:"create_categories" ~kind:Sqlgg_traits.Query.(Create "categories")) T.no_params
+)") ~name:"create_categories" ~kind:Sqlgg_traits.Query.(Create "categories") ()) T.no_params
 
   let create_products db  =
     T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (\n\
@@ -15,7 +15,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     category_id INTEGER,\n\
     price NUMERIC(10, 2) NOT NULL,\n\
     FOREIGN KEY (category_id) REFERENCES categories(id)\n\
-)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products")) T.no_params
+)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ()) T.no_params
 
   let test2 db ~five ~param ~test ~test2 ~test5 callback =
     let invoke_callback stmt =
@@ -40,7 +40,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   let test3 db ~five ~param ~test ~test2 ~test5 callback =
     let invoke_callback stmt =
@@ -65,7 +65,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   let reuseme db  callback =
     let invoke_callback stmt =
@@ -82,7 +82,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_
     )\n\
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
-JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params invoke_callback
+JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
 
   let reuse_reusable db  callback =
     let invoke_callback stmt =
@@ -104,7 +104,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
 JOIN categories c ON inner_cte.category_id = c.id)\n\
-SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   module Fold = struct
     let test2 db ~five ~param ~test ~test2 ~test5 callback acc =
@@ -131,7 +131,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let test3 db ~five ~param ~test ~test2 ~test5 callback acc =
@@ -158,7 +158,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let reuseme db  callback acc =
@@ -177,7 +177,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x 
     )\n\
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
-JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
     let reuse_reusable db  callback acc =
@@ -201,7 +201,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
 JOIN categories c ON inner_cte.category_id = c.id)\n\
-SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x !r_acc))
+SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -231,7 +231,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+FROM x") ~name:"test2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let test3 db ~five ~param ~test ~test2 ~test5 callback =
@@ -258,7 +258,7 @@ FROM ( \n\
 ) AS x \n\
 WHERE " ^ (match param with `None -> " ( TRUE ) " | `Some -> " ( FALSE ) ") ^ ")\n\
 SELECT 1 + ? - ? + ? + x.y1 as y2\n\
-FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let reuseme db  callback =
@@ -277,7 +277,7 @@ FROM x") ~name:"test3" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x 
     )\n\
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
-JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat)) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
     let reuse_reusable db  callback =
@@ -301,7 +301,7 @@ JOIN categories c ON inner_cte.category_id = c.id") ~name:"reuseme" ~kind:Sqlgg_
 SELECT inner_cte.*, c.name AS category_name\n\
 FROM inner_cte\n\
 JOIN categories c ON inner_cte.category_id = c.id)\n\
-SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+SELECT * FROM outer_cte") ~name:"reuse_reusable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

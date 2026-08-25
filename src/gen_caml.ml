@@ -284,8 +284,12 @@ let query_expr ~sql index stmt =
     | Stmt.Other -> "Sqlgg_traits.Query.Other"
   in
   let name = choose_name stmt.Gen.props stmt.Gen.kind index |> String.uncapitalize_ascii in
-  sprintf "(Sqlgg_traits.Query.make ~sql:%s ~name:%s ~kind:%s)"
-    sql (quote name) kind
+  let filename =
+    "file" |> Props.get stmt.Gen.props |>
+    Option.map_default (fun file -> sprintf "~filename:%s " (quote file)) ""
+  in
+  sprintf "(Sqlgg_traits.Query.make %s~sql:%s ~name:%s ~kind:%s ())"
+    filename sql (quote name) kind
 
 let is_single_row_select stmt =
   match stmt.Gen.kind, stmt.Gen.schema with

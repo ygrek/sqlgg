@@ -42,7 +42,7 @@ PostgreSQL parameter numbering in reusable queries, distinct parameters:
   SELECT *\n\
   FROM \"user\"\n\
   JOIN person ON person.user_id = \"user\".id\n\
-  WHERE \"user\".id > $2") ~name:"get_users" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  WHERE \"user\".id > $2") ~name:"get_users" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
 PostgreSQL parameter numbering in reusable queries, shared parameter:
 
@@ -98,7 +98,7 @@ PostgreSQL parameter numbering in reusable queries, shared parameter:
   JOIN person ON person.user_id = \"user\".id\n\
   WHERE\n\
     username LIKE $3\n\
-    AND \"user\".id > $4") ~name:"get_users" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+    AND \"user\".id > $4") ~name:"get_users" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
 PostgreSQL parameter numbering with two reusable queries in one outer query:
 
@@ -138,7 +138,7 @@ PostgreSQL parameter numbering with two reusable queries in one outer query:
       T.select db (Sqlgg_traits.Query.make ~sql:("WITH p AS (SELECT * FROM person WHERE name LIKE $1), a AS (SELECT * FROM \"user\" WHERE username LIKE $2)\n\
   SELECT p.id, a.username\n\
   FROM p JOIN a ON a.id = p.user_id\n\
-  WHERE p.id > $3") ~name:"two_ctes" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  WHERE p.id > $3") ~name:"two_ctes" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
 PostgreSQL parameter numbering with reusable queries threaded into each other:
 
@@ -173,4 +173,4 @@ PostgreSQL parameter numbering with reusable queries threaded into each other:
       in
       T.select db (Sqlgg_traits.Query.make ~sql:("WITH p AS (WITH inner_p AS (SELECT * FROM person WHERE name LIKE $1)\n\
   SELECT * FROM inner_p WHERE inner_p.id > $2)\n\
-  SELECT * FROM p WHERE p.user_id > $3") ~name:"outer_q" ~kind:Sqlgg_traits.Query.(Select Nat)) set_params invoke_callback
+  SELECT * FROM p WHERE p.user_id > $3") ~name:"outer_q" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback

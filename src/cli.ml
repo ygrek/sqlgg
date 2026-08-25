@@ -87,10 +87,15 @@ let parse_output s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
+let stamp_source filename stmts =
+  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.set stmt.props "file" filename }) stmts
+
 (* parse always runs for its schema-registration side effects, even in -gen none *)
 let read_statements = function
   | "-" -> Main.get_statements stdin
-  | filename -> Main.with_channel filename (Option.map_default Main.get_statements [])
+  | filename ->
+    Main.with_channel filename (Option.map_default Main.get_statements [])
+    |> stamp_source (Filename.basename filename)
 
 let filter_stmts ~output stmts =
   match output with

@@ -61,7 +61,7 @@ Full generated code:
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -75,7 +75,7 @@ Full generated code:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -92,7 +92,7 @@ Full generated code:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT * FROM (SELECT " ^ col.column ^ " FROM products WHERE price > ?) AS sub") ~name:"products_dyn" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -135,7 +135,7 @@ Full generated code:
           T.finish_params p
         in
         T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col)
   
@@ -149,7 +149,7 @@ Full generated code:
           in
           let r_acc = ref acc in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
             __sqlgg_r_col !r_acc)))
           (fun () -> IO.return !r_acc)
@@ -166,7 +166,7 @@ Full generated code:
           in
           let r_acc = ref [] in
           IO.(>>=) (T.select db
-          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat))
+          (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM (SELECT id, name, price FROM products) AS sub WHERE sub.id = ?") ~name:"cols_over_subq" ~kind:Sqlgg_traits.Query.(Select Nat) ())
           set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
           (fun () -> IO.return (List.rev !r_acc))
   
@@ -176,7 +176,7 @@ Full generated code:
   
   
     let create_products db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products")) T.no_params
+      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ()) T.no_params
   
     module Fold = struct
     end (* module Fold *)
