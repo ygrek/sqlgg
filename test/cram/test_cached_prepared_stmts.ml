@@ -27,7 +27,7 @@ module Small_Cache = Sqlgg_stmt_cache.Make(Small_Cache_Config)(Print_impl)
 module Medium_Cache = Sqlgg_stmt_cache.Make(Medium_Cache_Config)(Print_impl)
 module Large_Cache = Sqlgg_stmt_cache.Make(Large_Cache_Config)(Print_impl)
 
-let q sql = Sqlgg_traits.Query.make ~sql ~name:"test" ~kind:Sqlgg_traits.Query.(Select Nat)
+let q sql = Sqlgg_traits.Query.make ~sql ~name:"test" ~kind:Sqlgg_traits.Query.(Select Nat) ()
 
 let setup_mock_responses n =
   for i = 1 to n do

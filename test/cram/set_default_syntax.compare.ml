@@ -8,7 +8,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   `user_message` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT(''),\n\
   `grant_types` varchar(80) COLLATE utf8_bin NOT NULL DEFAULT 'implicit authorization_code',\n\
   PRIMARY KEY (`id`)\n\
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") ~name:"create_registration_feedbacks" ~kind:Sqlgg_traits.Query.(Create "registration_feedbacks")) T.no_params
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin") ~name:"create_registration_feedbacks" ~kind:Sqlgg_traits.Query.(Create "registration_feedbacks") ()) T.no_params
 
   let insert_registration_feedbacks_1 db ~user_message ~grant_types =
     let set_params stmt =
@@ -23,6 +23,6 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO `registration_feedbacks`\n\
 SET\n\
   `user_message` = " ^ (match user_message with Some _ -> " ( " ^ " CONCAT(" ^ "?" ^ ", '22222') " ^ " ) " | None -> " DEFAULT ") ^ ",\n\
-  `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> " ('2') " | `B -> " ('2') ") ^ " " ^ " ) " | None -> " DEFAULT ")) ~name:"insert_registration_feedbacks_1" ~kind:Sqlgg_traits.Query.(Insert "registration_feedbacks")) set_params
+  `grant_types` = " ^ (match grant_types with Some (grant_types) -> " ( " ^ " " ^ (match grant_types with `A -> " ('2') " | `B -> " ('2') ") ^ " " ^ " ) " | None -> " DEFAULT ")) ~name:"insert_registration_feedbacks_1" ~kind:Sqlgg_traits.Query.(Insert "registration_feedbacks") ()) set_params
 
 end (* module Sqlgg *)

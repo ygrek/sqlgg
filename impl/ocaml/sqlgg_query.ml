@@ -18,9 +18,10 @@ type t = {
   sql : string;
   name : string;
   kind : kind;
+  filename : string option;
 }
 
-let make ~sql ~name ~kind = { sql; name; kind }
+let make ?filename ~sql ~name ~kind () = { sql; name; kind; filename }
 
 let append_comment q comment = { q with sql = q.sql ^ " " ^ comment }
 

@@ -3,7 +3,7 @@ url encoded, pairs are sorted, and an empty list leaves the query untouched.
 Only [sql] changes, so [name] and [kind] stay usable after annotating.
 
   $ cat > sqlcommenter_test.ml <<'EOF'
-  > let q = Sqlgg_traits.Query.make ~sql:"SELECT id FROM users WHERE id = ?" ~name:"find_user" ~kind:Sqlgg_traits.Query.(Select Nat)
+  > let q = Sqlgg_traits.Query.make ~sql:"SELECT id FROM users WHERE id = ?" ~name:"find_user" ~kind:Sqlgg_traits.Query.(Select Nat) ()
   > let show (q : Sqlgg_traits.Query.t) = Printf.printf "name=%s sql=%s\n" q.name q.sql
   > let () =
   >   show q;
@@ -32,12 +32,12 @@ behind the metadata is rejected, so the only way to change it is a helper.
   [2]
 
   $ cat > forge.ml <<'EOF'
-  > let evil () = { Sqlgg_traits.Query.sql = "DROP TABLE users"; name = "find_user"; kind = Sqlgg_traits.Query.Other }
+  > let evil () = { Sqlgg_traits.Query.sql = "DROP TABLE users"; name = "find_user"; kind = Sqlgg_traits.Query.Other; filename = None }
   > EOF
   $ ocamlfind ocamlc -package sqlgg.traits -c forge.ml
-  File "forge.ml", line 1, characters 14-114:
-  1 | let evil () = { Sqlgg_traits.Query.sql = "DROP TABLE users"; name = "find_user"; kind = Sqlgg_traits.Query.Other }
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "forge.ml", line 1, characters 14-131:
+  1 | let evil () = { Sqlgg_traits.Query.sql = "DROP TABLE users"; name = "find_user"; kind = Sqlgg_traits.Query.Other; filename = None }
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   Error: Cannot create values of the private type Sqlgg_traits.Query.t
   [2]
 
@@ -77,7 +77,7 @@ Annotating twice appends a second comment instead of replacing the first, so a
 query that is already annotated should not be handed to another annotator.
 
   $ cat > twice.ml <<'EOF'
-  > let q = Sqlgg_traits.Query.make ~sql:"SELECT 1" ~name:"one" ~kind:Sqlgg_traits.Query.(Select One)
+  > let q = Sqlgg_traits.Query.make ~sql:"SELECT 1" ~name:"one" ~kind:Sqlgg_traits.Query.(Select One) ()
   > let () =
   >   let q = Sqlgg_traits.Query.Sqlcommenter.annotate [ "a", "1" ] q in
   >   let q = Sqlgg_traits.Query.Sqlcommenter.annotate [ "b", "2" ] q in
