@@ -38,7 +38,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -54,7 +54,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:S
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -73,7 +73,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:S
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -118,7 +118,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:S
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ " AND name = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -134,7 +134,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ " AND name = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -153,7 +153,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ^ " AND name = ?)\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -201,7 +201,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_in_list" ~kind
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -220,7 +220,7 @@ SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " (
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -242,7 +242,7 @@ SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " (
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ByStatus _ -> " ( status = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"cte_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -290,7 +290,7 @@ SELECT " ^ col.column ^ " FROM filtered ORDER BY " ^ ((match sort with `I -> " (
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match st with Some _ -> " ( " ^ " status = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -309,7 +309,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALS
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match st with Some _ -> " ( " ^ " status = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -331,7 +331,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALS
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match st with Some _ -> " ( " ^ " status = " ^ "?" ^ " " ^ " ) " | None -> " TRUE ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")"))) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALSE" | _ :: _ -> "(id, name) IN " ^ "(" ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (pairs_0n, pairs_1n) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match pairs_0n with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match pairs_1n with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') pairs; Buffer.contents _sqlgg_b) ^ ")")) ()) ~name:"cte_opt_filter" ~kind:Sqlgg_traits.Query.(Select Nat))
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -384,7 +384,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match pairs with [] -> "FALS
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -408,7 +408,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -435,7 +435,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH filtered AS (SELECT id, name FROM t WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) ")) ^ ")\n\
-SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRUE ) " | `ById _ -> " ( id = ? ) "))) ~name:"cte_shared_choice" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -492,7 +492,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("WITH recent AS (SELECT id, name, status FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -507,7 +507,7 @@ SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH recent AS (SELECT id, name, status FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -525,7 +525,7 @@ SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("WITH recent AS (SELECT id, name, status FROM t WHERE status = ?)\n\
-SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat))
+SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -569,7 +569,7 @@ SELECT " ^ col.column ^ " FROM recent") ~name:"cte_param_col" ~kind:Sqlgg_traits
       in
       T.select db
       (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
-WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -584,7 +584,7 @@ WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> 
         let r_acc = ref acc in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
-WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -602,7 +602,7 @@ WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> 
         let r_acc = ref [] in
         IO.(>>=) (T.select db
         (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM t\n\
-WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat))
+WHERE id IN (SELECT id FROM t WHERE status = ? AND " ^ ((match names with [] -> "FALSE" | _ :: _ -> "name IN " ^  "(" ^ String.concat ", " (List.map T.Types.Text.to_literal names) ^ ")")) ^ ")") ~name:"where_subquery" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 

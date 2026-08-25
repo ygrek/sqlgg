@@ -19,10 +19,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~name:(sqlgg__c_name :
-              (string option, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                Sqlgg_scope.col)
-      =
+       ~name:(sqlgg__c_name :
+               (string option, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                 Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_name = sqlgg__c_name in
@@ -68,10 +68,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~productName:(sqlgg__c_productName :
-                     (string option, 'sqlgg__brand, 'sqlgg__row,
-                       'sqlgg__params) Sqlgg_scope.col)
-      =
+       ~productName:(sqlgg__c_productName :
+                      (string option, 'sqlgg__brand, 'sqlgg__row,
+                        'sqlgg__params) Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_productName = sqlgg__c_productName in
@@ -115,10 +115,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~also_id:(sqlgg__c_also_id :
-                 (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                   Sqlgg_scope.col)
-      =
+       ~also_id:(sqlgg__c_also_id :
+                  (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                    Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_also_id = sqlgg__c_also_id in
@@ -153,10 +153,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~reply_count:(sqlgg__c_reply_count :
-                     (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                       Sqlgg_scope.col)
-      =
+       ~reply_count:(sqlgg__c_reply_count :
+                      (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                        Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_reply_count = sqlgg__c_reply_count in
@@ -191,10 +191,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~reply_count:(sqlgg__c_reply_count :
-                     (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                       Sqlgg_scope.col)
-      =
+       ~reply_count:(sqlgg__c_reply_count :
+                      (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                        Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_reply_count = sqlgg__c_reply_count in
@@ -202,7 +202,7 @@ include
            deferred) : (deferred, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
                          Sqlgg_scope.col)
     let _ = deferred_of_cols_gen
-    let deferred_of_cols ~reply_count:sqlgg__conv_reply_count
+    let deferred_of_cols ~reply_count:sqlgg__conv_reply_count 
       (sqlgg__cols :
         <
           id: (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
@@ -233,10 +233,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~reply_count:(sqlgg__c_reply_count :
-                     (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                       Sqlgg_scope.col)
-      =
+       ~reply_count:(sqlgg__c_reply_count :
+                      (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                        Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_reply_count = sqlgg__c_reply_count in
@@ -246,7 +246,7 @@ include
                                       Sqlgg_scope.col)
     let _ = deferred_with_default_of_cols_gen
     let deferred_with_default_of_cols ?reply_count:(sqlgg__conv_reply_count=
-      Int64.to_int)
+      Int64.to_int) 
       (sqlgg__cols :
         <
           id: (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
@@ -289,10 +289,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~hits:(sqlgg__c_hits :
-              (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                Sqlgg_scope.col)
-      =
+       ~hits:(sqlgg__c_hits :
+               (int, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                 Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_hits = sqlgg__c_hits in
@@ -338,10 +338,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~name:(sqlgg__c_name :
-              (string, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                Sqlgg_scope.col)
-      =
+       ~name:(sqlgg__c_name :
+               (string, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                 Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_name = sqlgg__c_name in
@@ -388,10 +388,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~product:(sqlgg__c_product :
-                 (product, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                   Sqlgg_scope.col)
-      =
+       ~product:(sqlgg__c_product :
+                  (product, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                    Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_product = sqlgg__c_product in
@@ -436,10 +436,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~channel:(sqlgg__c_channel :
-                 (Feed.channel, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                   Sqlgg_scope.col)
-      =
+       ~channel:(sqlgg__c_channel :
+                  (Feed.channel, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                    Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_channel = sqlgg__c_channel in
@@ -483,10 +483,10 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      ~label:(sqlgg__c_label :
-               (string, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
-                 Sqlgg_scope.col)
-      =
+       ~label:(sqlgg__c_label :
+                (string, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
+                  Sqlgg_scope.col)
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
          and+ sqlgg__v_label = sqlgg__c_label in

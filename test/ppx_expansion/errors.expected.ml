@@ -13,7 +13,7 @@ include
       ~id:(sqlgg__c_id :
             (int64, 'sqlgg__brand, 'sqlgg__row, 'sqlgg__params)
               Sqlgg_scope.col)
-      =
+       =
       (let open Sqlgg_scope in
          let+ sqlgg__v_id = sqlgg__c_id
           in ({ id = sqlgg__v_id } : product) : (product, 'sqlgg__brand,

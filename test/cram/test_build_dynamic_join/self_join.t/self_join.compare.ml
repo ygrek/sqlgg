@@ -35,7 +35,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat))
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -48,7 +48,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -64,7 +64,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1 LEFT JOIN users u2 ON u2.manager_id = u1.id") ~name:"bad" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
@@ -106,7 +106,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         T.finish_params p
       in
       T.select db
-      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat))
+      (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat) ())
       set_params (fun row -> let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col)
 
@@ -119,7 +119,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref acc in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in callback
           __sqlgg_r_col !r_acc)))
         (fun () -> IO.return !r_acc)
@@ -135,7 +135,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
         in
         let r_acc = ref [] in
         IO.(>>=) (T.select db
-        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat))
+        (Sqlgg_traits.Query.make ~sql:("SELECT " ^ col.column ^ " FROM users u1" ^ (if List.mem Users col.deps then " LEFT JOIN users u2 ON u2.id = u1.manager_id" else "")) ~name:"good" ~kind:Sqlgg_traits.Query.(Select Nat) ())
         set_params (fun row -> r_acc := (let (__sqlgg_r_col, __sqlgg_idx_after_col) = col.read row 0 in (__sqlgg_r_col)) :: !r_acc))
         (fun () -> IO.return (List.rev !r_acc))
 
