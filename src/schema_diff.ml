@@ -131,6 +131,8 @@ let action_of : Sql.alter_action -> Name.action = function
   | `Default_or_convert_to _ -> action "set_charset"
   | `TtlOptions _ -> action "set_ttl"
   | `RemoveTtl _ -> action "remove_ttl"
+  | `Cache _ -> action "cache"
+  | `NoCache _ -> action "nocache"
   | `AlterColumnPG (col, _) -> action_on "alter_col" col
 
 let diff_columns ~from_ ~to_ =

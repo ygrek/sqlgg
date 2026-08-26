@@ -1678,7 +1678,7 @@ let rec eval (stmt:Sql.stmt) =
         Tables.index_drop name ~index_name
       | `RenameIndex (old_name, new_name) ->
         Tables.index_rename name ~old_name ~new_name
-      | `AddConstraint _ | `DropConstraint _ -> ()
+      | `AddConstraint _ | `DropConstraint _ | `Cache _ | `NoCache _ -> ()
       | `TtlOptions (opts, _) ->
         let expr, enabled =
           List.fold_left (fun (expr, enabled) -> function

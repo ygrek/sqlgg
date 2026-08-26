@@ -42,6 +42,7 @@ let keywords =
    "binary",BINARY;
    "by",BY;
    "bytea",BINARY;
+   "cache",CACHE;
    "cascade",CASCADE;
    "case", CASE;
    "cast", CAST;
@@ -125,6 +126,7 @@ let keywords =
    "national",NATIONAL;
    "natural",NATURAL;
    "no", NO;
+   "nocache",NOCACHE;
    "not",NOT;
    "nothing", NOTHING;
    "nowait", NOWAIT;

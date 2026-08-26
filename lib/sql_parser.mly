@@ -44,7 +44,7 @@
        FIRST_VALUE LAST_VALUE NTH_VALUE PARTITION ROWS RANGE UNBOUNDED PRECEDING FOLLOWING CURRENT ROW
        CAST GENERATED ALWAYS VIRTUAL STORED STATEMENT DOUBLECOLON QSTN TWO_QSTN INSTANT INPLACE COPY ALGORITHM RECURSIVE
        SHARED EXCLUSIVE NONE
-       TTL TTL_ENABLE REMOVE
+       TTL TTL_ENABLE REMOVE CACHE NOCACHE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
@@ -389,6 +389,8 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | ALTER COLUMN? col=ident spec=located(alter_column_pg_spec) { `AlterColumnPG (col, spec) }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
+            | CACHE { `Cache ($startofs, $endofs) }
+            | NOCACHE { `NoCache ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }
 
 (* clauses sqlgg parses but does not act on: kept out of the action list *)

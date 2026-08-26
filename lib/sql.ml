@@ -1015,6 +1015,8 @@ type alter_action = [
     | `Default_or_convert_to of (charset_name * string located option)
     | `TtlOptions of ttl_option list * pos
     | `RemoveTtl of pos
+    | `Cache of pos
+    | `NoCache of pos
     | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
 
 type create_type_target =
