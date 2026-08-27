@@ -3,19 +3,19 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_categories db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE categories (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE categories (\n\
     id SERIAL PRIMARY KEY,\n\
     name VARCHAR(255) NOT NULL\n\
-)") ~name:"create_categories" ~kind:Sqlgg_traits.Query.(Create "categories") ()) T.no_params
+)") ~name:"create_categories" ~kind:Sqlgg_traits.Query.(Create "categories") ())
 
   let create_products db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (\n\
     id SERIAL PRIMARY KEY,\n\
     name VARCHAR(255) NOT NULL,\n\
     category_id INTEGER,\n\
     price NUMERIC(10, 2) NOT NULL,\n\
     FOREIGN KEY (category_id) REFERENCES categories(id)\n\
-)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ()) T.no_params
+)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ())
 
   let test2 db ~five ~param ~test ~test2 ~test5 callback =
     let invoke_callback stmt =

@@ -643,6 +643,14 @@ let output_params_binder _ vars =
   | [] -> "T.no_params"
   | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri set_var vars)
 
+let rec has_bound_params vars =
+  List.exists (function
+    | Sql.Single _ -> true
+    | v -> has_bound_params (Sql.sub_vars v)) vars
+
+let can_execute_unprepared stmt =
+  stmt.Gen.schema = [] && not (has_bound_params stmt.Gen.vars)
+
 
 let make_to_literal meta typ =
   match resolve_codec codec_set_param typ meta with
@@ -976,7 +984,8 @@ let generate_stmt ~module_kind index stmt =
       | (`Direct | `Fold | `List), Stmt.Select (`Zero_one | `One) -> output_select1_cb index stmt.schema
       | _ -> output_schema_binder_labeled index stmt.schema
   in
-  let params_binder_name = output_params_binder index stmt.vars in
+  let unprepared = can_execute_unprepared stmt in
+  let params_binder_name = if unprepared then "" else output_params_binder index stmt.vars in
   c.c_init ();
   let callback =
     c.c_callback
@@ -985,7 +994,12 @@ let generate_stmt ~module_kind index stmt =
       ~list:(sprintf "(fun x -> r_acc := %s x :: !r_acc)" callback)
   in
   let (bind, bind_end) = c.c_bind in
-  let exec = sprintf "T.%s db %s %s %s%s" func (query_expr ~sql index stmt) params_binder_name callback bind_end in
+  let exec =
+    if unprepared then
+      sprintf "T.execute_unprepared db %s%s" (query_expr ~sql index stmt) bind_end
+    else
+      sprintf "T.%s db %s %s %s%s" func (query_expr ~sql index stmt) params_binder_name callback bind_end
+  in
   let exec =
     match
       List.find_map

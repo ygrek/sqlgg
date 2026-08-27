@@ -703,10 +703,10 @@ ORDER BY " ^ ((match sort with `I -> " ( id ) " | `N -> " ( name ) "))) ~name:"k
 
 
   let create_t db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t (\n\
     id INT,\n\
     name TEXT\n\
-)") ~name:"create_t" ~kind:Sqlgg_traits.Query.(Create "t") ()) T.no_params
+)") ~name:"create_t" ~kind:Sqlgg_traits.Query.(Create "t") ())
 
   module Fold = struct
   end (* module Fold *)

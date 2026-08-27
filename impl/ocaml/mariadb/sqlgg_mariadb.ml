@@ -586,6 +586,17 @@ let select_one db q set_params convert =
 let execute db q set_params =
   with_stmt db q (fun stmt -> execute_with_stmt stmt set_params)
 
+let execute_unprepared db (q : Sqlgg_traits.Query.t) =
+  let open IO in
+  M.exec db q.sql >>=
+  check >>= fun (res : M.exec_result) ->
+  let insert_id =
+    match res.M.insert_id with
+    | 0 -> None
+    | x -> Some (Int64.of_int x)
+  in
+  return { affected_rows = Int64.of_int res.M.affected_rows; insert_id }
+
 let prepare db sql =
   let open IO in
   M.prepare db sql >>=

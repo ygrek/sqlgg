@@ -164,31 +164,31 @@ WHERE u.org_id = ? AND u.deleted = FALSE") ~name:"user_info" ~kind:Sqlgg_traits.
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (\n\
   id INT PRIMARY KEY,\n\
   org_id INT NOT NULL,\n\
   name TEXT NOT NULL,\n\
   email TEXT NOT NULL,\n\
   created_at TIMESTAMP NOT NULL,\n\
   deleted BOOLEAN NOT NULL\n\
-)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let create_profiles db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (\n\
   user_id INT PRIMARY KEY,\n\
   bio TEXT,\n\
   avatar_url TEXT,\n\
   location TEXT,\n\
   website TEXT\n\
-)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ()) T.no_params
+)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ())
 
   let create_billing db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE billing (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE billing (\n\
   user_id INT PRIMARY KEY,\n\
   plan TEXT NOT NULL,\n\
   paid_until DATETIME,\n\
   balance INT NOT NULL\n\
-)") ~name:"create_billing" ~kind:Sqlgg_traits.Query.(Create "billing") ()) T.no_params
+)") ~name:"create_billing" ~kind:Sqlgg_traits.Query.(Create "billing") ())
 
   module Fold = struct
   end (* module Fold *)

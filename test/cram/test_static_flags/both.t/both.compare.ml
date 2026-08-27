@@ -77,7 +77,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT NOT NULL, name TEXT NULL)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT NOT NULL, name TEXT NULL)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let get_user_static db ~id callback =
     let invoke_callback stmt =

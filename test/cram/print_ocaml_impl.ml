@@ -462,6 +462,9 @@ let execute (db : [> `WR ] connection) (q : Sqlgg_traits.Query.t) (set_params : 
     { affected_rows; insert_id }
   | _ -> failwith "Expected MockExecute response"
 
+let execute_unprepared (db : [> `WR ] connection) (q : Sqlgg_traits.Query.t) : execute_response =
+  execute db q no_params
+
 let select_one_maybe (db : [> `RO ] connection) (q : Sqlgg_traits.Query.t) (set_params : statement -> result) (convert : row -> 'a) : 'a option =
   printf "[MOCK SELECT_ONE_MAYBE] Connection type: [> `RO ]\n";
   let stmt = (q.Sqlgg_traits.Query.sql, 0) in

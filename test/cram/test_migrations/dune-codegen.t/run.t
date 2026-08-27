@@ -35,16 +35,16 @@ current, so -migrate only regenerates and prints the human note to stderr:
     module IO = T.IO
   
     let apply_alter_users_0 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users ADD COLUMN bio TEXT") ~name:"apply_alter_users_0" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users ADD COLUMN bio TEXT") ~name:"apply_alter_users_0" ~kind:Sqlgg_traits.Query.Other ())
   
     let revert_alter_users_0 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users DROP COLUMN bio") ~name:"revert_alter_users_0" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE users DROP COLUMN bio") ~name:"revert_alter_users_0" ~kind:Sqlgg_traits.Query.Other ())
   
     let apply_20260101000000_alter_users_add_col_age db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") ~name:"apply_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL") ~name:"apply_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other ())
   
     let revert_20260101000000_alter_users_add_col_age db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` DROP COLUMN `age`") ~name:"revert_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `users` DROP COLUMN `age`") ~name:"revert_20260101000000_alter_users_add_col_age" ~kind:Sqlgg_traits.Query.Other ())
   
     let migrations = [
       ("alter_users_0", apply_alter_users_0, revert_alter_users_0);

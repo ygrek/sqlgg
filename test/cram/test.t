@@ -919,7 +919,7 @@ Test Single style for SELECT 1/0..1 and hide empty modules:
     module IO = Sqlgg_io.Blocking
   
     let create_test20250902 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT)") ~name:"create_test20250902" ~kind:Sqlgg_traits.Query.(Create "test20250902") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test20250902 (id INT PRIMARY KEY, name TEXT)") ~name:"create_test20250902" ~kind:Sqlgg_traits.Query.(Create "test20250902") ())
   
     let select_1 db  =
       let get_row stmt =
@@ -969,11 +969,11 @@ Test non_nullifiable when update:
     module IO = Sqlgg_io.Blocking
   
     let create_non_nullifiable db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE non_nullifiable (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE non_nullifiable (\n\
       name TEXT,\n\
           updated_at DATETIME NULL,\n\
       updated_at_not_nullable DATETIME NOT NULL\n\
-  )") ~name:"create_non_nullifiable" ~kind:Sqlgg_traits.Query.(Create "non_nullifiable") ()) T.no_params
+  )") ~name:"create_non_nullifiable" ~kind:Sqlgg_traits.Query.(Create "non_nullifiable") ())
   
     let update_non_nullifiable_1 db ~updated_at =
       let set_params stmt =
@@ -1067,14 +1067,14 @@ Test non_nullifiable with multi-row INSERT (NULL allowed on insert):
     module IO = Sqlgg_io.Blocking
   
     let create_nn_insert_multi db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_insert_multi (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_insert_multi (\n\
       id INT PRIMARY KEY,\n\
       name TEXT,\n\
           published_at DATETIME\n\
-  )") ~name:"create_nn_insert_multi" ~kind:Sqlgg_traits.Query.(Create "nn_insert_multi") ()) T.no_params
+  )") ~name:"create_nn_insert_multi" ~kind:Sqlgg_traits.Query.(Create "nn_insert_multi") ())
   
     let insert_nn_insert_multi_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL)") ~name:"insert_nn_insert_multi_1" ~kind:Sqlgg_traits.Query.(Insert "nn_insert_multi") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_insert_multi (id, name, published_at) VALUES (1, 'a', NULL), (2, 'b', NULL)") ~name:"insert_nn_insert_multi_1" ~kind:Sqlgg_traits.Query.(Insert "nn_insert_multi") ())
   
   end (* module Sqlgg *)
 
@@ -1121,11 +1121,11 @@ Test non_nullifiable with INSERT ... ON DUPLICATE KEY UPDATE (values nullable, N
     module IO = Sqlgg_io.Blocking
   
     let create_nn_upsert db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_upsert (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_upsert (\n\
       id INT PRIMARY KEY,\n\
           column1 INT NULL,\n\
           column2 VARCHAR(255) NULL\n\
-  )") ~name:"create_nn_upsert" ~kind:Sqlgg_traits.Query.(Create "nn_upsert") ()) T.no_params
+  )") ~name:"create_nn_upsert" ~kind:Sqlgg_traits.Query.(Create "nn_upsert") ())
   
     let insert_nn_upsert_1 db ~v1 ~v2 =
       let set_params stmt =
@@ -1162,20 +1162,20 @@ Test non_nullifiable with INSERT ... SELECT (source may produce NULLs):
     module IO = Sqlgg_io.Blocking
   
     let create_nn_src db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_src (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_src (\n\
       id INT PRIMARY KEY,\n\
       ts DATETIME\n\
-  )") ~name:"create_nn_src" ~kind:Sqlgg_traits.Query.(Create "nn_src") ()) T.no_params
+  )") ~name:"create_nn_src" ~kind:Sqlgg_traits.Query.(Create "nn_src") ())
   
     let create_nn_dst db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_dst (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_dst (\n\
       id INT PRIMARY KEY,\n\
           published_at DATETIME\n\
-  )") ~name:"create_nn_dst" ~kind:Sqlgg_traits.Query.(Create "nn_dst") ()) T.no_params
+  )") ~name:"create_nn_dst" ~kind:Sqlgg_traits.Query.(Create "nn_dst") ())
   
     let insert_nn_dst_2 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_dst (id, published_at)\n\
-  SELECT id, ts FROM nn_src") ~name:"insert_nn_dst_2" ~kind:Sqlgg_traits.Query.(Insert "nn_dst") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_dst (id, published_at)\n\
+  SELECT id, ts FROM nn_src") ~name:"insert_nn_dst_2" ~kind:Sqlgg_traits.Query.(Insert "nn_dst") ())
   
   end (* module Sqlgg *)
 
@@ -1194,14 +1194,14 @@ Test INSERT (.. ) VALUES @rows with non_nullifiable column (NULL allowed on inse
     module IO = Sqlgg_io.Blocking
   
     let create_nn_insert_param db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_insert_param (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE nn_insert_param (\n\
       id INT PRIMARY KEY,\n\
       name TEXT,\n\
           published_at DATETIME\n\
-  )") ~name:"create_nn_insert_param" ~kind:Sqlgg_traits.Query.(Create "nn_insert_param") ()) T.no_params
+  )") ~name:"create_nn_insert_param" ~kind:Sqlgg_traits.Query.(Create "nn_insert_param") ())
   
     let insert_nn_insert_param_1 db ~rows =
-      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_insert_param (id, name, published_at) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name, published_at) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match name with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match published_at with None -> "NULL" | Some v -> T.Types.Datetime.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"insert_nn_insert_param_1" ~kind:Sqlgg_traits.Query.(Insert "nn_insert_param") ()) T.no_params )
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO nn_insert_param (id, name, published_at) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name, published_at) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match name with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match published_at with None -> "NULL" | Some v -> T.Types.Datetime.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"insert_nn_insert_param_1" ~kind:Sqlgg_traits.Query.(Insert "nn_insert_param") ()))
   
   end (* module Sqlgg *)
 
@@ -1215,10 +1215,10 @@ Test INSERT (..) VALUES @rows with columns whose names are OCaml keywords (must 
     module IO = Sqlgg_io.Blocking
   
     let create_kw_rows db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE kw_rows (type INTEGER, val TEXT)") ~name:"create_kw_rows" ~kind:Sqlgg_traits.Query.(Create "kw_rows") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE kw_rows (type INTEGER, val TEXT)") ~name:"create_kw_rows" ~kind:Sqlgg_traits.Query.(Create "kw_rows") ())
   
     let insert_kw_rows_1 db ~rows =
-      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO kw_rows (type, val) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (type_, val_) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match type_ with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match val_ with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"insert_kw_rows_1" ~kind:Sqlgg_traits.Query.(Insert "kw_rows") ()) T.no_params )
+      ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO kw_rows (type, val) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (type_, val_) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (match type_ with None -> "NULL" | Some v -> T.Types.Int.to_literal v); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (match val_ with None -> "NULL" | Some v -> T.Types.Text.to_literal v); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"insert_kw_rows_1" ~kind:Sqlgg_traits.Query.(Insert "kw_rows") ()))
   
   end (* module Sqlgg *)
 
@@ -1352,10 +1352,10 @@ order by and limit are supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let update_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None) ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("UPDATE test t SET t.column_a = 'value' ORDER BY t.id DESC LIMIT 10") ~name:"update_1" ~kind:Sqlgg_traits.Query.(Update None) ())
   
   end (* module Sqlgg *)
 
@@ -1369,7 +1369,7 @@ parametrized order by and limit are supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let update_1 db ~order ~direction ~limit =
       let set_params stmt =
@@ -1391,7 +1391,7 @@ limit is supported with update stmt + table alias:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let update_1 db ~limit =
       let set_params stmt =
@@ -1414,10 +1414,10 @@ order by and limit are supported with update stmt + table alias + join:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT PRIMARY KEY, column_a TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let create_test2 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL)") ~name:"create_test2" ~kind:Sqlgg_traits.Query.(Create "test2") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test2 (id INT PRIMARY KEY, column_a TEXT, test_id INT NOT NULL)") ~name:"create_test2" ~kind:Sqlgg_traits.Query.(Create "test2") ())
   
     let update_2 db ~value ~order ~direction ~limit =
       let set_params stmt =
@@ -1467,18 +1467,18 @@ Test GROUP_CONCAT with ORDER BY expressions and join:
     module IO = Sqlgg_io.Blocking
   
     let create_table_1_2025_09_26 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_1_2025_09_26 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_1_2025_09_26 (\n\
       id INT PRIMARY KEY AUTO_INCREMENT,\n\
       date_1 DATE,\n\
       table_no INT\n\
-  )") ~name:"create_table_1_2025_09_26" ~kind:Sqlgg_traits.Query.(Create "table_1_2025_09_26") ()) T.no_params
+  )") ~name:"create_table_1_2025_09_26" ~kind:Sqlgg_traits.Query.(Create "table_1_2025_09_26") ())
   
     let create_table_2_2025_09_26 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_2_2025_09_26 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_2_2025_09_26 (\n\
       id INT PRIMARY KEY AUTO_INCREMENT,\n\
       date_2 DATE,\n\
       table_no INT\n\
-  )") ~name:"create_table_2_2025_09_26" ~kind:Sqlgg_traits.Query.(Create "table_2_2025_09_26") ()) T.no_params
+  )") ~name:"create_table_2_2025_09_26" ~kind:Sqlgg_traits.Query.(Create "table_2_2025_09_26") ())
   
     let select_2 db ~order_kind ~par callback =
       let invoke_callback stmt =
@@ -1605,9 +1605,9 @@ INSERT ... SELECT with UNION ALL and enum meta propagation (short):
     module IO = Sqlgg_io.Blocking
   
     let create_t_enum_union db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_union (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_union (\n\
       pending_type ENUM('downgrade','upgrade') NOT NULL\n\
-  )") ~name:"create_t_enum_union" ~kind:Sqlgg_traits.Query.(Create "t_enum_union") ()) T.no_params
+  )") ~name:"create_t_enum_union" ~kind:Sqlgg_traits.Query.(Create "t_enum_union") ())
   
     let insert_t_enum_union_1 db ~p =
       let set_params stmt =
@@ -1644,9 +1644,9 @@ INSERT ... SELECT with meta propagation:
       end)
   
     let create_t_dst db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_dst (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_dst (\n\
     status ENUM('a','b') NOT NULL\n\
-  )") ~name:"create_t_dst" ~kind:Sqlgg_traits.Query.(Create "t_dst") ()) T.no_params
+  )") ~name:"create_t_dst" ~kind:Sqlgg_traits.Query.(Create "t_dst") ())
   
     let insert_t_dst_1 db ~s =
       let set_params stmt =
@@ -1717,7 +1717,7 @@ Test UINT64 mapping for UNSIGNED INT:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (id BIGINT UNSIGNED, v INT)") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (id BIGINT UNSIGNED, v INT)") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1783,10 +1783,10 @@ Test UINT64 mapping for UNSIGNED INT with mapping:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (\n\
    id BIGINT UNSIGNED,\n\
    v INT\n\
-  )") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ()) T.no_params
+  )") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1849,7 +1849,7 @@ Test UINT64 in type spec:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT)") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (id BIGINT UNSIGNED NOT NULL, v INT)") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ())
   
     let insert_t1_1 db ~id =
       let set_params stmt =
@@ -1893,7 +1893,7 @@ Enum generation without custom module (should generate open variants):
       end)
   
     let create_t_enum1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") ~name:"create_t_enum1" ~kind:Sqlgg_traits.Query.(Create "t_enum1") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") ~name:"create_t_enum1" ~kind:Sqlgg_traits.Query.(Create "t_enum1") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1944,7 +1944,7 @@ Enum generation without custom module (should generate open variants):
       end)
   
     let create_t_enum1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") ~name:"create_t_enum1" ~kind:Sqlgg_traits.Query.(Create "t_enum1") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum1 (status ENUM('a','b') NOT NULL)") ~name:"create_t_enum1" ~kind:Sqlgg_traits.Query.(Create "t_enum1") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -1993,9 +1993,9 @@ Enum generation with custom module (should not generate open variants, should us
     module IO = Sqlgg_io.Blocking
   
     let create_t_enum2 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum2 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum2 (\n\
       status ENUM('a','b') NOT NULL\n\
-  )") ~name:"create_t_enum2" ~kind:Sqlgg_traits.Query.(Create "t_enum2") ()) T.no_params
+  )") ~name:"create_t_enum2" ~kind:Sqlgg_traits.Query.(Create "t_enum2") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2043,9 +2043,9 @@ Enum generation with custom module (should not generate open variants, should us
     module IO = Sqlgg_io.Blocking
   
     let create_t_enum2 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum2 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum2 (\n\
       status ENUM('a','b') NOT NULL\n\
-  )") ~name:"create_t_enum2" ~kind:Sqlgg_traits.Query.(Create "t_enum2") ()) T.no_params
+  )") ~name:"create_t_enum2" ~kind:Sqlgg_traits.Query.(Create "t_enum2") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2102,10 +2102,10 @@ Enum mixed: one enum without module (generate 1 Enum_), one with module (skip):
       end)
   
     let create_t_enum_mix db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_mix (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_mix (\n\
     col_a ENUM('a','b') NOT NULL,\n\
       col_b ENUM('x','y') NOT NULL\n\
-  )") ~name:"create_t_enum_mix" ~kind:Sqlgg_traits.Query.(Create "t_enum_mix") ()) T.no_params
+  )") ~name:"create_t_enum_mix" ~kind:Sqlgg_traits.Query.(Create "t_enum_mix") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2155,9 +2155,9 @@ Enum only with custom module, including WHERE IN tuple param (should generate 0 
     module IO = Sqlgg_io.Blocking
   
     let create_t_enum_tuple db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_tuple (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t_enum_tuple (\n\
       col_b ENUM('x','y') NOT NULL\n\
-  )") ~name:"create_t_enum_tuple" ~kind:Sqlgg_traits.Query.(Create "t_enum_tuple") ()) T.no_params
+  )") ~name:"create_t_enum_tuple" ~kind:Sqlgg_traits.Query.(Create "t_enum_tuple") ())
   
     let select_1 db ~vals callback =
       let invoke_callback stmt =
@@ -2216,9 +2216,9 @@ Test meta propagation: IFNULL with ENUM column should propagate metadata to resu
     module IO = Sqlgg_io.Blocking
   
     let create_test_ifnull_enum db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_ifnull_enum (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_ifnull_enum (\n\
       priority ENUM('low','medium','high') NULL\n\
-  )") ~name:"create_test_ifnull_enum" ~kind:Sqlgg_traits.Query.(Create "test_ifnull_enum") ()) T.no_params
+  )") ~name:"create_test_ifnull_enum" ~kind:Sqlgg_traits.Query.(Create "test_ifnull_enum") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2265,9 +2265,9 @@ Test meta propagation: INSERT with Choices should propagate ENUM metadata to cho
     module IO = Sqlgg_io.Blocking
   
     let create_test_insert_choices db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_insert_choices (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_insert_choices (\n\
       status ENUM('pending','completed') NOT NULL\n\
-  )") ~name:"create_test_insert_choices" ~kind:Sqlgg_traits.Query.(Create "test_insert_choices") ()) T.no_params
+  )") ~name:"create_test_insert_choices" ~kind:Sqlgg_traits.Query.(Create "test_insert_choices") ())
   
     let insert_test_insert_choices_1 db ~x =
       let set_params stmt =
@@ -2324,10 +2324,10 @@ Test numeric literals and decimal types:
     module IO = Sqlgg_io.Blocking
   
     let create_shop_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE shop_items (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE shop_items (\n\
    id INT PRIMARY KEY,\n\
    pending_price DECIMAL(12,3)\n\
-  )") ~name:"create_shop_items" ~kind:Sqlgg_traits.Query.(Create "shop_items") ()) T.no_params
+  )") ~name:"create_shop_items" ~kind:Sqlgg_traits.Query.(Create "shop_items") ())
   
     let select_1 db ~pending_price callback =
       let invoke_callback stmt =
@@ -2392,10 +2392,10 @@ Test numeric literal to float:
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price FLOAT)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price FLOAT)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let insert_items_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.99)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.99)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ())
   
   end (* module Sqlgg *)
 
@@ -2409,10 +2409,10 @@ Test numeric literal to decimal - valid:
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(5,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(5,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let insert_items_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.99)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.99)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ())
   
   end (* module Sqlgg *)
 
@@ -2435,10 +2435,10 @@ Test numeric literal to decimal - invalid (too many decimals):
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(5,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(5,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let insert_items_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.999)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (99.999)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ())
   
   end (* module Sqlgg *)
 
@@ -2470,7 +2470,7 @@ Test decimal to float - allowed:
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(10,2), price_float FLOAT)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(10,2), price_float FLOAT)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -2517,10 +2517,10 @@ Test int to decimal - allowed:
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(10,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(10,2))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let insert_items_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (100)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("INSERT INTO items VALUES (100)") ~name:"insert_items_1" ~kind:Sqlgg_traits.Query.(Insert "items") ())
   
   end (* module Sqlgg *)
 
@@ -2535,10 +2535,10 @@ Test decimal arithmetic preserves scale:
     module IO = Sqlgg_io.Blocking
   
     let create_t1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (col1 DECIMAL(10,2))") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t1 (col1 DECIMAL(10,2))") ~name:"create_t1" ~kind:Sqlgg_traits.Query.(Create "t1") ())
   
     let create_t2 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t2 (col2 DECIMAL(12,3))") ~name:"create_t2" ~kind:Sqlgg_traits.Query.(Create "t2") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t2 (col2 DECIMAL(12,3))") ~name:"create_t2" ~kind:Sqlgg_traits.Query.(Create "t2") ())
   
     let select_2 db  callback =
       let invoke_callback stmt =
@@ -2582,7 +2582,7 @@ Test parameter with decimal cast:
     module IO = Sqlgg_io.Blocking
   
     let create_items db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(12,3))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (price DECIMAL(12,3))") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
   
     let select_1 db ~price callback =
       let invoke_callback stmt =
@@ -2641,10 +2641,10 @@ Test REPLACE function for string substitution:
     module IO = Sqlgg_io.Blocking
   
     let create_table_24_10_2025 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_24_10_2025 (col_1 TEXT, col_2 TEXT)") ~name:"create_table_24_10_2025" ~kind:Sqlgg_traits.Query.(Create "table_24_10_2025") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_24_10_2025 (col_1 TEXT, col_2 TEXT)") ~name:"create_table_24_10_2025" ~kind:Sqlgg_traits.Query.(Create "table_24_10_2025") ())
   
     let update_table_24_10_2025_1 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("UPDATE table_24_10_2025 SET col_1 = REPLACE(col_1, ',', ' ') WHERE col_2 = 'test'") ~name:"update_table_24_10_2025_1" ~kind:Sqlgg_traits.Query.(Update (Some "table_24_10_2025")) ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("UPDATE table_24_10_2025 SET col_1 = REPLACE(col_1, ',', ' ') WHERE col_2 = 'test'") ~name:"update_table_24_10_2025_1" ~kind:Sqlgg_traits.Query.(Update (Some "table_24_10_2025")) ())
   
   end (* module Sqlgg *)
 
@@ -2658,7 +2658,7 @@ Test REPLACE function with INSERT REPLACE in same query:
     module IO = Sqlgg_io.Blocking
   
     let create_table_24_10_2025 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_24_10_2025 (col_1 TEXT PRIMARY KEY, col_2 TEXT)") ~name:"create_table_24_10_2025" ~kind:Sqlgg_traits.Query.(Create "table_24_10_2025") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_24_10_2025 (col_1 TEXT PRIMARY KEY, col_2 TEXT)") ~name:"create_table_24_10_2025" ~kind:Sqlgg_traits.Query.(Create "table_24_10_2025") ())
   
     let insert_table_24_10_2025_1 db ~value =
       let set_params stmt =
@@ -2688,12 +2688,12 @@ Test BIGINT(20) UNSIGNED with module annotation:
     module IO = Sqlgg_io.Blocking
   
     let create_test_table db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_table (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test_table (\n\
     id BIGINT(20) UNSIGNED NOT NULL,\n\
     counter INT(10) UNSIGNED NOT NULL,\n\
     counter2 BIGINT(10) UNSIGNED NOT NULL DEFAULT 0,\n\
     name TEXT\n\
-  )") ~name:"create_test_table" ~kind:Sqlgg_traits.Query.(Create "test_table") ()) T.no_params
+  )") ~name:"create_test_table" ~kind:Sqlgg_traits.Query.(Create "test_table") ())
   
     let select_1 db ~id callback =
       let invoke_callback stmt =
@@ -2834,14 +2834,14 @@ Test GROUP_CONCAT with multiple expressions and JSON_ARRAYAGG:
     module IO = Sqlgg_io.Blocking
   
     let create_orders db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE orders (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE orders (\n\
     id INT PRIMARY KEY,\n\
     customer_id INT NOT NULL,\n\
     product TEXT NOT NULL,\n\
     quantity INT NOT NULL,\n\
     price DECIMAL(10,2) NOT NULL,\n\
     description TEXT\n\
-  )") ~name:"create_orders" ~kind:Sqlgg_traits.Query.(Create "orders") ()) T.no_params
+  )") ~name:"create_orders" ~kind:Sqlgg_traits.Query.(Create "orders") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -3271,19 +3271,19 @@ Test DEFAULT dialect feature valid for mysql:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_ts_interval db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_ts_interval (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_ts_interval (\n\
     ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
-  )") ~name:"create_ok_ts_interval" ~kind:Sqlgg_traits.Query.(Create "ok_ts_interval") ()) T.no_params
+  )") ~name:"create_ok_ts_interval" ~kind:Sqlgg_traits.Query.(Create "ok_ts_interval") ())
   
     let create_ok_ts_func db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_ts_func (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_ts_func (\n\
     ts DATETIME DEFAULT (DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY))\n\
-  )") ~name:"create_ok_ts_func" ~kind:Sqlgg_traits.Query.(Create "ok_ts_func") ()) T.no_params
+  )") ~name:"create_ok_ts_func" ~kind:Sqlgg_traits.Query.(Create "ok_ts_func") ())
   
     let create_ok_tidb_ts db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)\n\
-  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ()) T.no_params
+  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ())
   
   end (* module Sqlgg *)
 
@@ -3319,9 +3319,9 @@ Test DEFAULT dialect feature valid for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_tidb_ts db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT NOW()\n\
-  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ()) T.no_params
+  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ())
   
   end (* module Sqlgg *)
 
@@ -3346,9 +3346,9 @@ Test DEFAULT dialect feature valid for sqlite:
     module IO = Sqlgg_io.Blocking
   
     let create_ok_tidb_ts db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE ok_tidb_ts (\n\
     ts DATETIME DEFAULT NOW()\n\
-  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ()) T.no_params
+  )") ~name:"create_ok_tidb_ts" ~kind:Sqlgg_traits.Query.(Create "ok_tidb_ts") ())
   
   end (* module Sqlgg *)
 
@@ -3364,10 +3364,10 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_t4 db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t4 (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE t4 (\n\
     id bigint PRIMARY KEY,\n\
     j json DEFAULT (JSON_OBJECT(\"a\", 1, \"b\", 2))\n\
-  )") ~name:"create_t4" ~kind:Sqlgg_traits.Query.(Create "t4") ()) T.no_params
+  )") ~name:"create_t4" ~kind:Sqlgg_traits.Query.(Create "t4") ())
   
   end (* module Sqlgg *)
 
@@ -3394,9 +3394,9 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_user_status db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE user_status (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE user_status (\n\
    status ENUM('active', 'inactive', 'banned') NOT NULL DEFAULT 'active'\n\
-  )") ~name:"create_user_status" ~kind:Sqlgg_traits.Query.(Create "user_status") ()) T.no_params
+  )") ~name:"create_user_status" ~kind:Sqlgg_traits.Query.(Create "user_status") ())
   
   end (* module Sqlgg *)
 
@@ -3412,9 +3412,9 @@ Test DEFAULT dialect feature valid json for tidb:
     module IO = Sqlgg_io.Blocking
   
     let create_tbl db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE tbl (\n\
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE tbl (\n\
    f1 INT NOT NULL DEFAULT 1\n\
-  )") ~name:"create_tbl" ~kind:Sqlgg_traits.Query.(Create "tbl") ()) T.no_params
+  )") ~name:"create_tbl" ~kind:Sqlgg_traits.Query.(Create "tbl") ())
   
   end (* module Sqlgg *)
 
@@ -3439,7 +3439,7 @@ Test IS NOT NULL type refinement:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -3486,7 +3486,7 @@ Test IS NOT NULL type refinement with explicit NULL column:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT NULL)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT NULL)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =
@@ -3533,7 +3533,7 @@ Test IS NOT NULL type refinement with IS NULL:
     module IO = Sqlgg_io.Blocking
   
     let create_test db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE test (id INT, str TEXT, name TEXT)") ~name:"create_test" ~kind:Sqlgg_traits.Query.(Create "test") ())
   
     let select_1 db  callback =
       let invoke_callback stmt =

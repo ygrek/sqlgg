@@ -144,13 +144,13 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_products db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (\n\
     id INT PRIMARY KEY,\n\
     name TEXT,\n\
     price DECIMAL(10,2),\n\
     category TEXT,\n\
     stock INT\n\
-)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ()) T.no_params
+)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ())
 
   module Single = struct
   end (* module Single *)

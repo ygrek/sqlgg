@@ -253,6 +253,9 @@ module Make_with_clock (Clock : Clock) (Config : Cache_config) (Impl : Cached_m)
     with_prepared_stmt cached_conn q (fun stmt ->
       Impl.execute_with_stmt stmt set_params)
 
+  let execute_unprepared cached_conn q =
+    Impl.execute_unprepared cached_conn.original q
+
   let cache_stats cached_conn =
     let state = cached_conn.state in
     Printf.sprintf "Cache: %d/%d items, %d ops since start" 
@@ -316,8 +319,12 @@ module SharedConnectionCache (MutexImpl : Mutex_intf) (Config : Cache_config)
       select_one_maybe conn.base_conn q set_params convert)
     
   let execute conn q set_params =
-    MutexImpl.with_lock conn.mutex (fun () -> 
+    MutexImpl.with_lock conn.mutex (fun () ->
       execute conn.base_conn q set_params)
+
+  let execute_unprepared conn q =
+    MutexImpl.with_lock conn.mutex (fun () ->
+      execute_unprepared conn.base_conn q)
 
   let cache_stats conn =  cache_stats conn.base_conn
 
