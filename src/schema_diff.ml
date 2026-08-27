@@ -194,6 +194,7 @@ let diff_charset =
 let ttl_options_of (t : Tables.table_ttl) =
   [ `TtlSet (t.ttl_col, t.ttl_n, t.ttl_unit);
     `TtlEnable (if t.ttl_enabled then "ON" else "OFF") ]
+  @ Option.map_default (fun v -> [`TtlJobInterval v]) [] t.ttl_job_interval
 
 let diff_ttl =
   diff_property (fun t -> t.Tables.tbl_ttl)
@@ -286,9 +287,15 @@ let invert ~alter_options ~by_from ~by_to up =
         irreversible "a DEFAULT CHARSET / COLLATE was added while the baseline has \
                       no explicit charset to restore"
       | _ ->
-        match alter_change ~alter_options name f (diff_table ~from_:t ~to_:f) with
-        | Some down -> down
-        | None -> irreversible "reverse diff renders to nothing"
+        match f.Tables.tbl_ttl, t.Tables.tbl_ttl with
+        | Some { Tables.ttl_job_interval = None; _ },
+          Some { Tables.ttl_job_interval = Some _; _ } ->
+          irreversible "a TTL_JOB_INTERVAL was added while the baseline has no \
+                        explicit value to restore"
+        | _ ->
+          match alter_change ~alter_options name f (diff_table ~from_:t ~to_:f) with
+          | Some down -> down
+          | None -> irreversible "reverse diff renders to nothing"
 
 let generate ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
   let from_ = List.map materialize_inline_unique from_ in
@@ -313,8 +320,8 @@ let canonical ts =
   in
   let ttl_sig =
     Option.map_default
-      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled } : Tables.table_ttl) ->
-        sprintf "%s+%d %s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off"))
+      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled; ttl_job_interval } : Tables.table_ttl) ->
+        sprintf "%s+%d %s/%s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off") (Option.default "" ttl_job_interval))
       ""
   in
   let table_sig (t : Tables.stored_table) =
