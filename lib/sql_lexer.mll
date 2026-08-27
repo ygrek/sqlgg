@@ -196,6 +196,7 @@ let keywords =
    "recursive", RECURSIVE;
    "ttl", TTL;
    "ttl_enable", TTL_ENABLE;
+   "ttl_job_interval", TTL_JOB_INTERVAL;
    "remove", REMOVE;
    "type", TYPE "type";
   ] in (* more *)
