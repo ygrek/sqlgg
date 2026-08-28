@@ -101,13 +101,13 @@ WHERE u.note = '  two  spaces  inside  ' AND u.id = ?") ~name:"ws" ~kind:Sqlgg_t
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, note TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let create_profiles db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ())
 
   let create_billing db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)") ~name:"create_billing" ~kind:Sqlgg_traits.Query.(Create "billing") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE billing (user_id INT PRIMARY KEY, plan TEXT)") ~name:"create_billing" ~kind:Sqlgg_traits.Query.(Create "billing") ())
 
   module Fold = struct
   end (* module Fold *)

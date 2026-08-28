@@ -10,10 +10,10 @@ CREATE TYPE
     module IO = Sqlgg_io.Blocking
   
     let create_type_color db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ())
   
     let create_shirt db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") ~name:"create_shirt" ~kind:Sqlgg_traits.Query.(Create "shirt") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") ~name:"create_shirt" ~kind:Sqlgg_traits.Query.(Create "shirt") ())
   
     let select_2 db  callback =
       let invoke_callback stmt =
@@ -23,7 +23,7 @@ CREATE TYPE
       T.select db (Sqlgg_traits.Query.make ~sql:("SELECT \"id\" FROM \"shirt\" WHERE \"color\" = 'red'") ~name:"select_2" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
   
     let drop_type_color db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("DROP TYPE \"color\"") ~name:"drop_type_color" ~kind:Sqlgg_traits.Query.(DropType "color") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("DROP TYPE \"color\"") ~name:"drop_type_color" ~kind:Sqlgg_traits.Query.(DropType "color") ())
   
     module Fold = struct
       let select_2 db  callback acc =
@@ -89,16 +89,16 @@ CREATE DROP CREATE
     module IO = Sqlgg_io.Blocking
   
     let create_type_color db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('red', 'green', 'blue')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ())
   
     let drop_type_color db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("DROP TYPE \"color\"") ~name:"drop_type_color" ~kind:Sqlgg_traits.Query.(DropType "color") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("DROP TYPE \"color\"") ~name:"drop_type_color" ~kind:Sqlgg_traits.Query.(DropType "color") ())
   
     let create_type_color db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('black', 'white')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TYPE \"color\" AS ENUM ('black', 'white')") ~name:"create_type_color" ~kind:Sqlgg_traits.Query.(CreateType "color") ())
   
     let create_shirt db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") ~name:"create_shirt" ~kind:Sqlgg_traits.Query.(Create "shirt") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE \"shirt\" (\"id\" INTEGER NOT NULL, \"color\" \"color\" NOT NULL)") ~name:"create_shirt" ~kind:Sqlgg_traits.Query.(Create "shirt") ())
   
     let select_4 db  callback =
       let invoke_callback stmt =

@@ -3,7 +3,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~filename:"queries.sql" ~sql:("CREATE TABLE users (id INT NOT NULL, name TEXT NOT NULL, email TEXT NULL)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~filename:"queries.sql" ~sql:("CREATE TABLE users (id INT NOT NULL, name TEXT NOT NULL, email TEXT NULL)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let find_user db ~id callback =
     let invoke_callback stmt =
@@ -37,7 +37,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     T.select db (Sqlgg_traits.Query.make ~filename:"queries.sql" ~sql:("SELECT id, name FROM users WHERE " ^ (match ids with [] -> "FALSE" | _ :: _ -> "id IN " ^  "(" ^ String.concat ", " (List.map T.Types.Int.to_literal ids) ^ ")")) ~name:"find_users" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
 
   let add_users db ~rows =
-    ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute db (Sqlgg_traits.Query.make ~filename:"queries.sql" ~sql:("INSERT INTO users (id, name) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal name); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"add_users" ~kind:Sqlgg_traits.Query.(Insert "users") ()) T.no_params )
+    ( match rows with [] -> IO.return { T.affected_rows = 0L; insert_id = None } | _ :: _ -> T.execute_unprepared db (Sqlgg_traits.Query.make ~filename:"queries.sql" ~sql:("INSERT INTO users (id, name) VALUES " ^ (let _sqlgg_b = Buffer.create 13 in List.iteri (fun _sqlgg_idx (id, name) -> Buffer.add_string _sqlgg_b (if _sqlgg_idx = 0 then "(" else ", ("); Buffer.add_string _sqlgg_b (T.Types.Int.to_literal id); Buffer.add_string _sqlgg_b ", "; Buffer.add_string _sqlgg_b (T.Types.Text.to_literal name); Buffer.add_char _sqlgg_b ')') rows; Buffer.contents _sqlgg_b)) ~name:"add_users" ~kind:Sqlgg_traits.Query.(Insert "users") ()))
 
   let rename_user db ~name ~id =
     let set_params stmt =

@@ -145,11 +145,11 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_items db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (\n\
   id INT NOT NULL,\n\
   name TEXT NULL,\n\
   descr TEXT NULL\n\
-)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
 
   let static_not_null db  callback =
     let invoke_callback stmt =

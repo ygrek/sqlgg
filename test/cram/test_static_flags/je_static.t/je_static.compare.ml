@@ -92,10 +92,10 @@ WHERE i.id > ?") ~name:"wide" ~kind:Sqlgg_traits.Query.(Select Nat) ())
 
 
   let create_items db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (id INT NOT NULL PRIMARY KEY, name TEXT NULL)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE items (id INT NOT NULL PRIMARY KEY, name TEXT NULL)") ~name:"create_items" ~kind:Sqlgg_traits.Query.(Create "items") ())
 
   let create_stats db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE stats (item_id INT NOT NULL PRIMARY KEY, sold INT NULL)") ~name:"create_stats" ~kind:Sqlgg_traits.Query.(Create "stats") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE stats (item_id INT NOT NULL PRIMARY KEY, sold INT NULL)") ~name:"create_stats" ~kind:Sqlgg_traits.Query.(Create "stats") ())
 
   let wide_static db ~min_id callback =
     let invoke_callback stmt =

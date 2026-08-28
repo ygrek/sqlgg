@@ -353,16 +353,16 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let create_profiles db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT, avatar_id INT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT, avatar_id INT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ())
 
   let create_avatars db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE avatars (id INT PRIMARY KEY, url TEXT, badge_id INT)") ~name:"create_avatars" ~kind:Sqlgg_traits.Query.(Create "avatars") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE avatars (id INT PRIMARY KEY, url TEXT, badge_id INT)") ~name:"create_avatars" ~kind:Sqlgg_traits.Query.(Create "avatars") ())
 
   let create_badges db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE badges (id INT PRIMARY KEY, label TEXT)") ~name:"create_badges" ~kind:Sqlgg_traits.Query.(Create "badges") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE badges (id INT PRIMARY KEY, label TEXT)") ~name:"create_badges" ~kind:Sqlgg_traits.Query.(Create "badges") ())
 
   module Fold = struct
   end (* module Fold *)

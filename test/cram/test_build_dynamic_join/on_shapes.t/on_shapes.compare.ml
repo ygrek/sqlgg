@@ -598,10 +598,10 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let create_profiles db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE profiles (user_id INT PRIMARY KEY, bio TEXT)") ~name:"create_profiles" ~kind:Sqlgg_traits.Query.(Create "profiles") ())
 
   module Fold = struct
   end (* module Fold *)

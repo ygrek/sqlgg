@@ -37,6 +37,10 @@ module Routed_db = struct
     if per_request q then Print_impl.execute db.Cache.original (annotate_per_request q) set_params
     else Cache.execute db (annotate_static q) set_params
 
+  let execute_unprepared db q =
+    if per_request q then Print_impl.execute_unprepared db.Cache.original (annotate_per_request q)
+    else Cache.execute_unprepared db (annotate_static q)
+
 end
 
 module Naive_db = struct
@@ -47,6 +51,7 @@ module Naive_db = struct
   let select_one db q set_params conv = Cache.select_one db (annotate_per_request q) set_params conv
   let select_one_maybe db q set_params conv = Cache.select_one_maybe db (annotate_per_request q) set_params conv
   let execute db q set_params = Cache.execute db (annotate_per_request q) set_params
+  let execute_unprepared db q = Cache.execute_unprepared db (annotate_per_request q)
 
 end
 

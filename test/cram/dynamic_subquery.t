@@ -176,7 +176,7 @@ Full generated code:
   
   
     let create_products db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE products (id INT PRIMARY KEY, name TEXT, price INT)") ~name:"create_products" ~kind:Sqlgg_traits.Query.(Create "products") ())
   
     module Fold = struct
     end (* module Fold *)

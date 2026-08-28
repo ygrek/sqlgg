@@ -17,10 +17,10 @@ Step 2 - day-to-day change: target.sql adds `posts.views`.
     module IO = T.IO
   
     let apply_20260101000000_alter_posts_add_col_views db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `posts` ADD COLUMN `views` INT NOT NULL DEFAULT 0") ~name:"apply_20260101000000_alter_posts_add_col_views" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `posts` ADD COLUMN `views` INT NOT NULL DEFAULT 0") ~name:"apply_20260101000000_alter_posts_add_col_views" ~kind:Sqlgg_traits.Query.Other ())
   
     let revert_20260101000000_alter_posts_add_col_views db  =
-      T.execute db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `posts` DROP COLUMN `views`") ~name:"revert_20260101000000_alter_posts_add_col_views" ~kind:Sqlgg_traits.Query.Other ()) T.no_params
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("ALTER TABLE `posts` DROP COLUMN `views`") ~name:"revert_20260101000000_alter_posts_add_col_views" ~kind:Sqlgg_traits.Query.Other ())
   
     let migrations = [
       ("20260101000000_alter_posts_add_col_views", apply_20260101000000_alter_posts_add_col_views, revert_20260101000000_alter_posts_add_col_views);

@@ -38,6 +38,7 @@ module Annotating_impl = struct
   let select_one db q = Print_ocaml_impl.select_one db (annotate q)
   let select_one_maybe db q = Print_ocaml_impl.select_one_maybe db (annotate q)
   let execute db q = Print_ocaml_impl.execute db (annotate q)
+  let execute_unprepared db q = Print_ocaml_impl.execute_unprepared db (annotate q)
 
 end
 

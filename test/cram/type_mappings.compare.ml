@@ -3,16 +3,16 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_table_37 db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_37 (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_37 (\n\
                 col_1 INT PRIMARY KEY,\n\
                         col_2 INT NOT NULL\n\
-      )") ~name:"create_table_37" ~kind:Sqlgg_traits.Query.(Create "table_37") ()) T.no_params
+      )") ~name:"create_table_37" ~kind:Sqlgg_traits.Query.(Create "table_37") ())
 
   let create_table_38 db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_38 (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE table_38 (\n\
                 col_3 INT PRIMARY KEY,\n\
         col_4 TEXT NOT NULL\n\
-      )") ~name:"create_table_38" ~kind:Sqlgg_traits.Query.(Create "table_38") ()) T.no_params
+      )") ~name:"create_table_38" ~kind:Sqlgg_traits.Query.(Create "table_38") ())
 
   let select_2 db  callback =
     let invoke_callback stmt =

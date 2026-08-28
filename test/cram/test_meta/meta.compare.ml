@@ -3,93 +3,93 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
   module IO = Sqlgg_io.Blocking
 
   let create_accounts db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE accounts (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE accounts (\n\
   id BIGINT NOT NULL,\n\
     cid BIGINT NOT NULL,\n\
     status TEXT NOT NULL,\n\
   plain TEXT NOT NULL\n\
-)") ~name:"create_accounts" ~kind:Sqlgg_traits.Query.(Create "accounts") ()) T.no_params
+)") ~name:"create_accounts" ~kind:Sqlgg_traits.Query.(Create "accounts") ())
 
   let create_orders db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE orders (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE orders (\n\
     id BIGINT NOT NULL,\n\
     amount DECIMAL(10,2) NOT NULL\n\
-)") ~name:"create_orders" ~kind:Sqlgg_traits.Query.(Create "orders") ()) T.no_params
+)") ~name:"create_orders" ~kind:Sqlgg_traits.Query.(Create "orders") ())
 
   let create_events db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE events (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE events (\n\
   order_ref BIGINT NOT NULL,\n\
   amount BIGINT NOT NULL\n\
-)") ~name:"create_events" ~kind:Sqlgg_traits.Query.(Create "events") ()) T.no_params
+)") ~name:"create_events" ~kind:Sqlgg_traits.Query.(Create "events") ())
 
   let create_named_owners db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE named_owners (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE named_owners (\n\
     id BIGINT NOT NULL,\n\
   title TEXT NOT NULL\n\
-)") ~name:"create_named_owners" ~kind:Sqlgg_traits.Query.(Create "named_owners") ()) T.no_params
+)") ~name:"create_named_owners" ~kind:Sqlgg_traits.Query.(Create "named_owners") ())
 
   let create_named_owned db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE named_owned (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE named_owned (\n\
   id BIGINT NOT NULL,\n\
   note TEXT NOT NULL\n\
-)") ~name:"create_named_owned" ~kind:Sqlgg_traits.Query.(Create "named_owned") ()) T.no_params
+)") ~name:"create_named_owned" ~kind:Sqlgg_traits.Query.(Create "named_owned") ())
 
   let create_other_domain db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE other_domain (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE other_domain (\n\
     id BIGINT NOT NULL\n\
-)") ~name:"create_other_domain" ~kind:Sqlgg_traits.Query.(Create "other_domain") ()) T.no_params
+)") ~name:"create_other_domain" ~kind:Sqlgg_traits.Query.(Create "other_domain") ())
 
   let create_owners db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE owners (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE owners (\n\
     id BIGINT NOT NULL PRIMARY KEY\n\
-)") ~name:"create_owners" ~kind:Sqlgg_traits.Query.(Create "owners") ()) T.no_params
+)") ~name:"create_owners" ~kind:Sqlgg_traits.Query.(Create "owners") ())
 
   let create_owned db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE owned (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE owned (\n\
   owner_ref BIGINT NOT NULL,\n\
   loose BIGINT NOT NULL,\n\
   FOREIGN KEY (owner_ref) REFERENCES owners(id)\n\
-)") ~name:"create_owned" ~kind:Sqlgg_traits.Query.(Create "owned") ()) T.no_params
+)") ~name:"create_owned" ~kind:Sqlgg_traits.Query.(Create "owned") ())
 
   let create_unrelated db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE unrelated (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE unrelated (\n\
   owner_ref BIGINT NOT NULL\n\
-)") ~name:"create_unrelated" ~kind:Sqlgg_traits.Query.(Create "unrelated") ()) T.no_params
+)") ~name:"create_unrelated" ~kind:Sqlgg_traits.Query.(Create "unrelated") ())
 
   let create_projects db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE projects (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE projects (\n\
   id BIGINT NOT NULL,\n\
     company_id BIGINT NOT NULL\n\
-)") ~name:"create_projects" ~kind:Sqlgg_traits.Query.(Create "projects") ()) T.no_params
+)") ~name:"create_projects" ~kind:Sqlgg_traits.Query.(Create "projects") ())
 
   let create_alerts db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE alerts (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE alerts (\n\
   dashboard_id BIGINT NOT NULL,\n\
   company_id BIGINT NOT NULL\n\
-)") ~name:"create_alerts" ~kind:Sqlgg_traits.Query.(Create "alerts") ()) T.no_params
+)") ~name:"create_alerts" ~kind:Sqlgg_traits.Query.(Create "alerts") ())
 
   let create_courses db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE courses (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE courses (\n\
     slug TEXT NOT NULL,\n\
     seconds BIGINT NOT NULL\n\
-)") ~name:"create_courses" ~kind:Sqlgg_traits.Query.(Create "courses") ()) T.no_params
+)") ~name:"create_courses" ~kind:Sqlgg_traits.Query.(Create "courses") ())
 
   let create_left_rows db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE left_rows (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE left_rows (\n\
     id BIGINT NOT NULL\n\
-)") ~name:"create_left_rows" ~kind:Sqlgg_traits.Query.(Create "left_rows") ()) T.no_params
+)") ~name:"create_left_rows" ~kind:Sqlgg_traits.Query.(Create "left_rows") ())
 
   let create_right_rows db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE right_rows (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE right_rows (\n\
     id BIGINT NOT NULL,\n\
     status ENUM('draft','published','failed') NOT NULL\n\
-)") ~name:"create_right_rows" ~kind:Sqlgg_traits.Query.(Create "right_rows") ()) T.no_params
+)") ~name:"create_right_rows" ~kind:Sqlgg_traits.Query.(Create "right_rows") ())
 
   let create_codec_rows db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE codec_rows (\n\
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE codec_rows (\n\
   id INT NOT NULL,\n\
       status ENUM('new','paid','shipped') NOT NULL\n\
-)") ~name:"create_codec_rows" ~kind:Sqlgg_traits.Query.(Create "codec_rows") ()) T.no_params
+)") ~name:"create_codec_rows" ~kind:Sqlgg_traits.Query.(Create "codec_rows") ())
 
   let shared_by_equality db  callback =
     let invoke_callback stmt =

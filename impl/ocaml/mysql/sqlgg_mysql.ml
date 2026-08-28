@@ -444,6 +444,20 @@ let execute db q set_params =
   with_stmt db q (fun stmt ->
     execute_with_stmt stmt set_params)
 
+let execute_unprepared db (q : Sqlgg_traits.Query.t) =
+  let (_ : Mysql.result) = Mysql.exec db q.sql in
+  begin match Mysql.status db with
+  | Mysql.StatusError _ ->
+    oops "execute_unprepared (%s)" (match Mysql.errmsg db with Some e -> e | None -> "unknown error")
+  | Mysql.StatusOK | Mysql.StatusEmpty -> ()
+  end;
+  let insert_id =
+    match Mysql.insert_id db with
+    | 0L -> None
+    | x -> Some x
+  in
+  { affected_rows = Mysql.affected db; insert_id }
+
 let select_one_maybe db q set_params convert =
   with_stmt db q (fun stmt ->
     select_one_maybe_with_stmt stmt set_params convert)

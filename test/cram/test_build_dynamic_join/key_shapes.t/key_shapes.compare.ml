@@ -225,13 +225,13 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
 
 
   let create_users db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, email TEXT, org INT, dept INT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE users (id INT PRIMARY KEY, name TEXT, email TEXT, org INT, dept INT)") ~name:"create_users" ~kind:Sqlgg_traits.Query.(Create "users") ())
 
   let create_accounts db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE accounts (id INT PRIMARY KEY, email TEXT UNIQUE, label TEXT)") ~name:"create_accounts" ~kind:Sqlgg_traits.Query.(Create "accounts") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE accounts (id INT PRIMARY KEY, email TEXT UNIQUE, label TEXT)") ~name:"create_accounts" ~kind:Sqlgg_traits.Query.(Create "accounts") ())
 
   let create_memberships db  =
-    T.execute db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE memberships (org INT, dept INT, title TEXT, PRIMARY KEY (org, dept))") ~name:"create_memberships" ~kind:Sqlgg_traits.Query.(Create "memberships") ()) T.no_params
+    T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE memberships (org INT, dept INT, title TEXT, PRIMARY KEY (org, dept))") ~name:"create_memberships" ~kind:Sqlgg_traits.Query.(Create "memberships") ())
 
   module Fold = struct
   end (* module Fold *)
