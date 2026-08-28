@@ -652,13 +652,15 @@ let can_execute_unprepared stmt =
   stmt.Gen.schema = [] && not (has_bound_params stmt.Gen.vars)
 
 
+let as_literal_type t = match t.Type.t with Blob -> Sql.Type.type_name t | _ -> L.as_lang_type t
+
 let make_to_literal meta typ =
   match resolve_codec codec_set_param typ meta with
   | Custom_codec setter ->
-    let trait_type_name = match typ.Type.t with | Union _ -> "Text" | StringLiteral _ -> "Text" | _ -> L.as_lang_type typ in
+    let trait_type_name = match typ.Type.t with | Union _ -> "Text" | StringLiteral _ -> "Text" | _ -> as_literal_type typ in
     sprintf "(fun v -> T.Types.%s.%s_to_literal (%s v))" trait_type_name (L.as_runtime_repr_name typ) setter
   | Enum_codec m -> sprintf "%s.to_literal" m
-  | Builtin_codec t -> sprintf "T.Types.%s.to_literal" (L.as_lang_type t)
+  | Builtin_codec t -> sprintf "T.Types.%s.to_literal" (as_literal_type t)
 
 let gen_in_substitution meta var =
   if Option.is_none var.id.value then failwith "empty label in IN param";
