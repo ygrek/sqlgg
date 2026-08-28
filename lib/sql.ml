@@ -987,7 +987,8 @@ type charset_name = Named of string | Binary | Ascii | Unicode
 
 type ttl_option =
   [ `TtlSet of string * int * string
-  | `TtlEnable of string ] [@@deriving show {with_path=false}]
+  | `TtlEnable of string
+  | `TtlJobInterval of string ] [@@deriving show {with_path=false}]
 
 module Alter_column_pg = struct
   type t =

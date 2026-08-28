@@ -14,7 +14,7 @@ type table = Sql.table
 
 type table_charset = { charset : Sql.charset_name; collation : string option }
 
-type table_ttl = { ttl_col : string; ttl_n : int; ttl_unit : string; ttl_enabled : bool }
+type table_ttl = { ttl_col : string; ttl_n : int; ttl_unit : string; ttl_enabled : bool; ttl_job_interval : string option }
 
 module SMap = Map.Make(String)
 

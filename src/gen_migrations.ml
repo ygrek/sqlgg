@@ -156,7 +156,8 @@ let action_to_sql_fragment ~default_sql_lookup (action : Sql.alter_action) = mat
     |> List.map (function
       | `TtlSet (col, n, unit) ->
         sprintf "TTL = %s + INTERVAL %d %s" (quote_id col) n (String.uppercase_ascii unit)
-      | `TtlEnable v -> sprintf "TTL_ENABLE = '%s'" v)
+      | `TtlEnable v -> sprintf "TTL_ENABLE = '%s'" v
+      | `TtlJobInterval v -> sprintf "TTL_JOB_INTERVAL = '%s'" v)
     |> String.concat " "
   | `RemoveTtl _ -> "REMOVE TTL"
   | `AlterColumnPG (col_name, change) ->

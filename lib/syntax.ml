@@ -1680,20 +1680,26 @@ let rec eval (stmt:Sql.stmt) =
         Tables.index_rename name ~old_name ~new_name
       | `AddConstraint _ | `DropConstraint _ -> ()
       | `TtlOptions (opts, _) ->
-        let expr, enabled =
-          List.fold_left (fun (expr, enabled) -> function
-            | `TtlSet (col, n, unit) -> Some (col, n, String.uppercase_ascii unit), enabled
-            | `TtlEnable v -> expr, Some (String.uppercase_ascii v <> "OFF"))
-            (None, None) opts
+        let expr, enabled, job_interval =
+          List.fold_left (fun (expr, enabled, job_interval) -> function
+            | `TtlSet (col, n, unit) -> Some (col, n, String.uppercase_ascii unit), enabled, job_interval
+            | `TtlEnable v -> expr, Some (String.uppercase_ascii v <> "OFF"), job_interval
+            | `TtlJobInterval v -> expr, enabled, Some v)
+            (None, None, None) opts
         in
         let prev = Tables.get_ttl name in
         let ttl_enabled =
           Option.default (Option.map_default (fun (t : Tables.table_ttl) -> t.ttl_enabled) true prev) enabled
         in
+        let ttl_job_interval =
+          match job_interval with
+          | Some _ -> job_interval
+          | None -> Option.map_default (fun (t : Tables.table_ttl) -> t.ttl_job_interval) None prev
+        in
         Tables.set_ttl name @@
           Option.map_default
-            (fun (ttl_col, ttl_n, ttl_unit) -> Some { Tables.ttl_col; ttl_n; ttl_unit; ttl_enabled })
-            (Option.map (fun (t : Tables.table_ttl) -> { t with ttl_enabled }) prev)
+            (fun (ttl_col, ttl_n, ttl_unit) -> Some { Tables.ttl_col; ttl_n; ttl_unit; ttl_enabled; ttl_job_interval })
+            (Option.map (fun (t : Tables.table_ttl) -> { t with ttl_enabled; ttl_job_interval }) prev)
             expr
       | `RemoveTtl _ -> Tables.set_ttl name None
       | `Default_or_convert_to (cs, collation) ->

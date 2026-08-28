@@ -191,6 +191,7 @@ let diff_charset =
 let ttl_options_of (t : Tables.table_ttl) =
   [ `TtlSet (t.ttl_col, t.ttl_n, t.ttl_unit);
     `TtlEnable (if t.ttl_enabled then "ON" else "OFF") ]
+  @ Option.map_default (fun v -> [`TtlJobInterval v]) [] t.ttl_job_interval
 
 let diff_ttl =
   diff_property (fun t -> t.Tables.tbl_ttl)
@@ -280,6 +281,11 @@ let invert ~by_from ~by_to up =
       if f.Tables.tbl_charset = None && t.Tables.tbl_charset <> None then
         irreversible "a DEFAULT CHARSET / COLLATE was added while the baseline has \
                       no explicit charset to restore"
+      else if (match f.Tables.tbl_ttl, t.Tables.tbl_ttl with
+        | Some { Tables.ttl_job_interval = None; _ }, Some { Tables.ttl_job_interval = Some _; _ } -> true
+        | _ -> false) then
+        irreversible "a TTL_JOB_INTERVAL was added while the baseline has no \
+                      explicit value to restore"
       else
         match alter_change name f (diff_table ~from_:t ~to_:f) with
         | Some down -> down
@@ -308,8 +314,8 @@ let canonical ts =
   in
   let ttl_sig =
     Option.map_default
-      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled } : Tables.table_ttl) ->
-        sprintf "%s+%d %s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off"))
+      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled; ttl_job_interval } : Tables.table_ttl) ->
+        sprintf "%s+%d %s/%s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off") (Option.default "" ttl_job_interval))
       ""
   in
   let table_sig (t : Tables.stored_table) =

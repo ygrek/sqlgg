@@ -3589,6 +3589,22 @@ TTL is rejected on non-TiDB dialects:
   Errors encountered, no code generated
   [1]
 
+TTL_JOB_INTERVAL is accepted on TiDB, standalone or with other TTL options:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' >/dev/null
+  > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
+  > ALTER TABLE foo TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '24h';
+  > ALTER TABLE foo TTL_JOB_INTERVAL = '30m';
+  > EOF
+
+TTL_JOB_INTERVAL is rejected on non-TiDB dialects:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE foo (id INT NOT NULL, created_at TIMESTAMP NOT NULL);
+  > ALTER TABLE foo TTL_JOB_INTERVAL = '30m';
+  > EOF
+  Feature Ttl is not supported for dialect MySQL (supported by: TiDB) at TTL_JOB_INTERVAL = '30m'
+  Errors encountered, no code generated
+  [1]
+
 Composite: a choice nested inside another choice — every level is wrapped
 independently, so precedence is protected at each depth:
   $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE FALSE AND' | head -1
