@@ -1,0 +1,7 @@
+(test
+ (name test_property_based)
+ (libraries
+   extlib
+   oUnit
+   qcheck-ounit
+   sqlgg))
