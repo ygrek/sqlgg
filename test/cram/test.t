@@ -3589,6 +3589,36 @@ TTL is rejected on non-TiDB dialects:
   Errors encountered, no code generated
   [1]
 
+TiDB cached tables (ALTER TABLE ... CACHE / NOCACHE) are accepted:
+  $ sqlgg -gen caml -no-header -dialect=tidb - <<'EOF' >/dev/null
+  > CREATE TABLE foo (id INT NOT NULL);
+  > ALTER TABLE foo CACHE;
+  > ALTER TABLE foo NOCACHE;
+  > EOF
+
+Cached tables are rejected on non-TiDB dialects:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1
+  > CREATE TABLE foo (id INT NOT NULL);
+  > ALTER TABLE foo CACHE;
+  > EOF
+  Feature CachedTable is not supported for dialect MySQL (supported by: TiDB) at CACHE
+  Errors encountered, no code generated
+  [1]
+
+  $ sqlgg -gen caml -no-header -dialect=postgresql - <<'EOF' 2>&1
+  > CREATE TABLE foo (id INT NOT NULL);
+  > ALTER TABLE foo NOCACHE;
+  > EOF
+  Feature CachedTable is not supported for dialect PostgreSQL (supported by: TiDB) at NOCACHE
+  Errors encountered, no code generated
+  [1]
+
+Quoted `cache` still works as an identifier:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' >/dev/null
+  > CREATE TABLE bar (`cache` INT NOT NULL);
+  > SELECT `cache` FROM bar;
+  > EOF
+
 Composite: a choice nested inside another choice — every level is wrapped
 independently, so precedence is protected at each depth:
   $ sqlgg -gen caml -params unnamed -no-header - <<'EOF' 2>&1 | grep -F 'WHERE FALSE AND' | head -1

@@ -26,6 +26,7 @@ type feature =
   | RowLocking [@as "row_locking"]
   | DefaultExpr [@as "default_expr"]
   | Ttl [@as "ttl"]
+  | CachedTable [@as "cached_table"]
   | AlterColumn [@as "alter_column"]
   | UserDefinedType [@as "user_defined_type"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string]
@@ -121,6 +122,8 @@ let get_replace_into pos = only ReplaceInto [MySQL; TiDB] pos
 let get_row_locking pos = only RowLocking [PostgreSQL; MySQL; TiDB] pos
 
 let get_ttl pos = only Ttl [TiDB] pos
+
+let get_cached_table pos = only CachedTable [TiDB] pos
 
 let get_alter_column (change : Sql.Alter_column_pg.t) pos =
   match change with
@@ -355,6 +358,9 @@ and analyze_alter_action acc actions k = match actions with
         analyze_alter_action acc rest k
     | `TtlOptions (_, pos) | `RemoveTtl pos ->
         let acc = get_ttl pos :: acc in
+        analyze_alter_action acc rest k
+    | `Cache pos | `NoCache pos ->
+        let acc = get_cached_table pos :: acc in
         analyze_alter_action acc rest k
     | `AlterColumnPG (_, { value; pos }) ->
         let acc = get_alter_column value pos :: acc in

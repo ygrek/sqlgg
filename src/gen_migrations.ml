@@ -159,6 +159,8 @@ let action_to_sql_fragment ~default_sql_lookup (action : Sql.alter_action) = mat
       | `TtlEnable v -> sprintf "TTL_ENABLE = '%s'" v)
     |> String.concat " "
   | `RemoveTtl _ -> "REMOVE TTL"
+  | `Cache _ -> "CACHE"
+  | `NoCache _ -> "NOCACHE"
   | `AlterColumnPG (col_name, change) ->
     sprintf "ALTER COLUMN %s %s" (quote_id col_name)
       (match change.Sql.value with

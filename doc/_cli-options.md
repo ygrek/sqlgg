@@ -22,7 +22,7 @@
 
  Dialect and checks:
   -dialect mysql|postgresql|sqlite|tidb            Set SQL dialect. Queries can only use its features
-  -no-check {all|<feature>{,<feature>}+}           Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select|on_duplicate_key|on_conflict|straight_join|lock_in_share_mode|fulltext_index|unsigned_types|autoincrement|replace_into|row_locking|default_expr|ttl|alter_column|user_defined_type)
+  -no-check {all|<feature>{,<feature>}+}           Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select|on_duplicate_key|on_conflict|straight_join|lock_in_share_mode|fulltext_index|unsigned_types|autoincrement|replace_into|row_locking|default_expr|ttl|cached_table|alter_column|user_defined_type)
   -allow-write-notnull-null                        Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)
 
  Generated header:
