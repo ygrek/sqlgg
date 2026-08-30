@@ -52,7 +52,7 @@ module Column_sig = struct
           | Syntax_constraint _ -> cs, dflt)
         ([], false) a.extra
     in
-    { name = a.name;
+    { name = a.name.value;
       kind;
       collation;
       constraints = List.sort Sql.Constraint.compare constraints;
@@ -112,11 +112,11 @@ let rename kind old_ new_ =
   Name.action (verb "rename" @ verb kind) (Name.words old_ @ Name.words new_)
 
 let action_of : Sql.alter_action -> Name.action = function
-  | `Add (col, _) -> action_on "add_col" col.name
+  | `Add (col, _) -> action_on "add_col" col.name.value
   | `Drop name -> action_on "drop_col" name
   | `Change (old_name, new_col, _) ->
-    if old_name = new_col.name then action_on "change_col" new_col.name
-    else rename "col" old_name new_col.name
+    if old_name = new_col.name.value then action_on "change_col" new_col.name.value
+    else rename "col" old_name new_col.name.value
   | `RenameTable t -> action_on "rename_to" t.tn
   | `RenameColumn (o, n) -> rename "col" o n
   | `RenameIndex (o, n) -> rename "index" o n
@@ -293,7 +293,7 @@ let generate ~naming ~ddl_as_migration ~from_ ~to_ =
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
   diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
-    { Gen_migrations.props = Props.set Props.empty "name" (change_name ~naming up);
+    { Gen_migrations.props = [ Props.Name (change_name ~naming up) ];
       kind = kind_of_change up;
       apply = render_apply up;
       revert = render_apply (invert ~by_from ~by_to up) })
@@ -373,8 +373,7 @@ let dump state =
 let verify_ddl ~replay state ddl =
   let expected = canonical state in
   Tables.reset ();
-  String.split_on_char ';' ddl
-  |> List.iter (fun s -> if String.trim s <> "" then replay s);
+  replay ddl;
   let got = canonical (Tables.snapshot ()) in
   Tables.restore state;
   if got <> expected then

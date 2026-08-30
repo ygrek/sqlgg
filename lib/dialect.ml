@@ -5,7 +5,13 @@ type t =
   | PostgreSQL [@as "postgresql"]
   | SQLite [@as "sqlite"]
   | TiDB [@as "tidb"]
-[@@deriving eq, show { with_path = false }, enumerate, to_string, of_string]
+[@@deriving eq, hash, show { with_path = false }, enumerate, to_string, of_string]
+
+let to_yojson dialect = `String (to_string dialect)
+
+let of_yojson = function
+  | `String name -> Stdlib.Option.to_result ~none:("unknown dialect " ^ name) (of_string name)
+  | _ -> Error "dialect"
 
 let selected = ref MySQL
 
@@ -47,6 +53,23 @@ type dialect_support = {
   pos : Sql.pos;
   state : support_state;
 }
+
+let support { state; _ } dialect =
+  if List.mem dialect state.supported then `Supported
+  else if List.mem dialect state.unsupported then `Unsupported
+  else `Unknown
+
+let unknown_message { feature; _ } dialect =
+  Printf.sprintf "Feature %s has unknown support for dialect %s" (show_feature feature) (show dialect)
+
+let unsupported_message ?(alternatives = true) { state; feature; _ } dialect =
+  let suffix =
+    match state.supported with
+    | (_ :: _) as dialects when alternatives ->
+      Printf.sprintf " (supported by: %s)" (String.concat ", " (List.map show dialects))
+    | [] | _ :: _ -> ""
+  in
+  Printf.sprintf "Feature %s is not supported for dialect %s%s" (show_feature feature) (show dialect) suffix
 
 let all_except excluded = List.filter (fun d -> not (List.mem d excluded)) all
 
@@ -270,7 +293,7 @@ and analyze_nested acc nesteds k = match nesteds with
 
 and analyze_select acc sels k = match sels with
   | [] -> k acc
-  | { columns; from; where; group; having } :: rest ->
+  | { columns; from; where; group; having; _ } :: rest ->
     analyze_column acc columns (fun acc ->
       let nested_opt = option_list from in
       analyze_nested acc nested_opt (fun acc ->
@@ -435,8 +458,8 @@ let rec analyze stmt =
       analyze_assignment_expr acc aes (fun acc ->
         let exprs = option_list where_opt @ List.map fst order in
         analyze_expr acc exprs List.rev)
-  | UpdateMulti (nesteds, assignments, where_opt, order, _) ->
-      analyze_nested acc nesteds (fun acc ->
+  | UpdateMulti (from, assignments, where_opt, order, _) ->
+      analyze_nested acc [from] (fun acc ->
         let aes = List.map snd assignments in
         analyze_assignment_expr acc aes (fun acc ->
           let exprs = option_list where_opt @ List.map fst order in

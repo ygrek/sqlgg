@@ -5,7 +5,7 @@
   <in/>
   <out/>
  </stmt>
- <stmt name="insert1" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @maybe WHEN 0 THEN NULL ELSE @maybe END&#x0A;" category="DML" kind="insert" target="test" cardinality="0">
+ <stmt name="insert1" sql="INSERT INTO `test` SET&#x0A;  `nullable` = CASE @maybe WHEN 0 THEN NULL ELSE @maybe END" category="DML" kind="insert" target="test" cardinality="0">
   <in>
    <value name="maybe" type="Int" nullable="true"/>
   </in>

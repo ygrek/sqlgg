@@ -285,8 +285,8 @@ let query_expr ~sql index stmt =
   in
   let name = choose_name stmt.Gen.props stmt.Gen.kind index |> String.uncapitalize_ascii in
   let filename =
-    "file" |> Props.get stmt.Gen.props |>
-    Option.map_default (fun file -> sprintf "~filename:%s " (quote file)) ""
+    List.find_map (function Props.File file -> Some file | _ -> None) stmt.Gen.props
+    |> Stdlib.Option.fold ~none:"" ~some:(fun file -> sprintf "~filename:%s " (quote file))
   in
   sprintf "(Sqlgg_traits.Query.make %s~sql:%s ~name:%s ~kind:%s ())"
     filename sql (quote name) kind
@@ -352,7 +352,7 @@ let append_func_params ~has_callback ~module_kind inputs =
   ^ (if module_kind = `Fold then " acc" else "")
 
 let emit_func_header ~name ~extra_params ~has_callback ~format_input ~module_kind stmt =
-  let subst = Props.get_all stmt.props "subst" in
+  let subst = Props.substs stmt.props in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
   output "let %s db%s %s =" name extra_params (append_func_params ~has_callback ~module_kind inputs);
   inc_indent ();
@@ -550,8 +550,8 @@ let set_var index var =
       let branch i = function
         | Verbatim (n, _) ->
           `Unit (fun () -> output "| %s -> ()" (vname n ~is_poly:true))
-        | Simple (param, args) ->
-          let inner = filter_generators index (Option.default [] args) in
+        | Simple { ctor = param; body = args; _ } ->
+          let inner = filter_generators index (Stdlib.Option.value ~default:[] args) in
           let variant_name = make_variant_name i param.value ~is_poly:true in
           let pattern_args =
             match args, inner with
@@ -613,9 +613,9 @@ let rec eval_count_params vars =
     count_match (make_param_name i name)
       (ctors |> List.mapi (fun i -> function
         | Verbatim (n, _) -> vname n ~is_poly:true, "0"
-        | Simple (param, args) ->
+        | Simple { ctor = param; body = args; _ } ->
           match_variant_pattern i param.value args ~is_poly:true,
-          eval_count_params (Option.default [] args))))
+          eval_count_params (Stdlib.Option.value ~default:[] args))))
   in
   static ^ choices_in ^ choices ^ bool_choices
 
@@ -969,7 +969,7 @@ let empty_exec_result = {|IO.return { T.affected_rows = 0L; insert_id = None }|}
 let generate_stmt ~module_kind index stmt =
   if not (supports_module_kind module_kind stmt) then () else
   let c = consumer module_kind in
-  if Props.get stmt.props "noop" <> None then begin
+  if Props.has Noop stmt.props then begin
     let _ = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
     output "ignore db;";
     output "%s" empty_exec_result;
@@ -1148,7 +1148,7 @@ let generate_dynamic_select_modules stmts =
       
       let fields = List.map2 (fun ctor field ->
         let name, args = match ctor with
-          | Sql.Simple (ctor_param_id, args) -> field_name_of_param_id ctor_param_id, Option.default [] args
+          | Sql.Simple { ctor = ctor_param_id; body = args; _ } -> field_name_of_param_id ctor_param_id, Stdlib.Option.value ~default:[] args
           | Sql.Verbatim (name, _) -> name, []
         in
         { field_name = scoped_field_name name; field_args = args; field_schema = field; field_ctor = ctor }
@@ -1280,13 +1280,12 @@ let generate_migrations name migrations =
     Gen.choose_name m.props m.kind index, m
   ) migrations in
   let migration_names = List.map fst named in
-  let make_stmt fn_name sql =
-    { Gen.schema = []; vars = []; kind = Stmt.Other;
-      props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
+  let make_stmt ?(props = []) fn_name sql =
+    { Gen.schema = []; vars = []; kind = Stmt.Other; props = Props.Name fn_name :: Props.Sql sql :: props }
   in
   let revert_stmt name (m : Gen_migrations.migration) =
     match m.revert with
-    | [] -> let s = make_stmt ("revert_" ^ name) "" in { s with props = Props.set s.props "noop" "" }
+    | [] -> make_stmt ~props:[ Props.Noop ] ("revert_" ^ name) ""
     | revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
   in
   let stmts = List.concat_map (fun (name, (m : Gen_migrations.migration)) ->

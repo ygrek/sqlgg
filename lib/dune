@@ -1,5 +1,13 @@
+(rule
+ (copy sql_parser.mly sql_tokens.mly))
+
 (menhir
- (modules sql_parser))
+ (modules sql_tokens)
+ (flags --only-tokens --table --inspection))
+
+(menhir
+ (modules sql_parser)
+ (flags --strict --external-tokens Sql_tokens))
 
 (ocamllex sql_lexer)
 
@@ -8,4 +16,4 @@
  (public_name sqlgg.lib)
  (libraries extlib yojson sqlgg_json_path)
  (preprocess
-  (pps ppx_deriving.std ppx_enumerate ppx_deriving_variant_string)))
+  (pps ppx_deriving.std ppx_deriving_hash ppx_enumerate ppx_deriving_variant_string)))

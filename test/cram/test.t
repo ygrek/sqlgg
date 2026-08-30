@@ -295,7 +295,7 @@ Test SQLite dialect with ON CONFLICT, non-existent primary key (should fail):
   > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
   > EOF
   Failed : INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test SQLite dialect with ON CONFLICT, non-existent composite primary key (should fail):
@@ -304,7 +304,7 @@ Test SQLite dialect with ON CONFLICT, non-existent composite primary key (should
   > INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name;
   > EOF
   Failed : INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test SQLite dialect with ON CONFLICT, table-level unique constraint (should work):
@@ -329,7 +329,7 @@ Test SQLite dialect with ON CONFLICT, non-existent unique constraint (should fai
   > INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name;
   > EOF
   Failed : INSERT INTO users (id, name) VALUES (1, 'John') ON CONFLICT(id) DO UPDATE SET name = excluded.name
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test SQLite dialect with ON CONFLICT, non-existent composite unique constraint (should fail):
@@ -338,7 +338,7 @@ Test SQLite dialect with ON CONFLICT, non-existent composite unique constraint (
   > INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name;
   > EOF
   Failed : INSERT INTO users (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO UPDATE SET name = excluded.name
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test MySQL dialect with ON CONFLICT (should fail):
@@ -795,6 +795,7 @@ Test MySQL dialect with WHERE aliasing (should fail):
   > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
   > EOF
   Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  At : double_score
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
   [2]
 
@@ -804,6 +805,7 @@ Test PostgreSQL dialect with WHERE aliasing (should fail):
   > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
   > EOF
   Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  At : double_score
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
   [2]
 
@@ -813,6 +815,7 @@ Test TiDB dialect with WHERE aliasing (should fail):
   > SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100;
   > EOF
   Failed : SELECT id, name, score * 2 as double_score FROM users WHERE double_score > 100
+  At : double_score
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : double_score")
   [2]
 
@@ -822,6 +825,7 @@ Fix issue 96 (should fail):
   > SELECT x AS foo FROM test WHERE foo > 0;
   > EOF
   Failed : SELECT x AS foo FROM test WHERE foo > 0
+  At : foo
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : foo")
   [2]
 
@@ -897,7 +901,7 @@ Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent primary key (shoul
   > INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING;
   > EOF
   Failed : INSERT INTO test20250819 (id, name) VALUES (1, 'John') ON CONFLICT(id) DO NOTHING
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent composite constraint (should fail):
@@ -906,7 +910,7 @@ Test SQLite dialect with ON CONFLICT DO NOTHING, non-existent composite constrai
   > INSERT INTO test20250819 (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO NOTHING;
   > EOF
   Failed : INSERT INTO test20250819 (id, name, address) VALUES (1, 'John', '123 Main St') ON CONFLICT(id, address) DO NOTHING
-  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: { Sql.cname = \"id\"; tname = None }")
+  Fatal error: exception Failure("Schema Error: ON CONFLICT clause (id, address) does not match the PRIMARY KEY or UNIQUE constraint for column: id")
   [2]
 
 Test Single style for SELECT 1/0..1 and hide empty modules:
@@ -1703,6 +1707,7 @@ Test GROUP_CONCAT with ORDER BY expressions and join (should fail):
   JOIN table_2_2025_09_26 t2 ON t1.table_no = t2.table_no AND t1.id > @par
   GROUP BY t1.table_no
   ORDER BY dates_from_t1
+  At : t1.idontknow
   Fatal error: exception Sqlgg.Sql.Schema.Error(_, "missing attribute : idontknow")
   [2]
 
@@ -2295,8 +2300,7 @@ Test FloatingLiteral:
       let get_row stmt =
         (T.get_column_Float stmt 0)
       in
-      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT 1.2\n\
-  ") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
+      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT 1.2") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
   
     module Single = struct
       let select_0 db  callback =
@@ -2304,8 +2308,7 @@ Test FloatingLiteral:
           callback
             ~r:(T.get_column_Float stmt 0)
         in
-        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT 1.2\n\
-  ") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
+        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT 1.2") ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
   
     end (* module Single *)
   end (* module Sqlgg *)
@@ -3229,8 +3232,7 @@ Test test date functions that are both expressions and functions:
       let get_row stmt =
         (T.get_column_Int stmt 0)
       in
-      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)\n\
-  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
+      T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params get_row
   
     module Single = struct
       let select_0 db  callback =
@@ -3247,8 +3249,7 @@ Test test date functions that are both expressions and functions:
           callback
             ~r:(T.get_column_Int stmt 0)
         in
-        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)\n\
-  ") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
+        T.select_one db (Sqlgg_traits.Query.make ~sql:("SELECT DAY(CURRENT_DATE)") ~name:"select_1" ~kind:Sqlgg_traits.Query.(Select One) ()) T.no_params invoke_callback
   
     end (* module Single *)
   end (* module Sqlgg *)

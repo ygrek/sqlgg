@@ -66,3 +66,21 @@ revert would raise on the empty mock queue):
   $ ocamlfind ocamlc -package sqlgg.traits -I . -linkpkg -o run_mig.exe print_impl.ml output.ml run_mig.ml
   $ ./run_mig.exe
   noop revert affected_rows=0
+
+  $ cat > migrations.sql <<'EOF'
+  > -- [sqlgg] generated
+  > -- [sqlgg] irreversible
+  > -- [sqlgg] id=20251231000000_drop_legacy
+  > ALTER TABLE users DROP COLUMN legacy;
+  > 
+  > -- [sqlgg] generated
+  > -- [sqlgg] id=20260101000000_add_name
+  > ALTER TABLE users ADD COLUMN name TEXT;
+  > ALTER TABLE users DROP COLUMN name;
+  > EOF
+  $ sqlgg -no-header -dialect mysql -migrate -now 20260201000000 -gen caml -name mig -initial initial.sql -migrations-file migrations.sql -target target.sql 2>&1 | grep -E 'let (apply|revert)_|ignore db'
+    let apply_20251231000000_drop_legacy db  =
+    let revert_20251231000000_drop_legacy db  =
+      ignore db;
+    let apply_20260101000000_add_name db  =
+    let revert_20260101000000_add_name db  =

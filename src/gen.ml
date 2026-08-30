@@ -8,7 +8,7 @@ open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
-type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t; }
+type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t list; }
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -39,7 +39,7 @@ let make_param_name index (p:Sql.param_id) =
 
 let show_param_name (p: Sql.Type.t Sql.param) index = make_param_name index p.id
 
-let make_name props default = Option.default default (Props.get props "name")
+let make_name props default = Stdlib.Option.value ~default (Props.name props)
 let default_name str index = sprintf "%s_%u" str index
 
 let choose_name props kind index =
@@ -48,9 +48,9 @@ let choose_name props kind index =
   | _ -> '_'
   end in
   let fix' s =
-    match Props.get props "subst" with
-    | Some x -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in safename s
-    | None -> safename s
+    match Props.substs props with
+    | x :: _ -> let (_,s) = String.replace ~str:s ~sub:("%%"^x^"%%") ~by:x in safename s
+    | [] -> safename s
   in
   let fix t = fix' @@ Sql.show_table_name t in
   let name = match kind with
@@ -192,7 +192,7 @@ let substitute_vars s vars subst_param =
         loop s (List.rev processed_shared @ static (String.slice ~first:i ~last:i1 s) :: acc) i2 tl
     | DynamicSelect (name,ctors) :: tl ->
       let dyn = ctors |> List.map begin function
-        | Sql.Simple (ctor, args) ->
+        | Sql.Simple { ctor; body = args; _ } ->
           let (c1, c2) = ctor.pos in
           let sql = match args with
             | None | Some [] -> [Static (String.slice ~first:c1 ~last:c2 s)]
@@ -215,7 +215,7 @@ let substitute_vars s vars subst_param =
       loop s acc i2 tl
   and process_ctors ~is_poly s i ctors =
     ctors |> List.map begin function
-      | Sql.Simple (ctor, args) ->
+      | Sql.Simple { ctor; body = args; _ } ->
         let (c1, c2) = ctor.pos in
         assert ((c2 = 0 && c1 = 1) || c2 > c1);
         assert (c1 > i);
@@ -250,7 +250,7 @@ let subst_postgresql index _ = "$" ^ string_of_int (index + 1)
 let subst_unnamed _ _ = "?"
 
 let get_sql stmt =
-  let sql = Props.get stmt.props "sql" |> Option.get in
+  let sql = List.find_map (function Props.Sql s -> Some s | _ -> None) stmt.props |> Option.get in
   let subst =
     match !params_mode with
     | None -> None
@@ -298,8 +298,7 @@ let schema_to_values list = List.mapi (fun i attr -> { vname = name_of attr i; v
 let all_params_to_values l =
   l |> List.mapi (fun i p -> { vname = show_param_name p i; vtyp = T.as_lang_type p.typ; nullable = is_param_nullable p || p.typ.Sql.Type.nullability = Nullable; })
   |> List.unique ~cmp:(fun v1 v2 -> String.equal v1.vname v2.vname)
-(* rev unique rev -- to preserve ordering with respect to first occurrences *)
-let values_of_params = List.rev $ List.unique ~cmp:(=) $ List.rev $ all_params_to_values
+let values_of_params = all_params_to_values
 
 let rec find_param_ids l =
   List.concat @@

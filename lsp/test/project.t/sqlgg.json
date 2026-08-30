@@ -1,0 +1,1 @@
+{ "schema": ["schema/0?_*.sql", "schema/extra.sql"], "dialect": "sqlite", "other": 1 }

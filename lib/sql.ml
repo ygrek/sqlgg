@@ -4,7 +4,7 @@ open Printf
 open ExtLib
 open Prelude
 
-type pos = int * int [@@deriving show]
+type pos = int * int [@@deriving show, eq]
 
 type 'a located  = { value : 'a; pos : pos } [@@deriving show, make]
 type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make]
@@ -530,6 +530,15 @@ let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn 
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show]
 type table = table_name * schema [@@deriving show]
+type table_alias = {
+  alias : table_name located;
+  target : table_name option;
+} [@@deriving show]
+
+let find_table_alias (aliases : table_alias list) name =
+  List.find_map (fun { alias; target } ->
+    if String.equal alias.value.tn name then target else None)
+    aliases
 
 type join_source = { table : table_name; alias : table_name option } [@@deriving show]
 let join_source_name { table; alias } = Option.default table alias
@@ -600,8 +609,10 @@ type 't param = { id : param_id; typ : 't; } [@@deriving show, make]
 type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
 type params = Type.t param list [@@deriving show]
 type in_or_not_in = [`In | `NotIn] [@@deriving show]
+type 'expr choice = { ctor : param_id; ctor_pos : pos; body : 'expr option } [@@deriving show]
+
 type ctor =
-| Simple of param_id * var list option
+| Simple of var list choice
 | Verbatim of string * string
 and var =
 | Single of Type.t param * Meta.t
@@ -622,7 +633,7 @@ and tuple_list_kind =
 and vars = var list [@@deriving show]
 
 let ctor_vars = function
-  | Simple (_, vars) -> Option.default [] vars
+  | Simple { body; _ } -> Stdlib.Option.value ~default:[] body
   | Verbatim _ -> []
 
 let sub_vars = function
@@ -634,7 +645,7 @@ let sub_vars = function
 
 let map_sub_vars f =
   let map_ctor = function
-    | Simple (n, vars) -> Simple (n, Option.map f vars)
+    | Simple c -> Simple { c with body = Option.map f c.body }
     | Verbatim _ as c -> c
   in
   function
@@ -666,11 +677,12 @@ type limit_t = [ `Limit | `Offset ]
 type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
+  cpos : pos;
 } [@@deriving show]
 type logical_op = And | Or | Xor [@@deriving eq, show]
 type comparison_op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
 type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
-type source_alias = { table_name : table_name; column_aliases : schema option } [@@deriving show]
+type source_alias = { table_name : table_name located; column_aliases : schema option } [@@deriving show]
 type select_row_locking_kind = For_update | For_share [@@deriving show]
 and limit = Source_type.t param list * bool
 and nested = source * (source * Schema.Join.typ located * join_condition) located list [@@deriving show]
@@ -678,13 +690,14 @@ and source_kind = [ `Select of select_full | `Table of table_name | `Nested of n
 and source = (source_kind * source_alias option) (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {
+  source_pos : pos option;
   columns : column list;
   from : nested option;
   where : expr option;
   group : expr list;
   having : expr option;
 }
-and cte_item = { cte_name: string; cols: schema option; stmt: cte_stmt; } [@@deriving show]
+and cte_item = { cte_name: string located; cols: schema option; stmt: cte_stmt; } [@@deriving show]
 and cte_stmt = CteInline of select_complete | CteSharedQuery of shared_query_ref_id [@@deriving show]
 and cte = { cte_items: cte_item list; is_recursive: bool; } [@@deriving show]
 and select_complete = {
@@ -738,8 +751,8 @@ and 't func =
      - repeating_pattern: list of types that repeat [path_type, val_type]
      Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
   [@@deriving show]
-and 'expr choices = (param_id * 'expr option) list
-and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; over: over option } [@@deriving show]
+and 'expr choices = 'expr choice list
+and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; over: over option; fn_pos: pos } [@@deriving show]
 and over = { frame_has_a_row: bool } [@@deriving show]
 and case_branch = { when_: expr; then_: expr }
 and case = {  
@@ -772,7 +785,12 @@ and column_kind =
 
 type columns = column list [@@deriving show]
 
-let fn ?over fn_name kind parameters = Fun { fn_name; kind; parameters; over }
+let fn ?over fn_name kind parameters = Fun { fn_name; kind; parameters; over; fn_pos = dummy_pos }
+
+let with_pos pos e =
+  match e with
+  | Fun f when equal_pos f.fn_pos dummy_pos -> Fun { f with fn_pos = pos }
+  | e -> e
 
 let column ?collation collated = Column (make_collated ?collation ~collated ())
 
@@ -840,7 +858,7 @@ let map_kind_exprs f = function
 
 let sub_exprs = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ -> []
-  | Choices (_, l) -> List.filter_map snd l
+  | Choices (_, l) -> List.filter_map (fun c -> c.body) l
   | InChoice (_, _, e) -> [e]
   | OptionActions { choice; _ } -> [choice]
   | Fun { kind = Agg (With_order { order; _ }); parameters; _ } -> parameters @ List.map fst order
@@ -853,7 +871,7 @@ let sub_exprs = function
 
 let map_sub_exprs f = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ as e -> e
-  | Choices (n, l) -> Choices (n, List.map (fun (n, e) -> n, Option.map f e) l)
+  | Choices (n, l) -> Choices (n, List.map (fun c -> { c with body = Option.map f c.body }) l)
   | InChoice (n, k, e) -> InChoice (n, k, f e)
   | OptionActions ({ choice; _ } as o) -> OptionActions { o with choice = f choice }
   | Fun ({ kind; parameters; _ } as fn) ->
@@ -919,7 +937,7 @@ module Alter_action_attr = struct
     [@@deriving show {with_path=false}]
 
   type t = {  
-    name : string; 
+    name : string located;
     kind : Source_type.kind collated located option;
     extra : constraint_ located list;
     meta: (string * string) list; 
@@ -937,7 +955,7 @@ module Alter_action_attr = struct
       | Syntax_constraint _ -> None
     ) col.extra
 
-  let to_attr (x: t): attr = make_attribute x.name 
+  let to_attr (x: t): attr = make_attribute x.name.value 
     (Option.map (fun k -> Source_type.kind_to_type_kind k.value.collated) x.kind)
     (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
@@ -956,9 +974,9 @@ module Alter_action_attr = struct
       in
       make_located ~pos:(0,0) ~value:c
     ) in
-    let kind = Some (make_located ~pos:(0,0) ~value:(make_collated ~collated:(Source_type.Infer attr.domain.Type.t) ())) in
+    let kind = Some (make_located ~pos:dummy_pos ~value:(make_collated ~collated:(Source_type.Infer attr.domain.Type.t) ())) in
     let meta = Meta.StringMap.bindings attr.meta in
-    { name = attr.name; kind; extra; meta }
+    { name = make_located ~pos:dummy_pos ~value:attr.name; kind; extra; meta }
 end
 
 type index_op_kind =
@@ -1041,7 +1059,7 @@ type create_type_target =
   [@@deriving show {with_path=false}]
 
 type stmt =
-  | Create of table_name * create_target
+  | Create of table_name located * create_target
   | Drop of table_name
   | Alter of table_name * alter_action list
   | Rename of (table_name * table_name) list
@@ -1051,7 +1069,7 @@ type stmt =
   | DeleteMulti of table_name list * nested * expr option
   | Set of (string * expr) list * stmt option
   | Update of table_name * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
-  | UpdateMulti of nested list * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
+  | UpdateMulti of nested * assignments * expr option * order * Source_type.t param list (* where, order, limit *)
   | Select of select_full
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
   | CreateType of string * create_type_target
@@ -1085,6 +1103,11 @@ type schema_column =
   | Attr of attr
   | Dynamic of param_id * attr dynamic_field list
   [@@deriving show]
+
+let schema_of_columns : schema_column list -> schema =
+  List.concat_map (function
+    | Attr attr -> [attr]
+    | Dynamic (_, l) -> List.map (fun f -> f.field_attr) l)
 
 let drop_sources : schema_column_with_sources -> schema_column = function
   | AttrWithSources { attr; _ } -> Attr attr
@@ -1144,6 +1167,7 @@ module Function : sig
 
 val lookup : string -> int -> Source_type.t func
 val lookup_agg : string -> int -> Source_type.t func
+val names : unit -> string list
 
 val add : int -> Source_type.t func -> string -> unit
 val exclude : int -> string -> unit
@@ -1154,9 +1178,18 @@ val add_multi: Source_type.t func -> string -> unit
 val sponge : Source_type.t func
 val add_fixed_then_pairs : ret:Type.tyvar -> fixed_args:Type.tyvar list -> repeating_pattern:Type.tyvar list -> string -> unit
 
+type registry
+val snapshot : unit -> registry
+val restore : registry -> unit
+
 end = struct
 
-let h = Hashtbl.create 10
+type registry = (string * int option, Source_type.t func option) Hashtbl.t
+
+let h : registry = Hashtbl.create 10
+
+let snapshot () = Hashtbl.copy h
+let restore = hashtbl_restore h
 
 let add_ narg typ name =
   let name = String.lowercase_ascii name in
@@ -1193,6 +1226,10 @@ let lookup name narg =
 let lookup_agg name narg = match lookup name narg with 
   | Agg _ as a -> a
   | _ -> fail "Function %s is not an aggregate function" name
+
+let names () =
+  Hashtbl.fold (fun (name, _) typ acc -> match typ with Some _ -> name :: acc | None -> acc) h []
+  |> List.sort_uniq String.compare
 
 let monomorphic ret args name = add (List.length args) (monomorphic ret args) name
 let multi_polymorphic name = 

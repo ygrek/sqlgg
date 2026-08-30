@@ -21,4 +21,5 @@ let get_opt = Hashtbl.find_opt registry
 
 let get = Hashtbl.find registry
 
-let reset () = Hashtbl.reset registry
+let snapshot () = Hashtbl.copy registry
+let restore = Prelude.hashtbl_restore registry

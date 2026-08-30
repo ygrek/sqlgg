@@ -3,7 +3,7 @@ open Sql
 
 module Qualified_attr = struct
   module T = struct
-    type t = { sources : table_name list; name : string } [@@deriving eq, ord]
+    type t = { name : string; sources : table_name list } [@@deriving eq, ord]
   end
   include T
 
@@ -131,7 +131,7 @@ let narrow_columns ~resolve ~constrains e =
         | Fun { kind = Quantified_comparison _; _ } -> empty
         | Case c -> every_path c
         | Choices (_, alternatives) ->
-          keep_shared (List.map (fun (_, e) -> Option.map_default same empty e) alternatives)
+          keep_shared (List.map (fun c -> Stdlib.Option.fold ~none:empty ~some:same c.Sql.body) alternatives)
         | InChoice (_, `In, Fun { kind = Membership; parameters = x :: _; _ }) ->
           begin match known with `Holds -> has_value x | `Fails -> empty end
         | InTupleList { value = { exprs; kind_in_tuple_list = `In; _ }; _ } ->

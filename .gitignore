@@ -10,3 +10,4 @@ sqlgg.cgi
 # vim
 *.swp
 *.exe
+*.install

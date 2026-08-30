@@ -21,19 +21,13 @@ let cmp_params p1 p2 =
     _ -> false
 
 let parse sql =
-  let lexbuf = Lexing.from_string sql in
-  let tokens = Enum.from (fun () ->
-    match Sql_lexer.ruleStatement lexbuf with
-    | `Eof -> `Semicolon
-    | #Main.token as x -> x)
-  in
-  match Main.extract_statement' tokens with
-  | None -> raise Enum.No_more_elements 
-  | Some (buffer, _) ->
-      match Main.parse_one (buffer,[]) with
-      | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
-      | [] -> assert_failure @@ sprintf "Failed to parse : %s" sql
-      | stmt :: _ -> stmt
+  match Statements.split sql with
+  | [] -> assert_failure @@ sprintf "No statement in : %s" sql
+  | stmt :: _ ->
+    match Main.parse_one { stmt with props = [] } with
+    | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
+    | [] -> assert_failure @@ sprintf "Failed to parse : %s" sql
+    | stmt :: _ -> stmt
 let assert_params_with_meta stmt meta = 
     let meta = List.map (fun (p, m) -> p, Meta.of_list m) meta in
     assert_equal 
@@ -86,7 +80,8 @@ let tt_schema_only sql ?kind schema =
   sql >:: test
 
 let wrong sql =
-  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try ignore (Main.parse_one' (sql,[])); false with _ -> true))
+  let compile stmt = ignore (Compile.statement ~dynamic_select:Props.Off stmt) in
+  sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try List.iter compile (Statements.split sql); false with _ -> true))
 
 let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
 let check name sql expected = name >:: (fun () -> assert_params_with_meta (parse sql) expected)
