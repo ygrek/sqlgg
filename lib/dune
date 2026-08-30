@@ -1,5 +1,6 @@
 (menhir
- (modules sql_parser))
+ (modules sql_parser)
+ (flags --strict))
 
 (ocamllex sql_lexer)
 
