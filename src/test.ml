@@ -106,16 +106,16 @@ let test = Type.[
      [attr' ~nullability:Nullable "str" Text]
      [param Int];
   tt "SELECT x,y+? AS z FROM (SELECT id AS y,CONCAT(str,name) AS x FROM test WHERE id=@id*2) ORDER BY x,x+z LIMIT @lim"
-     [attr' ~nullability:Nullable "x" Text; attr' ~nullability:Nullable "z" Int]
-     [param_nullable Int; named "id" Int; named "lim" Int; ];
+     [attr' ~nullability:Nullable "x" Text; attr' "z" Int]
+     [param Int; named "id" Int; named "lim" Int; ];
   tt "select test.name,other.name as other_name from test, test as other where test.id=other.id + @delta"
      [  attr' ~nullability:Nullable "name" Text;
         attr' ~nullability:Nullable "other_name" Text
      ]
-     [named_nullable "delta" Int];
+     [named "delta" Int];
   tt "select test.name from test where test.id + @x = ? or test.id - @x = ?"
      [attr' ~nullability:Nullable "name" Text;]
-     [named_nullable "x" Int; param Int; named_nullable "x" Int; param Int;];
+     [named "x" Int; param Int; named "x" Int; param Int;];
   tt "SELECT name FROM test WHERE name IS NOT NULL"
      [attr' "name" Text]  (* Strict, not Nullable *)
      [];
@@ -259,9 +259,8 @@ let test = Type.[
      [attr' "name" Text;
       attr' "str" ~nullability:Nullable Text]
      [];
-  (* CASE missing ELSE - should NOT refine (else branch might be NULL) *)
   tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL END"
-     [attr' "name" ~nullability:Nullable Text]
+     [attr' "name" Text]
      [];
   (* CASE with one branch missing check - should NOT refine *)
   tt "SELECT name FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL WHEN id < 10 THEN id > 0 ELSE name IS NOT NULL END"
@@ -269,6 +268,20 @@ let test = Type.[
      [];
   (* CASE with different columns in branches - should NOT refine either *)
   tt "SELECT name, str FROM test WHERE CASE WHEN id > 10 THEN name IS NOT NULL ELSE str IS NOT NULL END"
+     [attr' "name" ~nullability:Nullable Text;
+      attr' "str" ~nullability:Nullable Text]
+     [];
+  tt "SELECT name FROM test WHERE name > ALL (SELECT str FROM test)"
+     [attr' "name" ~nullability:Nullable Text]
+     [];
+  tt "SELECT name FROM test WHERE name > ANY (SELECT str FROM test)"
+     [attr' "name" Text]
+     [];
+  tt "SELECT name, str FROM test WHERE NOT (name IS NULL) AND NOT (str IS NULL)"
+     [attr' "name" Text;
+      attr' "str" Text]
+     [];
+  tt "SELECT name, str FROM test WHERE NOT (name IS NULL AND str IS NULL)"
      [attr' "name" ~nullability:Nullable Text;
       attr' "str" ~nullability:Nullable Text]
      [];
@@ -291,7 +304,7 @@ let test = Type.[
   (* check precedence of boolean and arithmetic operators *)
   tt "select str from test where id>=@id and id-@x<@id"
     [attr' ~nullability:Nullable "str" Text;]
-    [named "id" Int; named_nullable "x" Int; named "id" Int];
+    [named "id" Int; named "x" Int; named "id" Int];
   tt "select 3/5"
     [attr' ~nullability:Strict "" Float;]
     [];
@@ -336,8 +349,8 @@ let test4 =
     [attr' ~nullability:Strict  "" Int; attr' ~nullability:Strict "" Text] [] ~kind:(Select `Nat);
   tt "select greatest(10,x) from test4" [attr' ~nullability:Nullable "" Int] [] ~kind:(Select `Nat);
   tt "select 1+2 from test4 where x=y"  [attr' ~nullability:Strict "" Int] [] ~kind:(Select `Nat);
-  tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:Nullable "q" Int] [named_nullable "n" Int] ~kind:(Select `One);
-  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:Strict "q" Int] [named_nullable "n" Int] ~kind:(Select `One); 
+  tt "select max(x) as q from test4 where y = x + @n" [attr' ~nullability:Nullable "q" Int] [named "n" Int] ~kind:(Select `One);
+  tt "select coalesce(max(x),0) as q from test4 where y = x + @n" [attr' ~nullability:Strict "q" Int] [named "n" Int] ~kind:(Select `One); 
 ]
 
 let test_parsing = [
@@ -353,27 +366,29 @@ let test_join_result_cols () =
   Tables.reset ();
   let ints = List.map (fun name ->
     if Stdlib.String.ends_with name ~suffix:"?" then
-      Sql.{ name = String.slice ~last:(-1) name; domain = Type.(nullable Int); extra = Constraints.empty; meta = Meta.empty();}
+      attr' ~nullability:Type.Nullable (String.slice ~last:(-1) name) Type.Int
     else
-      attr name Int)
+      attr' name Type.Int)
   in
   do_test "CREATE TABLE t1 (i INT, j INT)" [] [];
   do_test "CREATE TABLE t2 (k INT, j INT)" [] [];
-  do_test "SELECT * FROM t1 JOIN t2 ON t1.j=t2.j" (ints ["i";"j";"k";"j"]) [];
-  do_test "SELECT * FROM t1 LEFT JOIN t2 ON t1.j=t2.j" (ints ["i";"j";"k?";"j?"]) [];
-  do_test "SELECT * FROM t1 RIGHT JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k";"j"]) [];
+  do_test "SELECT * FROM t1 JOIN t2 ON t1.j=t2.j" (ints ["i?";"j";"k?";"j"]) [];
+  do_test "SELECT * FROM t1 LEFT JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k?";"j?"]) [];
+  do_test "SELECT * FROM t1 RIGHT JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k?";"j?"]) [];
   do_test "SELECT * FROM t1 FULL JOIN t2 ON t1.j=t2.j" (ints ["i?";"j?";"k?";"j?"]) [];
-  do_test "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i";"k"]) [];
-  do_test "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i";"k"]) [];
+  do_test "SELECT * FROM t1 NATURAL JOIN t2" (ints ["j";"i?";"k?"]) [];
+  do_test "SELECT * FROM t1 JOIN t2 USING (j)" (ints ["j";"i?";"k?"]) [];
+  do_test "SELECT * FROM t1 NATURAL LEFT JOIN t2" (ints ["j?";"i?";"k?"]) [];
+  do_test "SELECT * FROM t1 LEFT JOIN t2 USING (j)" (ints ["j?";"i?";"k?"]) [];
 (*   NATURAL JOIN with common column in WHERE *)
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE j > @x"
-    (ints ["j";"i";"k"])
+    (ints ["j";"i?";"k?"])
     [named"x" Int];
 (*   NATURAL JOIN with common column qualified in WHERE *)
   do_test
     "SELECT * FROM t1 NATURAL JOIN t2 WHERE t2.j > @x"
-    (ints ["j";"i";"k"])
+    (ints ["j";"i?";"k?"])
     [named "x" Int];
   ()
 
@@ -385,10 +400,10 @@ let test_enum = [
 
 let test_manual_param = [
   tt "CREATE TABLE test7 (x INT NULL DEFAULT 0) ENGINE=MyISAM DEFAULT CHARSET=utf8" [] [];
-  tt "SELECT * FROM test7 WHERE x = @x_arg" [attr "x" Int ~extra:[Null; WithDefault];] [
+  tt "SELECT * FROM test7 WHERE x = @x_arg" [attr' "x" Int ~extra:[Null; WithDefault];] [
     named "x_arg" Int
   ];
-  tt "SELECT * FROM test7 WHERE x = @x_arg::Int" [attr "x" Int ~extra:[Null; WithDefault];] [
+  tt "SELECT * FROM test7 WHERE x = @x_arg::Int" [attr' "x" Int ~extra:[Null; WithDefault];] [
     named "x_arg" Int
   ];
   tt "INSERT INTO test7 VALUES (@x_arg)" [] [
@@ -461,10 +476,10 @@ let test_param_not_null_by_default = [
     AND a + @x = 10
     AND c = @c AND a < (@a2 :: Int Null)
     AND (SELECT d FROM test16 LIMIT 1) = @d
-  |} [attr "a" Int ~extra:[];] [
+  |} [attr' "a" Int ~extra:[];] [
     named "a" Int;
     named "ab" Int;
-    named_nullable "x" Int;
+    named "x" Int;
     named "c" Text;
     named_nullable "a2" Int;
     named "d" Int;
@@ -612,7 +627,7 @@ let cte_possible_rec_non_shared_select_only = [
     )
     SELECT num
     FROM cte
-  |} [ attr' ~nullability:Nullable "num" Int;][];
+  |} [ attr' ~nullability:Strict "num" Int;][];
   tt {|
     CREATE TABLE test22 (
       col_id INT PRIMARY KEY,
@@ -648,7 +663,7 @@ let cte_possible_rec_non_shared_select_only = [
     WHERE dt.avg_value
   |} [
     attr' ~nullability:Nullable "col_group" Text;
-    attr' ~nullability:Nullable "avg_value" Float;
+    attr' ~nullability:Strict "avg_value" Float;
   ] [];
   tt {|
     INSERT INTO test22 (col_id, col_value, col_group)
@@ -710,26 +725,26 @@ let test_ambiguous = [
      while it doesn't do that for WHERE.
   *)
   tt "select test23.id from test23 join test24 on test23.id = test24.id order by id" [
-    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Strict "id" Int;
   ] [];
   (* Wrong parses and asserts fail *)
   wrong "select test23.id from test23 join test24 on test23.id = test24.id where id > 2 order by id";
   tt "select test23.id from test23 join test24 on test23.id = test24.id group by id" [
-    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Strict "id" Int;
   ] [];
   tt "select test23.id as test from test23 join test24 on test23.id = test24.id group by column_a" [
-    attr' ~nullability:Nullable "test" Int;
+    attr' ~nullability:Strict "test" Int;
   ][];
   tt "select test23.id, test24.id from test23 join test24 on test23.id = test24.id" [
-    attr' ~nullability:Nullable "id" Int;
-    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Strict "id" Int;
+    attr' ~nullability:Strict "id" Int;
   ] [];
   (* Wrong parses and asserts fail *)
   wrong "select id, id from test23 join test24 on test23.id = test24.id group by id";
   wrong "select id as id1, id as id2 from test23 join test24 on test23.id = test24.id group by id";
   wrong "select test23.id, test24.id from test23 join test24 on test23.id = test24.id group by id";
   tt "select test23.id from test23 join test24 on test23.id = test24.id group by id, column_a" [
-    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Strict "id" Int;
   ] [];
   tt "SELECT COUNT(column_a) as column_a FROM test23 WHERE column_a = @column_a" [
     (* COUNT(column_a :: Text) :: Int *)
@@ -742,19 +757,19 @@ let test_ambiguous = [
   tt "CREATE TABLE test26 (id INT)" [] [];
   wrong "select * from foo join bar on foo.id";
   tt "SELECT test23.id AS id1, test24.id AS id2 FROM test23 JOIN test24 ON test23.id = test24.id" [
-    attr' ~nullability:Nullable "id1" Int;
-    attr' ~nullability:Nullable "id2" Int;
+    attr' ~nullability:Strict "id1" Int;
+    attr' ~nullability:Strict "id2" Int;
   ] [];
   tt "SELECT test23.id, test24.id FROM test23 JOIN test24 ON test23.id = test24.id GROUP BY test23.id" [
-    attr' ~nullability:Nullable "id" Int;
-    attr' ~nullability:Nullable "id" Int;
+    attr' ~nullability:Strict "id" Int;
+    attr' ~nullability:Strict "id" Int;
   ][];
   wrong "SELECT COUNT(id) FROM test23 JOIN test24 ON test23.id = test24.id";
   wrong "SELECT COUNT(id) as id FROM test23 JOIN test24 ON test23.id = test24.id";
   wrong "SELECT id FROM test23 JOIN test24 ON test23.id = test24.id WHERE id > 2";
   tt "SELECT test23.id AS test_id, test24.id AS other_id FROM test23 JOIN test24 ON test23.id = test24.id" [
-    attr' ~nullability:Nullable "test_id" Int;
-    attr' ~nullability:Nullable "other_id" Int;
+    attr' ~nullability:Strict "test_id" Int;
+    attr' ~nullability:Strict "other_id" Int;
   ] [];
   tt "SELECT COUNT(test23.id) AS count_id FROM test23 JOIN test24 ON test23.id = test24.id" [
     attr' "count_id" Int;
@@ -768,7 +783,7 @@ let test_ambiguous = [
     JOIN test28 t2 ON t1.id = t2.id
     JOIN test29 t3 ON t1.id = t3.id
   |}[
-    attr' ~nullability:Nullable "id_from_test27" Int;
+    attr' ~nullability:Strict "id_from_test27" Int;
     attr' ~nullability:Nullable "value_from_test28" Int;
     attr' ~nullability:Nullable "value_from_test29" Int;
   ][];
@@ -1101,6 +1116,21 @@ let test_add_with_window_function = [
   tt {| SELECT MIN(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
   tt {| SELECT MAX(1) OVER() WHERE FALSE |} [attr' "" Int;] [];
   tt {| SELECT MAX(NULL) OVER() |} [attr' ~nullability:Nullable "" Any;] [];
+
+  (* A frame that never reaches the current row is empty on the rows at that edge *)
+  tt "CREATE TABLE win_frame (a INT, b INT)" [] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' "w" Int] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b ROWS UNBOUNDED PRECEDING) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' "w" Int] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' "w" Int] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' ~nullability:Nullable "w" Int] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b ROWS BETWEEN 1 FOLLOWING AND 2 FOLLOWING) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' ~nullability:Nullable "w" Int] [];
+  tt {| SELECT SUM(a) OVER (ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS w FROM win_frame WHERE a IS NOT NULL |}
+     [attr' ~nullability:Nullable "w" Int] [];
 
   (* Same but with PARTITION BY and ORDER BY *)
   tt {| SELECT SUM(1) OVER(PARTITION BY COALESCE(NULL, 'a')) |} [attr' "" Int;] [];
@@ -2636,6 +2666,7 @@ let test_cardinality =
   let z = [attr' ~nullability:Nullable "z" ~extra:[Constraint.make_composite_unique ["z"; "a"]] Int] in
   let a = [attr' ~nullability:Nullable "a" ~extra:[Constraint.make_composite_unique ["z"; "a"]] Int] in
   let b = [attr' ~nullability:Nullable "b" Int] in
+  let refined = List.map (fun a -> Sql.{ a with domain = Type.make_strict a.domain }) in
   [
   tt "CREATE TABLE test_cardinality (x INT PRIMARY KEY, y INT, z INT, a INT, b INT, UNIQUE(y), UNIQUE(z, a))" [] [];
   tt "select x from test_cardinality where true" x [] ~kind:(Select `Nat);
@@ -2663,49 +2694,49 @@ let test_cardinality =
   tt "select x from test_cardinality where x = 1 and x = 2 and x = 3" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where x = 1 and x = 2 and x = 3 and x = 4" x [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where x = 1 and x = 2 and x = 3 and x = 4 and x = 5" x [] ~kind:(Select `Zero_one);
-  tt "select y from test_cardinality where y = 1" y [] ~kind:(Select `Zero_one);
-  tt "select y from test_cardinality where y != 1" y [] ~kind:(Select `Nat);
-  tt "select z from test_cardinality where z = 1" z [] ~kind:(Select `Nat);
-  tt "select z from test_cardinality where z != 1" z [] ~kind:(Select `Nat);
+  tt "select y from test_cardinality where y = 1" (refined y) [] ~kind:(Select `Zero_one);
+  tt "select y from test_cardinality where y != 1" (refined y) [] ~kind:(Select `Nat);
+  tt "select z from test_cardinality where z = 1" (refined z) [] ~kind:(Select `Nat);
+  tt "select z from test_cardinality where z != 1" (refined z) [] ~kind:(Select `Nat);
   tt "select x from test_cardinality where x = 1 limit 1" x [] ~kind:(Select `Zero_one);
-  tt "select y from test_cardinality where y = 1 limit 1" y [] ~kind:(Select `Zero_one);
-  tt "select z from test_cardinality where z = 1 limit 1" z [] ~kind:(Select `Zero_one);
+  tt "select y from test_cardinality where y = 1 limit 1" (refined y) [] ~kind:(Select `Zero_one);
+  tt "select z from test_cardinality where z = 1 limit 1" (refined z) [] ~kind:(Select `Zero_one);
   tt "select x from test_cardinality where x = 1 limit 2" x [] ~kind:(Select `Zero_one);
-  tt "select y from test_cardinality where y = 1 limit 2" y [] ~kind:(Select `Zero_one);
-  tt "select z from test_cardinality where z = 1 limit 2" z [] ~kind:(Select `Nat);
+  tt "select y from test_cardinality where y = 1 limit 2" (refined y) [] ~kind:(Select `Zero_one);
+  tt "select z from test_cardinality where z = 1 limit 2" (refined z) [] ~kind:(Select `Nat);
   tt "select x,y from test_cardinality where x = 1" (x @ y) [] ~kind:(Select `Zero_one);
   tt "select x,y from test_cardinality where x = 1 limit 1" (x @ y) [] ~kind:(Select `Zero_one);
   tt "select x,y from test_cardinality where x = 1 limit 2" (x @ y) [] ~kind:(Select `Zero_one);
   tt "select x,z from test_cardinality where x = 1" (x @ z) [] ~kind:(Select `Zero_one);
   tt "select x,z from test_cardinality where x = 1 limit 1" (x @ z) [] ~kind:(Select `Zero_one);
   tt "select x,z from test_cardinality where x = 1 limit 2" (x @ z) [] ~kind:(Select `Zero_one);
-  tt "select x,z from test_cardinality where z = 1" (x @ z) [] ~kind:(Select `Nat);
-  tt "select x,z from test_cardinality where z = 1 limit 1" (x @ z) [] ~kind:(Select `Zero_one);
-  tt "select x,z from test_cardinality where z = 1 limit 2" (x @ z) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where z = 1 and a = 1" (z @ a) [] ~kind:(Select `Zero_one);
-  tt "select z,a from test_cardinality where z = 1 and not (a = 1)" (z @ a) [] ~kind:(Select `Nat);
+  tt "select x,z from test_cardinality where z = 1" (x @ refined z) [] ~kind:(Select `Nat);
+  tt "select x,z from test_cardinality where z = 1 limit 1" (x @ refined z) [] ~kind:(Select `Zero_one);
+  tt "select x,z from test_cardinality where z = 1 limit 2" (x @ refined z) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z = 1 and a = 1" (refined z @ refined a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and not (a = 1)" (refined z @ refined a) [] ~kind:(Select `Nat);
   tt "select z,a from test_cardinality where not (z = 1 and a = 1)" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where not (z = 1) and a = 1" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where not not (a = 1)" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where z = 1 and a != 1" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where z != 1 and a = 1" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where (z = 1) and (a = 1)" (z @ a) [] ~kind:(Select `Zero_one);
-  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 1" (z @ a) [] ~kind:(Select `Zero_one);
-  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 2" (z @ a) [] ~kind:(Select `Zero_one);
-  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1" (z @ a @ b) [] ~kind:(Select `Zero_one);
-  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 1" (z @ a @ b) [] ~kind:(Select `Zero_one);
-  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 2" (z @ a @ b) [] ~kind:(Select `Zero_one);
-  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and not b = 1" (z @ a @ b) [] ~kind:(Select `Zero_one);
-  tt "select z,a from test_cardinality where z = 1" (z @ a) [] ~kind:(Select `Nat);
-  tt "select z,a from test_cardinality where z = 1 limit 1" (z @ a) [] ~kind:(Select `Zero_one);
-  tt "select z,a from test_cardinality where z = 1 limit 2" (z @ a) [] ~kind:(Select `Nat);
-  tt "select a,b from test_cardinality where a = 1 and b = 1" (a @ b) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where not (z = 1) and a = 1" (refined z @ refined a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where not not (a = 1)" (z @ refined a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z = 1 and a != 1" (refined z @ refined a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z != 1 and a = 1" (refined z @ refined a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where (z = 1) and (a = 1)" (refined z @ refined a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 1" (refined z @ refined a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 and a = 1 limit 2" (refined z @ refined a) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1" (refined z @ refined a @ refined b) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 1" (refined z @ refined a @ refined b) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and b = 1 limit 2" (refined z @ refined a @ refined b) [] ~kind:(Select `Zero_one);
+  tt "select z,a,b from test_cardinality where z = 1 and a = 1 and not b = 1" (refined z @ refined a @ refined b) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1" (refined z @ a) [] ~kind:(Select `Nat);
+  tt "select z,a from test_cardinality where z = 1 limit 1" (refined z @ a) [] ~kind:(Select `Zero_one);
+  tt "select z,a from test_cardinality where z = 1 limit 2" (refined z @ a) [] ~kind:(Select `Nat);
+  tt "select a,b from test_cardinality where a = 1 and b = 1" (refined a @ refined b) [] ~kind:(Select `Nat);
 ]
 
 let test_cardinality_optimization_validity = 
   let x = [attr' ~nullability:Strict "x" ~extra:[PrimaryKey] Int] in
   let id = [attr' ~nullability:Nullable "id" Int] in
-  let one_x = [attr' ~nullability:Nullable "one_x" Int] in
+  let one_x = [attr' ~nullability:Strict "one_x" Int] in
   [
   tt "CREATE TABLE tc2_1 (x INT PRIMARY KEY)" [] [];
   tt "CREATE TABLE tc2_2 (id INT, one_x INT, FOREIGN KEY (one_x) REFERENCES tc2_1(x))" [] [];
@@ -2715,6 +2746,71 @@ let test_cardinality_optimization_validity =
   tt "select * from tc2_2 join tc2_1 on tc2_2.one_x = tc2_1.x where tc2_1.x = 1" (id @ one_x @ x) [] ~kind:(Select `Nat);
   (* below should return multiple rows -- tc2_1.x is a primary key, but joining on it allows multiple rows with it to be returned *)
   tt "select * from tc2_1 join tc2_2 on tc2_1.x = tc2_2.one_x where tc2_1.x = 1" (x @ id @ one_x) [] ~kind:(Select `Nat);
+]
+
+let test_nullability_narrowing =
+  let n name = attr' ~nullability:Nullable name Int in
+  let s name = attr' ~nullability:Strict name Int in
+  [
+  tt "CREATE TABLE narrow1 (a INT, b INT, c TEXT)" [] [];
+  tt "CREATE TABLE narrow2 (d INT, e INT)" [] [];
+
+  tt "SELECT a FROM narrow1 WHERE a = 5" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a > 5" [s "a"] [];
+  tt "SELECT a, b FROM narrow1 WHERE a > b" [s "a"; s "b"] [];
+  tt "SELECT a FROM narrow1 WHERE a <> 5" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE NOT (a = 5)" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE NOT NOT (a = 5)" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a = a" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a" [s "a"] [];
+
+  tt "SELECT a + 1 AS r FROM narrow1 WHERE a IS NOT NULL" [s "r"] [];
+  tt "SELECT a + b AS r FROM narrow1 WHERE a > 0 AND b > 0" [s "r"] [];
+  tt "SELECT a FROM narrow1 WHERE a + 1 = 5" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE (a + 1) IS NOT NULL" [s "a"] [];
+
+  tt "SELECT a FROM narrow1 WHERE CAST(a AS DECIMAL) = 1" [n "a"] [];
+  tt "SELECT c FROM narrow1 WHERE CONCAT(c, c) = 'x'" [attr' ~nullability:Nullable "c" Text] [];
+  tt "SELECT c FROM narrow1 WHERE CONCAT_WS(',', c, c) = 'x'" [attr' ~nullability:Nullable "c" Text] [];
+  tt "SELECT a, b FROM narrow1 WHERE IF(a = 1, b = 2, b = 2)" [n "a"; n "b"] [];
+
+  tt "SELECT a, b FROM narrow1 WHERE a = 1 AND b = 2" [s "a"; s "b"] [];
+  tt "SELECT a, b FROM narrow1 WHERE a = 1 OR b = 2" [n "a"; n "b"] [];
+  tt "SELECT a FROM narrow1 WHERE a = 1 OR a = 2" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a IS NULL OR a > 3" [n "a"] [];
+  tt "SELECT a, b FROM narrow1 WHERE NOT (a = 1 AND b = 2)" [n "a"; n "b"] [];
+
+  tt "SELECT a FROM narrow1 WHERE a <=> 5" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE COALESCE(a, 0) = 1" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE COALESCE(a, a) = 1" [s "a"] [];
+
+  tt "SELECT a FROM narrow1 WHERE a IN (1, 2)" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a NOT IN (1, 2)" [s "a"] [];
+  (* an empty subquery makes IN false and NOT IN true even for a NULL left operand, and the
+     grammar drops the NOT, so membership in a subquery must not narrow at all *)
+  tt "SELECT a FROM narrow1 WHERE a IN (SELECT d FROM narrow2)" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a NOT IN (SELECT d FROM narrow2)" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE NOT (a IN (SELECT d FROM narrow2))" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a = ANY (SELECT d FROM narrow2)" [s "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a > ANY (SELECT d FROM narrow2)" [s "a"] [];
+  (* <=> is null-safe, so it narrows nothing even under ANY *)
+  tt "SELECT a FROM narrow1 WHERE a <=> ANY (SELECT d FROM narrow2)" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a = ALL (SELECT d FROM narrow2)" [n "a"] [];
+  tt "SELECT a FROM narrow1 WHERE a BETWEEN 1 AND 2" [s "a"] [];
+  tt "SELECT a, b FROM narrow1 WHERE a IN (b, 1)" [s "a"; n "b"] [];
+  tt "SELECT a, b FROM narrow1 WHERE a BETWEEN b AND 1" [s "a"; n "b"] [];
+
+  tt "SELECT a, b FROM narrow1 WHERE CASE WHEN a = 1 THEN b = 2 END" [s "a"; s "b"] [];
+  tt "SELECT a, b FROM narrow1 WHERE CASE WHEN a = 1 THEN b = 2 ELSE b = 3 END" [n "a"; s "b"] [];
+  tt "SELECT a, b FROM narrow1 WHERE CASE WHEN a = 1 THEN b = 2 ELSE a = 3 END" [s "a"; n "b"] [];
+
+  tt "SELECT a, d FROM narrow1 JOIN narrow2 ON a = d" [s "a"; s "d"] [];
+  tt "SELECT a, d FROM narrow1 LEFT JOIN narrow2 ON a = d" [n "a"; n "d"] [];
+  tt "SELECT a, d FROM narrow1 RIGHT JOIN narrow2 ON a = d" [n "a"; n "d"] [];
+  tt "SELECT a FROM narrow1 JOIN narrow2 ON a = d RIGHT JOIN narrow2 x2 ON a = x2.e" [n "a"] [];
+
+  tt "SELECT a, b FROM narrow1 GROUP BY a HAVING a > 1" [s "a"; n "b"] [];
+  tt "SELECT a, b FROM narrow1 GROUP BY a HAVING b > 1" [n "a"; n "b"] [];
 ]
 
 let test_nullability_rules = [
@@ -2762,7 +2858,7 @@ let test_fn_group_by_arg = [
     GROUP BY t1.table_no
     ORDER BY dates_from_t1; 
   |} [
-    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Strict "table_no" Int;
     attr' ~nullability:Nullable "dates_from_t1" Text;
     attr' ~nullability:Strict "dates_from_t1_strict" Text;
     attr' ~nullability:Nullable "dates_from_t2" Text;
@@ -2784,7 +2880,7 @@ let test_fn_group_by_arg = [
   GROUP BY t1.table_no
   ORDER BY dates_from_t1;
   |} [
-    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Strict "table_no" Int;
     attr' ~nullability:Nullable "dates_from_t1" Text;
     attr' ~nullability:Nullable "dates_from_t2" Text;
   ] [];
@@ -2810,7 +2906,7 @@ let test_fn_group_by_arg = [
     WHERE t1.table_no > @delta
     GROUP BY t1.table_no
   |} [
-    attr' ~nullability:Nullable "table_no" Int;
+    attr' ~nullability:Strict "table_no" Int;
     attr' ~nullability:Nullable "dates_from_t1" Text;
   ] [
     named "delta" Int;
@@ -2955,6 +3051,7 @@ let run () =
     "test_cardinality" >::: test_cardinality;
     "test_cardinality_optimization_validity" >::: test_cardinality_optimization_validity;
     "test_nullability_rules" >::: test_nullability_rules;
+    "test_nullability_narrowing" >::: test_nullability_narrowing;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
     "migration name" >::: test_migration_name;
@@ -2963,3 +3060,4 @@ let run () =
 let test_suite = "main" >::: tests in
   let results = run_test_tt test_suite in
   exit @@ if List.exists (function RFailure _ | RError _ -> true | _ -> false) results then 1 else 0
+

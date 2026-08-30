@@ -25,7 +25,7 @@
   <out>
    <value name="id" type="Int"/>
    <value name="name" type="Text"/>
-   <value name="category_id" type="Int" nullable="true"/>
+   <value name="category_id" type="Int"/>
    <value name="category_name" type="Text"/>
   </out>
  </stmt>
@@ -34,7 +34,7 @@
   <out>
    <value name="id" type="Int"/>
    <value name="name" type="Text"/>
-   <value name="category_id" type="Int" nullable="true"/>
+   <value name="category_id" type="Int"/>
    <value name="category_name" type="Text"/>
   </out>
  </stmt>

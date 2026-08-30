@@ -158,6 +158,22 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
     in
     T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
 
+  let optional_guard_stays_nullable db ~name callback =
+    let invoke_callback stmt =
+      callback
+        ~name:(T.get_column_Text_nullable stmt 0)
+    in
+    let set_params stmt =
+      let p = T.start_params stmt (0 + (match name with Some _ -> 1 | None -> 0)) in
+      begin match name with
+      | None -> ()
+      | Some name ->
+        T.set_param_Text p name;
+      end;
+      T.finish_params p
+    in
+    T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE " ^ (match name with Some _ -> " ( " ^ "name = " ^ "?" ^ " ) " | None -> " TRUE ")) ~name:"optional_guard_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params invoke_callback
+
   module Fold = struct
     let static_not_null db  callback acc =
       let invoke_callback stmt =
@@ -166,6 +182,24 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       in
       let r_acc = ref acc in
       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+      (fun () -> IO.return !r_acc)
+
+    let optional_guard_stays_nullable db ~name callback acc =
+      let invoke_callback stmt =
+        callback
+          ~name:(T.get_column_Text_nullable stmt 0)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match name with Some _ -> 1 | None -> 0)) in
+        begin match name with
+        | None -> ()
+        | Some name ->
+          T.set_param_Text p name;
+        end;
+        T.finish_params p
+      in
+      let r_acc = ref acc in
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE " ^ (match name with Some _ -> " ( " ^ "name = " ^ "?" ^ " ) " | None -> " TRUE ")) ~name:"optional_guard_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x !r_acc))
       (fun () -> IO.return !r_acc)
 
   end (* module Fold *)
@@ -178,6 +212,24 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       in
       let r_acc = ref [] in
       IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE name IS NOT NULL") ~name:"static_not_null" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+      (fun () -> IO.return (List.rev !r_acc))
+
+    let optional_guard_stays_nullable db ~name callback =
+      let invoke_callback stmt =
+        callback
+          ~name:(T.get_column_Text_nullable stmt 0)
+      in
+      let set_params stmt =
+        let p = T.start_params stmt (0 + (match name with Some _ -> 1 | None -> 0)) in
+        begin match name with
+        | None -> ()
+        | Some name ->
+          T.set_param_Text p name;
+        end;
+        T.finish_params p
+      in
+      let r_acc = ref [] in
+      IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT name FROM items WHERE " ^ (match name with Some _ -> " ( " ^ "name = " ^ "?" ^ " ) " | None -> " TRUE ")) ~name:"optional_guard_stays_nullable" ~kind:Sqlgg_traits.Query.(Select Nat) ()) set_params (fun x -> r_acc := invoke_callback x :: !r_acc))
       (fun () -> IO.return (List.rev !r_acc))
 
   end (* module List *)

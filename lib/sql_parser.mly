@@ -18,7 +18,9 @@
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
-  let poly name ret parameters = Fun { fn_name = name; kind = (F (Typ ret, List.map (fun _ -> Var 0) parameters)); parameters; is_over_clause = false }
+  let call name parameters = fn name (Function.lookup name (List.length parameters)) parameters
+
+  let arith name ret e1 e2 = fn name (Arith (Source_type.depends ret)) [e1; e2]
 %}
 
 %token <int> INTEGER
@@ -66,13 +68,16 @@
 *)
 (* FIXME precedence of COMMA and JOIN *)
 
+%nonassoc LOWEST
+%nonassoc COLLATE KEY ON WITH NULL
+
 (* https://dev.mysql.com/doc/refman/8.0/en/operator-precedence.html *)
 
 %left OR CONCAT_OP
 %left XOR
 %left AND
 %nonassoc NOT
-%nonassoc BETWEEN CASE (* WHEN THEN ELSE *) (* never useful *)
+%nonassoc BETWEEN
 %nonassoc EQUAL NUM_EQ_OP NOT_DISTINCT_OP IS LIKE LIKE_OP IN
 %nonassoc NUM_CMP_OP TEXT_CMP_OP TEXT_DIST_OP
 %left NUM_BIT_OR
@@ -86,7 +91,7 @@
 %nonassoc EXCL
 (* Warning: the precedence level assigned to BINARY is never useful. *)
 (* %nonassoc BINARY COLLATE *)
-%nonassoc INTERVAL
+%nonassoc ESCAPE
 
 %type <Sql.expr> expr
 
@@ -141,15 +146,15 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
                 CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind }
               }
          | select_stmt { Select $1 }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=insert_columns VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? VALUES p=param ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=insert_columns VALUES p=param ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Param (names, p); on_conflict_clause=ss; }
               }
-         | insert_action_kind=insert_cmd target=table_name names=sequence(ident)? select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
+         | insert_action_kind=insert_cmd target=table_name names=insert_columns select=maybe_parenth(select_stmt) ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Select (names, select); on_conflict_clause=ss; }
               }
@@ -157,14 +162,13 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=table_nam
               {
                 Insert { insert_action_kind; target; action=`Set set; on_conflict_clause=ss; }
               }
-         | update_cmd table=table_name SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
+         /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax
+            (a plain `UPDATE t SET` is the single-source case of it) */
+         | update_cmd tables=table_list SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
-                Update (table,ss,w,o,lim)
-              }
-         /* http://dev.mysql.com/doc/refman/5.1/en/update.html multi-table syntax */
-         | update_cmd tables=commas(table_list) SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
-              {
-                UpdateMulti (tables,ss,w,o,lim)
+                match tables with
+                | (`Table table, None), [] -> Update (table,ss,w,o,lim)
+                | _ -> UpdateMulti ([tables],ss,w,o,lim)
               }
          | DELETE FROM table=table_name w=where?
               {
@@ -262,29 +266,26 @@ select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(
 
 table_list: src=source joins=located(join_source)* { (src,joins) }
 
-anyorder(X,Y): x=X y=Y | y=Y x=X { x,y }
 inner_join: either(CROSS,INNER)? { Schema.Join.Inner }
-left_join: anyorder(LEFT,OUTER?) { Schema.Join.Left }
-right_join: anyorder(RIGHT,OUTER?) { Schema.Join.Right }
-full_join: anyorder(FULL,OUTER?) { Schema.Join.Full }
+inner_join_kw: either(CROSS,INNER) { Schema.Join.Inner }
+outer_join: LEFT OUTER? | OUTER LEFT { Schema.Join.Left }
+          | RIGHT OUTER? | OUTER RIGHT { Schema.Join.Right }
+          | FULL OUTER? | OUTER FULL { Schema.Join.Full }
 straight_join: STRAIGHT_JOIN { Schema.Join.Straight }
-natural(join): j=anyorder(NATURAL,join) JOIN src=source { src, snd j, Schema.Join.Natural }
+natural_join: NATURAL j=located(inner_join) | j=located(inner_join_kw) NATURAL { j }
+            | NATURAL j=located(outer_join) | j=located(outer_join) NATURAL { j }
+natural(join): j=join JOIN src=source { src, j, Schema.Join.Natural }
 cond(join): j=join JOIN src=source c=join_cond { src, j, c }
 straight_cond(join): j=join src=source c=join_cond { src, j, c }
 
 join_source: COMMA src=source c=join_cond { src, make_located ~value:Schema.Join.Inner ~pos:($startofs, $endofs), c }
-           | j=natural(located(left_join))
-           | j=natural(located(right_join))
-           | j=natural(located(full_join))
-           | j=natural(located(inner_join))
-           | j=cond(located(left_join))
-           | j=cond(located(right_join))
-           | j=cond(located(full_join))
+           | j=natural(natural_join)
+           | j=cond(located(outer_join))
            | j=cond(located(inner_join)) { j }
            | j=straight_cond(located(straight_join)) { j }
 join_cond: ON e=expr { On e }
          | USING l=sequence(ident) { Using l }
-         | (* *) { Default }
+         | %prec LOWEST { Default }
 
 source1: table_name { `Table $1 }
        | LPAREN s=select_stmt RPAREN { `Select s }
@@ -325,11 +326,11 @@ select_row_locking:
       { For_share }
 
 for_update_or_share:
-  FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock? { }
+  FOR either(UPDATE, SHARE) update_or_share_of? NOWAIT? with_lock { }
 
 update_or_share_of: OF commas(ident) { }
 
-with_lock: WITH LOCK { }
+with_lock: %prec LOWEST { } | WITH LOCK { }
 
 int_or_param: i=INTEGER { `Const i }
             | p=param { `Param p }
@@ -434,7 +435,7 @@ int_arg: LPAREN n=INTEGER RPAREN { n }
 
 key_part: n=ident int_arg? either(ASC,DESC)? { n }
 
-index_options: list(IDENT)? { }
+index_options: IDENT* { }
 
 table_index: name=ident? l=sequence(key_part) index_options { (name, l) }
 
@@ -457,7 +458,8 @@ on_conflict: ON CONFLICT algo=conflict_algo { algo }
 column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint PrimaryKey) }
                 | NOT NULL { Some (Alter_action_attr.Syntax_constraint NotNull) }
                 | NULL { Some (Alter_action_attr.Syntax_constraint Null) }
-                | UNIQUE KEY? { Some (Alter_action_attr.Syntax_constraint Unique) }
+                | UNIQUE %prec LOWEST
+                | UNIQUE KEY { Some (Alter_action_attr.Syntax_constraint Unique) }
                 | AUTOINCREMENT { Some (Alter_action_attr.Syntax_constraint Autoincrement) }
                 | DEFAULT def=default_value {
                     let pos = ($startofs(def), $endofs(def)) in
@@ -483,89 +485,96 @@ set_column_expr:
   | LCURLY e=expr RCURLY TWO_QSTN { (WithDefaultParam (e, (($startofs, $endofs), ($startofs + 1, $endofs - 3)))) }
   | DEFAULT { AssignDefault }
 
-anyall: ANY | ALL | SOME { }
+anyall: ANY | SOME { `Any }
+      | ALL { `All }
 
 mnot(X): NOT x = X | x = X { x }
 
 attr_name: cname=ident { { cname; tname=None} }
          | table=table_name DOT cname=ident { {cname; tname=Some table} } (* FIXME database identifier *)
 
-distinct_from: DISTINCT FROM { }
+is_not: %prec LOWEST { } | NOT %prec LOWEST { }
+distinct_from: { } | DISTINCT FROM { }
 
-like_expr: e1=expr mnot(like) e2=expr %prec LIKE { Fun { fn_name = "like"; kind = (fixed Bool [Text; Text]); parameters = [e1;e2]; is_over_clause = false } }
+%inline insert_columns: { None } | l=sequence(ident) { Some l }
+
+operators(E):
+      e1=E numeric_bin_op e2=E %prec PLUS { arith "numeric_bin_op" Any e1 e2 } (* TODO default Int *)
+    | e1=E NUM_DIV_OP e2=E %prec PLUS { arith "num_div" Float e1 e2 }
+    | e1=E TEXT_DIST_OP e2=E { arith "text_dist" Float e1 e2 }
+    | e1=E DIV e2=E %prec PLUS { arith "div" Int e1 e2 }
+    | e1=E op=comparison_op q=anyall? e2=E %prec EQUAL
+      { let kind = Option.map_default (fun quantifier -> Quantified_comparison { op; quantifier }) (Comparison op) q in
+        fn "comparison" kind [e1;e2] }
+    | e1=E CONCAT_OP e2=E { fn "concat" (fixed Text [Text;Text]) [e1;e2] }
+    | e1=E JSON_EXTRACT_OP e2=E { call "json_extract" [e1;e2] }
+    | e1=E JSON_UNQUOTE_EXTRACT_OP e2=E { call "json_unquote" [call "json_extract" [e1;e2]] }
+    | EXCL e=E %prec EXCL
+      (* Some SQLs use ! as negation, some don't. play it safe and negate it,
+         since negation is currently only used to verify cardinality constraints *)
+      { fn "excl" Negation [e] }
+    | TILDE e=E %prec TILDE { e }
+    | MINUS e=E %prec UNARY_MINUS { e }
+    | INTERVAL e=E interval_unit { fn "interval" (fixed Datetime [Int]) [e] }
+
+b_expr:
+      e=c_expr | e=operators(b_expr) { e }
 
 expr:
-      e1=expr numeric_bin_op e2=expr %prec PLUS { Fun { fn_name = "numeric_bin_op"; kind = (Ret (Source_type.depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* TODO default Int *)
-    | MOD LPAREN e1=expr COMMA e2=expr RPAREN { Fun { fn_name = "mod"; kind = (Ret (Source_type.depends Any)); parameters = [e1;e2]; is_over_clause = false } } (* mysql special *)
-    | e1=expr NUM_DIV_OP e2=expr %prec PLUS { Fun { fn_name = "num_div"; kind = (Ret (Source_type.depends Float)); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr TEXT_DIST_OP e2=expr { Fun { fn_name = "text_dist"; kind = (Ret (Source_type.depends Float)); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr DIV e2=expr %prec PLUS { Fun { fn_name = "div"; kind = (Ret (Source_type.depends Int)); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr bool_op=boolean_bin_op e2=expr %prec AND { Fun { fn_name = "boolean_bin_op"; kind = (Logical bool_op); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr comp_op=comparison_op anyall? e2=expr %prec EQUAL { Fun { fn_name = "comparison"; kind = Comparison comp_op; parameters = [e1; e2]; is_over_clause = false } }
-    | e1=expr CONCAT_OP e2=expr { Fun { fn_name = "concat"; kind = (fixed Text [Text;Text]); parameters = [e1;e2]; is_over_clause = false } }
-    | e1=expr JSON_EXTRACT_OP e2=expr { Fun { fn_name = "json_extract"; kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } }
-    | e1=expr JSON_UNQUOTE_EXTRACT_OP e2=expr { 
-        let extracted = Fun { fn_name = "json_extract"; kind = (Function.lookup "json_extract" 2); parameters = [e1; e2]; is_over_clause = false } in 
-        Fun { fn_name = "json_unquote"; kind = (Function.lookup "json_unquote" 1); parameters = [extracted]; is_over_clause = false } 
-      }
-    | e=like_expr esc=escape?
-      {
-        match esc with
-        | None -> e
-        | Some esc -> Fun { fn_name = "like_escape"; kind = (fixed Bool [Bool; Text]); parameters = [e;esc]; is_over_clause = false }
-      }
-    | f=unary_op e=expr { f e }
-    | MINUS e=expr %prec UNARY_MINUS { e }
-    | INTERVAL e=expr interval_unit { Fun { fn_name = "interval"; kind = (fixed Datetime [Int]); parameters = [e]; is_over_clause = false } }
-    | LPAREN e=expr RPAREN { e }
-    | a=attr_name c=collate? { Column (make_collated ?collation:c ~collated:a ()) }
-    | VALUES LPAREN n=ident RPAREN { Of_values n }
-    | v=literal_value | v=datetime_value { v }
-    | INTERVAL_UNIT { Value (make_collated ~collated:(strict Datetime) ()) }
-    | e1=expr mnot(IN) l=sequence(expr) { poly "in" (depends Bool) (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { poly "in_select" (depends Bool) [e1; SelectExpr (select, `AsValue)] }
+      e=c_expr | e=operators(expr) { e }
+    | e1=expr AND e2=expr { fn "boolean_bin_op" (Logical And) [e1;e2] }
+    | e1=expr XOR e2=expr { fn "boolean_bin_op" (Logical Xor) [e1;e2] }
+    | e1=expr OR e2=expr { fn "boolean_bin_op" (Logical Or) [e1;e2] }
+    | NOT e=expr %prec NOT { fn "not" Negation [e] }
+    | e1=expr mnot(like) e2=expr %prec LIKE { fn "like" Like [e1;e2] }
+    | e1=expr mnot(like) e2=expr ESCAPE esc=expr { fn "like_escape" Like_escape [fn "like" Like [e1;e2]; esc] }
+    | e1=expr mnot(IN) l=sequence(expr) { fn "in" Membership (e1::l) }
+    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { fn "in_select" Membership [e1; SelectExpr (select, `AsValue)] }
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | e1=expr k=in_or_not_in p=param
       {
-        let e = poly "in_param" (depends Bool) [ e1; Inparam (make_param ~id:p ~typ:(Source_type.depends Any), Meta.empty()) ] in
+        let arg = Inparam (make_param ~id:p ~typ:(Source_type.depends Any), Meta.empty()) in
+        let e = fn "in_param" Membership [e1; arg] in
         InChoice (make_located ~value:p.value ~pos:($startofs, $endofs), k, e )
       }
-    | LPAREN exprs=commas(expr) RPAREN k=in_or_not_in p=param
+    | LPAREN e=expr COMMA es=commas(expr) RPAREN k=in_or_not_in p=param
       {
-        InTupleList(make_located ~value:{ exprs; param_id = p; kind_in_tuple_list = k; } ~pos:($startofs, $endofs))
+        InTupleList(make_located ~value:{ exprs = e :: es; param_id = p; kind_in_tuple_list = k; } ~pos:($startofs, $endofs))
       }
+    | e=expr IS NOT NULL { fn "is_not_null" (Comparison Is_not_null) [e] }
+    | e=expr IS NULL { fn "is_null" (Comparison Is_null) [e] }
+    | e1=expr IS is_not distinct_from e2=expr %prec IS { fn "is_distinct" (Comparison Not_distinct_op) [e1;e2] }
+    | e=expr mnot(BETWEEN) a=b_expr AND b=expr { fn "between" Range [e;a;b] }
+
+c_expr:
+      MOD LPAREN e1=expr COMMA e2=expr RPAREN { arith "mod" Any e1 e2 } (* mysql special *)
+    | LPAREN e=expr RPAREN { e }
+    | a=attr_name c=collate? { column ?collation:c a }
+    | VALUES LPAREN n=ident RPAREN { Of_values n }
+    | v=literal_value | v=datetime_value { v }
+    | INTERVAL_UNIT { Value (make_collated ~collated:(strict Datetime) ()) }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
     | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (make_param ~id:{ p with pos=($startofs, $endofs) } ~typ:(Option.default (Source_type.depends Any) t), Meta.empty())  }
     | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { value; pos=(p1,_p2) } = p in Choices ({ value; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
-    | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { Fun { fn_name = "substring"; kind = (Function.lookup "substring" 3); parameters = [s;p;n]; is_over_clause = false } }
-    | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { Fun { fn_name = "substring"; kind = (Function.lookup "substring" 2); parameters = [s;p]; is_over_clause = false } }
-    | REPLACE LPAREN s=expr COMMA from=expr COMMA to_=expr RPAREN { Fun { fn_name = "replace"; kind = (Function.lookup "replace" 3); parameters = [s;from;to_]; is_over_clause = false } }
-    | DATE LPAREN e=expr RPAREN { Fun { fn_name = "date"; kind = (Function.lookup "date" 1); parameters = [e]; is_over_clause = false } }
-    | TIME LPAREN e=expr RPAREN { Fun { fn_name = "time"; kind = (Function.lookup "time" 1); parameters = [e]; is_over_clause = false } }
-    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { Fun { fn_name = f; kind = Function.lookup f 1; parameters = [e]; is_over_clause = false } }
-    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { Fun { fn_name = "extract"; kind = Function.lookup "extract" 1; parameters = [e]; is_over_clause = false } }
-    | DEFAULT LPAREN a=attr_name RPAREN { Fun { fn_name = "default"; kind = fun_identity; parameters = [Column (make_collated ~collated:a ())]; is_over_clause = false } }
+    | SUBSTRING LPAREN s=expr COMMA p=expr COMMA n=expr RPAREN { call "substring" [s;p;n] }
+    | SUBSTRING LPAREN s=expr either(FROM,COMMA) p=expr RPAREN { call "substring" [s;p] }
+    | REPLACE LPAREN s=expr COMMA from=expr COMMA to_=expr RPAREN { call "replace" [s;from;to_] }
+    | DATE LPAREN e=expr RPAREN { call "date" [e] }
+    | TIME LPAREN e=expr RPAREN { call "time" [e] }
+    | f=INTERVAL_UNIT LPAREN e=expr RPAREN { call f [e] }
+    | EXTRACT LPAREN interval_unit FROM e=expr RPAREN { call "extract" [e] }
+    | DEFAULT LPAREN a=attr_name RPAREN { fn "default" fun_identity [Column (make_collated ~collated:a ())] }
     | CONVERT LPAREN e=expr USING IDENT RPAREN { e }
     | CONVERT LPAREN e=expr COMMA f=cast_as RPAREN { f e }
     | GROUP_CONCAT LPAREN p=func_params order=loption(order) preceded(SEPARATOR, TEXT)? RPAREN
-      {
-        Fun { fn_name = "group_concat"; kind = Agg ( With_order({ with_order_kind = Group_concat; order })); parameters = p; is_over_clause = false } 
-      }
+      { fn "group_concat" (Agg (With_order { with_order_kind = Group_concat; order })) p }
     | JSON_ARRAYAGG LPAREN p=func_params order=loption(order) limit_t? RPAREN
-      {
-        Fun { fn_name = "json_arrayagg"; kind = Agg ( With_order({ with_order_kind = Json_arrayagg; order })); parameters = p; is_over_clause = false } 
-      }
+      { fn "json_arrayagg" (Agg (With_order { with_order_kind = Json_arrayagg; order })) p }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
-    | f=table_name LPAREN p=func_params RPAREN { 
-        Fun { fn_name = f.tn; kind = (Function.lookup f.tn (List.length p)); parameters = p; is_over_clause = false } 
-      }
-    | e=expr IS NOT NULL { Fun { fn_name = "is_not_null"; kind = Comparison Is_not_null; parameters = [e]; is_over_clause = false } }
-    | e=expr IS NULL { Fun { fn_name = "is_null"; kind = Comparison Is_null; parameters = [e]; is_over_clause = false } }
-    | e1=expr IS NOT? distinct_from? e2=expr { Fun { fn_name = "is_distinct"; kind = Comparison Not_distinct_op; parameters = [e1; e2]; is_over_clause = false } }
-    | e=expr mnot(BETWEEN) a=expr AND b=expr { poly "between" (depends Bool) [e;a;b] }
-    | mnot(EXISTS) LPAREN select=select_stmt RPAREN { Fun { fn_name = "exists"; kind = (F (Typ (strict Bool), [Typ (depends Any)])); parameters = [SelectExpr (select,`Exists)]; is_over_clause = false } }
+    | f=table_name LPAREN p=func_params RPAREN { call f.tn p }
+    | EXISTS LPAREN select=select_stmt RPAREN { fn "exists" (F (Typ (strict Bool), [Typ (depends Any)])) [SelectExpr (select,`Exists)] }
     | CASE initial_expr=expr? branches_list=nonempty_list(case_branch) else_expr=preceded(ELSE,expr)? END
       {
         let case_record = {
@@ -575,11 +584,10 @@ expr:
         } in
         Sql.Case case_record
       }
-    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { Fun { fn_name = "if"; kind = (F (Var 0, [Typ (depends Bool);Var 0;Var 0])); parameters = [e1;e2;e3]; is_over_clause = false } }
-    | e=window_function OVER window_spec { e }
-    | f=table_name LPAREN p=func_params RPAREN OVER window_spec 
-        { Fun { fn_name = f.tn; kind = (Function.lookup_agg f.tn (List.length p)); parameters = p; is_over_clause = true } }
-
+    | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { fn "if" (F (Var 0, [Typ (depends Bool); Var 0; Var 0])) [e1;e2;e3] }
+    | w=window_function OVER spec=window_spec { w spec }
+    | f=table_name LPAREN p=func_params RPAREN OVER w=window_spec
+        { fn ~over:w f.tn (Function.lookup_agg f.tn (List.length p)) p }
 values_stmt1: 
   | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
   | VALUES id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types; values_start_pos = $startofs  } }
@@ -589,24 +597,41 @@ values_stmt:
   
 
 (* https://dev.mysql.com/doc/refman/8.0/en/window-functions-usage.html *)
+lag_or_lead: LAG { "lag" } | LEAD { "lead" }
+
 window_function:
-  | either(FIRST_VALUE,LAST_VALUE) LPAREN e=expr RPAREN { e }
-  | NTH_VALUE LPAREN e=expr COMMA INTEGER RPAREN { e }
-  | either(LAG,LEAD) LPAREN e=expr pair(COMMA, pair(MINUS?,INTEGER))? RPAREN { e }
+  | FIRST_VALUE LPAREN e=expr RPAREN { fun over -> fn ~over "first_value" (Agg Self) [e] }
+  | LAST_VALUE LPAREN e=expr RPAREN { fun over -> fn ~over "last_value" (Agg Self) [e] }
+  | NTH_VALUE LPAREN e=expr COMMA INTEGER RPAREN
+    { fun _ -> fn ~over:{ frame_has_a_row = false } "nth_value" (Agg Self) [e] }
+  | f=lag_or_lead LPAREN e=expr offset=pair(COMMA, pair(MINUS?,INTEGER))? RPAREN
+    {
+      match offset with
+      | Some (_, (_, 0)) -> (fun _ -> e)
+      | None | Some _ -> (fun _ -> fn ~over:{ frame_has_a_row = false } f (Agg Self) [e])
+    }
 
-window_spec: LPAREN e=partition? o=order? frame? RPAREN (* TODO order parameters? *) { (Option.may (fun o -> make_partition_by (List.map fst o )) o); e }
-partition: PARTITION BY e=expr_list { make_partition_by e} (* TODO check no params *)
-
-frame: either(ROWS,RANGE) either(frame_border, frame_between) { }
-
-frame_between: BETWEEN frame_border AND frame_border { }
+frame:
+  | either(ROWS,RANGE) start=frame_border { start, `Current }
+  | either(ROWS,RANGE) BETWEEN start=frame_border AND stop=frame_border { start, stop }
 
 frame_border:
-  | CURRENT ROW
-  | UNBOUNDED PRECEDING
-  | UNBOUNDED FOLLOWING
-  | expr PRECEDING
-  | expr FOLLOWING { }
+  | CURRENT ROW { `Current }
+  | UNBOUNDED PRECEDING { `Before }
+  | UNBOUNDED FOLLOWING { `After }
+  | expr PRECEDING { `Before }
+  | expr FOLLOWING { `After }
+
+window_spec: LPAREN partition? o=order? f=frame? RPAREN (* TODO order parameters? *)
+  {
+    Option.may (fun o -> make_partition_by (List.map fst o)) o;
+    { frame_has_a_row = match f with
+      | None -> true
+      | Some (`After, _) | Some (_, `Before) -> false
+      | Some ((`Before | `Current), (`Current | `After)) -> true }
+  }
+
+partition: PARTITION BY e=expr_list { make_partition_by e} (* TODO check no params *)
 
 in_or_not_in: IN { `In } | NOT IN { `NotIn }
 case_branch: WHEN w=expr THEN t=expr
@@ -620,8 +645,8 @@ choices: separated_nonempty_list(pair(parser_state_ident,NUM_BIT_OR),choice) { $
 datetime_value: | DATETIME_FUNC | DATETIME_FUNC LPAREN INTEGER? RPAREN { Value { collated=(strict Datetime); collation=None; } }
 
 literal_value:
-    | TEXT c=collate? { Value { collated=(strict (StringLiteral $1)); collation=c; } }
-    | BLOB c=collate? { Value { collated=(strict Blob); collation=c; } }
+    | TEXT c=collate_opt { Value { collated=(strict (StringLiteral $1)); collation=c; } }
+    | BLOB c=collate_opt { Value { collated=(strict Blob); collation=c; } }
     | INTEGER         { Value { collated=(strict Int);  collation=None; } }
     | TRUE
     | FALSE           { Value { collated=(strict Bool); collation=None; } }
@@ -640,7 +665,6 @@ expr_list: l=commas(expr) { l }
 func_params: DISTINCT? l=expr_list { l }
            | ASTERISK { [] }
            | (* *) { [] }
-escape: ESCAPE expr { $2 }
 numeric_bin_op: PLUS | MINUS | ASTERISK | MOD | NUM_BIT_OR | NUM_BIT_AND | NUM_BIT_SHIFT { }
 comparison_op: 
     | EQUAL { Comp_equal }
@@ -653,18 +677,6 @@ comparison_op:
          we conservatively return `Comp_num_eq *)  
       Comp_num_eq 
     }
-
-boolean_bin_op: 
-    | AND { And }
-    | OR { Or }
-    | XOR { Xor }
-
-unary_op: EXCL { 
-          (* Some SQLs use ! as negation, some don't. play it safe and negate it,
-             since negation is currently only used to verify cardinality constraints *)
-          (fun e -> Fun { fn_name = "excl"; kind = Negation; parameters = [e]; is_over_clause = false }) } 
-        | TILDE { (fun e -> e) }
-        | NOT { (fun e -> Fun { fn_name = "not"; kind = Negation; parameters = [e]; is_over_clause = false }) }
 
 interval_unit: INTERVAL_UNIT
              | SECOND_MICROSECOND | MINUTE_MICROSECOND | MINUTE_SECOND
@@ -681,13 +693,15 @@ int_type:
       }
     }
 
-(* expr_sql_type_flavor returns Type.kind for use in CAST *)
-expr_sql_type_flavor:
-                 | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) { 
+decimal_type:
+                 | T_DECIMAL p=option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, INTEGER))), RPAREN)) {
                       match p with
                       | Some (precision, scale) -> Decimal { precision = Some precision; scale }
                       | None -> Decimal { precision = None; scale = None}
                   }
+
+(* expr_sql_type_flavor returns Type.kind for use in CAST *)
+expr_sql_type_flavor:
                  | binary { Blob }
                  | NATIONAL? text VARYING? charset? { Text }
                  | T_BOOLEAN { Bool }
@@ -710,25 +724,31 @@ expr_sql_type_flavor:
   | T_VARCHAR2 n=int_arg? { Source_type.Varchar2 n }
 
 (* sql_type_flavor returns Source_type.kind *)
-sql_type_flavor: 
+sql_type_flavor:
   | t=int_type ZEROFILL? { t }
+  | T_VARBINARY n=int_arg?                              { Source_type.Blob (Varbinary n) }
+  | NATIONAL? f=text_var VARYING? charset?              { Source_type.Text f }
+  | t=decimal_type { Source_type.Infer t }
+  | t=sql_type_flavor_plain type_args? { t }
+
+sql_type_flavor_plain:
   | T_FLOAT { Source_type.Float Single }
   | T_DOUBLE PRECISION? { Source_type.Float Double }
   | f=blob_plain                                        { Source_type.Blob f }
-  | T_VARBINARY n=int_arg?                              { Source_type.Blob (Varbinary n) }
   | NATIONAL? f=text_plain charset?                     { Source_type.Text f }
-  | NATIONAL? f=text_var VARYING? charset?              { Source_type.Text f }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
   | name=ident { Source_type.Infer (User_types.get name) }
+
+type_args: LPAREN INTEGER RPAREN UNSIGNED? | LPAREN INTEGER COMMA INTEGER RPAREN { }
 
 binary: BINARY | BINARY VARYING { }
 text: CHARACTER { }
 
 cast_as:
-    | t=cast_sql_type { (fun e -> Fun { fn_name = "cast"; kind = (Ret (Source_type.depends t)); parameters = [e]; is_over_clause = false }) }
-    | UNSIGNED { (fun e -> Fun { fn_name = "cast_unsigned"; kind = (Ret (Source_type.depends UInt64)); parameters = [e]; is_over_clause = false }) }
-    | SIGNED { (fun e -> Fun { fn_name = "cast_signed"; kind = (Ret (Source_type.depends Int)); parameters = [e]; is_over_clause = false }) }
+    | t=cast_sql_type { (fun e -> fn "cast" (Ret (Source_type.depends t)) [e]) }
+    | UNSIGNED { (fun e -> fn "cast_unsigned" (Ret (Source_type.depends UInt64)) [e]) }
+    | SIGNED { (fun e -> fn "cast_signed" (Ret (Source_type.depends Int)) [e]) }
 
 %inline either(X,Y): X | Y { }
 %inline commas(X): l=separated_nonempty_list(COMMA,X) { l }
@@ -742,15 +762,14 @@ charset: charset_kw c=IDENT { Named c }
        | charset_kw? ASCII { Ascii }
        | charset_kw? UNICODE { Unicode }
 collate: COLLATE c=IDENT { make_located ~value:c ~pos:($startofs, $endofs) }
+collate_opt: %prec LOWEST { None } | c=collate { Some c }
 
-sql_type: t=collated(sql_type_flavor)
-        | t=collated(sql_type_flavor) LPAREN INTEGER RPAREN UNSIGNED?
-        | t=collated(sql_type_flavor) LPAREN INTEGER COMMA INTEGER RPAREN
-        { t }
+sql_type: t=sql_type_flavor c=collate_opt { make_collated ?collation:c ~collated:t () }
 
 located_sql_type: t=sql_type { make_located ~value:t ~pos:($startofs, $endofs) }
 
 cast_sql_type:
+        | t=decimal_type { t }
         | t=expr_sql_type_flavor { t }
         | t=expr_sql_type_flavor LPAREN INTEGER RPAREN { t }
         | t=expr_sql_type_flavor LPAREN INTEGER COMMA INTEGER RPAREN { t }
@@ -800,5 +819,3 @@ lock:
  | SHARED {}
 
 %inline located(X): X { make_located ~value:$1 ~pos:($startofs, $endofs) }
-
-collated(X): X c=collate? { make_collated ?collation:c ~collated:$1 () }

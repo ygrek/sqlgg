@@ -2189,7 +2189,7 @@ Virtual select: param as bare column expression (spacing at ctor boundary):
         let id : _ t =
           {
             set = (fun _p -> ());
-            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
             column = ("id");
             count = 0;
             deps = [];
@@ -2388,7 +2388,7 @@ Virtual select: mixed columns and params without spaces after commas:
         let id : _ t =
           {
             set = (fun _p -> ());
-            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
             column = ("id");
             count = 0;
             deps = [];
@@ -2787,7 +2787,7 @@ Virtual select: arithmetic with param at expression start:
         let id : _ t =
           {
             set = (fun _p -> ());
-            read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+            read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
             column = ("id");
             count = 0;
             deps = [];

@@ -14,3 +14,6 @@ SELECT name, descr FROM items WHERE name IS NOT NULL AND descr IS NOT NULL;
 -- [sqlgg] dynamic_select=true
 -- @dynamic_or_stays_nullable
 SELECT name, descr FROM items WHERE name IS NOT NULL OR descr IS NOT NULL;
+
+-- @optional_guard_stays_nullable
+SELECT name FROM items WHERE {name = @name}?;

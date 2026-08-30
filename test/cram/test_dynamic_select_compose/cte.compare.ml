@@ -8,7 +8,7 @@ module Sqlgg (T : Sqlgg_traits.M) = struct
       let id : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
           column = ("id");
           count = 0;
           deps = [];
@@ -88,7 +88,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:S
       let id : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Int_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Int row idx, idx + 1));
           column = ("id");
           count = 0;
           deps = [];
@@ -96,7 +96,7 @@ SELECT " ^ col.column ^ " FROM filtered WHERE id > ?") ~name:"cte_plain" ~kind:S
       let name : _ t =
         {
           set = (fun _p -> ());
-          read = (fun row idx -> (T.get_column_Text_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Text row idx, idx + 1));
           column = ("name");
           count = 0;
           deps = [];
@@ -465,12 +465,12 @@ SELECT " ^ col.column ^ " FROM filtered WHERE " ^ ((match f with `All -> " ( TRU
         }
       let is_new cutoff : _ t =
         let _set_is_new p =
-          begin match cutoff with None -> T.set_param_null p | Some v -> T.set_param_Int p v end;
+          T.set_param_Int p cutoff;
           ()
         in
         {
           set = _set_is_new;
-          read = (fun row idx -> (T.get_column_Bool_nullable row idx, idx + 1));
+          read = (fun row idx -> (T.get_column_Bool row idx, idx + 1));
           column = ("(status >= " ^ "?" ^ ")");
           count = 1;
           deps = [];

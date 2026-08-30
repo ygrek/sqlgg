@@ -81,7 +81,7 @@ let () =
   go "cte_param_col: plain column" (fun () ->
     W.Cte_param_col.select db ~st:1L W.Cte_param_col.id (fun _ -> ()));
   go "cte_param_col: param inside picked column binds after cte param" (fun () ->
-    W.Cte_param_col.select db ~st:1L (W.Cte_param_col.is_new (Some 100L)) (fun _ -> ()));
+    W.Cte_param_col.select db ~st:1L (W.Cte_param_col.is_new 100L) (fun _ -> ()));
 
   go "where_subquery: empty names" (fun () ->
     W.Where_subquery.select db W.Where_subquery.name ~st:1L ~names:[] (fun _ -> ()));

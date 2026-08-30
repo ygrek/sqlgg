@@ -15,7 +15,7 @@ depends: [
   "yojson" {>= "1.6.0"}
   "dune" {>= "2.7"}
   "integers" {>= "0.4.0"}
-  "menhir" {>= "20180523"}
+  "menhir" {>= "20260209"}
   "ppx_deriving" {>= "4.3"}
   "ppx_enumerate" {>= "v0.15.0"}
   "ppx_deriving_variant_string" {>= "1.0.1"}
@@ -24,7 +24,7 @@ depends: [
   "base-unix"
   "odoc" {with-doc}
   "ounit"
-  "qcheck-ounit" {>= "0.25"}
+  "qcheck-core" {with-test & >= "0.25"}
 ]
 depopts: [
   "mariadb"
