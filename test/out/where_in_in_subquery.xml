@@ -15,7 +15,7 @@
  </stmt>
  <stmt name="update_3" sql="UPDATE test30 t30&#x0A;SET&#x0A;    t30.column_a = 'the value',&#x0A;    t30.column_b = false&#x0A;WHERE&#x0A;    t30.column_c_31 IN (&#x0A;        SELECT t31.id&#x0A;        FROM test31 t31&#x0A;        WHERE t31.column_c_32 IN (&#x0A;            SELECT t32.id&#x0A;            FROM test32 t32&#x0A;            WHERE t32.column_f IN @@c_f_ids&#x0A;        )&#x0A;    )" category="DML" kind="update" cardinality="0">
   <in>
-   <value name="c_f_ids" type="set(Int)" nullable="true"/>
+   <value name="c_f_ids" type="set(Int)"/>
   </in>
   <out/>
  </stmt>
@@ -37,26 +37,26 @@
  </stmt>
  <stmt name="update_8" sql="UPDATE tbl4 t4&#x0A;SET t4.col3 = t4.col3 * 1.2&#x0A;WHERE t4.tbl3_id IN (&#x0A;    SELECT t3.id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t2.col2&#x0A;        FROM tbl2 t2&#x0A;        WHERE t2.col1 IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
   <in>
-   <value name="t1_c2" type="set(Text)" nullable="true"/>
+   <value name="t1_c2" type="set(Text)"/>
   </in>
   <out/>
  </stmt>
  <stmt name="update_9" sql="UPDATE tbl3 t3&#x0A;SET t3.col3 = CONCAT('Updated: ', t3.col3)&#x0A;WHERE t3.tbl2_id IN (&#x0A;    SELECT t2.id&#x0A;    FROM tbl2 t2&#x0A;    WHERE t2.tbl1_id IN (&#x0A;        SELECT t1.id&#x0A;        FROM tbl1 t1&#x0A;        WHERE t1.col1 IN  @@t1_c1&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
   <in>
-   <value name="t1_c1" type="set(Int)" nullable="true"/>
+   <value name="t1_c1" type="set(Int)"/>
   </in>
   <out/>
  </stmt>
  <stmt name="update_10" sql="UPDATE tbl2 t2&#x0A;SET t2.col1 = t2.col1 + 1000&#x0A;WHERE t2.id IN (&#x0A;    SELECT t3.tbl2_id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t4.col2&#x0A;        FROM tbl4 t4&#x0A;        WHERE t4.col1 IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN  @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
   <in>
-   <value name="t1_c2" type="set(Text)" nullable="true"/>
+   <value name="t1_c2" type="set(Text)"/>
   </in>
   <out/>
  </stmt>
  <stmt name="update_11" sql="UPDATE tbl2 t2&#x0A;SET t2.col1 = t2.col1 + 1000&#x0A;WHERE t2.id IN (&#x0A;    SELECT t3.tbl2_id&#x0A;    FROM tbl3 t3&#x0A;    WHERE t3.col2 IN (&#x0A;        SELECT t4.col2&#x0A;        FROM tbl4 t4&#x0A;        WHERE @left_side_isnt_missed IN (&#x0A;            SELECT t1.id&#x0A;            FROM tbl1 t1&#x0A;            WHERE t1.col2 IN  @@t1_c2&#x0A;        )&#x0A;    )&#x0A;)" category="DML" kind="update" cardinality="0">
   <in>
    <value name="left_side_isnt_missed" type="Int" nullable="true"/>
-   <value name="t1_c2" type="set(Text)" nullable="true"/>
+   <value name="t1_c2" type="set(Text)"/>
   </in>
   <out/>
  </stmt>

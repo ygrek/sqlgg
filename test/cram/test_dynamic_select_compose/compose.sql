@@ -12,6 +12,10 @@ SELECT id, name FROM t WHERE id IN @ids AND name = @nm;
 SELECT id, name FROM t WHERE (id, name) IN @pairs;
 
 -- [sqlgg] dynamic_select=true
+-- @tuple_list_not_in
+SELECT id, name FROM t WHERE (id, name) NOT IN @pairs;
+
+-- [sqlgg] dynamic_select=true
 -- @opt_filter
 SELECT id, name FROM t WHERE { id = @v }?;
 

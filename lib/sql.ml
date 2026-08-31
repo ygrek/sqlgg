@@ -715,8 +715,14 @@ and 't func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
   | Null_handling of null_handling_fn_kind
   | Comparison of comparison_op
+  | Quantified_comparison of { op: comparison_op; quantifier: [ `Any | `All ] } 
   | Logical of logical_op
   | Negation
+  | Arith of 't  (* 'a -> 'a -> t *)
+  | Membership (* 'a -> { 'a }+ -> bool *)
+  | Range  (* 'a -> 'a -> 'a -> bool *)
+  | Like (* text -> text -> bool *)
+  | Like_escape (* bool -> text -> bool *)
   | Ret of 't (* _ -> t *) (* TODO eliminate *)
   | F of Type.tyvar * Type.tyvar list
   | Col_assign of { ret_t: Type.tyvar; col_t: Type.tyvar; arg_t: Type.tyvar; }
@@ -733,7 +739,8 @@ and 't func =
      Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
   [@@deriving show]
 and 'expr choices = (param_id * 'expr option) list
-and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; is_over_clause: bool; } [@@deriving show]
+and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; over: over option } [@@deriving show]
+and over = { frame_has_a_row: bool } [@@deriving show]
 and case_branch = { when_: expr; then_: expr }
 and case = {  
   case: expr option;
@@ -765,6 +772,10 @@ and column_kind =
 
 type columns = column list [@@deriving show]
 
+let fn ?over fn_name kind parameters = Fun { fn_name; kind; parameters; over }
+
+let column ?collation collated = Column (make_collated ?collation ~collated ())
+
 let comparison_signature op =
   let open Type in
   match op with
@@ -794,13 +805,16 @@ let signature kind arity =
   let sign =
     match kind with
     | F (ret, args) -> Some (ret, args)
-    | Comparison op -> Some (comparison_signature op)
+    | Comparison op | Quantified_comparison { op; _ } -> Some (comparison_signature op)
     | Null_handling nulls -> Some (null_handling_signature nulls arity)
     | Agg Self -> Some agg_same_type
     | Col_assign { ret_t; col_t; arg_t } -> Some (ret_t, [col_t; arg_t])
     | Multi { ret; fixed_args; repeating_pattern } ->
       Option.map (fun args -> ret, args) (multi_args ~fixed_args ~repeating_pattern arity)
-    | Agg _ | Logical _ | Negation | Ret _ -> None
+    | Membership | Range -> Some Type.(Typ (depends Bool), List.make arity (Var 0))
+    | Like -> Some Type.(Typ (depends Bool), [Typ (depends Text); Typ (depends Text)])
+    | Like_escape -> Some Type.(Typ (depends Bool), [Typ (depends Bool); Typ (depends Text)])
+    | Agg _ | Logical _ | Negation | Ret _ | Arith _ -> None
   in
   match sign with
   | Some (_, args) when not (Int.equal (List.length args) arity) -> None
@@ -808,9 +822,11 @@ let signature kind arity =
 
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
+  | Arith t -> Arith (Source_type.to_infer_type t)
   | Agg (Self | Count | Avg | With_order _) 
-  | Null_handling _ | Comparison _
+  | Null_handling _ | Comparison _ | Quantified_comparison _
   | Logical _ | Negation | F _ 
+  | Membership | Range | Like | Like_escape
   | Col_assign _ | Multi _ as fn -> fn
 
 let expr_to_string = show_expr
@@ -818,8 +834,9 @@ let expr_to_string = show_expr
 let map_kind_exprs f = function
   | Agg (With_order ({ order; _ } as wo)) ->
     Agg (With_order { wo with order = List.map (fun (e, dir) -> f e, dir) order })
-  | Agg (Self | Count | Avg) | Null_handling _ | Comparison _
-  | Logical _ | Negation | Ret _ | F _ | Col_assign _ | Multi _ as kind -> kind
+  | Agg (Self | Count | Avg) | Null_handling _ | Comparison _ | Quantified_comparison _
+  | Logical _ | Negation | Ret _ | F _ | Col_assign _ | Multi _
+  | Arith _ | Membership | Range | Like | Like_escape as kind -> kind
 
 let sub_exprs = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ -> []
@@ -1089,11 +1106,21 @@ let pp_func pp f =
   | Agg (With_order { with_order_kind = Group_concat; _ }) -> fprintf pp "|'a| -> text"
   | Agg (With_order { with_order_kind = Json_arrayagg; _ }) -> fprintf pp "|'a| -> json"
   | Ret ret -> fprintf pp "_ -> %s" (Type.show ret)
+  | Arith ret -> fprintf pp "'a -> 'a -> %s" (Type.show ret)
+  | Membership -> fprintf pp "'a -> { 'a }+ -> %s" (Type.show_kind Bool)
+  | Range -> fprintf pp "'a -> 'a -> 'a -> %s" (Type.show_kind Bool)
+  | Like -> fprintf pp "%s -> %s -> %s" (Type.show_kind Text) (Type.show_kind Text) (Type.show_kind Bool)
+  | Like_escape -> fprintf pp "%s -> %s -> %s" (Type.show_kind Bool) (Type.show_kind Text) (Type.show_kind Bool)
   | F (ret, args) -> fprintf pp "%s -> %s" (String.concat " -> " @@ List.map Type.string_of_tyvar args) (Type.string_of_tyvar ret)
   | Col_assign { ret_t=ret; col_t; arg_t } -> aux (F (ret, [col_t; arg_t]))
   | Null_handling (Coalesce (ret, each_arg)) -> fprintf pp "{ %s }+ -> %s" (Type.string_of_tyvar each_arg) (Type.string_of_tyvar ret)
   | Null_handling nulls -> let ret, args = null_handling_signature nulls 2 in aux (F (ret, args))
   | Comparison op -> let ret, args = comparison_signature op in aux (F (ret, args))
+  | Quantified_comparison { op; quantifier } ->
+    let ret, _ = comparison_signature op in
+    fprintf pp "'a -> %s { 'a } -> %s"
+      (match quantifier with `Any -> "any" | `All -> "all")
+      (Type.string_of_tyvar ret)
   | Logical _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
   | Negation -> fprintf pp "'a -> %s" (Type.show_kind Bool)
   | Multi { ret; fixed_args; repeating_pattern } ->
@@ -1110,7 +1137,8 @@ let string_of_func = Format.asprintf "%a" pp_func
 
 let is_grouping = function
   | Agg _ -> true
-  | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _ -> false
+  | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _
+  | Quantified_comparison _ | Arith _ | Membership | Range | Like | Like_escape -> false
 
 module Function : sig
 

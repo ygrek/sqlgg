@@ -9,7 +9,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -17,7 +17,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -25,7 +25,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -33,7 +33,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -41,7 +41,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -49,7 +49,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -57,7 +57,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -65,7 +65,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -73,7 +73,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -81,7 +81,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -89,7 +89,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -97,7 +97,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -105,7 +105,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -113,7 +113,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -121,7 +121,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -129,7 +129,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -137,7 +137,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -145,7 +145,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -153,7 +153,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>
@@ -161,7 +161,7 @@
   <in/>
   <out>
    <value name="id" type="Int"/>
-   <value name="stamp" type="Datetime" nullable="true"/>
+   <value name="stamp" type="Datetime"/>
    <value name="interval" type="Int" nullable="true"/>
   </out>
  </stmt>

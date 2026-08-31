@@ -20,8 +20,14 @@ let () =
 
   go "tuple_list: empty pairs" (fun () ->
     C.Tuple_list.select db C.Tuple_list.id ~pairs:[] (fun _ -> ()));
-  go "tuple_list: two pairs with null" (fun () ->
-    C.Tuple_list.select db C.Tuple_list.id ~pairs:[(Some 1L, Some "a"); (None, Some "b")] (fun _ -> ()));
+  go "tuple_list: two pairs" (fun () ->
+    C.Tuple_list.select db C.Tuple_list.id ~pairs:[(1L, "a"); (2L, "b")] (fun _ -> ()));
+
+  go "tuple_list_not_in: empty pairs" (fun () ->
+    C.Tuple_list_not_in.select db C.Tuple_list_not_in.id ~pairs:[] (fun _ -> ()));
+  go "tuple_list_not_in: two pairs with null" (fun () ->
+    C.Tuple_list_not_in.select db C.Tuple_list_not_in.id
+      ~pairs:[(Some 1L, Some "a"); (None, Some "b")] (fun _ -> ()));
 
   go "opt_filter: none" (fun () ->
     C.Opt_filter.select db C.Opt_filter.name ~v:None (fun _ -> ()));
@@ -48,7 +54,7 @@ let () =
 
   go "kitchen_sink: everything on" (fun () ->
     C.Kitchen_sink.select db C.Kitchen_sink.name
-      ~ids:[1L; 2L] ~pairs:[(Some 1L, Some "a")] ~nm:(Some "x") ~f:(`ById 5L) ~sort:`N
+      ~ids:[1L; 2L] ~pairs:[(1L, "a")] ~nm:(Some "x") ~f:(`ById 5L) ~sort:`N
       (fun _ -> ()));
   go "kitchen_sink: everything off" (fun () ->
     C.Kitchen_sink.select db C.Kitchen_sink.name
@@ -71,7 +77,7 @@ let () =
   go "cte_opt_filter: none, empty pairs" (fun () ->
     W.Cte_opt_filter.select db ~st:None W.Cte_opt_filter.name ~pairs:[] (fun _ -> ()));
   go "cte_opt_filter: some, pairs" (fun () ->
-    W.Cte_opt_filter.select db ~st:(Some 1L) W.Cte_opt_filter.name ~pairs:[(Some 1L, Some "a")] (fun _ -> ()));
+    W.Cte_opt_filter.select db ~st:(Some 1L) W.Cte_opt_filter.name ~pairs:[(1L, "a")] (fun _ -> ()));
 
   go "cte_shared_choice: all" (fun () ->
     W.Cte_shared_choice.select db W.Cte_shared_choice.name ~f:`All (fun _ -> ()));
@@ -81,7 +87,7 @@ let () =
   go "cte_param_col: plain column" (fun () ->
     W.Cte_param_col.select db ~st:1L W.Cte_param_col.id (fun _ -> ()));
   go "cte_param_col: param inside picked column binds after cte param" (fun () ->
-    W.Cte_param_col.select db ~st:1L (W.Cte_param_col.is_new (Some 100L)) (fun _ -> ()));
+    W.Cte_param_col.select db ~st:1L (W.Cte_param_col.is_new 100L) (fun _ -> ()));
 
   go "where_subquery: empty names" (fun () ->
     W.Where_subquery.select db W.Where_subquery.name ~st:1L ~names:[] (fun _ -> ()));

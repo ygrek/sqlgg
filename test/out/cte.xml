@@ -18,16 +18,16 @@
    <value name="some_value" type="Float"/>
   </in>
   <out>
-   <value name="col4" type="Int" nullable="true"/>
+   <value name="col4" type="Int"/>
    <value name="col5" type="Text" nullable="true"/>
-   <value name="col6" type="Float" nullable="true"/>
+   <value name="col6" type="Float"/>
   </out>
  </stmt>
  <stmt name="select_4" sql="SELECT *&#x0A;FROM (&#x0A;    WITH&#x0A;    cte_grouped AS (&#x0A;        SELECT col_group, AVG(col_value) AS avg_value&#x0A;        FROM test22&#x0A;        GROUP BY col_group&#x0A;    ),&#x0A;    cte_counts AS (&#x0A;        SELECT col_group, COUNT(*) AS group_count&#x0A;        FROM test22&#x0A;        GROUP BY col_group&#x0A;    ),&#x0A;    cte_max_values AS (&#x0A;        SELECT col_group, MAX(col_value) AS max_value&#x0A;        FROM test22&#x0A;        GROUP BY col_group&#x0A;    ),&#x0A;    cte_combined AS (&#x0A;        SELECT &#x0A;            g.col_group, &#x0A;            g.avg_value, &#x0A;            c.group_count, &#x0A;            m.max_value&#x0A;        FROM cte_grouped g&#x0A;        JOIN cte_counts c ON g.col_group = c.col_group&#x0A;        JOIN cte_max_values m ON g.col_group = m.col_group&#x0A;    )&#x0A;    SELECT col_group, avg_value, group_count, max_value&#x0A;    FROM cte_combined&#x0A;) AS dt&#x0A;WHERE dt.group_count &gt; 1 AND dt.avg_value &gt; 50.00" category="DQL" kind="select" cardinality="n">
   <in/>
   <out>
-   <value name="col_group" type="Text" nullable="true"/>
-   <value name="avg_value" type="Float" nullable="true"/>
+   <value name="col_group" type="Text"/>
+   <value name="avg_value" type="Float"/>
    <value name="group_count" type="Int"/>
    <value name="max_value" type="Decimal" nullable="true"/>
   </out>

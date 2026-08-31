@@ -15,7 +15,7 @@
   </in>
   <out>
    <value name="id" type="Int"/>
-   <value name="foo" type="Text" nullable="true"/>
+   <value name="foo" type="Text"/>
   </out>
  </stmt>
  <stmt name="delete_foo0" sql="DELETE foo FROM foo" category="DML" kind="delete" target="foo" cardinality="0">
