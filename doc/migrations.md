@@ -62,7 +62,9 @@ The command starts from `--initial` when supplied, replays generated and manual
 migrations in id order, and compares the result with `--schema`. It appends the
 new difference to `migrations.sql` and regenerates `migrations.ml`. The manual
 file is read-only. Without `--output`, the generated module goes to standard
-output.
+output. With `--output`, `--line-directives` adds `# <line> "<file.sql>"`
+directives, so that OCaml and merlin report errors in `apply_*` and `revert_*`
+on the line of the migration in its SQL file.
 
 `--lang ocaml` selects the OCaml migration runtime. `--dialect mysql` covers
 MySQL and MariaDB; use `--dialect tidb` for TiDB.

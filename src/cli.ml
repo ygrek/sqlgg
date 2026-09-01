@@ -49,10 +49,10 @@ let process_stmts = function
 
 type recorded_blocks =
   | Function_list_blocks of
-      (Sqlgg_migrations.Migration_id.t option * Statements.t) list
+      (Sqlgg_migrations.Migration_id.t option * Main.migration_block) list
   | Typed_plan_blocks of {
       baseline : Sqlgg_migrations.Migration_id.t option;
-      blocks : (Sqlgg_migrations.Migration_id.t * Statements.t) list;
+      blocks : (Sqlgg_migrations.Migration_id.t * Main.migration_block) list;
     }
 
 let process_migrations lang name migration_output =
@@ -108,15 +108,12 @@ let parse_output s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
-let stamp_source filename stmts =
-  List.map (fun (stmt : Query.t) -> { stmt with props = Props.File filename :: stmt.props }) stmts
-
 (* parse always runs for its schema-registration side effects, even in -gen none *)
 let read_statements = function
-  | "-" -> Main.get_statements stdin
+  | "-" -> Main.get_statements ~file:None stdin
   | filename ->
-    Main.with_channel filename (Option.map_default Main.get_statements [])
-    |> stamp_source (Filename.basename filename)
+    Main.with_channel filename
+      (Option.map_default (Main.get_statements ~file:(Some filename)) [])
 
 let filter_stmts ~output stmts =
   match output with
@@ -132,8 +129,8 @@ let generate ~output ~name results =
 let merge_blocks gen ext =
   let numbered, rest =
     List.fold_right
-      (fun (block : Statements.t) (numbered, rest) ->
-        match Props.id block.props with
+      (fun (block : Main.migration_block) (numbered, rest) ->
+        match Props.id block.stmt.props with
         | None -> (numbered, block :: rest)
         | Some raw ->
           (match Sqlgg_migrations.Migration_id.parse raw with
@@ -213,19 +210,11 @@ let entries_to_sql entries =
           "-gen sql: %s of migration %s is multi-statement and cannot be emitted as \
            a single SQL entry; write this step by hand in the extends file" label id
     in
-    let up = single "up" m.apply in
+    let up = single "up" m.apply.sql in
     match m.revert with
     | None -> sprintf "-- [sqlgg] generated\n-- [sqlgg] irreversible\n-- [sqlgg] id=%s\n%s;" id up
-    | Some revert -> sprintf "-- [sqlgg] generated\n-- [sqlgg] id=%s\n%s;\n%s;" id up (single "down" revert))
+    | Some revert -> sprintf "-- [sqlgg] generated\n-- [sqlgg] id=%s\n%s;\n%s;" id up (single "down" revert.sql))
   |> String.concat "\n\n"
-
-let read_file_opt path =
-  if Sys.file_exists path then
-    match Std.input_file path with
-    | exception Sys_error msg -> fatal "cannot read %s: %s" path msg
-    | s -> let s = String.trim s in if s = "" then None else Some s
-  else
-    None
 
 let program = Filename.basename Sys.executable_name
 
@@ -304,7 +293,10 @@ type schema_source = From_file of string | From_block of Statements.t
 
 let to_file_sources files = List.map (fun f -> From_file f) files
 
-let read_blocks f = Main.with_channel f (Stdlib.Option.fold ~none:[] ~some:Main.raw_blocks)
+let read_blocks f =
+  Main.with_channel f
+    (Stdlib.Option.fold ~none:[] ~some:(fun ch ->
+       Main.migration_blocks ~file:f (In_channel.input_all ch)))
 
 let replay_sources sources =
   Compile.reset ();
@@ -313,7 +305,8 @@ let replay_sources sources =
     with Main.With_backtrace (exn, _) -> fatal "%s: %s" origin (Parser_utils.message_of_exn exn)
   in
   List.iter (function
-    | From_file f -> List.iter (replay f) (read_blocks f)
+    | From_file f ->
+      List.iter (fun (block : Main.migration_block) -> replay f block.stmt) (read_blocks f)
     | From_block block ->
       replay
         (Stdlib.Option.fold ~none:"migration without id" ~some:(sprintf "migration %s")
@@ -373,7 +366,7 @@ type migrate_args = {
   delta : delta_args;
   gen_lang : lang;
   initial_files : string list;
-  migrations_file : string option;
+  migration_log : Migrations_command.migration_log option;
   extends_file : string option;
 }
 
@@ -395,12 +388,16 @@ let parse_args () =
   let migrate_mode = ref false in
   let initial_files = ref [] in
   let migrations_file = ref None in
+  let migrations_output = ref None in
   let extends_file = ref None in
   let now = ref None in
   let max_id_length = ref Sqlgg_migrations.Migration_id.max_length in
   let new_tables = ref Schema_diff.Created_by_schema in
   let alter_lock = ref None in
   let alter_algorithm = ref None in
+  let emit_line_directives = ref false in
+  let line_directives_file = ref None in
+  let input_files = ref [] in
   let files : (string, [ `Open of Query.t list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
   let canonical = function
     | "-" -> "-"
@@ -418,6 +415,7 @@ let parse_args () =
       | Some `Positional | None -> read_statements s
     in
     Hashtbl.replace files key `Positional;
+    input_files := s :: !input_files;
     inputs := filter_stmts ~output:!output stmts :: !inputs
   in
   let groups =
@@ -431,6 +429,10 @@ let parse_args () =
       "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
         " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
+      "-line-directives", Arg.Set emit_line_directives,
+        " Emit `# <line> \"<file.sql>\"` directives so that OCaml and merlin report errors in a generated query function on the line the query starts at (caml/caml_io only)";
+      "-line-directives-file", Arg.String (fun s -> line_directives_file := Some s),
+        "<file> Name of the generated file, used by -line-directives to hand numbering back to it outside of query functions (default: <input.sql>.ml for a single input file; required with several input files and with -migrate)";
       "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
       "-json-schema", Arg.Unit (print_json_schema Query.document_jsonschema),
         " Print the JSON Schema of -gen json output and exit";
@@ -443,7 +445,8 @@ let parse_args () =
       "-base", Arg.String (fun f -> base_files := f :: !base_files), "<file> Baseline schema / prior up migrations (repeatable)";
       "-target", Arg.String (fun f -> target_files := f :: !target_files), "<file> Target schema (repeatable)";
       "-initial", Arg.String (fun f -> initial_files := f :: !initial_files), "<file> Baseline DDL for -migrate (repeatable)";
-      "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
+      "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place unless -migrations-output is given; required only when there is a new delta to record)";
+      "-migrations-output", Arg.String (fun f -> migrations_output := Some f), "<file> Write the complete migration log here, leaving -migrations-file untouched";
       "-extends", Arg.String (fun f -> extends_file := Some f), "<file> Hand-written migrations SQL, merged with generated ones by `id` (read-only)";
       "-now", Arg.String (fun raw ->
         match Int64.of_string_opt raw with
@@ -510,6 +513,18 @@ let parse_args () =
   in
   Arg.parse args work usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
+  Gen.line_directives :=
+    (match !emit_line_directives, !line_directives_file with
+     | false, None -> None
+     | false, Some _ -> fatal "-line-directives-file requires -line-directives"
+     | true, Some generated_file -> Some generated_file
+     | true, None ->
+       match !migrate_mode, List.filter (fun f -> f <> "-") !input_files with
+       | true, _ -> fatal "-line-directives with -migrate requires -line-directives-file"
+       | false, [] -> None
+       | false, [ input ] -> Some (input ^ ".ml")
+       | false, _ :: _ :: _ ->
+         fatal "-line-directives with several input files requires -line-directives-file");
   if !max_id_length > Sqlgg_migrations.Migration_id.max_length then
     fatal "-max-migration-id-length %d is above %d, the width of the migration id column"
       !max_id_length Sqlgg_migrations.Migration_id.max_length;
@@ -547,6 +562,13 @@ let parse_args () =
   match !migrate_mode, !diff_mode with
   | true, true -> fatal "-migrate and -diff are mutually exclusive"
   | true, false ->
+    let migration_log =
+      match !migrations_file, !migrations_output with
+      | None, None -> None
+      | None, Some _ -> fatal "-migrations-output requires -migrations-file"
+      | Some source, output ->
+        Some { Migrations_command.source; output }
+    in
     let gen_lang =
       match !output with
       | Some (Lang l) -> l
@@ -557,7 +579,7 @@ let parse_args () =
       delta;
       gen_lang;
       initial_files = List.rev !initial_files;
-      migrations_file = !migrations_file;
+      migration_log;
       extends_file = !extends_file;
     }
   | false, true ->
@@ -576,18 +598,34 @@ let run_migrate
     ~recorded_blocks
     ({ delta = { name; target_files; now; max_id_length;
                  new_tables; alter_options };
-       gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
+       gen_lang; initial_files; migration_log; extends_file } : migrate_args) =
   let initial = to_file_sources initial_files in
   let ext = Option.map_default read_blocks [] extends_file in
-  let read_recorded () =
-    recorded_blocks
-      (merge_blocks
-         (match migrations_file with
-          | Some f when Sys.file_exists f -> read_blocks f
-          | Some _ | None -> [])
-         ext)
+  let migration_source =
+    let read_source source =
+      if Sys.file_exists source
+      then
+        match Std.input_file source with
+        | text -> text
+        | exception Sys_error message ->
+          fatal "cannot read %s: %s" source message
+      else ""
+    in
+    match migration_log with
+    | None -> None
+    | Some ({ Migrations_command.source; _ } as log) ->
+      Some (log, read_source source)
   in
-  let before = read_recorded () in
+  let read_recorded generated =
+    recorded_blocks (merge_blocks generated ext)
+  in
+  let generated =
+    match migration_source with
+    | None -> []
+    | Some ({ source; _ }, text) ->
+      Main.migration_blocks ~file:source text
+  in
+  let before = read_recorded generated in
   let taken_ids, before_blocks =
     match before with
     | Function_list_blocks blocks ->
@@ -596,7 +634,8 @@ let run_migrate
         Stdlib.Option.to_list baseline @ List.map fst blocks, List.map snd blocks
   in
   let current =
-    schema_of_sources (initial @ List.map (fun block -> From_block block) before_blocks)
+    schema_of_sources
+      (initial @ List.map (fun (block : Main.migration_block) -> From_block block.stmt) before_blocks)
   in
   let target = load_schema target_files in
   let regenerate recorded =
@@ -631,29 +670,46 @@ let run_migrate
   match diff_schema ~naming ~alter_options ~new_tables ~from_:current ~to_:target with
   | [] ->
     regenerate before;
+    begin match migration_source with
+    | Some ({ output = Some filename; _ }, text) ->
+      Std.output_file ~filename ~text
+    | None | Some ({ output = None; _ }, _) -> ()
+    end;
     (match before_blocks with
      | [] -> prerr_endline "nothing to do"
      | _ :: _ ->
        eprintf "nothing new to migrate; regenerated code from %d recorded migration(s)\n"
          (List.length before_blocks))
   | migs ->
-    let migrations_file =
-      match migrations_file with
-      | Some f -> f
+    let { Migrations_command.source; output }, existing =
+      match migration_source with
+      | Some source -> source
       | None -> fatal "%d new migration(s) to record: pass -migrations-file <file>" (List.length migs)
     in
     let entries = assign_ids base migs in
     let sql = entries_to_sql entries in
     let text =
-      Option.map_default (fun existing -> existing ^ "\n\n" ^ sql) sql
-        (read_file_opt migrations_file)
+      match String.trim existing with
+      | "" -> sql ^ "\n"
+      | existing -> existing ^ "\n\n" ^ sql ^ "\n"
     in
-    Std.output_file ~filename:migrations_file ~text:(text ^ "\n");
-    regenerate (read_recorded ());
-    eprintf "appended %d migration(s) to %s (id %s)\n"
-      (List.length migs) migrations_file
-      (String.concat ", "
-         (List.map (fun (id, _) -> Sqlgg_migrations.Migration_id.to_string id) entries))
+    regenerate
+      (read_recorded (Main.migration_blocks ~file:source text));
+    let destination = Stdlib.Option.value output ~default:source in
+    Std.output_file ~filename:destination ~text;
+    let ids =
+      String.concat ", "
+        (List.map
+           (fun (id, _) -> Sqlgg_migrations.Migration_id.to_string id)
+           entries)
+    in
+    match output with
+    | None ->
+      eprintf "appended %d migration(s) to %s (id %s)\n"
+        (List.length migs) destination ids
+    | Some _ ->
+      eprintf "wrote %d migration(s) to %s (id %s)\n"
+        (List.length migs) destination ids
 
 let run_materialize_schema ({ base_files } : materialize_args) =
   let state =
@@ -753,7 +809,7 @@ let run_migrations () =
   | `Exit code -> exit code
   | `Generate
       { dialect; schema_file; initial_file; baseline;
-        migrations_file; manual_file; module_name; now; new_tables;
+        migration_log; manual_file; module_name; now; new_tables;
         destination } ->
     select_dialect
       (match dialect with
@@ -795,13 +851,17 @@ let run_migrations () =
             };
           gen_lang = Caml_io;
           initial_files = Stdlib.Option.to_list initial_file;
-          migrations_file = Some migrations_file;
+          migration_log = Some migration_log;
           extends_file = manual_file;
         }
     in
     match destination with
     | Migrations_command.Stdout -> generate ()
-    | Migrations_command.File filename ->
+    | Migrations_command.File { filename; line_directives } ->
+      Gen.line_directives :=
+        (match line_directives with
+         | Migrations_command.Omit_line_directives -> None
+         | Migrations_command.Emit_line_directives -> Some filename);
       let generated = Gen.capture generate in
       try Std.output_file ~filename ~text:generated
       with Sys_error message -> bad_input "cannot write %s: %s" filename message

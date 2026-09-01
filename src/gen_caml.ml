@@ -338,40 +338,9 @@ let emit_cols_module ~brand_decl ~field_names body =
     List.iter (fun name -> output "method %s = Cols.%s" name name) field_names);
   output "end"
 
-let emit_verbatim_block src =
-  let ind = make_indent () in
-  String.split_on_char '\n' src
-  |> List.iter (fun line ->
-    if line = "" then emit "\n"
-    else emit (ind ^ line ^ "\n"))
-
-let append_func_params ~has_callback ~module_kind inputs =
-  inputs
-  ^ (if has_callback then " callback" else "")
-  ^ (if module_kind = `Fold then " acc" else "")
-
-let emit_func_header ~name ~extra_params ~has_callback ~format_input ~module_kind (stmt : Query.t) =
-  let subst = Props.substs stmt.props in
-  let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
-  output "let %s db%s %s =" name extra_params (append_func_params ~has_callback ~module_kind inputs);
-  inc_indent ();
-  subst
-
 let format_func_input ~dyn_annot dynamic_names v =
   if List.mem v dynamic_names then sprintf "(%s : %s)" v (dyn_annot v)
   else sprintf "~%s" v
-
-let gen_func_signature ~dynamic_infos ~module_kind ({ name; stmt; _ } : Query.named) =
-  let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
-  let format_input =
-    format_func_input (List.map fst dynamic_map)
-      ~dyn_annot:(fun v -> sprintf "_ %s.t" (List.assoc v dynamic_map))
-  in
-  emit_func_header
-    ~name:(String.uncapitalize_ascii name)
-    ~extra_params:""
-    ~has_callback:(has_row_callback stmt || (module_kind = `Single && dynamic_infos = []))
-    ~format_input ~module_kind stmt
 
 type consumer = {
   c_init : unit -> unit;
@@ -397,10 +366,30 @@ let consumer = function
       c_callback = (fun ~direct:_ ~fold:_ ~list -> list);
       c_finish = (fun () -> output "(fun () -> IO.return (List.rev !r_acc))") }
 
-let complete_func c =
-  c.c_finish ();
-  dec_indent ();
+let emit_func ~name ~has_callback ~format_input ~module_kind (stmt : Query.t) body =
+  let c = consumer module_kind in
+  with_src stmt.src (fun () ->
+    let inputs =
+      ((Props.substs stmt.props @ names_of_vars stmt.vars) |> List.map format_input |> inline_values)
+      ^ (if has_callback then " callback" else "")
+      ^ (if module_kind = `Fold then " acc" else "")
+    in
+    output "let %s db %s =" name inputs;
+    indented (fun () ->
+      body c;
+      c.c_finish ()));
   empty_line ()
+
+let gen_func ~dynamic_infos ~module_kind ({ name; stmt; _ } : Query.named) body =
+  let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
+  let format_input =
+    format_func_input (List.map fst dynamic_map)
+      ~dyn_annot:(fun v -> sprintf "_ %s.t" (List.assoc v dynamic_map))
+  in
+  emit_func
+    ~name:(String.uncapitalize_ascii name)
+    ~has_callback:(has_row_callback stmt || (module_kind = `Single && dynamic_infos = []))
+    ~format_input ~module_kind stmt body
 
 let make_variant_name i name ~is_poly =
   let prefix = if is_poly then "`" else "" in 
@@ -847,7 +836,7 @@ type callback_build_state = {
   idx_expr: string option;
 }
 
-let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callback ~sql_pieces ({ stmt; _ } as q : Query.named) =
+let emit_dynamic_select_body ~c ~dynamic_infos ~in_module ~with_callback ~sql_pieces ({ stmt; _ } as q : Query.named) =
   let join_ctors = join_ctors_of_vars stmt.vars in
 
   let col_ref di = di.param_name in
@@ -924,7 +913,6 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
   in
   let sql_expr = String.concat " ^ " (build_parts [] false sql_pieces) in
 
-  let c = consumer module_kind in
   c.c_init ();
 
   let rec split_schema_multi acc current = function
@@ -988,8 +976,8 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
 
   output "%sT.%s db" bind_start (select_func_of_kind stmt.kind);
   output "  %s" (query_expr ~sql:(sprintf "(%s)" sql_expr) q);
-  output "  set_params %s%s" full_callback bind_end;
-  complete_func c
+  String.split_on_char '\n' (sprintf "set_params %s%s" full_callback bind_end)
+  |> List.iteri (fun i line -> if i = 0 then output "%s" line else emit_line line)
 
 let emit_dynamic_module_select ~module_kind ~dynamic_infos ~sql_pieces ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
@@ -1000,11 +988,8 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos ~sql_pieces ({ stmt; 
     | `List, [Sql.Dynamic _] -> false
     | (`Direct | `Single | `Fold | `List), _ -> has_row_callback stmt
   in
-  let (_ : string list) =
-    emit_func_header ~name:"select" ~extra_params:""
-      ~has_callback:with_callback ~format_input ~module_kind stmt
-  in
-  emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback ~sql_pieces q
+  emit_func ~name:"select" ~has_callback:with_callback ~format_input ~module_kind stmt
+    (fun c -> emit_dynamic_select_body ~c ~dynamic_infos ~in_module:true ~with_callback ~sql_pieces q)
 
 let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
   let sql = make_sql ~to_literal:make_to_literal ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces in
@@ -1026,19 +1011,16 @@ let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
 
 let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
-  let c = consumer module_kind in
+  gen_func ~dynamic_infos:[] ~module_kind q @@ fun c ->
   let empty_exec_result =
     sprintf {|%s { T.affected_rows = 0L; insert_id = None }|} return_expr
   in
   if Props.has Noop stmt.props then begin
-    let _ = gen_func_signature ~dynamic_infos:[] ~module_kind q in
     output "ignore db;";
-    output "%s" empty_exec_result;
-    complete_func c
+    output "%s" empty_exec_result
   end else
-  let subst = gen_func_signature ~dynamic_infos:[] ~module_kind q in
   let sql_pieces = Gen.get_sql q in
-  let sql = emit_sql_with_subst subst stmt sql_pieces in
+  let sql = emit_sql_with_subst (Props.substs stmt.props) stmt sql_pieces in
   let (func, callback) =
     match stmt.schema with
     | [] -> "execute", ""
@@ -1064,8 +1046,7 @@ let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.name
     else
       sprintf "T.%s db %s %s %s%s" func (query_expr ~sql q) params_binder_name callback bind_end
   in
-  output "%s%s" bind (guard_empty_insertion sql_pieces ~empty:empty_exec_result exec);
-  complete_func c
+  output "%s%s" bind (guard_empty_insertion sql_pieces ~empty:empty_exec_result exec)
 
 let sanitize_to_variant_name s =
   let normalized =
@@ -1245,7 +1226,7 @@ let generate_dynamic_select_modules stmts =
         in
         emit_cols_module ~brand_decl
           ~field_names:(List.map (fun f -> f.field_name) fields)
-          (fun () -> List.iter2 emit_field fields field_sqls);
+          (fun () -> with_src stmt.src (fun () -> List.iter2 emit_field fields field_sqls));
 
         if single_di then begin
           empty_line ();
@@ -1263,11 +1244,10 @@ let generate_stmt_wrapper ~return_expr ~module_kind index ({ stmt; _ } as q : Qu
   | [] -> generate_stmt ~return_expr ~module_kind index q
   | [_] -> ()
   | _ :: _ :: _ ->
-    if supports_module_kind module_kind stmt then begin
-      let _subst = gen_func_signature ~dynamic_infos ~module_kind q in
-      emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:false ~with_callback:true
-        ~sql_pieces:(Gen.get_sql q) q
-    end
+    if supports_module_kind module_kind stmt then
+      gen_func ~dynamic_infos ~module_kind q (fun c ->
+        emit_dynamic_select_body ~c ~dynamic_infos ~in_module:false ~with_callback:true
+          ~sql_pieces:(Gen.get_sql q) q)
 
 let generate_direct_body ~io stmts =
   let return_expr =
@@ -1423,33 +1403,29 @@ let generate_migrations name migration_output =
       let ids, migrations = List.split migrations in
       Typed_plan { baseline; migrations = List.combine ids (named migrations) }
   in
-  let make_stmt ?(props = []) fn_name sql =
-    Query.verbatim ~props:(Props.Name fn_name :: props) sql
-  in
-  let revert_stmt name (m : Gen_migrations.migration) =
-    match m.revert with
-    | None -> make_stmt ~props:[ Props.Noop ] ("revert_" ^ name) ""
-    | Some revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
+  let step_stmt fn_name ({ sql; src } : Gen_migrations.step) =
+    { (Query.verbatim ~props:[ Props.Name fn_name ] (String.concat ";\n" sql)) with src }
   in
   let stmts =
     match migration_output with
     | Function_list migrations ->
         List.concat_map
           (fun (name, (m : Gen_migrations.migration)) ->
-            [
-              make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply);
-              revert_stmt name m;
-            ])
+            let revert =
+              match m.revert with
+              | None ->
+                  Query.verbatim ~props:[ Props.Name ("revert_" ^ name); Props.Noop ] ""
+              | Some step -> step_stmt ("revert_" ^ name) step
+            in
+            [ step_stmt ("apply_" ^ name) m.apply; revert ])
           migrations
     | Typed_plan { migrations; _ } ->
         List.concat_map
           (fun (_, (name, (m : Gen_migrations.migration))) ->
-            let apply =
-              make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply)
-            in
+            let apply = step_stmt ("apply_" ^ name) m.apply in
             match m.revert with
             | None -> [ apply ]
-            | Some _ -> [ apply; revert_stmt name m ])
+            | Some step -> [ apply; step_stmt ("revert_" ^ name) step ])
           migrations
   in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;

@@ -4,19 +4,26 @@ open Sqlgg
 open Stmt
 open Jsonkit.Primitives
 
+type src = {
+  file : string;
+  line : int;
+}
+[@@deriving json, jsonschema]
+
 type t = {
   sql : string;
   schema : Sql.schema_column list;
   vars : Sql.var list;
   kind : kind;
   props : Props.t list;
+  src : src option;
 }
 [@@deriving json, jsonschema]
 
 let of_result props ({ typed = { sql; schema; vars; kind }; _ } : Syntax.result) =
-  { sql; schema; vars; kind; props }
+  { sql; schema; vars; kind; props; src = None }
 
-let verbatim ~props sql = { sql; schema = []; vars = []; kind = Other; props }
+let verbatim ~props sql = { sql; schema = []; vars = []; kind = Other; props; src = None }
 
 let name props kind index =
   let sanitize_chars =

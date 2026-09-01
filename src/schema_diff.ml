@@ -320,8 +320,8 @@ let generate ~naming ~alter_options ~new_tables ~from_ ~to_ =
          | Some name -> [ Props.Name name ]
          | None -> []);
       kind = kind_of_change up;
-      apply = render_apply up;
-      revert = Some (render_apply (invert ~alter_options ~by_from ~by_to up)) })
+      apply = { sql = render_apply up; src = None };
+      revert = Some { sql = render_apply (invert ~alter_options ~by_from ~by_to up); src = None } })
 
 let canonical ts =
   let index_sig (name, (i : Tables.stored_index)) =
@@ -375,8 +375,13 @@ let replay_migrations ~replay ~from_ ~to_ migs =
   in
   let target = canonical to_ in
   let baseline = canonical from_ in
-  let applied  = rebuild from_ (List.concat_map (fun m -> m.Gen_migrations.apply) migs) in
-  let reverted = rebuild to_   (List.concat_map (fun m -> Option.default [] m.Gen_migrations.revert) (List.rev migs)) in
+  let applied  = rebuild from_ (List.concat_map (fun m -> m.Gen_migrations.apply.sql) migs) in
+  let reverted =
+    rebuild to_
+      (List.concat_map
+         (fun m -> Option.map_default (fun (s : Gen_migrations.step) -> s.sql) [] m.Gen_migrations.revert)
+         (List.rev migs))
+  in
   if applied <> target then
     raise (Verification_failed
       { reason = "applying the migrations did not rebuild the target schema";

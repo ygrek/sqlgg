@@ -6,6 +6,8 @@
   -category {all|none|[-]<category>{,<category>}+}    Only generate code for these specific query categories (possible values: DDL DQL DML DCL TCL)
   -open <file>                                        Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)
   -dynamic-select                                     Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)
+  -line-directives                                    Emit `# <line> "<file.sql>"` directives so that OCaml and merlin report errors in a generated query function on the line the query starts at (caml/caml_io only)
+  -line-directives-file <file>                        Name of the generated file, used by -line-directives to hand numbering back to it outside of query functions (default: <input.sql>.ml for a single input file; required with several input files and with -migrate)
   -                                                   Read sql from stdin
   -json-schema                                        Print the JSON Schema of -gen json output and exit
 
@@ -15,7 +17,8 @@
   -base <file>                                        Baseline schema / prior up migrations (repeatable)
   -target <file>                                      Target schema (repeatable)
   -initial <file>                                     Baseline DDL for -migrate (repeatable)
-  -migrations-file <file>                             Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)
+  -migrations-file <file>                             Generated migrations SQL for -migrate (read and appended in place unless -migrations-output is given; required only when there is a new delta to record)
+  -migrations-output <file>                           Write the complete migration log here, leaving -migrations-file untouched
   -extends <file>                                     Hand-written migrations SQL, merged with generated ones by `id` (read-only)
   -now <YYYYMMDDHHMMSS>                               Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>
   -max-migration-id-length <N>                        Limit generated migration ids to N bytes (default and maximum: 191)

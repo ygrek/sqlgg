@@ -287,11 +287,16 @@ let create_table_schema ct =
   let { create; added_keys; charset; ttl } = create_table_statements ct in
   create :: charset @ ttl @ added_keys
 
+type step = {
+  sql : string list;
+  src : Query.src option;
+}
+
 type migration = {
   props : Props.t list;
   kind : Stmt.kind;
-  apply : string list;
-  revert : string list option;
+  apply : step;
+  revert : step option;
 }
 
 let drop_type_sql type_name =

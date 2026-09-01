@@ -69,7 +69,8 @@ picks its own placeholder syntax:
             ]
           ],
           "kind": [ "Select", "Zero_one" ],
-          "props": [ [ "File", "find.sql" ], [ "Name", "find" ] ]
+          "props": [ [ "File", "find.sql" ], [ "Name", "find" ] ],
+          "src": { "file": "find.sql", "line": 2 }
         },
         "template": [
           [ "Text", "SELECT id, name FROM users WHERE id = " ],
@@ -168,7 +169,8 @@ A noparse statement is kept verbatim:
           "schema": [],
           "vars": [],
           "kind": "Other",
-          "props": [ [ "File", "raw.sql" ], [ "Name", "raw" ], "Noparse" ]
+          "props": [ [ "File", "raw.sql" ], [ "Name", "raw" ], "Noparse" ],
+          "src": { "file": "raw.sql", "line": 3 }
         },
         "template": [ [ "Text", "SELECT whatever(1)" ] ]
       }

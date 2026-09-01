@@ -134,7 +134,19 @@ let prepare_statements text =
     | ((start, stop), msg) :: _ -> Error.log "%s at %d-%d" msg start stop; false)
   |> List.map Statements.strip_comments
 
-let get_statements ch =
+let src_of_statement ~file (stmt : Statements.t) =
+  { Query.file = Stdlib.Option.value stmt.src.file ~default:file; line = stmt.src.line }
+
+let get_statements ~file ch =
+  let stamp =
+    match file with
+    | None -> fun _ stmts -> stmts
+    | Some file ->
+      let file_prop = Props.File (Filename.basename file) in
+      fun stmt stmts ->
+        let src = Some (src_of_statement ~file stmt) in
+        List.map (fun (q : Query.t) -> { q with props = file_prop :: q.props; src }) stmts
+  in
   prepare_statements (In_channel.input_all ch)
   |> List.concat_map (fun (stmt : Statements.t) ->
     match parse_one stmt with
@@ -142,7 +154,7 @@ let get_statements ch =
     | first :: _ as stmts ->
       if not (Sql.Schema.is_unique (Sql.schema_of_columns first.schema)) then
         Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" stmt.text;
-      stmts)
+      stamp stmt stmts)
 
 let replay_statement stmt =
   let (_ : Query.t option) = executable stmt in
@@ -150,11 +162,34 @@ let replay_statement stmt =
 
 let replay_sql sql = List.iter replay_statement (prepare_statements sql)
 
-let raw_blocks ch = Statements.glue_downs (prepare_statements (In_channel.input_all ch))
+type migration_revert =
+  | Irreversible
+  | Revert of Gen_migrations.step
+  | Missing_down
 
-let migration_of_block ~id (block : Statements.t) =
+type migration_block = {
+  stmt : Statements.t;
+  apply_src : Query.src;
+  revert : migration_revert;
+}
+
+let migration_blocks ~file text =
+  Statements.pair_downs (prepare_statements text)
+  |> List.map (fun ((up : Statements.t), down) ->
+    let apply_src = src_of_statement ~file up in
+    let revert =
+      match down, Props.down up.props with
+      | Some (down : Statements.t), _ ->
+        Revert { sql = [ down.text ]; src = Some (src_of_statement ~file down) }
+      | None, _ when Props.has Props.Irreversible up.props -> Irreversible
+      | None, Some down -> Revert { sql = [ down ]; src = Some apply_src }
+      | None, None -> Missing_down
+    in
+    { stmt = up; apply_src; revert })
+
+let migration_of_block ~id ({ stmt = block; apply_src; revert } : migration_block) =
   Stdlib.Option.bind (executable block) (fun (stmt : Query.t) ->
-    let apply = String.trim block.text in
+    let apply_sql = String.trim block.text in
     let migration revert =
       let props =
         match Props.name stmt.props, id with
@@ -165,12 +200,16 @@ let migration_of_block ~id (block : Statements.t) =
              Props.Name (Sqlgg_migrations.Migration_id.to_string id) :: stmt.props
            | None -> stmt.props)
       in
-      Some { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert }
+      Some
+        { Gen_migrations.props;
+          kind = stmt.kind;
+          apply = { sql = [ apply_sql ]; src = Some apply_src };
+          revert }
     in
-    match Props.has Irreversible block.props, Props.down block.props with
-    | true, _ -> migration None
-    | false, Some down -> migration (Some [down])
-    | false, None -> Error.log "migration has no `down`:\n%s" apply; None)
+    match revert with
+    | Irreversible -> migration None
+    | Revert step -> migration (Some step)
+    | Missing_down -> Error.log "migration has no `down`:\n%s" apply_sql; None)
 
 let with_channel filename f =
   match try Some (open_in filename) with _ -> None with

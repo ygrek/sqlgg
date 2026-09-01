@@ -353,7 +353,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
         match In_channel.with_open_bin file In_channel.input_all with
         | exception Sys_error _ -> index
         | text ->
-          let blocks = Statements.glue_downs (Statements.split text) in
+          let blocks = List.map fst (Statements.pair_downs (Statements.split text)) in
           let (index, _) = apply ~file index blocks in
           index
       in
