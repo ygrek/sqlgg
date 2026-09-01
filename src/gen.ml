@@ -8,7 +8,9 @@ open Stmt
 
 type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
 
-type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t; }
+type src = { file : string; line : int }
+
+type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t; src : src option }
 
 (** defines substitution function for parameter literals *)
 let params_mode = ref None
@@ -19,12 +21,28 @@ let (inc_indent,dec_indent,make_indent) =
   (fun () -> v := !v - 2),
   (fun () -> String.make !v ' ')
 
-let print_indent () = print_string (make_indent ())
-let indent s = print_indent (); print_string s
-let indent_endline s = print_indent (); print_endline @@ String.trim s
+let cur_src : src option ref = ref None
+let out_line = ref 1
+
+let emit s = print_string s; String.iter (function '\n' -> incr out_line | _ -> ()) s
+let directive line file = emit (sprintf "# %d %S\n" line file)
+
+let enter_src src = cur_src := if !Sqlgg_config.line_directives then src else None
+
+let leave_src () =
+  !cur_src |> Option.may (fun { file; _ } ->
+    cur_src := None;
+    let after_directive = !out_line + 1 in
+    directive after_directive (Option.default (file ^ ".ml") !Sqlgg_config.line_directives_file))
+
+let emit_line str =
+  Option.may (fun s -> directive s.line s.file) !cur_src;
+  emit str; emit "\n"
+let indent s = emit (make_indent ()); emit s
+let indent_endline s = emit_line (make_indent () ^ String.trim s)
 let output fmt = ksprintf indent_endline fmt
 let output_l = List.iter indent_endline
-let print fmt = ksprintf print_endline fmt
+let print fmt = ksprintf emit_line fmt
 let indented k = inc_indent (); k (); dec_indent ()
 
 let name_of attr index =

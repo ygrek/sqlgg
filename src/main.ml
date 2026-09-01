@@ -113,7 +113,7 @@ let parse_one' (sql, props) =
     | _ -> ()
     end;
     let props = Props.set props "sql" sql in
-    { Gen.schema; vars; kind; props }
+    { Gen.schema; vars; kind; props; src = None }
 
 (** @return parsed statement or [None] in case of parsing failure.
     @raise exn for other errors (typing etc)
@@ -132,7 +132,7 @@ let stmt_has_dynamic_select (stmt : Gen.stmt) =
 
 let parse_one (sql, props as x) =
   match Props.get props "noparse" with
-  | Some _ -> [ { Gen.schema=[]; vars=[]; kind=Stmt.Other; props=Props.set props "sql" sql } ]
+  | Some _ -> [ { Gen.schema=[]; vars=[]; kind=Stmt.Other; props=Props.set props "sql" sql; src=None } ]
   | None ->
     match try_parse parse_one' x with
     | None -> []
@@ -191,15 +191,20 @@ end
 
 let lex_tokens lexbuf =
   Enum.from (fun () ->
-    if lexbuf.Lexing.lex_eof_reached then raise Enum.No_more_elements
-    else match Sql_lexer.ruleStatement lexbuf with
+    match Sql_lexer.ruleStatement lexbuf with
     | `Eof -> raise Enum.No_more_elements
-    | #token as x -> x)
+    | #token as x -> (x, Lexing.lexeme_start lexbuf))
+
+let lex_channel ch =
+  let source = Std.input_all ch in
+  let line = Array.make (String.length source + 1) 1 in
+  String.iteri (fun i c -> line.(i + 1) <- line.(i) + (if c = '\n' then 1 else 0)) source;
+  lex_tokens (Lexing.from_string source), Array.get line
 
 let extract_statement' tokens =
     let b = Buffer.create 1024 in
     let props = ref Props.empty in
-    let answer () = Buffer.contents b, !props in
+    let answer start = Buffer.contents b, !props, start in
 
     let internal_props = ref Props.empty in
 
@@ -210,39 +215,46 @@ let extract_statement' tokens =
       )
     in
 
-    let rec loop smth =
+    let rec loop start =
+      let started = Option.is_some start in
       match Enum.get tokens with
-      | None -> if smth then Some (answer ()) else None
-      | Some x ->
+      | None -> if started then Some (answer start) else None
+      | Some (x, off) ->
+        let content_start = if started then start else Some off in
         begin match x with
-        | `Comment _ -> loop smth
-        | `Char c -> flush_internal_props (); Buffer.add_char b c; loop true
-        | `Token s -> flush_internal_props (); Buffer.add_string b s; loop true
-        | `Space _ when smth = false -> loop smth
-        | `Space s -> Buffer.add_string b s; loop true
-        | `Props p when smth -> internal_props := Props.set_all p !internal_props; loop smth
-        | `Props p -> props := Props.set_all p !props; loop smth
-        | `Semicolon -> Some (answer ())
+        | `Comment _ -> loop start
+        | `Char c -> flush_internal_props (); Buffer.add_char b c; loop content_start
+        | `Token s -> flush_internal_props (); Buffer.add_string b s; loop content_start
+        | `Space _ when not started -> loop start
+        | `Space s -> Buffer.add_string b s; loop start
+        | `Props p when started -> internal_props := Props.set_all p !internal_props; loop start
+        | `Props p -> props := Props.set_all p !props; loop start
+        | `Semicolon -> Some (answer start)
         end
     in
     Parser_state.Stmt_metadata.reset();
-    try loop false
+    try loop None
     with e -> 
       Error.log "lexer failed (%s)" (Printexc.to_string e); 
       None
 
-let get_statements ch =
-  let lexbuf = Lexing.from_channel ch in
-  let tokens = lex_tokens lexbuf in
+let get_statements ?file ch =
+  let (tokens, line_at) = lex_channel ch in
   Enum.from (fun () ->
     match extract_statement' tokens with
     | Some x -> x
     | None -> raise Enum.No_more_elements)
-  |> Enum.map (fun (buffer, props) ->
+  |> Enum.map (fun (buffer, props, start) ->
+    let props = Option.map_default (Props.set props "file") props file in
+    let src = match file, start with
+      | Some file, Some off -> Some { Gen.file; line = line_at off }
+      | _ -> None
+    in
     let include_ = match Props.get props "include" with
       | Some s -> Include.of_string s
       | None -> Include.OnlyExecutable
     in
+    List.map (fun (stmt : Gen.stmt) -> { stmt with Gen.src }) @@
     match include_ with
     | OnlyReusable ->
       let (_: Sql.select_full option) = parse_select_one (buffer, props) in
@@ -255,21 +267,24 @@ let get_statements ch =
     | ReusableAndExecutable ->
       parse_select_one (buffer, props) |> Option.map_default (fun select_full ->
         let (schema, vars, kind) = Syntax.eval_select select_full in
-        let stmt = { Gen.schema; vars; kind; props = Props.set props "sql" buffer } in
+        let stmt = { Gen.schema; vars; kind; props = Props.set props "sql" buffer; src = None } in
         check_statement stmt buffer; [stmt]) []
   ) |> List.of_enum |> List.concat
 
 let replay_sql sql = ignore (try_parse parse_one' (sql, Props.empty))
 
 let collect_blocks ch =
-  let lexbuf = Lexing.from_channel ch in
-  let tokens = lex_tokens lexbuf in
+  let (tokens, line_at) = lex_channel ch in
   let rec aux acc =
     match extract_statement' tokens with
     | None -> List.rev acc
-    | Some (buffer, props) ->
+    | Some (buffer, props, start) ->
       let b = String.trim buffer in
-      if b = "" then aux acc else aux ((b, props) :: acc)
+      if b = "" then aux acc else
+      let props =
+        Option.map_default (fun off -> Props.set props "line" (string_of_int (line_at off))) props start
+      in
+      aux ((b, props) :: acc)
   in
   aux []
 
@@ -279,6 +294,7 @@ let glue_downs blocks =
     | (sql, props) :: (down_sql, down_props) :: rest
       when has "id" props && not (has "down" props) && not (has "irreversible" props)
            && not (has "id" down_props) ->
+      let props = Option.map_default (Props.set props "down_line") props (Props.get down_props "line") in
       (sql, Props.set props "down" down_sql) :: aux rest
     | b :: rest -> b :: aux rest
     | [] -> []
@@ -313,7 +329,13 @@ let migration_of_block (sql, props) =
          | _ -> stmt.props)
       | _ -> stmt.props
     in
-    { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert })
+    let src key =
+      match Props.get props "file", Props.get props key with
+      | Some file, Some line -> Option.map (fun line -> { Gen.file; line }) (int_of_string_opt line)
+      | _ -> None
+    in
+    { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert;
+      apply_src = src "line"; revert_src = src "down_line" })
 
 let with_channel filename f =
   match try Some (open_in filename) with _ -> None with

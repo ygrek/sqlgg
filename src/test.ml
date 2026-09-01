@@ -21,15 +21,9 @@ let cmp_params p1 p2 =
     _ -> false
 
 let parse sql =
-  let lexbuf = Lexing.from_string sql in
-  let tokens = Enum.from (fun () ->
-    match Sql_lexer.ruleStatement lexbuf with
-    | `Eof -> `Semicolon
-    | #Main.token as x -> x)
-  in
-  match Main.extract_statement' tokens with
+  match Main.extract_statement' (Main.lex_tokens (Lexing.from_string sql)) with
   | None -> raise Enum.No_more_elements 
-  | Some (buffer, _) ->
+  | Some (buffer, _, _) ->
       match Main.parse_one (buffer,[]) with
       | exception exn -> assert_failure @@ sprintf "failed : %s : %s" (Printexc.to_string exn) sql
       | [] -> assert_failure @@ sprintf "Failed to parse : %s" sql

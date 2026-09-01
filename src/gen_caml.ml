@@ -115,7 +115,7 @@ let quote_comment_inline str =
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
 let comment () fmt = Printf.ksprintf (indent_endline $ make_comment) fmt
 
-let empty_line () = print_newline ()
+let empty_line () = emit "\n"
 
 let enums_hash_tbl = Hashtbl.create 100
 
@@ -342,9 +342,7 @@ let emit_cols_module ~brand_decl ~field_names body =
 let emit_verbatim_block src =
   let ind = make_indent () in
   String.split_on_char '\n' src
-  |> List.iter (fun line ->
-    if line = "" then print_newline ()
-    else Printf.printf "%s%s\n" ind line)
+  |> List.iter (fun line -> if line = "" then emit "\n" else emit_line (ind ^ line))
 
 let append_func_params ~has_callback ~module_kind inputs =
   inputs
@@ -352,6 +350,7 @@ let append_func_params ~has_callback ~module_kind inputs =
   ^ (if module_kind = `Fold then " acc" else "")
 
 let emit_func_header ~name ~extra_params ~has_callback ~format_input ~module_kind stmt =
+  enter_src stmt.src;
   let subst = Props.get_all stmt.props "subst" in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
   output "let %s db%s %s =" name extra_params (append_func_params ~has_callback ~module_kind inputs);
@@ -401,6 +400,7 @@ let consumer = function
 let complete_func c =
   c.c_finish ();
   dec_indent ();
+  leave_src ();
   empty_line ()
 
 let make_variant_name i name ~is_poly =
@@ -1163,6 +1163,7 @@ let generate_dynamic_select_modules stmts =
           in
           let count_expr = eval_count_params field_args in
           let set_helper_name = sprintf "_set_%s" field_name in
+          enter_src stmt.Gen.src;
           begin match names_of_vars field_args with
           | [] -> output "let %s : _ t =" field_name
           | names -> output "let %s %s : _ t =" field_name (String.concat " " names)
@@ -1186,7 +1187,8 @@ let generate_dynamic_select_modules stmts =
               output "column = %s;" column_body;
               output "count = %s;" count_expr;
               output "deps = %s;" (deps_of_field field_schema));
-            output "}")
+            output "}");
+          leave_src ()
         in
         emit_cols_module ~brand_decl
           ~field_names:(List.map (fun f -> f.field_name) fields)
@@ -1280,17 +1282,18 @@ let generate_migrations name migrations =
     Gen.choose_name m.props m.kind index, m
   ) migrations in
   let migration_names = List.map fst named in
-  let make_stmt fn_name sql =
-    { Gen.schema = []; vars = []; kind = Stmt.Other;
+  let make_stmt ~src fn_name sql =
+    { Gen.schema = []; vars = []; kind = Stmt.Other; src;
       props = Props.set (Props.set Props.empty "name" fn_name) "sql" sql }
   in
   let revert_stmt name (m : Gen_migrations.migration) =
+    let make_stmt = make_stmt ~src:m.revert_src in
     match m.revert with
     | [] -> let s = make_stmt ("revert_" ^ name) "" in { s with props = Props.set s.props "noop" "" }
     | revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
   in
   let stmts = List.concat_map (fun (name, (m : Gen_migrations.migration)) ->
-    [make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
+    [make_stmt ~src:m.apply_src ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
   ) named in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
   generate ~gen_io:true ~migration_names:(Some migration_names) name stmts
