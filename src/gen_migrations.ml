@@ -271,6 +271,8 @@ type migration = {
   kind : Stmt.kind;
   apply : string list;
   revert : string list;
+  apply_src : Gen.src option;
+  revert_src : Gen.src option;
 }
 
 let drop_type_sql type_name =

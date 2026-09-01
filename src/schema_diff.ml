@@ -293,7 +293,8 @@ let generate ~naming ~ddl_as_migration ~from_ ~to_ =
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
   diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
-    { Gen_migrations.props = Props.set Props.empty "name" (change_name ~naming up);
+    { Gen_migrations.apply_src = None; revert_src = None;
+      props = Props.set Props.empty "name" (change_name ~naming up);
       kind = kind_of_change up;
       apply = render_apply up;
       revert = render_apply (invert ~by_from ~by_to up) })

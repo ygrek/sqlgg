@@ -87,15 +87,12 @@ let parse_output s =
   | "none" -> None
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
-let stamp_source filename stmts =
-  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.set stmt.props "file" filename }) stmts
-
 (* parse always runs for its schema-registration side effects, even in -gen none *)
 let read_statements = function
   | "-" -> Main.get_statements stdin
   | filename ->
-    Main.with_channel filename (Option.map_default Main.get_statements [])
-    |> stamp_source (Filename.basename filename)
+    Main.with_channel filename
+      (Option.map_default (Main.get_statements ~file:(Filename.basename filename)) [])
 
 let filter_stmts ~output stmts =
   match output with
@@ -339,6 +336,10 @@ let parse_args () =
       "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
         " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
+      "-line-directives", Arg.Set Sqlgg_config.line_directives,
+        " Emit `# <line> \"<file.sql>\"` directives so that OCaml and merlin report errors in a generated query function on the line the query starts at (caml/caml_io only)";
+      "-line-directives-file", Arg.String (fun s -> Sqlgg_config.line_directives_file := Some s),
+        "<file> Name of the generated file, used by -line-directives to hand numbering back to it outside of query functions (default: <input.sql>.ml)";
       "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
     ] };
 
@@ -445,7 +446,9 @@ let parse_args () =
         inputs = List.rev !inputs;
       }
 
-let read_blocks f = Main.with_channel f (function Some ch -> Main.raw_blocks ch | None -> [])
+let read_blocks f =
+  Main.with_channel f (function Some ch -> Main.raw_blocks ch | None -> [])
+  |> List.map (fun (sql, props) -> sql, Props.set props "file" (Filename.basename f))
 
 let parse_migrations blocks =
   let migs = List.filter_map Main.migration_of_block blocks in

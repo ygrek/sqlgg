@@ -24,3 +24,7 @@ let no_check_features: Dialect.feature list ref = ref []
 let set_no_check_features l = no_check_features := l
 
 let allow_write_notnull_null b = Syntax.Config.allow_write_notnull_null := b
+
+let line_directives = ref false
+
+let line_directives_file : string option ref = ref None
