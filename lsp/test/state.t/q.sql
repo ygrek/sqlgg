@@ -1,0 +1,9 @@
+CREATE TABLE t (id INT, name TEXT);
+
+SELECT na FROM t WHERE id = 1;
+
+DROP TABLE t;
+
+CREATE TABLE t (id INT);
+
+SELECT na FROM t;

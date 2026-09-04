@@ -1,0 +1,26 @@
+(env
+ (_
+  (flags (:standard -open Stdlib -open Sqlgg))))
+
+(rule
+ (copy ../lib/sql_parser.mly sql_parser_incremental.mly))
+
+(menhir
+ (modules sql_parser_incremental)
+ (flags --table --inspection --external-tokens Sqlgg.Sql_tokens))
+
+(library
+ (name sqlgg_lsp)
+ (public_name sqlgg-lsp.lib)
+ (modules :standard \ lsp_main)
+ (libraries extlib menhirLib sqlgg linol.lsp yojson unix)
+ (preprocess
+  (pps ppx_deriving.std ppx_deriving_hash ppx_deriving_yojson ppx_enumerate ppx_deriving_variant_string)))
+
+(executable
+ (name lsp_main)
+ (public_name sqlgg-lsp)
+ (package sqlgg-lsp)
+ (modules lsp_main)
+ (promote (until-clean))
+ (libraries sqlgg_lsp linol linol-lwt))

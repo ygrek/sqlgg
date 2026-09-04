@@ -127,9 +127,9 @@ module Narrowing_model = struct
     "{" ^ String.concat ", " (List.map show_column (List.filter (Array.get m) all_columns)) ^ "}"
 
   let refs = [|
-    [ { cname = "a"; tname = Some t1 } ];
-    [ { cname = "a"; tname = Some t2 } ];
-    [ { cname = "b"; tname = Some t1 }; { cname = "b"; tname = None } ];
+    [ { cname = "a"; tname = Some t1; cpos = Sql.dummy_pos } ];
+    [ { cname = "a"; tname = Some t2; cpos = Sql.dummy_pos } ];
+    [ { cname = "b"; tname = Some t1; cpos = Sql.dummy_pos }; { cname = "b"; tname = None; cpos = Sql.dummy_pos } ];
   |]
 
   let column_of_ref (c : col_name) =
@@ -146,7 +146,10 @@ module Narrowing_model = struct
   let neg a = call Negation [ a ]
   let is_not_null a = call (Comparison Is_not_null) [ a ]
   let subquery =
-    let select = { columns = []; from = None; where = None; group = []; having = None } in
+    let select =
+      { source_pos = None; columns = []; from = None; where = None;
+        group = []; having = None }
+    in
     SelectExpr ({ select_complete = { select = select, []; order = []; limit = None;
                                       select_row_locking = None }; cte = None }, `AsValue)
 
@@ -237,8 +240,8 @@ module Narrowing_model = struct
            (option (gen_cond (depth - 1)));
       1, map2 (fun a b ->
            Choices (make_located ~value:(Some "q") ~pos:(0, 0),
-             [ make_located ~value:(Some "A") ~pos:(0, 0), Some a;
-               make_located ~value:(Some "B") ~pos:(0, 0), Some b ]))
+             [ { ctor = make_located ~value:(Some "A") ~pos:(0, 0); ctor_pos = (0, 0); body = Some a };
+               { ctor = make_located ~value:(Some "B") ~pos:(0, 0); ctor_pos = (0, 0); body = Some b } ]))
            (gen_cond (depth - 1)) (gen_cond (depth - 1));
     ]
 
@@ -377,7 +380,7 @@ module Narrowing_model = struct
     in
     match e with
     | Choices (_, alternatives) ->
-      List.concat_map (fun (_, e) -> Option.map_default disambiguate [] e) alternatives
+      List.concat_map (fun c -> Option.map_default disambiguate [] c.Sql.body) alternatives
     | Fun ({ kind = Like_escape; parameters = [ Fun ({ kind = Like; parameters = [ a; b ]; _ } as inner); esc ]; _ } as f) ->
       List.concat_map (fun a ->
         List.concat_map (fun b ->
@@ -430,7 +433,7 @@ module Narrowing_model = struct
       List.concat_map (fun b -> [ b.when_; b.then_ ]) branches @ opt else_
     | Case { case = Some _; branches; else_ } ->
       List.map (fun b -> b.then_) branches @ opt else_
-    | Choices (_, alternatives) -> List.filter_map snd alternatives
+    | Choices (_, alternatives) -> List.filter_map (fun c -> c.Sql.body) alternatives
     | Fun _ | Value _ | Param _ | Inparam _ | InChoice _ | SelectExpr _ | Column _
     | InTupleList _ | OptionActions _ | Of_values _ -> []
 

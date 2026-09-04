@@ -7,3 +7,6 @@ let get name = try Hashtbl.find shared_queries name with Not_found ->
   failwith @@ Printf.sprintf "Shared query %s not found" name
 
 let mem name = Hashtbl.mem shared_queries name
+
+let snapshot () = Hashtbl.copy shared_queries
+let restore = Prelude.hashtbl_restore shared_queries

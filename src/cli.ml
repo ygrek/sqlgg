@@ -88,7 +88,7 @@ let parse_output s =
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let stamp_source filename stmts =
-  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.set stmt.props "file" filename }) stmts
+  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.File filename :: stmt.props }) stmts
 
 (* parse always runs for its schema-registration side effects, even in -gen none *)
 let read_statements = function
@@ -121,8 +121,8 @@ let migration_to_sql ~id ~name (m : Gen_migrations.migration) =
   | [] -> sprintf "-- [sqlgg] generated\n-- [sqlgg] irreversible\n-- [sqlgg] id=%s\n%s;" id up
   | revert -> sprintf "-- [sqlgg] generated\n-- [sqlgg] id=%s\n%s;\n%s;" id up (single "down" revert)
 
-let block_id ((_, props) : string * Props.t) =
-  Props.get props "id" |> Option.map (fun s ->
+let block_id (block : Statements.t) =
+  Props.id block.props |> Option.map (fun s ->
     match Migration_id.parse s with
     | Some id -> id
     | None -> fatal "bad migration block id %S (expected integer or <timestamp>_<name>)" s)
@@ -168,7 +168,7 @@ let assign_ids ~naming base migs =
 let entry_to_sql { id; code_name; mig } = migration_to_sql ~id ~name:code_name mig
 
 let entry_to_codegen { code_name; mig; _ } =
-  { mig with props = Props.set mig.props "name" code_name }
+  { mig with props = Props.Name code_name :: mig.props }
 
 let entries_to_sql entries = entries |> List.map entry_to_sql |> String.concat "\n\n"
 
@@ -227,16 +227,17 @@ let fail_on_errors msg =
     raise Cli_errors_found
   end
 
-type schema_source = From_file of string | From_sql of string
+type schema_source = From_file of string | From_block of Statements.t
 
 let to_file_sources files = List.map (fun f -> From_file f) files
 
+let read_blocks f = Main.with_channel f (Stdlib.Option.fold ~none:[] ~some:Main.raw_blocks)
+
 let replay_sources sources =
-  Tables.reset ();
-  User_types.reset ();
+  Compile.reset ();
   List.iter (function
-    | From_file f -> Main.with_channel f (Option.map_default Main.replay_schema ())
-    | From_sql sql -> Main.replay_sql sql) sources
+    | From_file f -> List.iter Main.replay_statement (read_blocks f)
+    | From_block block -> Main.replay_statement block) sources
 
 let schema_of_sources sources =
   replay_sources sources;
@@ -445,8 +446,6 @@ let parse_args () =
         inputs = List.rev !inputs;
       }
 
-let read_blocks f = Main.with_channel f (function Some ch -> Main.raw_blocks ch | None -> [])
-
 let parse_migrations blocks =
   let migs = List.filter_map Main.migration_of_block blocks in
   abort_on_errors ();
@@ -459,7 +458,7 @@ let run_migrate ({ delta = { name; target_files; now; max_id_length; ddl_as_migr
   let recorded_blocks () = merge_blocks (Option.map_default read_blocks [] migrations_file) ext in
   let before = recorded_blocks () in
   let current =
-    schema_of_sources (initial @ List.map (fun (sql, _) -> From_sql sql) before)
+    schema_of_sources (initial @ List.map (fun block -> From_block block) before)
   in
   let target = load_schema target_files in
   let regenerate () =

@@ -3,27 +3,18 @@
   open Printf
   open Lexing
   open ExtLib
-  open Sql_parser
+  open Sql_tokens
   module T = Sql.Type
-
-let error _ callerID =
-  prerr_endline (sprintf "Lexer error : %s" callerID);
-(*	update_pos buf;*)
-	raise Parsing.Parse_error
 
 let pos lexbuf = (lexeme_start lexbuf, lexeme_end lexbuf)
 
-let advance_line_pos pos =
-  { pos with pos_lnum = pos.pos_lnum + 1; pos_bol = pos.pos_cnum; }
+exception Error of string * Sql.pos
 
-let advance_line lexbuf =
-  lexbuf.lex_curr_p <- advance_line_pos lexbuf.lex_curr_p
+let error lexbuf msg = raise (Error (msg, pos lexbuf))
 
-let keep_lexeme_start lexbuf f =
-  let start_p = lexeme_start_p lexbuf in
-  let x = f () in
-  lexbuf.lex_start_p <- start_p;
-  x
+let unescape char s =
+  let quote = String.make 1 char in
+  String.nsplit s (quote ^ quote) |> String.concat quote
 
 let keywords =
   let k = ref [
@@ -252,83 +243,84 @@ let keywords =
 module Keywords = Map.Make(String)
 
 let keywords =
-  let add map (k,v) =
+  let add map (k, v) =
     let k = String.lowercase_ascii k in
-    if Keywords.mem k map then
-      failwith (sprintf "Lexeme %s is already associated with keyword." k)
-    else
-      Keywords.add k v map
+    if Keywords.mem k map then failwith (sprintf "Lexeme %s is already associated with keyword." k)
+    else Keywords.add k v map
   in
   List.fold_left add Keywords.empty keywords
+
+let is_keyword =
+  let tokens = Hashtbl.create (Keywords.cardinal keywords) in
+  Keywords.iter (fun _ token -> Hashtbl.replace tokens token ()) keywords;
+  fun token -> Hashtbl.mem tokens token
 
 (* FIXME case sensitivity??! *)
 
 let get_ident str =
   let str = String.lowercase_ascii str in
-  try Keywords.find str keywords with Not_found -> IDENT str
+  match Keywords.find_opt str keywords with
+  | Some token -> token
+  | None -> IDENT str
 
 let ident str = IDENT (String.lowercase_ascii str)
 
-let as_literal ch s =
-  let s = String.replace_chars (fun x -> String.make (if x = ch then 2 else 1) x) s in
-  sprintf "%c%s%c" ch s ch
 }
 
 let digit = ['0'-'9']
 let alpha = ['a'-'z' 'A'-'Z']
 let ident = (alpha) (alpha | digit | '_' )*
 let wsp = [' ' '\r' '\t']
+let blank = [' ' '\n' '\r' '\t']
+
 let cmnt = "--" | "//" | "#"
+let line_comment = cmnt [^'\n']* '\n'?
+let comment_body = ([^'*'] | '*'+ [^'*' '/'])*
+let block_comment = "/*" comment_body '*'+ '/'
+let open_comment = "/*" comment_body '*'*
+
+let dq = ([^'"' '\n'] | "\"\"")*
+let sq = ([^'\'' '\n'] | "''")*
+let bq = ([^'`' '\n'] | "``")*
+let sb = [^']' '\n']*
+let open_string = '"' dq | "'" sq | '`' bq | '[' sb
+
+let plain = [^ ';' '"' '\'' '`' '[' '$' '-' '/' '#' ' ' '\n' '\r' '\t']
 
 (* extract separate statements *)
 rule ruleStatement = parse
-  | ['\n' ' ' '\r' '\t']+ as tok { `Space tok }
   | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* "=" wsp* ([^'\n']* as v) '\n' { `Props [(n, String.trim v)] }
-  | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as v) '\n'
-    {
-      let props = rulePropList [] (Lexing.from_string v) in
-      let all_props = ("name", name) :: props in
-      `Props all_props
-    }
-  | cmnt wsp* "@" (ident+ as name) [^'\n']* '\n' { `Props [("name", name); ] }
-  | '"' { let s = ruleInQuotes "" lexbuf in `Token (as_literal '"' s) }
-  | "'" { let s = ruleInSingleQuotes "" lexbuf in `Token (as_literal '\'' s) }
-  | "$" (ident? as tag) "$" {
-    keep_lexeme_start lexbuf (fun () -> let s = ruleInDollarQuotes tag "" lexbuf in `Token (sprintf "$%s$%s$%s$" tag s tag))
-  }
-  | cmnt as s { `Comment (s ^ ruleComment "" lexbuf) }
-  | "/*" { `Comment ("/*" ^ ruleCommentMulti "" lexbuf ^ "*/") }
+  | cmnt wsp* "[sqlgg]" wsp+ (ident+ as n) wsp* '\n' { `Props [(n, "")] }
+  | cmnt wsp* "@" (ident+ as name) wsp* "|" ([^'\n']* as props) '\n'?
+    { match rulePropList [] (Lexing.from_string props) with
+      | Some props -> `Props (("name", name) :: props)
+      | None -> `Bad_props }
+  | cmnt wsp* "@" (ident+ as name) [^'|' '\n']* '\n' { `Props [("name", name)] }
+  | '"' dq '"' | "'" sq "'" | '`' bq '`' | '[' sb ']' { `Literal }
+  | "$" (ident? as tag) "$" { if Option.is_some (ruleInDollarQuotes tag lexbuf) then `Literal else `Open_literal }
+  | line_comment | block_comment { `Comment }
+  | open_string | open_comment { `Open_literal }
   | ';' { `Semicolon }
-  | [^ ';'] as c { `Char c }
+  | blank+ { `Blank }
+  | plain+ (blank+ plain+)* | [^ ';'] { `Text }
   | eof { `Eof }
-(* Parse a list of key:value properties *)
 and
 rulePropList acc = parse
-  | wsp* (ident+ as prop) wsp* ':' wsp* ([^',' '\n']+ as value) wsp*
-    {
-      let new_acc = (String.trim prop, String.trim value) :: acc in
-      rulePropListNext new_acc lexbuf
-    }
-  | wsp* '\n' { List.rev acc }
-  | wsp* eof { List.rev acc }
-  | _ { error lexbuf "rulePropList" }
-(* Parse continuation after comma *)
+  | wsp* (ident as k) wsp* ':' wsp* ([^',']* as v) { rulePropListNext ((k, String.trim v) :: acc) lexbuf }
+  | wsp* eof { Some (List.rev acc) }
+  | _ { None }
 and
 rulePropListNext acc = parse
   | ',' { rulePropList acc lexbuf }
-  | wsp* '\n' { List.rev acc }
-  | wsp* eof { List.rev acc }
-  | _ { error lexbuf "rulePropListNext" }
+  | wsp* eof { Some (List.rev acc) }
+  | _ { None }
 (* extract tail of the input *)
 and
-ruleTail acc = parse
-  | eof { acc }
-  | _* as str { ruleTail (acc ^ str) lexbuf }
+ruleTail = parse
+  | _* as tail { tail }
 and
 ruleMain = parse
-  | wsp   { ruleMain lexbuf }
-  (* update line number *)
-  | '\n'  { advance_line lexbuf; ruleMain lexbuf}
+  | blank { ruleMain lexbuf }
 
   | '('                { LPAREN }
   | ')'                { RPAREN }
@@ -337,8 +329,7 @@ ruleMain = parse
   | '{'   { LCURLY (lexeme_start lexbuf) }
   | '}'   { RCURLY (lexeme_start lexbuf) }
 
-  | cmnt { ignore (ruleComment "" lexbuf); ruleMain lexbuf }
-  | "/*" { ignore (ruleCommentMulti "" lexbuf); ruleMain lexbuf }
+  | line_comment | block_comment { ruleMain lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -367,73 +358,31 @@ ruleMain = parse
   | '&' (ident as value) { SHARED_QUERY_REF { value; pos = pos lexbuf } }
   | "::" { DOUBLECOLON }
 
-  | '"' { keep_lexeme_start lexbuf (fun () -> ident (ruleInQuotes "" lexbuf)) }
-  | "'" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInSingleQuotes "" lexbuf)) }
+  | '"' (dq as s) '"' { ident (unescape '"' s) }
+  | '`' (bq as s) '`' { ident (unescape '`' s) }
+  | '[' (sb as s) ']' { ident s }
+  | "'" (sq as s) "'" { TEXT (unescape '\'' s) }
+  | ['x' 'X'] "'" (sq as s) "'" { BLOB (unescape '\'' s) }
   (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)
-  | "$" (ident? as tag) "$" { keep_lexeme_start lexbuf (fun () -> TEXT (ruleInDollarQuotes tag "" lexbuf)) }
-  | "`" { keep_lexeme_start lexbuf (fun () -> ident (ruleInBackQuotes "" lexbuf)) }
-  | "[" { keep_lexeme_start lexbuf (fun () -> ident (ruleInBrackets "" lexbuf)) }
-  | ['x' 'X'] "'" { keep_lexeme_start lexbuf (fun () -> BLOB (ruleInSingleQuotes "" lexbuf)) }
+  | "$" (ident? as tag) "$" {
+      let start_p = lexeme_start_p lexbuf and body = lexbuf.lex_curr_pos in
+      match ruleInDollarQuotes tag lexbuf with
+      | Some stop -> lexbuf.lex_start_p <- start_p; TEXT (sub_lexeme lexbuf body stop)
+      | None -> raise (Error ("unterminated dollar quote", (start_p.pos_cnum, lexeme_end lexbuf)))
+    }
+  | open_string { error lexbuf "unterminated string literal" }
+  | open_comment { error lexbuf "unterminated comment" }
 
   | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
-  | _	{ error lexbuf "ruleMain" }
+  | _	{ error lexbuf "unexpected character" }
 and
-(* FIXME factor out all that ruleIn* rules *)
-ruleInQuotes acc = parse
-  | '"'	        { acc }
-  | eof	        { error lexbuf "no terminating quote" }
-  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating quote" }
-  | "\"\""      { ruleInQuotes (acc^"\"") lexbuf }
-  | [^'"' '\n']+ as s { ruleInQuotes (acc^s) lexbuf }
-  | _		{ error lexbuf "ruleInQuotes" }
-and
-ruleInBrackets acc = parse
-  | ']'	        { acc }
-  | eof	        { error lexbuf "no terminating bracket" }
-  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating bracket" }
-(*   | "\"\""      { ruleInQuotes (acc ^ "\"") lexbuf } *)
-  | [^']' '\n']+  { ruleInBrackets (acc ^ lexeme lexbuf) lexbuf }
-  | _		{ error lexbuf "ruleInBrackets" }
-and
-ruleInSingleQuotes acc = parse
-  | '\''	      { acc }
-  | eof	        { error lexbuf "no terminating single quote" }
-  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating single quote" }
-  | "''"        { ruleInSingleQuotes (acc ^ "'") lexbuf }
-  | [^'\'' '\n']+  { ruleInSingleQuotes (acc ^ lexeme lexbuf) lexbuf }
-  | _		{ error lexbuf "ruleInSingleQuotes" }
-and
-ruleInBackQuotes acc = parse
-  | '`'	        { acc }
-  | eof	        { error lexbuf "no terminating back quote" }
-  | '\n'        { advance_line lexbuf; error lexbuf "EOL before terminating back quote" }
-  | "``"        { ruleInBackQuotes (acc ^ "`") lexbuf }
-  | [^'`' '\n']+  { ruleInBackQuotes (acc ^ lexeme lexbuf) lexbuf }
-  | _		{ error lexbuf "ruleInBackQuotes" }
-and
-ruleInDollarQuotes tag acc = parse
-  | "$" (ident? as tag_) "$" { if tag_ = tag then acc else ruleInDollarQuotes tag (acc ^ sprintf "$%s$" tag_) lexbuf }
-  | eof	        { error lexbuf "no terminating dollar quote" }
-  | '\n'        { advance_line lexbuf; ruleInDollarQuotes tag (acc ^ "\n") lexbuf }
-  (* match one char at a time to make sure delimiter matches longer *)
-  | [^'\n']     { ruleInDollarQuotes tag (acc ^ lexeme lexbuf) lexbuf }
-  | _		{ error lexbuf "ruleInDollarQuotes" }
-and
-ruleComment acc = parse
-  | '\n'	{ advance_line lexbuf; acc }
-  | eof	        { acc }
-  | [^'\n']+    { let s = lexeme lexbuf in ruleComment (acc ^ s) lexbuf; }
-  | _		{ error lexbuf "ruleComment"; }
-and
-ruleCommentMulti acc = parse
-  | '\n'	{ advance_line lexbuf; ruleCommentMulti (acc ^ "\n") lexbuf }
-  | "*/"	{ acc }
-  | "*"
-  | [^'\n' '*']+    { let s = lexeme lexbuf in ruleCommentMulti (acc ^ s) lexbuf }
-  | _	        { error lexbuf "ruleCommentMulti" }
+ruleInDollarQuotes tag = parse
+  | "$" (ident? as tag_) "$" { if String.equal tag_ tag then Some lexbuf.lex_start_pos else ruleInDollarQuotes tag lexbuf }
+  | eof	        { None }
+  | [^'$']+ | '$' { ruleInDollarQuotes tag lexbuf }
 
 {
 

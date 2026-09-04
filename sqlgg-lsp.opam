@@ -1,0 +1,40 @@
+opam-version: "2.0"
+maintainer: "ygrek@autistici.org"
+authors: ["ygrek"]
+homepage: "https://ygrek.org/p/sqlgg/"
+dev-repo: "git+https://github.com/ygrek/sqlgg.git"
+bug-reports: "https://github.com/ygrek/sqlgg/issues"
+license: "GPL-2.0-only"
+tags: [ "org:ygrek" ]
+synopsis: "Language server for SQL, driven by the sqlgg front end"
+description: """
+Type-checks SQL documents with sqlgg and reports what it finds to an editor:
+errors as diagnostics, the columns and parameters of a statement on hover,
+the names in scope as completions, and the CREATE TABLE a name comes from as
+its definition.
+
+Kept apart from the sqlgg package so that generating code does not drag in an
+editor's worth of dependencies.
+"""
+build: [
+  ["dune" "subst"] {dev}
+  ["dune" "build" "-p" name "-j" jobs "@install" "@doc" {with-doc}]
+]
+depends: [
+  "ocaml" {>= "4.14.0"}
+  "dune" {>= "2.7"}
+  "sqlgg" {= version}
+  "extlib" {>= "1.6.0"}
+  "yojson" {>= "1.6.0"}
+  "menhir" {>= "20180523"}
+  "menhirLib" {>= "20180523"}
+  "ppx_deriving" {>= "4.3"}
+  "ppx_deriving_hash" {>= "0.1.3"}
+  "ppx_deriving_yojson" {>= "3.6.0"}
+  "ppx_enumerate" {>= "v0.15.0"}
+  "ppx_deriving_variant_string" {>= "1.0.1"}
+  "linol" {>= "0.11"}
+  "linol-lwt" {>= "0.11"}
+  "base-unix"
+  "odoc" {with-doc}
+]

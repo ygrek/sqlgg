@@ -1,0 +1,8 @@
+(executable
+ (name ask)
+ (libraries sqlgg_lsp)
+ (preprocess
+  (pps ppx_deriving_variant_string)))
+
+(cram
+ (deps %{exe:ask.exe}))

@@ -85,7 +85,7 @@ let constraint_to_sql = function
   | WithDefault | OnConflict _ | Composite _ -> None
 
 let alter_action_attr_to_sql ~default_sql_lookup (col : Sql.Alter_action_attr.t) =
-  let name = quote_id col.name in
+  let name = quote_id col.name.value in
   let kind_sql =
     Option.map_default (fun (k : Sql.Source_type.kind Sql.collated Sql.located) ->
       let type_sql = " " ^ source_type_kind_to_sql k.value.collated in
@@ -97,12 +97,12 @@ let alter_action_attr_to_sql ~default_sql_lookup (col : Sql.Alter_action_attr.t)
       match c.value with
       | Syntax_constraint cst -> constraint_to_sql cst
       | Default _ ->
-        match default_sql_lookup col.name with
+        match default_sql_lookup col.name.value with
          | Some sql -> Some (sprintf "DEFAULT %s" sql)
          | None ->
            fail "column `%s` has a DEFAULT whose source SQL was not captured; \
                  cannot serialize it for migration (write this migration by hand)"
-             col.name)
+             col.name.value)
   in
   let extras_sql = match extras with [] -> "" | l -> " " ^ String.concat " " l in
   sprintf "%s%s%s" name kind_sql extras_sql
@@ -267,7 +267,7 @@ let create_table_schema ct =
      @ List.map (fun ix -> Add_key ix) ct.indexes)
 
 type migration = {
-  props : Props.t;
+  props : Props.t list;
   kind : Stmt.kind;
   apply : string list;
   revert : string list;

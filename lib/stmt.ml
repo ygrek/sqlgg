@@ -43,3 +43,10 @@ let category_of_stmt_kind = function
 | CreateType _
 | DropType _ -> DDL
 | Other -> OTHER
+
+let dml_tables = function
+| Insert (_, table)
+| Update (Some table) -> [ table ]
+| Delete tables -> tables
+| Select _ | Create _ | CreateIndex _ | Update None | Alter _ | Drop _
+| CreateRoutine _ | CreateType _ | DropType _ | Other -> []
