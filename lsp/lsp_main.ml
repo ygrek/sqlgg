@@ -148,24 +148,36 @@ module Session = struct
     Line_indexes.remove t.line_indexes uri
 end
 
-let failed ~request ~uri exn =
-  Printf.eprintf "sqlgg-lsp: %s failed for %s: %s (%s)\n%s%!"
-    request (DocumentUri.to_path uri)
-    (Sqlgg.Parser_utils.message_of_exn exn) (Printexc.to_string exn)
-    (Printexc.get_backtrace ())
-
-let answer ~request ~uri ~none f =
+let run_handler ~request ~uri f =
   match f () with
-  | result -> result
+  | result -> Ok result
   | exception (Out_of_memory as exn) -> raise exn
-  | exception exn -> failed ~request ~uri exn; none exn
+  | exception exn ->
+    Printf.eprintf "sqlgg-lsp: %s failed for %s: %s (%s)\n%s%!"
+      request (DocumentUri.to_path uri)
+      (Sqlgg.Parser_utils.message_of_exn exn) (Printexc.to_string exn)
+      (Printexc.get_backtrace ());
+    Error exn
 
-let internal_error exn =
-  let start = Position.create ~line:0 ~character:0 in
-  Diagnostic.create
-    ~range:(Range.create ~start ~end_:(Position.create ~line:0 ~character:1))
-    ~severity:DiagnosticSeverity.Error ~source:"sqlgg"
-    ~message:(`String ("sqlgg-lsp: " ^ Sqlgg.Parser_utils.message_of_exn exn)) ()
+let project_request ~request ~uri f =
+  let config = Project.locate (DocumentUri.to_path uri) in
+  Option.bind config
+    (fun _ ->
+      let result = run_handler ~request ~uri f in
+      Result.value ~default:None result)
+
+let diagnostic_result ~request ~uri f =
+  match run_handler ~request ~uri f with
+  | Ok result -> result
+  | Error exn ->
+    let start = Position.create ~line:0 ~character:0 in
+    [ Diagnostic.create
+        ~range:(Range.create ~start
+          ~end_:(Position.create ~line:0 ~character:1))
+        ~severity:DiagnosticSeverity.Error ~source:"sqlgg"
+        ~message:(`String
+          ("sqlgg-lsp: " ^ Sqlgg.Parser_utils.message_of_exn exn))
+        () ]
 
 let publish_diagnostics
     (notify_back : Linol_lwt.Jsonrpc2.notify_back) ~version uri diagnostics =
@@ -197,29 +209,29 @@ class sqlgg_lsp =
 
     method on_notif_doc_did_open ~notify_back doc ~content =
       let path = DocumentUri.to_path doc.TextDocumentItem.uri in
-      begin match Project.locate path with
-      | Some config -> Printf.eprintf "sqlgg-lsp: %s: schema from %s\n%!" path config
+      let diagnostics =
+        match Project.locate path with
+        | Some config ->
+          Printf.eprintf "sqlgg-lsp: %s: schema from %s\n%!" path config;
+          diagnostic_result ~request:"didOpen" ~uri:doc.uri
+            (fun () ->
+              Session.diagnostics session ~encoding:positionEncoding
+                ~version:doc.version doc.uri content)
       | None ->
         Printf.eprintf
-          "sqlgg-lsp: %s: no sqlgg.json above this file, so no schema is loaded \
-           and every table declared elsewhere is reported as missing\n%!" path
-      end;
-      let diagnostics =
-        answer ~request:"didOpen" ~uri:doc.TextDocumentItem.uri
-          ~none:(fun exn -> [ internal_error exn ])
-          (fun () ->
-            Session.diagnostics session ~encoding:positionEncoding
-              ~version:doc.version doc.uri content)
+          "sqlgg-lsp: %s: disabled (no sqlgg.json above this file)\n%!" path;
+        []
       in
       publish_diagnostics notify_back ~version:doc.version doc.uri diagnostics
 
     method on_notif_doc_did_change ~notify_back doc _changes ~old_content:_ ~new_content =
       let diagnostics =
-        answer ~request:"didChange" ~uri:doc.VersionedTextDocumentIdentifier.uri
-          ~none:(fun exn -> [ internal_error exn ])
-          (fun () ->
-            Session.diagnostics session ~encoding:positionEncoding
-              ~version:doc.version doc.uri new_content)
+        let config = Project.locate (DocumentUri.to_path doc.uri) in
+        Option.fold config ~none:[] ~some:(fun _ ->
+          diagnostic_result ~request:"didChange" ~uri:doc.uri
+            (fun () ->
+              Session.diagnostics session ~encoding:positionEncoding
+                ~version:doc.version doc.uri new_content))
       in
       publish_diagnostics notify_back ~version:doc.version doc.uri diagnostics
 
@@ -240,7 +252,7 @@ class sqlgg_lsp =
           begin match self#find_doc identifier.TextDocumentIdentifier.uri with
           | None -> Linol_lwt.return None
           | Some state ->
-            answer ~request:"semanticTokens" ~uri:identifier.uri ~none:(fun _ -> None)
+            project_request ~request:"semanticTokens" ~uri:identifier.uri
               (fun () ->
                 Some (Session.semantic_tokens session ~encoding:positionEncoding
                   ~version:state.Linol_lwt.Jsonrpc2.version identifier.uri state.content))
@@ -249,21 +261,21 @@ class sqlgg_lsp =
         | _ -> super#on_request_unhandled ~notify_back ~id req
 
     method! on_req_hover ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_ doc =
-      answer ~request:"hover" ~uri ~none:(fun _ -> None) (fun () ->
+      project_request ~request:"hover" ~uri (fun () ->
         Session.hover session ~encoding:positionEncoding
           ~version:doc.Linol_lwt.Jsonrpc2.version uri doc.content pos)
       |> Linol_lwt.return
 
     method! on_req_definition ~notify_back:_ ~id:_ ~uri ~pos ~workDoneToken:_
         ~partialResultToken:_ doc =
-      answer ~request:"definition" ~uri ~none:(fun _ -> None) (fun () ->
+      project_request ~request:"definition" ~uri (fun () ->
         Session.definition session ~encoding:positionEncoding
           ~version:doc.Linol_lwt.Jsonrpc2.version uri doc.content pos)
       |> Linol_lwt.return
 
     method! on_req_completion ~notify_back:_ ~id:_ ~uri ~pos ~ctx:_
         ~workDoneToken:_ ~partialResultToken:_ doc =
-      answer ~request:"completion" ~uri ~none:(fun _ -> None) (fun () ->
+      project_request ~request:"completion" ~uri (fun () ->
         Session.completion session ~encoding:positionEncoding
           ~version:doc.Linol_lwt.Jsonrpc2.version uri doc.content pos)
       |> Linol_lwt.return

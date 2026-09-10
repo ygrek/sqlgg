@@ -125,6 +125,13 @@ let result = function
   | `Assoc fields -> List.assoc_opt "result" fields
   | _ -> None
 
+let expect_null method_ response =
+  match result response with
+  | Some `Null -> ()
+  | Some _ | None ->
+    failf "%s returned a result without sqlgg.json: %s"
+      method_ (Yojson.Safe.to_string response)
+
 type 'a request = {
   jsonrpc : string;
   id : int;
@@ -238,6 +245,9 @@ let did_close server ~uri =
   notify server ~method_:"textDocument/didClose" document_params_to_yojson
     { text_document = { uri } }
 
+let project_uri name =
+  "file://" ^ Filename.concat (Unix.getcwd ()) name
+
 let test_shutdown executable =
   with_server executable (fun server ->
     initialize server;
@@ -246,7 +256,7 @@ let test_shutdown executable =
 
 let test_close_clears_diagnostics executable =
   with_server executable (fun server ->
-    let uri = "file:///tmp/sqlgg-lsp-invalid.sql" in
+    let uri = project_uri "invalid.sql" in
     initialize server;
     did_open server ~uri ~text:"SELECT FROM;";
     ignore (receive server (diagnostics (function [] -> false | _ :: _ -> true)));
@@ -257,7 +267,7 @@ let test_close_clears_diagnostics executable =
 
 let test_close_forgets_document executable =
   with_server executable (fun server ->
-    let uri = "file:///tmp/sqlgg-lsp-closed.sql" in
+    let uri = project_uri "closed.sql" in
     initialize server;
     did_open server ~uri ~text:"SELECT 1;";
     ignore (receive server (diagnostics (fun _ -> true)));
@@ -275,7 +285,7 @@ let test_close_forgets_document executable =
 
 let test_change_versions_diagnostics executable =
   with_server executable (fun server ->
-    let uri = "file:///tmp/sqlgg-lsp-version.sql" in
+    let uri = project_uri "version.sql" in
     initialize server;
     did_open server ~uri ~text:"SELECT FROM;";
     ignore (receive server (versioned_diagnostics 1));
@@ -288,7 +298,7 @@ let test_change_versions_diagnostics executable =
 
 let test_hover executable =
   with_server executable (fun server ->
-    let uri = "file:///tmp/sqlgg-lsp-hover.sql" in
+    let uri = project_uri "hover.sql" in
     initialize server;
     did_open server ~uri ~text:"SELECT 1;";
     ignore (receive server (diagnostics (fun _ -> true)));
@@ -297,6 +307,26 @@ let test_hover executable =
         document_position_params_to_yojson
         { text_document = { uri }; position = { line = 0; character = 7 } });
     shutdown server 3;
+    close_out_noerr server.input)
+
+let test_no_project executable =
+  with_server executable (fun server ->
+    let uri = "file:///tmp/sqlgg-lsp-no-project.sql" in
+    initialize server;
+    did_open server ~uri ~text:"SELECT missing FROM absent;";
+    ignore (receive server (diagnostics (function [] -> true | _ :: _ -> false)));
+    let position method_ id =
+      request server ~id ~method_
+        document_position_params_to_yojson
+        { text_document = { uri }; position = { line = 0; character = 8 } }
+    in
+    expect_null "hover" (position "textDocument/hover" 2);
+    expect_null "definition" (position "textDocument/definition" 3);
+    expect_null "completion" (position "textDocument/completion" 4);
+    expect_null "semanticTokens"
+      (request server ~id:5 ~method_:"textDocument/semanticTokens/full"
+        document_params_to_yojson { text_document = { uri } });
+    shutdown server 6;
     close_out_noerr server.input)
 
 let () =
@@ -309,7 +339,8 @@ let () =
   | [ _; executable; "change-versions-diagnostics" ] ->
     test_change_versions_diagnostics executable
   | [ _; executable; "hover" ] -> test_hover executable
+  | [ _; executable; "no-project" ] -> test_no_project executable
   | _ ->
     failf
       "usage: protocol LSP \
-       {shutdown|close-clears-diagnostics|close-forgets-document|change-versions-diagnostics|hover}"
+       {shutdown|close-clears-diagnostics|close-forgets-document|change-versions-diagnostics|hover|no-project}"

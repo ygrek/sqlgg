@@ -15,3 +15,7 @@ Diagnostics identify the document version they were computed from:
 Hover works over the protocol boundary:
 
   $ ../protocol.exe ../../lsp_main.exe hover
+
+Documents without a sqlgg.json project are ignored:
+
+  $ ../protocol.exe ../../lsp_main.exe no-project
