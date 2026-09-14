@@ -368,7 +368,7 @@ column1_kind:
        | ASTERISK { Sql.All }
        | c=pair(located(expr), maybe_as) { let (e, m) = c in Sql.Expr (e, m) }
 
-maybe_as: AS? name=ident { Some name }
+maybe_as: AS? name=located(ident) { Some name }
         | { None }
 
 source_alias: AS? name=located(ident) names=sequence(ident)? { name, names }
@@ -606,7 +606,8 @@ c_expr_:
           Sql.branches = branches_list;
           Sql.else_ = else_expr;
         } in
-        Sql.Case case_record
+        Sql.Case (Sql.make_located
+          ~value:case_record ~pos:($startofs, $endofs))
       }
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { fn "if" (F (Var 0, [Typ (depends Bool); Var 0; Var 0])) [e1;e2;e3] }
     | w=window_function OVER spec=window_spec { w spec }

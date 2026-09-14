@@ -29,3 +29,8 @@ SELECT 'users' AS s FROM users;
 
 -- @in_list
 SELECT id FROM users WHERE id IN @ids AND name NOT IN @excluded;
+
+SELECT id AS email FROM users;
+SELECT id email_without_as FROM users;
+SELECT id AS first_id FROM users UNION SELECT id second_id FROM users;
+SELECT CASE WHEN id > 0 THEN 'active' ELSE 'inactive' END AS status FROM users;

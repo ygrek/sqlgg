@@ -79,7 +79,7 @@ let narrow_columns ~resolve ~constrains e =
   let rec narrow (e : Sql.expr) known =
     let same e = narrow e known in
     let has_value e = narrow e `Has_value in
-    let every_path { Sql.case; branches; else_ } =
+    let every_path { Sql.value = { case; branches; else_ }; _ } =
       let condition when_ =
         match case with
         | Some x -> add (has_value x) (has_value when_)

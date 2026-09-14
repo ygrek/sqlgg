@@ -30,6 +30,7 @@ type target =
   | Parameter of Params.node
   | Name of resolution
   | Expr of Sql.Type.t
+  | Result_alias of Sql.attr
   | Statement of { stmt : Document.stmt; loc : Symbol.loc option }
 
 let make_target cursor =
@@ -45,15 +46,29 @@ let make_target cursor =
         node.placement)
     |> Sql.Pos.find_innermost_opt cursor.offset
   in
-  let shared_query () =
-    let* (name, pos) =
-      List.find_map (fun (lexeme : Recover_parser.lexeme) ->
+  let ident =
+    let rec loop acc = function
+      | [] -> None
+      | (lexeme : Recover_parser.lexeme) :: _ when fst lexeme.pos > local -> None
+      | (lexeme : Recover_parser.lexeme) :: rest ->
+        match Recover_parser.ident_name lexeme.token with
+        | Some name when Sql.Pos.covers lexeme.pos local ->
+          Some { name; pos = Sql.Pos.shift base lexeme.pos;
+            qualifier = Recover_parser.qualifier_before acc }
+        | Some _ | None -> loop (lexeme :: acc) rest
+    in
+    loop [] tokens
+  in
+  let shared_reference =
+    List.find_map (fun (lexeme : Recover_parser.lexeme) ->
         match lexeme.token with
         | SHARED_QUERY_REF reference when Sql.Pos.covers reference.pos local ->
           Some (reference.value, Sql.Pos.shift base reference.pos)
         | _ -> None)
-        tokens
-    in
+      tokens
+  in
+  let shared_query () =
+    let* (name, pos) = shared_reference in
     let* (stmt, loc) = Document.find_reusable_opt cursor.document name in
     located pos (Statement { stmt; loc = Some loc })
   in
@@ -63,20 +78,18 @@ let make_target cursor =
     | Params.Var _ -> Some { Sql.value = Parameter node; pos }
     | Params.Branch _ -> None
   in
+  let typed types =
+    Sql.Pos.find_innermost_opt cursor.offset (List.to_seq types)
+    |> Option.map (fun (typ, pos) -> { Sql.value = Expr typ; pos })
+  in
+  let result_alias () =
+    Sql.Pos.find_innermost_opt cursor.offset
+      (List.to_seq (Document.result_aliases cursor.stmt))
+    |> Option.map (fun (attr, pos) ->
+      { Sql.value = Result_alias attr; pos })
+  in
   let name () =
-    let* id =
-      let rec loop acc = function
-        | [] -> None
-        | (lexeme : Recover_parser.lexeme) :: _ when fst lexeme.pos > local -> None
-        | (lexeme : Recover_parser.lexeme) :: rest ->
-          match Recover_parser.ident_name lexeme.token with
-          | Some name when Sql.Pos.covers lexeme.pos local ->
-            Some { name; pos = Sql.Pos.shift base lexeme.pos;
-              qualifier = Recover_parser.qualifier_before acc }
-          | Some _ | None -> loop (lexeme :: acc) rest
-      in
-      loop [] tokens
-    in
+    let* id = ident in
     let symbols = Document.scope cursor.stmt cursor.offset in
     let find_columns sources =
       let resolved source =
@@ -126,15 +139,18 @@ let make_target cursor =
     | Params.Branch _ -> Some { Sql.value = Parameter node; pos }
     | Params.Var _ -> None
   in
-  let expr () =
-    Sql.Pos.find_innermost_opt cursor.offset (List.to_seq (Document.exprs cursor.stmt))
-    |> Option.map (fun (typ, pos) -> { Sql.value = Expr typ; pos })
+  let expr () = typed (Document.exprs cursor.stmt) in
+  let target =
+    List.find_map (fun candidate -> candidate ())
+      [ param; result_alias; name; branch; expr; shared_query ]
   in
-  List.find_map (fun candidate -> candidate ())
-    [ param; name; branch; expr; shared_query ]
-  |> Option.value ~default:
+  if Option.is_some ident || Option.is_some shared_reference then target
+  else
+    let fallback =
       { Sql.value = Statement { stmt = cursor.stmt; loc = None };
         pos = cursor.stmt.pos }
+    in
+    Some (Option.value target ~default:fallback)
 
 module Markdown = struct
   let with_buffer f = let b = Buffer.create 256 in f b; Buffer.contents b
@@ -215,6 +231,10 @@ module Markdown = struct
 
   let expr typ = with_buffer @@ fun b -> section b [ "expression", Sql.Type.show typ ]
 
+  let result_alias (attr : Sql.attr) =
+    with_buffer @@ fun b ->
+    section b [ attr.name, Sql.Type.show attr.domain ]
+
   let kind (kind : Stmt.kind) =
     let tables tables =
       String.concat ", " (List.map Sql.show_table_name tables)
@@ -249,7 +269,7 @@ module Markdown = struct
 end
 
 let hover cursor =
-  let { Sql.value = target; pos } = make_target cursor in
+  let* { Sql.value = target; pos } = make_target cursor in
   let text =
     match target with
     | Parameter ({ kind = Params.Var _; _ } as node) ->
@@ -258,6 +278,7 @@ let hover cursor =
       Some (Markdown.branch node)
     | Name resolved -> Some (Markdown.resolution resolved)
     | Expr typ -> Some (Markdown.expr typ)
+    | Result_alias attr -> Some (Markdown.result_alias attr)
     | Statement { stmt; _ } -> Markdown.stmt stmt
   in
   Option.map (fun text -> text, pos) text
@@ -271,19 +292,21 @@ let definition cursor =
       if Sql.Pos.contains loc.pos cursor.offset then [] else [ loc ]
   in
   let symbol_locations (symbol : Symbol.t) = locations symbol symbol.loc in
-  let { Sql.value = target; _ } = make_target cursor in
-  match target with
-  | Parameter _ | Expr _ -> []
-  | Statement { loc; _ } -> Option.to_list loc
-  | Name (Source { symbol; declaration }) ->
-    begin match symbol_locations symbol with
-    | _ :: _ as found -> found
-    | [] -> Option.fold ~none:[] ~some:symbol_locations declaration
-    end
-  | Name (Columns (first, rest)) ->
-    first :: rest |> List.concat_map (fun { source; column } ->
-      let loc = match column.loc with None -> source.loc | Some _ -> column.loc in
-      locations source loc)
+  Option.fold (make_target cursor) ~none:[] ~some:(fun { Sql.value = target; _ } ->
+    match target with
+    | Parameter _ | Expr _ | Result_alias _ -> []
+    | Statement { loc; _ } -> Option.to_list loc
+    | Name (Source { symbol; declaration }) ->
+      begin match symbol_locations symbol with
+      | _ :: _ as found -> found
+      | [] -> Option.fold ~none:[] ~some:symbol_locations declaration
+      end
+    | Name (Columns (first, rest)) ->
+      first :: rest |> List.concat_map (fun { source; column } ->
+        let loc =
+          match column.loc with None -> source.loc | Some _ -> column.loc
+        in
+        locations source loc))
 
 type token = { pos : Sql.Pos.t; typ : Params.token_type }
 

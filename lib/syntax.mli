@@ -19,6 +19,7 @@ type stmt_annotations = {
   table_aliases : table_alias list;
   table_defs : (table_name located * string located list) list;
   expr_types : Type.t located list;
+  result_aliases : attr located list;
   select_scopes : select_scope list;
 }
 

@@ -108,6 +108,52 @@ Hover: statement, table, column, parameter, expressions (also inside ORDER BY of
   
   Takes no parameters.
 
+An explicit result alias has the type of its expression:
+
+  $ ../ask.exe q.sql hover:'total FROM'
+  ### hover:total FROM
+  11:19-11:24
+  ```sql
+  total  Int
+  ```
+
+Alias spans take precedence over same-named source columns and do not require AS:
+
+  $ ../ask.exe q.sql hover:'id AS emai^' hover:'id email_without_a^'
+  ### hover:id AS emai^
+  33:13-33:18
+  ```sql
+  email  Int
+  ```
+  ### hover:id email_without_a^
+  34:10-34:26
+  ```sql
+  email_without_as  Int
+  ```
+
+Result aliases from each compound branch keep their own spans:
+
+  $ ../ask.exe q.sql hover:first_id hover:second_id
+  ### hover:first_id
+  35:13-35:21
+  ```sql
+  first_id  Int
+  ```
+  ### hover:second_id
+  35:49-35:58
+  ```sql
+  second_id  Int
+  ```
+
+CASE expressions expose their inferred result type:
+
+  $ ../ask.exe q.sql hover:'SELECT CAS^'
+  ### hover:SELECT CAS^
+  36:7-36:57
+  ```sql
+  expression  Union (active| inactive)
+  ```
+
 Definition of a table and of a column, and nothing for a parameter:
 
   $ ../ask.exe q.sql def:'users WHERE' def:'email FROM' def:@id
@@ -136,6 +182,14 @@ Text that is not code:
   replace 27:13-27:13
   ### complete:users' AS
   replace 28:8-28:8
+
+Unresolved identifiers do not fall back to statement hover:
+
+  $ ../ask.exe q.sql hover:nmae hover:FRM
+  ### hover:nmae
+  nothing
+  ### hover:FRM
+  nothing
 
 Completion: in an expression, at a table position, of a parameter, and next to a qualified column
 where the qualifier must not be taken for an alias:
@@ -236,6 +290,39 @@ the first projected column:
   ```
   
   Declared in `dynamic.sql`
+
+Dynamic-select result aliases keep their source spans:
+
+  $ ../ask.exe dynamic.sql hover:listed_price hover:'price AS nam^' hover:'name display_nam^'
+  ### hover:listed_price
+  13:16-13:28
+  ```sql
+  listed_price  Decimal(10,2)?
+  ```
+  ### hover:price AS nam^
+  16:16-16:20
+  ```sql
+  name  Decimal(10,2)?
+  ```
+  ### hover:name display_nam^
+  16:27-16:39
+  ```sql
+  display_name  Text?
+  ```
+
+Nested aliases remain annotated when only the outer SELECT is dynamic:
+
+  $ ../ask.exe dynamic.sql hover:'price AS nested_pric^' hover:outer_price
+  ### hover:price AS nested_pric^
+  20:22-20:34
+  ```sql
+  nested_price  Decimal(10,2)?
+  ```
+  ### hover:outer_price
+  19:23-19:34
+  ```sql
+  outer_price  Decimal(10,2)?
+  ```
 
 Lexical errors are diagnostics on the offending span, not a dead file: an
 unterminated literal ends its statement so later statements are still analyzed,

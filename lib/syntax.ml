@@ -66,12 +66,13 @@ type stmt_annotations = {
   table_aliases : table_alias list;
   table_defs : (table_name located * string located list) list;
   expr_types : Type.t located list;
+  result_aliases : Sql.attr located list;
   select_scopes : select_scope list;
 } [@@deriving show]
 
 let no_stmt_annotations =
   { src_tbls = []; cte_defs = []; table_aliases = []; table_defs = [];
-    expr_types = []; select_scopes = [] }
+    expr_types = []; result_aliases = []; select_scopes = [] }
 
 let merge_stmt_annotations a b = {
   src_tbls = a.src_tbls @ b.src_tbls;
@@ -79,6 +80,7 @@ let merge_stmt_annotations a b = {
   table_aliases = a.table_aliases @ b.table_aliases;
   table_defs = a.table_defs @ b.table_defs;
   expr_types = a.expr_types @ b.expr_types;
+  result_aliases = a.result_aliases @ b.result_aliases;
   select_scopes = a.select_scopes @ b.select_scopes;
 }
 
@@ -93,8 +95,15 @@ type res_expr =
   | ResInChoice of param_id * in_or_not_in * res_expr
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (Pos.t * Pos.t); kind: Sql.option_actions_kind }
-  | ResCase of { case: res_expr option; branches: case_branch list; else_: res_expr option }
+  | ResCase of res_case located
   [@@deriving show] 
+
+and res_case = {
+  case: res_expr option;
+  branches: case_branch list;
+  else_: res_expr option;
+  result_type: Type.t option;
+} [@@deriving show]
 
 and case_branch = { when_: res_expr; then_: res_expr; } [@@deriving show]
 
@@ -255,7 +264,7 @@ let dynamic_col_param_name = "col"
 
 let make_dynamic_select ~env columns =
   if not (dynamic_allowed env) then
-    columns
+    columns, []
   else
     let module S = Set.Make(String) in
     let unique_name used base =
@@ -278,35 +287,50 @@ let make_dynamic_select ~env columns =
           choice :: choices, S.add col_name used, idx + 1
         ) ([], used, idx) schema
       in
-      (used, idx, snd column_pos), List.rev rev_choices
+      (used, idx, snd column_pos), (List.rev rev_choices, [])
     in
-    let (_, _, last_col_end), choices_chunks =
+    let (_, _, last_col_end), chunks =
       List.fold_left_map (fun (used, idx, _last_end) column ->
         match column.value with
         | Expr ({ value = e; pos = ep_start, ep_end }, alias) ->
-          let base_name = Option.default begin match e with
+          let default_name =
+            match e with
             | Column { collated = { cname; _ }; _ } -> cname
             | _ -> dynamic_col_param_name ^ string_of_int (idx + 1)
-            end alias
+          in
+          let base_name =
+            Option.map_default (fun alias -> alias.value) default_name alias
           in
           let col_name = unique_name used base_name in
-          let choice = ({ ctor = { value = Some col_name; pos = (ep_start, ep_end) }; ctor_pos = dummy_pos; body = Some e }, column.pos) in
-          ((S.add col_name used, idx + 1, snd column.pos), [choice])
+          let choice =
+            { ctor = { value = Some col_name; pos = (ep_start, ep_end) };
+              ctor_pos = dummy_pos; body = Some e }
+          in
+          let aliases =
+            Stdlib.Option.fold ~none:[]
+              ~some:(fun alias -> [ choice.ctor, alias ])
+              alias
+          in
+          (S.add col_name used, idx + 1, snd column.pos),
+          ([ choice, column.pos ], aliases)
         | All ->
-          use_expanded_choices ~used ~idx ~column_pos:column.pos ~schema:env.schema
+          use_expanded_choices ~used ~idx ~column_pos:column.pos
+            ~schema:env.schema
         | AllOf t ->
-          use_expanded_choices ~used ~idx ~column_pos:column.pos ~schema:(schema_of ~env t)
+          use_expanded_choices ~used ~idx ~column_pos:column.pos
+            ~schema:(schema_of ~env t)
       ) (S.empty, 0, 0) columns
     in
+    let choices_chunks, alias_chunks = List.split chunks in
     let all_choices = List.concat choices_chunks in
+    let dynamic_aliases = List.concat alias_chunks in
     match all_choices with
-    | [] -> columns
+    | [] -> columns, []
     | (_, (first_pos, _)) :: _ ->
       let outer_pos = (first_pos, last_col_end) in
       let choices = List.map fst all_choices in
-      [{ value = Expr ({ value = Choices ({ value = Some dynamic_col_param_name; pos = outer_pos }, choices); pos = outer_pos }, None); pos = outer_pos }]
-  
-
+      [{ value = Expr ({ value = Choices ({ value = Some dynamic_col_param_name; pos = outer_pos }, choices); pos = outer_pos }, None); pos = outer_pos }],
+      dynamic_aliases
 
 type resolved_source = {
   rsrc_schema : table_name Schema.Source.t;
@@ -580,16 +604,18 @@ let propagate_meta ~meta_of =
       let same_domain = List.filter_map (fun c -> c.body) l in
       node same_domain (fun ctx ->
         Sql.Choices (n, List.map (fun c -> { c with body = Option.map (push_to ctx) c.body }) l))
-    | Case { case; branches; else_ } ->
+    | Case ({ value = { case; branches; else_ }; _ } as located) ->
       let case = Option.map without_meta case in
       let branches = List.map (fun (b : Sql.case_branch) -> without_meta b.when_, aux b.then_) branches in
       let else_ = Option.map aux else_ in
       let same_domain = List.map snd branches @ option_list else_ in
       node same_domain (fun ctx ->
-        Sql.Case {
+        let value = {
           case;
           branches = List.map (fun (when_, a) -> { Sql.when_; then_ = push_to ctx a }) branches;
-          else_ = Option.map (push_to ctx) else_ })
+          else_ = Option.map (push_to ctx) else_
+        } in
+        Sql.Case { located with value })
     | Fun ({ kind; parameters; _ } as fn) ->
       let kind = Sql.map_kind_exprs without_meta kind in
       match Sql.signature kind (List.length parameters) with
@@ -705,11 +731,11 @@ let rec resolve_columns env expr =
     | Choices (n, l) -> ResChoices (n, List.map (fun c -> { c with body = Option.map each c.body }) l)
     | Fun { kind; parameters; over; fn_pos; _ } ->
       ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map each parameters; over; fn_pos; ret = None }
-    | Case { case; branches; else_ } ->
+    | Case { value = { case; branches; else_ }; pos } ->
       let case = Option.map each case in
       let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each when_; then_ = each then_ }) branches in
       let else_ = Option.map each else_ in
-      ResCase { case; branches; else_ }
+      ResCase { value = { case; branches; else_; result_type = None }; pos }
     | Of_values col -> begin match Hashtbl.find_opt env.insert_resolved_types col with
       | Some t -> ResValue t
       | None -> fail "VALUES(col) as an expression is only acceptable in ON DUPLICATE KEY UPDATE context" 
@@ -724,7 +750,7 @@ let rec resolve_columns env expr =
       | [ { attr = {domain; _}; _ } ], `AsValue -> 
         (* This function should be raised? *)
         let rec with_count = function 
-            | Case { case = _; branches; else_ } ->
+            | Case { value = { case = _; branches; else_ }; _ } ->
               let then_exprs = List.map (fun b -> b.Sql.then_) branches in
               let all_results_exprs = then_exprs @ (option_list else_) in
               List.find_map with_count all_results_exprs
@@ -802,7 +828,10 @@ and assign_types env expr =
       (* We can order by different columns with the different types *)
       let assign_any e = if env.is_order_by then e else assign_params (get_or_failwith t) e in
       ResChoices (n, List.map2 (fun c e -> { c with body = Option.map assign_any e }) l e), t
-    | ResCase { case; branches; else_ } ->
+    | ResCase {
+        value = { case; branches; else_; result_type = _ };
+        pos
+      } ->
       let (case_e, case_t) = option_split @@ Option.map typeof case in
       let (else_, else_t) = option_split @@ Option.map typeof else_ in
       let (whens_e, whens_t) = List.split @@ List.map (fun { when_; _ } -> typeof when_) branches in
@@ -832,7 +861,10 @@ and assign_types env expr =
       let else_ = Option.map (assign_params thens_t) else_ in
       let case = Option.map (assign_params whens_t) case_e in
       let branches = List.map2 (fun when_ then_ -> { when_; then_ }) whens_e thens_e in
-      ResCase { case = case; branches; else_ = else_ }, `Ok thens_t
+      ResCase {
+        value = { case; branches; else_; result_type = Some thens_t };
+        pos
+      }, `Ok thens_t
     | ResFun { kind; parameters; over; fn_pos; ret = _ }  ->
         let open Type in
         let (params,types) = parameters |> List.map typeof |> List.split in
@@ -1058,12 +1090,16 @@ and infer_schema env columns =
 (*   let all = tables |> List.map snd |> List.flatten in *)
   let refine = Attr_refinement.apply env.attr_refinement in
   let resolve1 = function
-    | { value = All; _ } -> List.map (fun x -> AttrWithSources (refine x)) env.schema
-    | { value = AllOf t; _ } -> List.map (fun x -> AttrWithSources (refine x)) (schema_of ~env t)
+    | { value = All; _ } ->
+      List.map (fun x -> AttrWithSources (refine x)) env.schema, []
+    | { value = AllOf t; _ } ->
+      List.map (fun x -> AttrWithSources (refine x)) (schema_of ~env t), []
     | { value = Expr ({ value = expr; _ }, alias); _ } ->
       let apply_alias col =
         Option.map_default
-          (fun n -> Schema.Source.Attr.map_attr (fun attr -> { attr with name = n }) col)
+          (fun alias ->
+            Schema.Source.Attr.map_attr
+              (fun attr -> { attr with name = alias.value }) col)
           col alias
       in
       let resolve_expr = function
@@ -1077,22 +1113,33 @@ and infer_schema env columns =
       let col =
         match expr with
         | Choices (p, choices) when dynamic_allowed env ->
-          let dynamic = choices |> List.filter_map (fun { ctor = choice_p; body = e_opt; _ } -> 
-            Option.map (fun choice_e ->
+          let dynamic =
+            List.filter_map (fun { ctor = field_id; body; _ } ->
+              Option.map (fun choice_e ->
               let field_attr =
                 choice_e
                 |> resolve_expr |> refine
                 |> Schema.Source.Attr.map_attr (fun attr -> unnamed_attribute ~meta:attr.meta attr.domain)
                 |> apply_alias
               in
-              { Sql.field_id = choice_p; field_attr; join_deps = [] }) e_opt
-          ) in 
+              { Sql.field_id; field_attr; join_deps = [] })
+                body)
+              choices
+          in
           DynamicWithSources (p, dynamic)
-        | e -> AttrWithSources (e |> resolve_expr |> refine |> apply_alias)
+        | e ->
+          AttrWithSources (e |> resolve_expr |> refine |> apply_alias)
       in
-      [ col ]
+      let result_aliases =
+        match alias, col with
+        | Some alias, AttrWithSources { attr; _ } ->
+          [ { value = attr; pos = alias.pos } ]
+        | Some _, DynamicWithSources _ | None, _ -> []
+      in
+      [ col ], result_aliases
   in
-  List.concat_map resolve1 columns
+  let schemas, result_aliases = List.split (List.map resolve1 columns) in
+  List.concat schemas, List.concat result_aliases
 
 and get_params env e =
   let (e, _) = resolve_types env e in
@@ -1189,7 +1236,14 @@ and get_params_of_res_expr env e =
     match e with
     | ResSelect (_, p, select_annotations) ->
       List.rev p @ acc, merge_stmt_annotations select_annotations annotations
-    | ResCase { case; branches; else_ } ->
+    | ResCase { value = { case; branches; else_; result_type }; pos } ->
+      let annotations =
+        match result_type with
+        | Some t ->
+          { annotations with
+            expr_types = { value = t; pos } :: annotations.expr_types }
+        | None -> annotations
+      in
       let st = acc, annotations in
       let st = Stdlib.Option.fold ~none:st ~some:(loop st) case in
       let st = List.fold_left (fun st { when_; then_ } -> loop (loop st when_) then_) st branches in
@@ -1258,13 +1312,19 @@ and ensure_res_expr = function
   | Value x -> ResValue x.collated
   | Param (x, m) -> ResParam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
   | Inparam (x, m) -> ResInparam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
-  | Case { case; branches; else_ }-> 
+  | Case { value = { case; branches; else_ }; pos } ->
     let res_case = Option.map ensure_res_expr case in
     let res_branches = List.map (fun { Sql.when_; then_ } -> 
       { when_ = ensure_res_expr when_; then_ = ensure_res_expr then_ }
     ) branches in
     let res_else = Option.map ensure_res_expr else_ in
-    ResCase { case = res_case; branches = res_branches; else_ = res_else }
+    ResCase {
+      value = {
+        case = res_case; branches = res_branches; else_ = res_else;
+        result_type = None
+      };
+      pos
+    }
   | InTupleList { value = { param_id; _ }; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
@@ -1313,8 +1373,29 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
     Attr_refinement.restrict_not_null (fun k -> Qualified_attr.Set.mem k grouping_keys) (narrow having) in
   let env = { env with attr_refinement =
     Attr_refinement.keep_all [ env.attr_refinement; narrow where; narrow_having having ] } in
-  let projection = make_dynamic_select ~env columns in
-  let final_schema = infer_schema env projection in
+  let projection, dynamic_aliases = make_dynamic_select ~env columns in
+  let final_schema, result_aliases =
+    infer_schema env projection
+  in
+  let result_aliases =
+    let locate field =
+      List.find_map (fun (field_id, alias) ->
+        if Sql.equal_param_id field.Sql.field_id field_id
+        then Some alias
+        else None)
+        dynamic_aliases
+      |> Option.map (fun alias ->
+        let attr = field.Sql.field_attr.Schema.Source.Attr.attr in
+        { value = { attr with name = alias.value }; pos = alias.pos })
+    in
+    let dynamic =
+      List.concat_map (function
+        | AttrWithSources _ -> []
+        | DynamicWithSources (_, fields) -> List.filter_map locate fields)
+        final_schema
+    in
+    result_aliases @ dynamic
+  in
   let final_schema =
     match child_scope with
     | From_passthrough -> final_schema @ From.dynamic_columns resolved_from
@@ -1361,6 +1442,10 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
     List.fold_left merge_stmt_annotations no_stmt_annotations
       [ from_annotations; column_annotations; where_annotations; group_annotations;
         having_annotations ]
+  in
+  let annotations =
+    { annotations with
+      result_aliases = result_aliases @ annotations.result_aliases }
   in
   let annotations =
     match source_pos with
@@ -1427,7 +1512,7 @@ and eval_source env (x, alias) =
       rsrc_annotations = annotations }
   | `Nested from ->
     let (env, p, from_, annotations) = eval_nested env (Some from) in
-    let s = infer_schema env [dummy_loc All] in
+    let s, _ = infer_schema env [dummy_loc All] in
     if alias <> None then failwith "No alias allowed on nested tables";
     let s = attrs_only "Nested source cannot have dynamic columns" s in
     { rsrc_schema = s; rsrc_params = p; rsrc_tables = env.tables; rsrc_aliases = [];
@@ -1452,7 +1537,8 @@ and eval_source env (x, alias) =
     *)
     let exprs_to_cols =
       List.mapi (fun idx e ->
-        dummy_loc (Expr (dummy_loc e, Some (Printf.sprintf "column_%d" idx)))
+        let alias = dummy_loc (Printf.sprintf "column_%d" idx) in
+        dummy_loc (Expr (dummy_loc e, Some alias))
       )
     in
     let dummy_select exprs =

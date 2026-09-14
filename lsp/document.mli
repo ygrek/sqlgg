@@ -31,6 +31,7 @@ val params : stmt -> Params.node list
 val statement_scope : stmt -> Symbol.t list
 val sources : stmt -> int -> Symbol.t list
 val exprs : stmt -> (Sql.Type.t * Sql.Pos.t) list
+val result_aliases : stmt -> (Sql.attr * Sql.Pos.t) list
 val select_scope_opt : stmt -> int -> Symbol.t list option
 val scope : stmt -> int -> Symbol.t list
 
