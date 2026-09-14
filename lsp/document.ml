@@ -22,6 +22,7 @@ type analysis = {
   scope : scope;
   select_scopes : (scope * Sql.Pos.t) list;
   exprs : (Sql.Type.t * Sql.Pos.t) list;
+  result_aliases : (Sql.attr * Sql.Pos.t) list;
 }
 
 type outcome =
@@ -53,6 +54,7 @@ let params stmt =
   | Verbatim | Rejected _ -> []
 
 let exprs stmt = stmt.analysis.exprs
+let result_aliases stmt = stmt.analysis.result_aliases
 
 let select_scope stmt offset =
   let scopes = List.to_seq stmt.analysis.select_scopes in
@@ -184,7 +186,7 @@ let check ~file (stmt : Statements.t) =
   let dynamic_select = Option.value ~default:Props.Off (Props.dynamic_select stmt.props) in
   let no_annotations : Syntax.stmt_annotations =
     { src_tbls = []; cte_defs = []; table_aliases = []; table_defs = [];
-      expr_types = []; select_scopes = [] }
+      expr_types = []; result_aliases = []; select_scopes = [] }
   in
   let success (result : Syntax.result) =
     `Checked { kind = result.kind;
@@ -210,7 +212,8 @@ let check ~file (stmt : Statements.t) =
       let (src_tbls, cte_defs, table_aliases) = recover_scope exn in
       `Rejected (error_of_exn exn), { no_annotations with src_tbls; cte_defs; table_aliases }
   in
-  let { Syntax.src_tbls; cte_defs; table_aliases; expr_types; _ } = annotations in
+  let { Syntax.src_tbls; cte_defs; table_aliases; expr_types;
+        result_aliases; _ } = annotations in
   let ctes = List.map (fun ((cte : Sql.table Sql.located), columns) -> cte.value, columns) cte_defs in
   let find_cte_opt name =
     List.find_opt (fun ((table, _), _) -> String.equal (tn table) name) ctes
@@ -271,10 +274,18 @@ let check ~file (stmt : Statements.t) =
       scope, rebase select_scope.pos)
       annotations.select_scopes
   in
+  let rebase_types types =
+    List.filter_map (fun (expr : Sql.Type.t Sql.located) ->
+      Option.map (fun pos -> expr.value, rebase pos) (nonempty expr.pos))
+      types
+  in
   let analysis =
-    { scope; select_scopes;
-      exprs = List.filter_map (fun (expr : Sql.Type.t Sql.located) ->
-        Option.map (fun pos -> expr.value, rebase pos) (nonempty expr.pos)) expr_types }
+    { scope; select_scopes; exprs = rebase_types expr_types;
+      result_aliases =
+        List.filter_map (fun (alias : Sql.attr Sql.located) ->
+          Option.map (fun pos -> alias.value, rebase pos)
+            (nonempty alias.pos))
+          result_aliases }
   in
   let outcome =
     match compiled with

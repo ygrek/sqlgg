@@ -194,11 +194,13 @@ module Narrowing_model = struct
            (gen_scalar (depth - 1)) (gen_scalar (depth - 1));
       1, map2 (fun a b -> call (Null_handling If_null) [ a; b ])
            (gen_scalar (depth - 1)) (gen_scalar (depth - 1));
-      2, map2 (fun branches else_ -> Case { case = None; branches; else_ })
+      2, map2 (fun branches else_ ->
+           Case (dummy_loc { case = None; branches; else_ }))
            (list_size (int_range 1 2)
               (map2 (fun when_ then_ -> { when_; then_ }) (gen_cond (depth - 1)) (gen_scalar (depth - 1))))
            (option (gen_scalar (depth - 1)));
-      1, map3 (fun scrutinee branches else_ -> Case { case = Some scrutinee; branches; else_ })
+      1, map3 (fun scrutinee branches else_ ->
+           Case (dummy_loc { case = Some scrutinee; branches; else_ }))
            (gen_scalar (depth - 1))
            (list_size (int_range 1 2)
               (map2 (fun when_ then_ -> { when_; then_ }) (gen_scalar (depth - 1)) (gen_scalar (depth - 1))))
@@ -229,11 +231,13 @@ module Narrowing_model = struct
       3, map2 (fun a b -> call (Logical Or) [ a; b ]) (gen_cond (depth - 1)) (gen_cond (depth - 1));
       2, map2 (fun a b -> call (Logical Xor) [ a; b ]) (gen_cond (depth - 1)) (gen_cond (depth - 1));
       2, map neg (gen_cond (depth - 1));
-      2, map2 (fun branches else_ -> Case { case = None; branches; else_ })
+      2, map2 (fun branches else_ ->
+           Case (dummy_loc { case = None; branches; else_ }))
            (list_size (int_range 1 2)
               (map2 (fun when_ then_ -> { when_; then_ }) (gen_cond (depth - 1)) (gen_cond (depth - 1))))
            (option (gen_cond (depth - 1)));
-      2, map3 (fun scrutinee branches else_ -> Case { case = Some scrutinee; branches; else_ })
+      2, map3 (fun scrutinee branches else_ ->
+           Case (dummy_loc { case = Some scrutinee; branches; else_ }))
            scalar
            (list_size (int_range 1 2)
               (map2 (fun when_ then_ -> { when_; then_ }) scalar (gen_cond (depth - 1))))
@@ -297,7 +301,7 @@ module Narrowing_model = struct
       (match eval_scalar row a, eval_scalar row b with Some a, Some b -> Some (a + b) | _ -> None)
     | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = [ a; b ]; _ } ->
       (match eval_scalar row a with None -> eval_scalar row b | v -> v)
-    | Case { case; branches; else_ } ->
+    | Case { value = { case; branches; else_ }; _ } ->
       let rec taken = function
         | [] -> Option.map_default (eval_scalar row) None else_
         | b :: rest -> if guard row case b = Some true then eval_scalar row b.then_ else taken rest
@@ -363,7 +367,7 @@ module Narrowing_model = struct
       | `All -> fold kleene_and (Some true)
       | `Any -> fold kleene_or (Some false)
       end
-    | Case { case; branches; else_ } ->
+    | Case { value = { case; branches; else_ }; _ } ->
       let rec taken = function
         | [] -> Option.map_default (eval_condition row) None else_
         | b :: rest -> if guard row case b = Some true then eval_condition row b.then_ else taken rest
@@ -396,7 +400,7 @@ module Narrowing_model = struct
       List.map (fun x -> InChoice (id, kind, Fun { f with parameters = x :: rest })) (disambiguate x)
     | InTupleList ({ value = ({ exprs; _ } as tuples); _ } as l) ->
       List.map (fun exprs -> InTupleList { l with value = { tuples with exprs } }) (cartesian exprs)
-    | Case { case; branches; else_ } ->
+    | Case ({ value = { case; branches; else_ }; _ } as located) ->
       let opt = function None -> [ None ] | Some e -> List.map (fun e -> Some e) (disambiguate e) in
       let branches =
         List.fold_right (fun { when_; then_ } acc ->
@@ -408,7 +412,11 @@ module Narrowing_model = struct
       let elses = opt else_ in
       List.concat_map (fun case ->
         List.concat_map (fun branches ->
-          List.map (fun else_ -> Case { case; branches; else_ }) elses) branches) (opt case)
+          List.map (fun else_ ->
+            Case { located with value = { case; branches; else_ } })
+            elses)
+          branches)
+        (opt case)
     | e -> [ e ]
 
   let rows_for arity =
@@ -429,9 +437,9 @@ module Narrowing_model = struct
     List.to_seq @@
     match e with
     | Fun { kind = Logical _ | Negation; parameters; _ } -> parameters
-    | Case { case = None; branches; else_ } ->
+    | Case { value = { case = None; branches; else_ }; _ } ->
       List.concat_map (fun b -> [ b.when_; b.then_ ]) branches @ opt else_
-    | Case { case = Some _; branches; else_ } ->
+    | Case { value = { case = Some _; branches; else_ }; _ } ->
       List.map (fun b -> b.then_) branches @ opt else_
     | Choices (_, alternatives) -> List.filter_map (fun c -> c.Sql.body) alternatives
     | Fun _ | Value _ | Param _ | Inparam _ | InChoice _ | SelectExpr _ | Column _

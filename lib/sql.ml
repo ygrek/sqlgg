@@ -26,7 +26,7 @@ module Pos = struct
     find_innermost_by_opt contains offset candidates
 end
 
-type 'a located  = { value : 'a; pos : Pos.t } [@@deriving show, make]
+type 'a located  = { value : 'a; pos : Pos.t } [@@deriving show, make, eq]
 type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make]
 
 let dummy_pos : Pos.t = (0, 0)
@@ -566,7 +566,7 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = string option located [@@deriving show]
+type param_id = string option located [@@deriving show, eq]
 type shared_query_ref_id = string located [@@deriving show]
 
 type int_size = Tiny | Small | Medium | Big
@@ -790,13 +790,13 @@ and expr =
       to use it during the substitution and to not depend on the magic numbers there.
    *)
   | OptionActions of { choice: expr; pos: (Pos.t * Pos.t); kind: option_actions_kind }
-  | Case of case
+  | Case of case located
   | Of_values of string (** VALUES(col_name) *)
 and column = column_kind located [@@deriving show {with_path=false}]
 and column_kind =
   | All
   | AllOf of table_name
-  | Expr of expr located * string option
+  | Expr of expr located * string located option
 
 type columns = column list [@@deriving show]
 
@@ -879,7 +879,7 @@ let sub_exprs = function
   | Fun { kind = Agg (With_order { order; _ }); parameters; _ } -> parameters @ List.map fst order
   | Fun { parameters; _ } -> parameters
   | InTupleList { value = { exprs; _ }; _ } -> exprs
-  | Case { case; branches; else_ } ->
+  | Case { value = { case; branches; else_ }; _ } ->
     option_list case
     @ List.concat_map (fun (b : case_branch) -> [b.when_; b.then_]) branches
     @ option_list else_
@@ -893,12 +893,16 @@ let map_sub_exprs f = function
     Fun { fn with kind = map_kind_exprs f kind; parameters = List.map f parameters }
   | InTupleList ({ value = { exprs; _ } as tl; _ } as loc) ->
     InTupleList { loc with value = { tl with exprs = List.map f exprs } }
-  | Case { case; branches; else_ } ->
-    Case {
+  | Case ({ value = { case; branches; else_ }; _ } as located) ->
+    let value = {
       case = Option.map f case;
-      branches = List.map (fun (b : case_branch) -> { when_ = f b.when_; then_ = f b.then_ }) branches;
+      branches =
+        List.map
+          (fun (b : case_branch) -> { when_ = f b.when_; then_ = f b.then_ })
+          branches;
       else_ = Option.map f else_;
-    }
+    } in
+    Case { located with value }
 
 let rec expr_exists p e = p e || List.exists (expr_exists p) (sub_exprs e)
 

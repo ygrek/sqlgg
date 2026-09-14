@@ -806,8 +806,12 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
     sprintf "%s.count" (col_ref di)
   ) |> String.concat " + " in
 
-  let find_di_by_pid pid = List.find (fun di -> di.param_id = pid) dynamic_infos in
-  let is_di pid = List.exists (fun di -> di.param_id = pid) dynamic_infos in
+  let find_di_by_pid pid =
+    List.find (fun di -> Sql.equal_param_id di.param_id pid) dynamic_infos
+  in
+  let is_di pid =
+    List.exists (fun di -> Sql.equal_param_id di.param_id pid) dynamic_infos
+  in
 
   (* params are bound positionally, so col.set must run exactly where the
      dynamic select occurs among the other vars, not before them;
@@ -1141,7 +1145,7 @@ let generate_dynamic_select_modules stmts =
     all_dis |> List.iter (fun di ->
       let module_name = di.module_name in
       let field_sqls = List.find_map (function
-        | Gen.Dynamic (pid, ctors) when pid = di.param_id -> 
+        | Gen.Dynamic (pid, ctors) when Sql.equal_param_id pid di.param_id ->
           Some (List.map (fun c -> c.Gen.ctor, c.Gen.sql) ctors)
         | _ -> None
       ) sql_pieces |> Option.default [] in
