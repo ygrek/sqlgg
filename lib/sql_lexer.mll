@@ -69,6 +69,7 @@ let keywords =
    "escape",ESCAPE;
    "except",EXCEPT;
    "exists",EXISTS;
+   "extension", EXTENSION "extension";
    "extract",EXTRACT;
    "false", FALSE;
    "first",FIRST;
@@ -142,6 +143,7 @@ let keywords =
    "returns", RETURNS;
    "row", ROW;
    "rows", ROWS;
+   "schema", SCHEMA "schema";
    "second_microsecond", SECOND_MICROSECOND;
    "select",SELECT;
    "set",SET;
@@ -168,6 +170,7 @@ let keywords =
    "using",USING;
    "values",VALUES;
    "varying",VARYING;
+   "version", VERSION "version";
    "view",VIEW;
    "when", WHEN;
    "where",WHERE;

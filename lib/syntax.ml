@@ -2082,6 +2082,9 @@ let rec eval (stmt:Sql.stmt) =
   | DropType (name, if_exists) ->
      User_types.drop ~if_exists name;
      [], [], DropType name, no_stmt_annotations
+  | CreateExtension _ | DropExtension _ ->
+     (* sqlgg keeps no extension state: accepted, and invisible to codegen *)
+     [], [], Other, no_stmt_annotations
 
 type var_shape =
   | Shape_param
