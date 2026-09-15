@@ -1,0 +1,1 @@
+CREATE TABLE users (a INT, b INT NOT NULL, c INT);
