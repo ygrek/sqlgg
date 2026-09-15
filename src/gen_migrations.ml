@@ -219,6 +219,12 @@ type alter_clause =
   | Default_charset of ddl_charset
   | Ttl_options of Sql.ttl_option list
 
+let alter_option_to_sql = function
+  | Sql.Alter_algorithm algorithm ->
+    "ALGORITHM=" ^ String.uppercase_ascii (Sql.alter_algorithm_to_string algorithm)
+  | Sql.Alter_lock lock ->
+    "LOCK=" ^ String.uppercase_ascii (Sql.alter_lock_to_string lock)
+
 let alter_clause_body ~default_sql_lookup = function
   | Columns actions ->
     (match List.map (action_to_sql_fragment ~default_sql_lookup) actions with
@@ -236,8 +242,14 @@ let alter_clause_body ~default_sql_lookup = function
   | Ttl_options opts ->
     Some (action_to_sql_fragment ~default_sql_lookup (`TtlOptions (opts, (0, 0))))
 
-let alter_table_sql ~default_sql_lookup table clause =
-  Option.map (sprintf "ALTER TABLE %s %s" (quote_table_name table))
+let alter_table_sql ~default_sql_lookup ?(options = []) table clause =
+  let suffix =
+    match options with
+    | [] -> ""
+    | options -> ", " ^ String.concat ", " (List.map alter_option_to_sql options)
+  in
+  Option.map
+    (fun body -> sprintf "ALTER TABLE %s %s%s" (quote_table_name table) body suffix)
     (alter_clause_body ~default_sql_lookup clause)
 
 let drop_table_sql name =

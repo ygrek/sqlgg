@@ -32,6 +32,8 @@ type feature =
   | Ttl [@as "ttl"]
   | CachedTable [@as "cached_table"]
   | AlterColumn [@as "alter_column"]
+  | AlterAlgorithm [@as "alter_algorithm"]
+  | AlterLock [@as "alter_lock"]
   | UserDefinedType [@as "user_defined_type"]
   | Extension [@as "extension"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string]
@@ -151,6 +153,11 @@ let get_alter_column (change : Sql.Alter_column_pg.t) pos =
   match change with
   | Set_type _ | Set_not_null | Drop_not_null -> only AlterColumn [PostgreSQL] pos
   | Set_default | Drop_default -> only AlterColumn [MySQL; PostgreSQL; TiDB] pos
+
+let get_alter_option ({ Sql.value; pos } : Sql.alter_option Sql.located) =
+  match value with
+  | Alter_algorithm _ -> only AlterAlgorithm [MySQL; TiDB] pos
+  | Alter_lock _ -> only AlterLock [MySQL] pos
 
 let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
 
@@ -438,7 +445,8 @@ let rec analyze stmt =
       let acc = get_create_table_as_select pos :: acc in
       analyze_select_full acc [select] List.rev
   | Drop _ -> []
-  | Alter (_, actions) ->
+  | Alter { alter_actions = actions; alter_options = options; _ } ->
+      let acc = List.rev_append (List.map get_alter_option options) acc in
       analyze_alter_action acc actions List.rev
   | Rename _ -> []
   | CreateIndex { ci_cols; _ } -> List.concat_map check_collated ci_cols

@@ -152,7 +152,9 @@ let get_statements ch =
         Printf.eprintf "Warning: this SQL statement will produce rowset with duplicate column names:\n%s\n" stmt.text;
       stmts)
 
-let replay_statement stmt = ignore (executable stmt)
+let replay_statement stmt =
+  let (_ : Gen.stmt option) = executable stmt in
+  ()
 
 let replay_sql sql = List.iter replay_statement (prepare_statements sql)
 

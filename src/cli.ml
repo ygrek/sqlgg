@@ -210,6 +210,27 @@ let set_dialect s =
       | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Gen.Unnamed  (* ? syntax *)
       | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
 
+let enum_values to_string values =
+  String.concat "|" (List.map to_string values)
+
+let alter_lock_values =
+  enum_values Sql.alter_lock_to_string Sql.all_of_alter_lock
+
+let alter_algorithm_values =
+  enum_values Sql.alter_algorithm_to_string Sql.all_of_alter_algorithm
+
+let parse_alter_option kind values of_string s =
+  match of_string s with
+  | Some option -> option
+  | None -> fatal "unknown ALTER TABLE %s %S (expected %s)" kind s values
+
+let parse_alter_lock =
+  parse_alter_option "lock" alter_lock_values Sql.alter_lock_of_string
+
+let parse_alter_algorithm =
+  parse_alter_option "algorithm" alter_algorithm_values
+    Sql.alter_algorithm_of_string
+
 let set_no_check = function
   | "all" -> Sqlgg_config.set_no_check_features Dialect.all_of_feature
   | s ->
@@ -246,9 +267,9 @@ let schema_of_sources sources =
 
 let load_schema files = schema_of_sources (to_file_sources files)
 
-let diff_schema ~naming ~ddl_as_migration ~from_ ~to_ =
+let diff_schema ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
   let migs =
-    try Schema_diff.generate ~naming ~ddl_as_migration ~from_ ~to_
+    try Schema_diff.generate ~naming ~alter_options ~ddl_as_migration ~from_ ~to_
     with Gen_migrations.Migration_error msg ->
       fatal "cannot generate migration (write this step manually):\n%s" msg
   in
@@ -272,6 +293,7 @@ type delta_args = {
   now : int option;
   max_id_length : int option;
   ddl_as_migration : bool;
+  alter_options : Sql.alter_option list;
 }
 
 type diff_args = {
@@ -310,6 +332,8 @@ let parse_args () =
   let now = ref None in
   let max_id_length = ref None in
   let ddl_as_migration = ref false in
+  let alter_lock = ref None in
+  let alter_algorithm = ref None in
   let files : (string, [ `Open of Gen.stmt list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
   let canonical = function
     | "-" -> "-"
@@ -356,14 +380,22 @@ let parse_args () =
       "-max-migration-id-length", Arg.Int (fun n -> max_id_length := Some n),
         "<N> Limit generated migration ids to N characters (default: no limit)";
       "-ddl-as-migration", Arg.Set ddl_as_migration, " Write new tables as CREATE TABLE migrations instead of plain schema DDL";
+      "-alter-algorithm", Arg.String (fun s -> alter_algorithm := Some (parse_alter_algorithm s)),
+        sprintf "%s Add ALGORITHM policy to generated ALTER TABLE statements (MySQL and TiDB only)"
+          alter_algorithm_values;
+      "-alter-lock", Arg.String (fun s -> alter_lock := Some (parse_alter_lock s)),
+        sprintf "%s Add LOCK policy to generated ALTER TABLE statements (MySQL only)"
+          alter_lock_values;
     ] };
 
     { title = "Dialect and checks"; opts =
     [
-      "-dialect", Arg.String set_dialect, sprintf "%s Set SQL dialect. Queries can only use its features" (Dialect.all |> List.map Dialect.to_string |> String.concat "|");
+      "-dialect", Arg.String set_dialect,
+        sprintf "%s Set SQL dialect. Queries can only use its features"
+          (enum_values Dialect.to_string Dialect.all);
       "-no-check", Arg.String set_no_check,
         sprintf "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: %s)"
-          (Dialect.all_of_feature |> List.map Dialect.feature_to_string |> String.concat "|");
+          (enum_values Dialect.feature_to_string Dialect.all_of_feature);
       "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
     ] };
 
@@ -404,12 +436,29 @@ let parse_args () =
   in
   Arg.parse args work usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
+  begin match !alter_lock, !Dialect.selected with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB) ->
+    fatal "-alter-lock is only supported for dialect mysql"
+  | None, _ | Some _, Dialect.MySQL -> ()
+  end;
+  begin match !alter_algorithm, !Dialect.selected with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite) ->
+    fatal "-alter-algorithm is only supported for dialects mysql and tidb"
+  | None, _ | Some _, (Dialect.MySQL | Dialect.TiDB) -> ()
+  end;
+  let alter_options =
+    Stdlib.Option.to_list
+      (Option.map (fun algorithm -> Sql.Alter_algorithm algorithm) !alter_algorithm)
+    @ Stdlib.Option.to_list
+        (Option.map (fun lock -> Sql.Alter_lock lock) !alter_lock)
+  in
   let delta =
     { name = !name;
       target_files = List.rev !target_files;
       now = !now;
       max_id_length = !max_id_length;
-      ddl_as_migration = !ddl_as_migration }
+      ddl_as_migration = !ddl_as_migration;
+      alter_options }
   in
   (* these modes reset the schema and rebuild it from -base/-target/-initial,
      silently discarding whatever -open loaded *)
@@ -451,7 +500,8 @@ let parse_migrations blocks =
   abort_on_errors ();
   migs
 
-let run_migrate ({ delta = { name; target_files; now; max_id_length; ddl_as_migration };
+let run_migrate ({ delta = { name; target_files; now; max_id_length;
+                             ddl_as_migration; alter_options };
                    gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
   let initial = to_file_sources initial_files in
   let ext = Option.map_default read_blocks [] extends_file in
@@ -468,7 +518,7 @@ let run_migrate ({ delta = { name; target_files; now; max_id_length; ddl_as_migr
   in
   let base = next_base now before in
   let naming = Migration_id.naming ~max_length:max_id_length base in
-  match diff_schema ~naming ~ddl_as_migration ~from_:current ~to_:target with
+  match diff_schema ~naming ~alter_options ~ddl_as_migration ~from_:current ~to_:target with
   | [] ->
     regenerate ();
     (match before with
@@ -508,13 +558,14 @@ let run_materialize_schema ({ base_files } : materialize_args) =
   end;
   print_endline ddl
 
-let run_diff ({ delta = { name; target_files; now; max_id_length; ddl_as_migration };
+let run_diff ({ delta = { name; target_files; now; max_id_length;
+                          ddl_as_migration; alter_options };
                 base_files; output } : diff_args) =
   let from_ = load_schema base_files in
   let to_   = load_schema target_files in
   let base = next_base now [] in
   let naming = Migration_id.naming ~max_length:max_id_length base in
-  let migs = diff_schema ~naming ~ddl_as_migration ~from_ ~to_ in
+  let migs = diff_schema ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ in
   Tables.restore from_;
   match output with
   | None -> ()
