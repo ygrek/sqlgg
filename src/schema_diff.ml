@@ -204,16 +204,66 @@ let diff_table ~from_ ~to_ =
   diff_columns ~from_ ~to_ @ diff_pk ~from_ ~to_
   @ diff_indexes ~from_ ~to_ @ diff_charset ~from_ ~to_ @ diff_ttl ~from_ ~to_
 
-let alter_change name target actions =
+let invert_action ~from_ = function
+  | `Add ((col : Sql.Alter_action_attr.t), _) -> Some (`Drop col.name.value)
+  | `Drop name ->
+    Option.map (fun c -> `Add (attr_of_column c, `Default))
+      (Tables.find_column ~name from_.Tables.columns)
+  | `Change (_, (new_col : Sql.Alter_action_attr.t), pos) ->
+    Option.map (fun c -> `Change (new_col.name.value, attr_of_column c, pos))
+      (Tables.find_column ~name:new_col.name.value from_.Tables.columns)
+  | `AddIndex { Sql.add_idx_name = Some name; _ } -> Some (`DropIndex name)
+  | `AddIndex { Sql.add_idx_name = None; _ } -> None
+  | `DropIndex name ->
+    Option.map (add_index name) (SMap.find_opt name from_.Tables.tbl_indexes)
+  | `AddPrimaryKey _ -> Some `DropPrimaryKey
+  | `DropPrimaryKey ->
+    (match Tables.get_primary_key_columns from_.Tables.columns with
+     | [] -> None
+     | cols -> Some (`AddPrimaryKey cols))
+  | `Default_or_convert_to (_, _) ->
+    Option.map
+      (fun ({ charset; collation } : Tables.table_charset) ->
+        `Default_or_convert_to (charset, Option.map Gen_migrations.loc collation))
+      from_.Tables.tbl_charset
+  | `TtlOptions _ ->
+    Some (Option.map_default
+      (fun ttl -> `TtlOptions (ttl_options_of ttl, (0, 0)))
+      (`RemoveTtl (0, 0)) from_.Tables.tbl_ttl)
+  | `RemoveTtl _ ->
+    Option.map (fun ttl -> `TtlOptions (ttl_options_of ttl, (0, 0)))
+      from_.Tables.tbl_ttl
+  | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddConstraint _
+  | `DropConstraint _ | `Cache _ | `NoCache _ | `AlterColumnPG _ ->
+    None
+
+let split_online_actions ~online ~dialect ~from_ actions =
+  if not online then [actions]
+  else
+    let online action = Gen_migrations.online_ddl_clause dialect [action] in
+    let key action =
+      online action, Stdlib.Option.bind (invert_action ~from_ action) online
+    in
+    List.fold_left
+      (fun groups action ->
+        match groups with
+        | (head :: _ as group) :: rest when key head = key action ->
+          (action :: group) :: rest
+        | _ -> [action] :: groups)
+      [] actions
+    |> List.rev_map List.rev
+
+let alter_change ~online_ddl ~dialect name target actions =
   let default_sql_lookup col_name =
     Stdlib.Option.bind (Tables.find_column ~name:col_name target.Tables.columns)
       (fun (c : Tables.column) -> c.default_sql)
   in
-  Option.map
-    (fun sql -> Alter_table { table = name; sql; actions })
-    (Gen_migrations.alter_table_sql ~default_sql_lookup name (Gen_migrations.Columns actions))
+  Gen_migrations.alter_table_sql ~default_sql_lookup ~online_ddl ~dialect name
+    (Gen_migrations.Columns actions)
+  |> Option.map (fun sql -> Alter_table { table = name; sql; actions })
 
-let diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
+let diff ~online_ddl ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to ~
+    dialect =
   let creates =
     if not ddl_as_migration then []
     else
@@ -223,9 +273,14 @@ let diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
     from_ |> List.filter (fun (t : Tables.stored_table) -> not (SMap.mem t.name.tn by_to))
          |> List.map (fun t -> Drop_table t) in
   let alters =
-    to_ |> List.filter_map (fun (t : Tables.stored_table) ->
-      Stdlib.Option.bind (SMap.find_opt t.name.tn by_from)
-        (fun old -> alter_change t.name t (diff_table ~from_:old ~to_:t))) in
+    to_
+    |> List.concat_map (fun (t : Tables.stored_table) ->
+         match SMap.find_opt t.name.tn by_from with
+         | None -> []
+         | Some old ->
+           diff_table ~from_:old ~to_:t
+           |> split_online_actions ~online:online_ddl ~dialect ~from_:old
+           |> List.filter_map (alter_change ~online_ddl ~dialect t.name t)) in
   drops @ creates @ alters
 
 let create_table_of t =
@@ -265,7 +320,7 @@ let kind_of_change = function
   | Drop_table t -> Stmt.Drop t.Tables.name
   | Alter_table { table; _ } -> Stmt.Alter [table]
 
-let invert ~by_from ~by_to up =
+let invert ~online_ddl ~dialect ~by_from ~by_to up =
   let irreversible reason =
     Gen_migrations.fail
       "table %s: this change cannot be auto-reverted (%s); \
@@ -275,7 +330,7 @@ let invert ~by_from ~by_to up =
   match up with
   | Create_table t -> Drop_table t
   | Drop_table t -> Create_table t
-  | Alter_table { table = name; _ } ->
+  | Alter_table { table = name; actions; _ } ->
     match SMap.find_opt name.Sql.tn by_from, SMap.find_opt name.Sql.tn by_to with
     | None, _ | _, None ->
       irreversible "table is missing from the baseline or target snapshot"
@@ -284,20 +339,26 @@ let invert ~by_from ~by_to up =
         irreversible "a DEFAULT CHARSET / COLLATE was added while the baseline has \
                       no explicit charset to restore"
       else
-        match alter_change name f (diff_table ~from_:t ~to_:f) with
-        | Some down -> down
-        | None -> irreversible "reverse diff renders to nothing"
+        let down_actions =
+          if online_ddl then
+            List.filter_map (invert_action ~from_:f) (List.rev actions)
+          else diff_table ~from_:t ~to_:f
+        in
+        (match alter_change ~online_ddl ~dialect name f down_actions with
+         | Some down -> down
+         | None -> irreversible "reverse diff renders to nothing")
 
-let generate ~naming ~ddl_as_migration ~from_ ~to_ =
+let generate ~naming ~online_ddl ~ddl_as_migration ~from_ ~to_ ~dialect =
   let from_ = List.map materialize_inline_unique from_ in
   let to_ = List.map materialize_inline_unique to_ in
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
-  diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
-    { Gen_migrations.props = [ Props.Name (change_name ~naming up) ];
-      kind = kind_of_change up;
-      apply = render_apply up;
-      revert = render_apply (invert ~by_from ~by_to up) })
+  diff ~online_ddl ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to ~dialect
+  |> List.map (fun up ->
+       { Gen_migrations.props = [ Props.Name (change_name ~naming up) ];
+         kind = kind_of_change up;
+         apply = render_apply up;
+         revert = render_apply (invert ~online_ddl ~dialect ~by_from ~by_to up) })
 
 let canonical ts =
   let index_sig (name, (i : Tables.stored_index)) =

@@ -219,11 +219,67 @@ type alter_clause =
   | Default_charset of ddl_charset
   | Ttl_options of Sql.ttl_option list
 
-let alter_clause_body ~default_sql_lookup = function
+type online_kind = Instant | Inplace
+
+let column_nullable (col : Sql.Alter_action_attr.t) =
+  let open Sql in
+  let cs =
+    Constraints.of_list
+      (List.map
+         (fun (c : Sql.Alter_action_attr.constraint_ Sql.located) ->
+           Sql.Alter_action_attr.constraint_to_syntax_constraint c.value)
+         col.extra)
+  in
+  not (Constraints.mem NotNull cs || Constraints.mem PrimaryKey cs)
+
+let column_has_default (col : Sql.Alter_action_attr.t) =
+  match Sql.Alter_action_attr.default_sql col with
+  | Some _ -> true
+  | None ->
+    List.exists
+      (fun (c : Sql.Alter_action_attr.constraint_ Sql.located) ->
+        match c.value with Default _ -> true | _ -> false)
+      col.extra
+
+let add_column_instant_eligible (col : Sql.Alter_action_attr.t) pos =
+  pos = `Default && (column_nullable col || column_has_default col)
+
+let online_kind_of_action (dialect : Dialect.t) (action : Sql.alter_action) :
+    online_kind option =
+  match dialect, action with
+  | (Dialect.MySQL | Dialect.TiDB), `AddIndex { add_idx_kind = Plain_idx | Unique_idx; _ } ->
+    Some Inplace
+  | (Dialect.MySQL | Dialect.TiDB), `DropIndex _ -> Some Inplace
+  | (Dialect.MySQL | Dialect.TiDB), `RenameIndex _ -> Some Inplace
+  | Dialect.MySQL, `Drop _ -> Some Inplace
+  | (Dialect.MySQL | Dialect.TiDB), `Add (col, pos) when add_column_instant_eligible col pos ->
+    Some Instant
+  | _ -> None
+
+let online_ddl_clause (dialect : Dialect.t) (actions : Sql.alter_action list) :
+    string option =
+  match actions with
+  | [] -> None
+  | action :: rest ->
+    (match online_kind_of_action dialect action with
+     | None -> None
+     | Some kind ->
+       if List.for_all (fun a -> online_kind_of_action dialect a = Some kind) rest then
+         match dialect, kind with
+         | Dialect.MySQL, Instant -> Some ", ALGORITHM=INSTANT"
+         | Dialect.MySQL, Inplace -> Some ", ALGORITHM=INPLACE, LOCK=NONE"
+         | Dialect.TiDB, Instant -> Some ", ALGORITHM=INSTANT"
+         | Dialect.TiDB, Inplace -> Some ", ALGORITHM=INPLACE"
+         | _ -> None
+       else None)
+
+let alter_clause_body ~default_sql_lookup ?online_suffix = function
   | Columns actions ->
     (match List.map (action_to_sql_fragment ~default_sql_lookup) actions with
      | [] -> None
-     | fs -> Some (String.concat ", " fs))
+     | fs ->
+       let body = String.concat ", " fs in
+       Some (body ^ Option.default "" online_suffix))
   | Add_key ix ->
     let key kw = sprintf "%s %s (%s)" kw (quote_id ix.ix_name) (index_cols_sql ix) in
     (match ix.ix_kind with
@@ -236,9 +292,18 @@ let alter_clause_body ~default_sql_lookup = function
   | Ttl_options opts ->
     Some (action_to_sql_fragment ~default_sql_lookup (`TtlOptions (opts, (0, 0))))
 
-let alter_table_sql ~default_sql_lookup table clause =
+let alter_table_sql
+    ~default_sql_lookup
+    ?(online_ddl = false)
+    ?(dialect = !Dialect.selected)
+    table clause =
+  let online_suffix =
+    match clause, online_ddl with
+    | Columns actions, true -> online_ddl_clause dialect actions
+    | _ -> None
+  in
   Option.map (sprintf "ALTER TABLE %s %s" (quote_table_name table))
-    (alter_clause_body ~default_sql_lookup clause)
+    (alter_clause_body ~default_sql_lookup ?online_suffix clause)
 
 let drop_table_sql name =
   sprintf "DROP TABLE %s" (quote_table_name name)
