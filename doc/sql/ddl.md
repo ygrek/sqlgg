@@ -104,6 +104,21 @@ DROP TYPE mood;
 
 Enum types get the same treatment as inline `ENUM(...)` columns. See [Literals](./literals.md) for enum literal validation and the OCaml mapping to polymorphic variants.
 
+## CREATE EXTENSION (PostgreSQL)
+
+`CREATE EXTENSION` and `DROP EXTENSION` are accepted with `-dialect postgresql` so that
+migration files can be fed to sqlgg unchanged:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+DROP EXTENSION pg_trgm;
+```
+
+sqlgg keeps no extension state, so these statements are only checked for syntax: an
+extension can be dropped without having been created, and the optional `SCHEMA`,
+`VERSION` and `CASCADE` clauses are parsed and discarded. They are reported as plain
+statements with no particular kind.
+
 ## Metadata
 
 Metadata (`-- [sqlgg] key=value`) can be attached to columns and propagates through DDL/DML/DQL. See [Metadata](./metadata.md) for details.

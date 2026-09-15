@@ -48,6 +48,7 @@
        SHARED EXCLUSIVE NONE
        TTL TTL_ENABLE REMOVE CACHE NOCACHE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
+%token <string> EXTENSION SCHEMA VERSION
 %token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR EXTRACT
@@ -99,7 +100,17 @@
 
 %%
 
-input: statement EOF { $1 }
+input: top_statement EOF { $1 }
+
+(* CREATE/DROP EXTENSION are database-global PostgreSQL DDL, so they are only
+   accepted as a whole statement and not inside a routine body. Keeping them out
+   of [statement] also keeps CREATE EXTENSION's trailing [ WITH ] ... clause from
+   being ambiguous with a following statement that starts with a WITH (CTE). *)
+top_statement: s=statement { s }
+             | CREATE EXTENSION if_not_exists? name=ident create_extension_opts
+                  { CreateExtension name }
+             | DROP EXTENSION if_exists? names=commas(ident) drop_behavior?
+                  { DropExtension names }
 
 param: 
   | QSTN { { value=None; pos = ($startofs, $endofs) } }
@@ -213,6 +224,14 @@ proc_parameter: parameter_mode? p=func_parameter { p }
 
 or_replace: OR REPLACE { }
 
+(* CREATE EXTENSION options: sqlgg tracks no extension state, so these are
+   accepted and discarded. Order is left loose on purpose. *)
+create_extension_opts: WITH? create_extension_opt* { }
+create_extension_opt: SCHEMA ident { }
+                    | VERSION extension_version { }
+                    | CASCADE { }
+extension_version: TEXT { } | ident { }
+
 routine_body: TEXT | compound_stmt { }
 compound_stmt: BEGIN statement+ END { } (* mysql *)
 
@@ -221,7 +240,7 @@ routine_extra: LANGUAGE IDENT { }
 
 (* cf. ColId / unreserved_keyword in PostgreSQL's gram.y (TYPE_P is unreserved there too):
    https://github.com/postgres/postgres/blob/REL_18_0/src/backend/parser/gram.y#L17632 *)
-ident: x=IDENT | x=TYPE { x }
+ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION { x }
 
 table_ident: x=ident { x }
 qual_ident: x=ident { x }
