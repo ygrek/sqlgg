@@ -411,11 +411,18 @@ let make_variant_name i name ~is_poly =
 
 let vname n = make_variant_name 0 (Some n)
   
+let rec flatten_shared_vars vars =
+  List.concat_map (function
+    | Sql.SharedVarsGroup (vars, _) -> flatten_shared_vars vars
+    | var -> [var]
+  ) vars
+
 let match_variant_pattern i name args ~is_poly =
   let variant_name = make_variant_name i name ~is_poly in
   match args with
   | None | Some [] -> variant_name
   | Some arg_list ->
+    let arg_list = flatten_shared_vars arg_list in
     let (_, _, all_wildcard), patterns =
       List.fold_left_map (fun (seen_wildcards, seen_names, all_wc) arg ->
         let make_wildcard_param value = 
@@ -499,8 +506,44 @@ let set_var index var =
   let execute_generators = List.iter (fun f -> f ()) in
   let with_indent action = inc_indent (); action (); dec_indent () in
   let unless_empty gens use = if gens = [] then None else Some (fun () -> use gens) in
+  let pattern_param_id = function
+    | Single ({ id; _ }, _) | SingleIn ({ id; _ }, _) | TupleList (id, _)
+    | ChoiceIn { param = id; _ } | OptionActionChoice (id, _, _, _)
+    | Choice (id, _) | DynamicSelect (id, _) -> Some id
+    | DynamicSelectJoin _ | SharedVarsGroup _ -> None
+  in
+  let option_payload_names vars =
+    let (_, payload_names) =
+      List.fold_left (fun (seen, acc) var ->
+        let bind_name = match var with
+          | Single ({ id; _ }, _) | SingleIn ({ id; _ }, _) | TupleList (id, _) -> id.value
+          | _ -> None
+        in
+        match bind_name with
+        | Some name when List.mem name seen -> (seen, acc)
+        | _ ->
+          let seen = Option.map_default (fun name -> name :: seen) seen bind_name in
+          let name = Stdlib.Option.value ~default:"_" (Stdlib.List.nth_opt (names_of_vars [var]) 0) in
+          (seen, name :: acc)
+      ) ([], []) vars
+    in
+    List.rev payload_names
+  in
 
   let rec filter_generators index vars = List.filter_map (aux index) vars
+
+  and set_param_patterns index vars payload_names =
+    let bound_names =
+      List.filter_map (fun var ->
+        match aux index var, pattern_param_id var with
+        | Some _, Some id -> Some (make_param_name index id)
+        | Some _, None -> Stdlib.List.nth_opt (names_of_vars [var]) 0
+        | None, _ -> None
+      ) vars
+    in
+    List.map (fun name ->
+      if List.mem name bound_names then name else "_"
+    ) payload_names
 
   and aux index var =
     match classify_var var with
@@ -522,21 +565,7 @@ let set_var index var =
         output "end;")
     | Option_group (name, vars) ->
       unless_empty (filter_generators index vars) (fun generators ->
-        let patterns =
-          List.fold_left (fun (seen, acc) var ->
-            let bind_name = match var with
-              | Single ({ id; _ }, _) | SingleIn ({ id; _ }, _) | TupleList (id, _) -> id.value
-              | _ -> None
-            in
-            match bind_name with
-            | Some n when List.mem n seen -> (seen, acc)
-            | _ ->
-              let seen = Option.map_default (fun n -> n :: seen) seen bind_name in
-              let pattern = if Option.is_some (aux index var) then List.hd (names_of_vars [var]) else "_" in
-              (seen, pattern :: acc)
-          ) ([], []) vars
-          |> snd |> List.rev
-        in
+        let patterns = set_param_patterns index vars (option_payload_names vars) in
         let param_pattern = match patterns with
           | [single] -> single
           | many -> "(" ^ String.concat ", " many ^ ")"
@@ -558,7 +587,9 @@ let set_var index var =
             | (Some [] | None), [] -> ""
             | (Some [] | None), _ -> (match param.value with Some n -> " " ^ n | None -> "")
             | Some _, [] -> " _"
-            | Some l, _ -> " (" ^ String.concat "," (names_of_vars l) ^ ")"
+            | Some vars, _ ->
+              let vars = flatten_shared_vars vars in
+              " (" ^ String.concat "," (set_param_patterns index vars (names_of_vars vars)) ^ ")"
           in
           (match inner with
           | [] -> `Unit (fun () -> output "| %s%s -> ()" variant_name pattern_args)
