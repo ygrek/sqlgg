@@ -958,6 +958,51 @@ Test MySQL CAST/CONVERT syntax (should work):
   $ echo $?
   0
 
+Test SIGNED is preserved in generated SQL:
+  $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF'
+  > CREATE TABLE counters (data JSON);
+  > -- @counter
+  > SELECT CAST(JSON_EXTRACT(data, '$.counter') AS SIGNED) AS counter FROM counters;
+  > EOF
+  module Sqlgg (T : Sqlgg_traits.M) = struct
+  
+    module IO = Sqlgg_io.Blocking
+  
+    let create_counters db  =
+      T.execute_unprepared db (Sqlgg_traits.Query.make ~sql:("CREATE TABLE counters (data JSON)") ~name:"create_counters" ~kind:Sqlgg_traits.Query.(Create "counters") ())
+  
+    let counter db  callback =
+      let invoke_callback stmt =
+        callback
+          ~counter:(T.get_column_Int_nullable stmt 0)
+      in
+      T.select db (Sqlgg_traits.Query.make ~sql:("SELECT CAST(JSON_EXTRACT(data, '$.counter') AS SIGNED) AS counter FROM counters") ~name:"counter" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params invoke_callback
+  
+    module Fold = struct
+      let counter db  callback acc =
+        let invoke_callback stmt =
+          callback
+            ~counter:(T.get_column_Int_nullable stmt 0)
+        in
+        let r_acc = ref acc in
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT CAST(JSON_EXTRACT(data, '$.counter') AS SIGNED) AS counter FROM counters") ~name:"counter" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x !r_acc))
+        (fun () -> IO.return !r_acc)
+  
+    end (* module Fold *)
+    
+    module List = struct
+      let counter db  callback =
+        let invoke_callback stmt =
+          callback
+            ~counter:(T.get_column_Int_nullable stmt 0)
+        in
+        let r_acc = ref [] in
+        IO.(>>=) (T.select db (Sqlgg_traits.Query.make ~sql:("SELECT CAST(JSON_EXTRACT(data, '$.counter') AS SIGNED) AS counter FROM counters") ~name:"counter" ~kind:Sqlgg_traits.Query.(Select Nat) ()) T.no_params (fun x -> r_acc := invoke_callback x :: !r_acc))
+        (fun () -> IO.return (List.rev !r_acc))
+  
+    end (* module List *)
+  end (* module Sqlgg *)
+
 Test non_nullifiable when update:
   $ sqlgg -gen caml -no-header -dialect=mysql - <<'EOF' 2>&1 
   > CREATE TABLE non_nullifiable (
