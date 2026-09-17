@@ -2477,6 +2477,12 @@ let test_datefns = [
 
 let test_json_and_fixed_then_pairs_fn_kind  = [
   tt "CREATE TABLE test46 ( id INT AUTO_INCREMENT PRIMARY KEY, data JSON)" [][];
+  tt "SELECT CAST(1 AS SIGNED) AS signed_value"
+    [attr' "signed_value" Int] [];
+  tt "SELECT CONVERT(1, SIGNED) AS signed_value"
+    [attr' "signed_value" Int] [];
+  tt "SELECT CAST(JSON_EXTRACT(data, '$.counter') AS SIGNED) AS counter FROM test46"
+    [attr' ~nullability:Nullable "counter" Int] [];
   tt "UPDATE test46 SET data = JSON_ARRAY_APPEND(data, '$', '\"new_val\"') WHERE id = 3" [] [];
   tt "UPDATE test46 SET data = JSON_ARRAY_APPEND(data, '$[0][1][2].three.four.five', 'false') WHERE id = 3" [] [];
   tt {| SELECT JSON_ARRAY_APPEND(

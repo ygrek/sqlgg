@@ -163,6 +163,7 @@ let keywords =
    "unicode",UNICODE;
    "union",UNION;
    "unique",UNIQUE;
+   "signed",SIGNED;
    "unsigned",UNSIGNED;
    "update",UPDATE;
    "using",USING;
