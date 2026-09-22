@@ -1099,6 +1099,8 @@ type stmt =
   | CreateRoutine of table_name * Source_type.kind collated located option * (string * Source_type.kind collated located * expr option) list (* table_name represents possibly namespaced function name *)
   | CreateType of string * create_type_target
   | DropType of string * bool
+  | CreateExtension of string
+  | DropExtension of string list
   [@@deriving show {with_path=false}]
 
 (*

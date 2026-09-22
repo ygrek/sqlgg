@@ -23,7 +23,8 @@ let make_lexeme lexbuf token = { token; pos = Sql_lexer.pos lexbuf }
 let position offset = { Lexing.dummy_pos with pos_cnum = offset }
 
 let ident_name : Sql_tokens.token -> string option = function
-  | IDENT name | TYPE name -> Some name
+  | IDENT name | TYPE name | EXTENSION name | SCHEMA name | VERSION name ->
+    Some name
   | _ -> None
 
 let qualifier_before = function

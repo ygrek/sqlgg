@@ -232,11 +232,11 @@ let make (document : Document.t) offset =
           ~some:(column_items ~rank:Rank.exact)
           (Symbol.find_opt sources q)
       | Name roles ->
-        let is_type = function Sql_tokens.TYPE _ -> true | _ -> false in
         let keywords =
           Sql_lexer.Keywords.to_seq Sql_lexer.keywords
           |> Seq.filter (fun (_, token) ->
-            not (is_type token) && Recover_parser.accepts run token)
+            Option.is_none (Recover_parser.ident_name token)
+            && Recover_parser.accepts run token)
           |> Seq.map (fun (keyword, _) ->
             if List.exists (String.equal keyword) functions then function_item keyword
             else

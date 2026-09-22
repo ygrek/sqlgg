@@ -33,6 +33,7 @@ type feature =
   | CachedTable [@as "cached_table"]
   | AlterColumn [@as "alter_column"]
   | UserDefinedType [@as "user_defined_type"]
+  | Extension [@as "extension"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string]
 
 let show_feature x = 
@@ -152,6 +153,8 @@ let get_alter_column (change : Sql.Alter_column_pg.t) pos =
   | Set_default | Drop_default -> only AlterColumn [MySQL; PostgreSQL; TiDB] pos
 
 let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
+
+let get_extension pos = only Extension [PostgreSQL] pos
 
 let get_default_expr ~kind ~expr pos =
   let open Sql in
@@ -480,3 +483,5 @@ let rec analyze stmt =
       process_params acc params
   | CreateType _ -> [get_user_defined_type (0, 0)]
   | DropType _ -> [get_user_defined_type (0, 0)]
+  | CreateExtension _ -> [get_extension (0, 0)]
+  | DropExtension _ -> [get_extension (0, 0)]
