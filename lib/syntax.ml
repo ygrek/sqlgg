@@ -1830,7 +1830,7 @@ let rec eval (stmt:Sql.stmt) =
       Tables.add (name, to_schema schema);
       [], params, Create name,
       { annotations with table_defs = (located_name, []) :: annotations.table_defs }
-  | Alter (name,actions) ->
+  | Alter { alter_table = name; alter_actions = actions; _ } ->
       List.iter (function
       | `Add (col,pos) ->
         let source_kind = Option.map (fun k -> k.value) col.Alter_action_attr.kind in

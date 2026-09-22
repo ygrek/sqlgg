@@ -204,16 +204,17 @@ let diff_table ~from_ ~to_ =
   diff_columns ~from_ ~to_ @ diff_pk ~from_ ~to_
   @ diff_indexes ~from_ ~to_ @ diff_charset ~from_ ~to_ @ diff_ttl ~from_ ~to_
 
-let alter_change name target actions =
+let alter_change ~alter_options name target actions =
   let default_sql_lookup col_name =
     Stdlib.Option.bind (Tables.find_column ~name:col_name target.Tables.columns)
       (fun (c : Tables.column) -> c.default_sql)
   in
   Option.map
     (fun sql -> Alter_table { table = name; sql; actions })
-    (Gen_migrations.alter_table_sql ~default_sql_lookup name (Gen_migrations.Columns actions))
+    (Gen_migrations.alter_table_sql ~default_sql_lookup ~options:alter_options
+       name (Gen_migrations.Columns actions))
 
-let diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
+let diff ~alter_options ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
   let creates =
     if not ddl_as_migration then []
     else
@@ -225,7 +226,7 @@ let diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
   let alters =
     to_ |> List.filter_map (fun (t : Tables.stored_table) ->
       Stdlib.Option.bind (SMap.find_opt t.name.tn by_from)
-        (fun old -> alter_change t.name t (diff_table ~from_:old ~to_:t))) in
+        (fun old -> alter_change ~alter_options t.name t (diff_table ~from_:old ~to_:t))) in
   drops @ creates @ alters
 
 let create_table_of t =
@@ -265,7 +266,7 @@ let kind_of_change = function
   | Drop_table t -> Stmt.Drop t.Tables.name
   | Alter_table { table; _ } -> Stmt.Alter [table]
 
-let invert ~by_from ~by_to up =
+let invert ~alter_options ~by_from ~by_to up =
   let irreversible reason =
     Gen_migrations.fail
       "table %s: this change cannot be auto-reverted (%s); \
@@ -280,24 +281,25 @@ let invert ~by_from ~by_to up =
     | None, _ | _, None ->
       irreversible "table is missing from the baseline or target snapshot"
     | Some f, Some t ->
-      if f.Tables.tbl_charset = None && t.Tables.tbl_charset <> None then
+      match f.Tables.tbl_charset, t.Tables.tbl_charset with
+      | None, Some _ ->
         irreversible "a DEFAULT CHARSET / COLLATE was added while the baseline has \
                       no explicit charset to restore"
-      else
-        match alter_change name f (diff_table ~from_:t ~to_:f) with
+      | _ ->
+        match alter_change ~alter_options name f (diff_table ~from_:t ~to_:f) with
         | Some down -> down
         | None -> irreversible "reverse diff renders to nothing"
 
-let generate ~naming ~ddl_as_migration ~from_ ~to_ =
+let generate ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
   let from_ = List.map materialize_inline_unique from_ in
   let to_ = List.map materialize_inline_unique to_ in
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
-  diff ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
+  diff ~alter_options ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
     { Gen_migrations.props = [ Props.Name (change_name ~naming up) ];
       kind = kind_of_change up;
       apply = render_apply up;
-      revert = render_apply (invert ~by_from ~by_to up) })
+      revert = render_apply (invert ~alter_options ~by_from ~by_to up) })
 
 let canonical ts =
   let index_sig (name, (i : Tables.stored_index)) =

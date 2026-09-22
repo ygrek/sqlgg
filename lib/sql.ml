@@ -1079,6 +1079,32 @@ type alter_action = [
     | `NoCache of Pos.t
     | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
 
+type alter_algorithm =
+  | Algorithm_default [@as "default"]
+  | Algorithm_instant [@as "instant"]
+  | Algorithm_inplace [@as "inplace"]
+  | Algorithm_copy [@as "copy"]
+  [@@deriving show {with_path=false}, enumerate, to_string, of_string]
+
+type alter_lock =
+  | Lock_default [@as "default"]
+  | Lock_none [@as "none"]
+  | Lock_shared [@as "shared"]
+  | Lock_exclusive [@as "exclusive"]
+  [@@deriving show {with_path=false}, enumerate, to_string, of_string]
+
+type alter_option =
+  | Alter_algorithm of alter_algorithm
+  | Alter_lock of alter_lock
+  [@@deriving show {with_path=false}]
+
+type alter = {
+  alter_table : table_name;
+  alter_actions : alter_action list;
+  alter_options : alter_option located list;
+}
+[@@deriving show]
+
 type create_type_target =
   | TypeEnum of string list
   [@@deriving show {with_path=false}]
@@ -1086,7 +1112,7 @@ type create_type_target =
 type stmt =
   | Create of table_name located * create_target
   | Drop of table_name
-  | Alter of table_name * alter_action list
+  | Alter of alter
   | Rename of (table_name * table_name) list
   | CreateIndex of create_index_def
   | Insert of insert_action

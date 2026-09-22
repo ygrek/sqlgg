@@ -144,7 +144,16 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
               }
          | ALTER TABLE name=table_name actions=commas(alter_action_or_ignored)
               {
-                Alter (name, List.filter_map (fun x -> x) actions)
+                let actions, options =
+                  List.fold_right
+                    (fun item (actions, options) ->
+                      match item with
+                      | `Action action -> action :: actions, options
+                      | `Option option -> actions, option :: options
+                      | `Ignored -> actions, options)
+                    actions ([], [])
+                in
+                Alter { alter_table = name; alter_actions = actions; alter_options = options }
               }
          | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(table_name,TO,table_name)) { Rename l }
          | DROP either(TABLE,VIEW) if_exists? name=table_name
@@ -422,11 +431,13 @@ alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (co
             | NOCACHE { `NoCache ($startofs, $endofs) }
             | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }
 
-(* clauses sqlgg parses but does not act on: kept out of the action list *)
-alter_action_or_ignored: a=alter_action { Some a }
-            | SET IDENT IDENT { None }
-            | ALGORITHM EQUAL algorithm { None }
-            | LOCK EQUAL lock { None }
+alter_action_or_ignored: a=alter_action { `Action a }
+            | SET IDENT IDENT { `Ignored }
+            | option=located(alter_option) { `Option option }
+
+alter_option:
+            | ALGORITHM EQUAL algorithm=algorithm { Alter_algorithm algorithm }
+            | LOCK EQUAL lock=lock { Alter_lock lock }
 
 ttl_option: TTL EQUAL col=ident PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
               { `TtlSet (col, n, unit) }
@@ -856,14 +867,15 @@ manual_type:
     | T_DATETIME NULL        { Source_type.nullable Datetime }
 
 algorithm:
- | INPLACE { }
- | COPY { }
- | INSTANT { }
+ | DEFAULT { Algorithm_default }
+ | INPLACE { Algorithm_inplace }
+ | COPY { Algorithm_copy }
+ | INSTANT { Algorithm_instant }
 
 lock:
- | NONE {}
- | EXCLUSIVE {}
- | DEFAULT {}
- | SHARED {}
+ | NONE { Lock_none }
+ | EXCLUSIVE { Lock_exclusive }
+ | DEFAULT { Lock_default }
+ | SHARED { Lock_shared }
 
 %inline located(X): X { make_located ~value:$1 ~pos:($startofs, $endofs) }

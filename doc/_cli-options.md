@@ -19,10 +19,12 @@
   -now <YYYYMMDDHHMMSS>                            Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>
   -max-migration-id-length <N>                     Limit generated migration ids to N characters (default: no limit)
   -ddl-as-migration                                Write new tables as CREATE TABLE migrations instead of plain schema DDL
+  -alter-algorithm default|instant|inplace|copy    Add ALGORITHM policy to generated ALTER TABLE statements (MySQL and TiDB only)
+  -alter-lock default|none|shared|exclusive        Add LOCK policy to generated ALTER TABLE statements (MySQL only)
 
  Dialect and checks:
   -dialect mysql|postgresql|sqlite|tidb            Set SQL dialect. Queries can only use its features
-  -no-check {all|<feature>{,<feature>}+}           Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select|on_duplicate_key|on_conflict|straight_join|lock_in_share_mode|fulltext_index|unsigned_types|autoincrement|replace_into|row_locking|default_expr|ttl|cached_table|alter_column|user_defined_type|extension)
+  -no-check {all|<feature>{,<feature>}+}           Disable dialect feature checks (possible features: collation|join_on_subquery|create_table_as_select|on_duplicate_key|on_conflict|straight_join|lock_in_share_mode|fulltext_index|unsigned_types|autoincrement|replace_into|row_locking|default_expr|ttl|cached_table|alter_column|alter_algorithm|alter_lock|user_defined_type|extension)
   -allow-write-notnull-null                        Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)
 
  Generated header:
