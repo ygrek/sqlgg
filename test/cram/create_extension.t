@@ -80,3 +80,13 @@ extension, schema and version stay unreserved: still usable as identifiers
   > SELECT extension, schema, version FROM kw WHERE schema = 'public';
   > CREATE EXTENSION schema;
   > EOF
+
+They also stay usable in identifier positions that predate extension support
+
+  $ sqlgg -gen none -dialect=postgresql -no-check=all - <<'EOF' 2>&1
+  > CREATE TABLE kw_contexts (col TEXT COLLATE schema);
+  > CREATE TABLE kw_charset (col TEXT CHARACTER SET extension);
+  > CREATE FUNCTION extension(arg INTEGER) RETURNS INTEGER AS 'body' LANGUAGE version;
+  > SELECT CONVERT('x' USING extension);
+  > EOF
+  Warning: Assuming custom collation implementation for PostgreSQL

@@ -232,19 +232,11 @@ let make (document : Document.t) offset =
           ~some:(column_items ~rank:Rank.exact)
           (Symbol.find_opt sources q)
       | Name roles ->
-        (* Tokens that [ident] accepts too (see the ident rule in sql_parser.mly):
-           the recovering parser takes them wherever an identifier fits, so
-           offering them as keywords is noise in every completion list. Keep in
-           step with [ident]. *)
-        let is_unreserved = function
-          | Sql_tokens.TYPE _ | Sql_tokens.EXTENSION _ | Sql_tokens.SCHEMA _
-          | Sql_tokens.VERSION _ -> true
-          | _ -> false
-        in
         let keywords =
           Sql_lexer.Keywords.to_seq Sql_lexer.keywords
           |> Seq.filter (fun (_, token) ->
-            not (is_unreserved token) && Recover_parser.accepts run token)
+            Option.is_none (Recover_parser.ident_name token)
+            && Recover_parser.accepts run token)
           |> Seq.map (fun (keyword, _) ->
             if List.exists (String.equal keyword) functions then function_item keyword
             else
