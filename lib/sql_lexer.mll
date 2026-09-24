@@ -245,26 +245,24 @@ let keywords =
   A: Sometimes SQL is case-sensitive, also string contents should be preserved
 *)
 
-module Keywords = Map.Make(String)
-
 let keywords =
   let add map (k, v) =
     let k = String.lowercase_ascii k in
-    if Keywords.mem k map then failwith (sprintf "Lexeme %s is already associated with keyword." k)
-    else Keywords.add k v map
+    if Prelude.String_map.mem k map then failwith (sprintf "Lexeme %s is already associated with keyword." k)
+    else Prelude.String_map.add k v map
   in
-  List.fold_left add Keywords.empty keywords
+  List.fold_left add Prelude.String_map.empty keywords
 
 let is_keyword =
-  let tokens = Hashtbl.create (Keywords.cardinal keywords) in
-  Keywords.iter (fun _ token -> Hashtbl.replace tokens token ()) keywords;
+  let tokens = Hashtbl.create (Prelude.String_map.cardinal keywords) in
+  Prelude.String_map.iter (fun _ token -> Hashtbl.replace tokens token ()) keywords;
   fun token -> Hashtbl.mem tokens token
 
 (* FIXME case sensitivity??! *)
 
 let get_ident str =
   let str = String.lowercase_ascii str in
-  match Keywords.find_opt str keywords with
+  match Prelude.String_map.find_opt str keywords with
   | Some token -> token
   | None -> IDENT str
 

@@ -261,12 +261,12 @@ let select_func_of_kind = function
 | Stmt.Select `One -> "select_one"
 | _ -> "select"
 
-let query_expr ~sql index stmt =
+let query_expr ~sql ({ name; stmt; _ } : Query.named) =
   let table t = quote (Sql.show_table_name t) in
   let tables ts = sprintf "[%s]" (String.concat "; " (List.map table ts)) in
   let k fmt = ksprintf (fun s -> sprintf "Sqlgg_traits.Query.(%s)" s) fmt in
   let kind =
-    match stmt.Gen.kind with
+    match stmt.kind with
     | Stmt.Select `Zero_one -> k "Select Zero_one"
     | Stmt.Select `One -> k "Select One"
     | Stmt.Select `Nat -> k "Select Nat"
@@ -283,21 +283,20 @@ let query_expr ~sql index stmt =
     | Stmt.DropType s -> k "DropType %s" (quote s)
     | Stmt.Other -> "Sqlgg_traits.Query.Other"
   in
-  let name = choose_name stmt.Gen.props stmt.Gen.kind index |> String.uncapitalize_ascii in
   let filename =
-    List.find_map (function Props.File file -> Some file | _ -> None) stmt.Gen.props
+    List.find_map (function Props.File file -> Some file | _ -> None) stmt.props
     |> Stdlib.Option.fold ~none:"" ~some:(fun file -> sprintf "~filename:%s " (quote file))
   in
   sprintf "(Sqlgg_traits.Query.make %s~sql:%s ~name:%s ~kind:%s ())"
-    filename sql (quote name) kind
+    filename sql (quote (String.uncapitalize_ascii name)) kind
 
-let is_single_row_select stmt =
-  match stmt.Gen.kind, stmt.Gen.schema with
+let is_single_row_select (stmt : Query.t) =
+  match stmt.kind, stmt.schema with
   | Stmt.Select (`One | `Zero_one), _ :: _ -> true
   | _ -> false
 
-let has_row_callback stmt =
-  match stmt.Gen.schema, stmt.Gen.kind with
+let has_row_callback (stmt : Query.t) =
+  match stmt.schema, stmt.kind with
   | [], _ -> false
   | _, Stmt.Select (`Zero_one | `One) -> false
   | _ -> true
@@ -351,7 +350,7 @@ let append_func_params ~has_callback ~module_kind inputs =
   ^ (if has_callback then " callback" else "")
   ^ (if module_kind = `Fold then " acc" else "")
 
-let emit_func_header ~name ~extra_params ~has_callback ~format_input ~module_kind stmt =
+let emit_func_header ~name ~extra_params ~has_callback ~format_input ~module_kind (stmt : Query.t) =
   let subst = Props.substs stmt.props in
   let inputs = (subst @ names_of_vars stmt.vars) |> List.map format_input |> inline_values in
   output "let %s db%s %s =" name extra_params (append_func_params ~has_callback ~module_kind inputs);
@@ -362,14 +361,14 @@ let format_func_input ~dyn_annot dynamic_names v =
   if List.mem v dynamic_names then sprintf "(%s : %s)" v (dyn_annot v)
   else sprintf "~%s" v
 
-let gen_func_signature ~dynamic_infos ~module_kind ~index stmt =
+let gen_func_signature ~dynamic_infos ~module_kind ({ name; stmt; _ } : Query.named) =
   let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
   let format_input =
     format_func_input (List.map fst dynamic_map)
       ~dyn_annot:(fun v -> sprintf "_ %s.t" (List.assoc v dynamic_map))
   in
   emit_func_header
-    ~name:(choose_name stmt.props stmt.kind index |> String.uncapitalize_ascii)
+    ~name:(String.uncapitalize_ascii name)
     ~extra_params:""
     ~has_callback:(has_row_callback stmt || (module_kind = `Single && dynamic_infos = []))
     ~format_input ~module_kind stmt
@@ -679,8 +678,10 @@ let rec has_bound_params vars =
     | Sql.Single _ -> true
     | v -> has_bound_params (Sql.sub_vars v)) vars
 
-let can_execute_unprepared stmt =
-  stmt.Gen.schema = [] && not (has_bound_params stmt.Gen.vars)
+let can_execute_unprepared (stmt : Query.t) =
+  match stmt.schema with
+  | [] -> not (has_bound_params stmt.vars)
+  | _ :: _ -> false
 
 
 let as_literal_type t = match t.Type.t with Blob -> Sql.Type.type_name t | _ -> L.as_lang_type t
@@ -734,7 +735,6 @@ let make_schema_of_tuple_types label =
   })   
 
 let join_ctors_of_vars vars =
-  let module SM = Map.Make(String) in
   let joins = List.filter_map (function
     | Sql.DynamicSelectJoin { pos; source; _ } -> Some (fst pos, source)
     | Sql.Single _ | SingleIn _ | ChoiceIn _ | Choice _ | DynamicSelect _
@@ -742,13 +742,13 @@ let join_ctors_of_vars vars =
   in
   let occurrences =
     List.fold_left (fun acc (_, s) ->
-      SM.add s.Sql.table.tn (1 + Option.default 0 (SM.find_opt s.Sql.table.tn acc)) acc)
-      SM.empty joins
+      String_map.add s.Sql.table.tn (1 + Option.default 0 (String_map.find_opt s.Sql.table.tn acc)) acc)
+      String_map.empty joins
   in
   let base (_, source) =
     let tn = source.Sql.table.tn in
     let name = (Sql.join_source_name source).tn in
-    if SM.find tn occurrences > 1 && name <> tn then tn ^ "_" ^ name else tn
+    if String_map.find tn occurrences > 1 && name <> tn then tn ^ "_" ^ name else tn
   in
   let ctors =
     joins |> List.map base |> Name.idents ~prefix:"join" |> List.map String.capitalize_ascii
@@ -759,7 +759,7 @@ let join_ctor join_ctors join_id =
   try List.assoc join_id join_ctors with Not_found -> fail "unknown dynamic join %d" join_id
 
 let cond_test ~ctor_of ~deps_of = function
-  | Gen.Dep_selected (pid, dep_id) -> sprintf "List.mem %s %s" (ctor_of dep_id) (deps_of pid)
+  | Sql_template.Dep_selected (pid, dep_id) -> sprintf "List.mem %s %s" (ctor_of dep_id) (deps_of pid)
 
 let render_cond ~ctor_of ~deps_of cond body =
   sprintf {|(if %s then %s else "")|} (cond_test cond ~ctor_of ~deps_of) body
@@ -768,40 +768,40 @@ let make_sql ~join_ctors l =
   let rec render l =
     let parts =
       match l with
-      | Gen.Static "" :: tl -> quote "" :: List.filter_map piece tl
+      | `Text "" :: tl -> quote "" :: List.filter_map piece tl
       | l -> List.filter_map piece l
     in
     match parts with
     | [] -> quote ""
     | parts -> String.concat " ^ " parts
   and piece = function
-    | Static "" -> None
-    | Static s -> Some (quote s)
-    | SubstIn (param, m) -> Some (gen_in_substitution m param)
-    | DynamicIn (name, in_or_not_in, sqls) ->
+    | `Text "" -> None
+    | `Text s -> Some (quote s)
+    | `SubstIn (param, m) -> Some (gen_in_substitution m param)
+    | `DynamicIn (name, in_or_not_in, sqls) ->
       Some (sprintf "(match %s with [] -> \"%s\" | _ :: _ -> %s)"
         (make_param_name 0 name)
         (String.uppercase_ascii @@ string_of_bool @@ match in_or_not_in with `In -> false | `NotIn -> true)
         (render sqls))
-    | Dynamic (name, ctors) ->
-      Some (sprintf "(match %s with %s)"
+    | `Choice (name, arms) -> Some (render_arms ~is_poly:true name arms)
+    | `DynamicSelect (name, arms) -> Some (render_arms ~is_poly:false name arms)
+    | `Optional (name, ({ vars; some; none } : _ Sql_template.optional)) ->
+      Some (sprintf "(match %s with %s -> %s | %s -> %s)"
         (make_param_name 0 name)
-        (ctors
-         |> List.mapi (fun i { ctor; args; sql; is_poly } ->
-             sprintf "%s -> %s" (match_variant_pattern i ctor.value args ~is_poly) (render sql))
-         |> String.concat " | "))
-    | Cond (cond, body) ->
+        (match_variant_pattern 0 (Some "Some") (Some vars) ~is_poly:false) (render some)
+        (match_variant_pattern 1 (Some "None") None ~is_poly:false) (quote none))
+    | `Cond (cond, body) ->
       Some (render_cond cond (render body)
         ~ctor_of:(fun id -> join_ctor join_ctors id)
         ~deps_of:(fun pid -> make_param_name 0 pid ^ ".deps"))
-    | SubstTuple (id, Insertion schema) ->
+    | `SubstTuple (id, Insertion schema) ->
       Some (gen_tuple_substitution ~is_row:false (resolve_tuple_label id) schema)
-    | SubstTuple (id, Where_in { value = (types, _); pos = _ }) ->
+    | `SubstTuple (id, Where_in { value = (types, _); pos = _ }) ->
       let label = resolve_tuple_label id in
       let schema = make_schema_of_tuple_types label types in
       Some (sprintf "%s ^ %s ^ %s"
         (quote "(") (gen_tuple_substitution ~is_row:false label schema) (quote ")"))
-    | SubstTuple (id, ValueRows { types; _ }) ->
+    | `SubstTuple (id, ValueRows { types; _ }) ->
       let label = resolve_tuple_label id in
       (* TODO: Implement meta for ValueRows *)
       let types = List.map (fun typ -> typ, Meta.empty()) types in
@@ -812,6 +812,13 @@ let make_sql ~join_ctors l =
         |> sprintf {|"SELECT %s WHERE FALSE"|} in
       let not_empty = gen_tuple_substitution ~is_row:true label schema in
       Some (sprintf {|( if %s = [] then %s else ( "VALUES " ^ %s ) )|} label empty not_empty)
+  and render_arms ~is_poly name arms =
+    sprintf "(match %s with %s)"
+      (make_param_name 0 name)
+      (arms
+       |> List.mapi (fun i (arm : _ Sql_template.arm) ->
+           sprintf "%s -> %s" (match_variant_pattern i arm.ctor.value arm.args ~is_poly) (render arm.sql))
+       |> String.concat " | ")
   in
   "(" ^ render l ^ ")"
 
@@ -823,9 +830,8 @@ type callback_build_state = {
   idx_expr: string option;
 }
 
-let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callback index stmt =
-  let sql_pieces = get_sql stmt in
-  let join_ctors = join_ctors_of_vars stmt.Gen.vars in
+let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callback ~sql_pieces ({ stmt; _ } as q : Query.named) =
+  let join_ctors = join_ctors_of_vars stmt.vars in
 
   let col_ref di = di.param_name in
   let deps_ref di = di.param_name ^ ".deps" in
@@ -859,17 +865,19 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
     emit_set_params ~count:(sprintf "%s + %s" static_count dynamic_counts) set_vars_in_order
   in
 
+  let is_blank s = String.equal (String.trim s) "" in
+
   let rec build_parts acc pending_comma = function
     | [] -> List.rev acc
-    | Gen.Static s :: rest ->
+    | `Text s :: rest ->
       let piece, pending =
         match String.rindex_opt s ',' with
-        | Some i when String.(trim (slice ~first:(i + 1) s)) = "" -> String.slice ~last:i s, true
+        | Some i when is_blank (String.slice ~first:(i + 1) s) -> String.slice ~last:i s, true
         | _ -> s, false
       in
-      let acc = if pending && String.trim piece = "" then acc else quote piece :: acc in
+      let acc = if pending && is_blank piece then acc else quote piece :: acc in
       build_parts acc pending rest
-    | Gen.Dynamic (pid, _) :: rest when is_di pid ->
+    | `DynamicSelect (pid, _) :: rest when is_di pid ->
       let di = find_di_by_pid pid in
       let dyn_expr =
         if pending_comma then
@@ -878,8 +886,8 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
           sprintf "%s.column" (col_ref di)
       in
       build_parts (dyn_expr :: acc) false rest
-    | Gen.Cond (cond, body) :: rest ->
-      let Gen.Dep_selected (pid, _) = cond in
+    | `Cond (cond, body) :: rest ->
+      let Sql_template.Dep_selected (pid, _) = cond in
       let di = find_di_by_pid pid in
       let body_expr =
         match build_parts [] false body with
@@ -892,7 +900,7 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
           ~deps_of:(fun _ -> deps_ref di)
       in
       build_parts (expr :: acc) pending_comma rest
-    | (Gen.Dynamic _ | Gen.SubstIn _ | Gen.DynamicIn _ | Gen.SubstTuple _) as piece :: rest ->
+    | (`Choice _ | `Optional _ | `DynamicSelect _ | `SubstIn _ | `DynamicIn _ | `SubstTuple _) as piece :: rest ->
       let expr = make_sql ~join_ctors [piece] in
       let acc = if pending_comma then expr :: quote "," :: acc else expr :: acc in
       build_parts acc false rest
@@ -962,11 +970,11 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
   let (bind_start, bind_end) = c.c_bind in
 
   output "%sT.%s db" bind_start (select_func_of_kind stmt.kind);
-  output "  %s" (query_expr ~sql:(sprintf "(%s)" sql_expr) index stmt);
+  output "  %s" (query_expr ~sql:(sprintf "(%s)" sql_expr) q);
   output "  set_params %s%s" full_callback bind_end;
   complete_func c
 
-let emit_dynamic_module_select ~module_kind ~dynamic_infos index stmt =
+let emit_dynamic_module_select ~module_kind ~dynamic_infos ~sql_pieces ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
   let dynamic_names = List.map (fun di -> di.param_name) dynamic_infos in
   let format_input = format_func_input dynamic_names ~dyn_annot:(fun _ -> "_ t") in
@@ -979,10 +987,10 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos index stmt =
     emit_func_header ~name:"select" ~extra_params:""
       ~has_callback:with_callback ~format_input ~module_kind stmt
   in
-  emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback index stmt
+  emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback ~sql_pieces q
 
-let emit_sql_with_subst subst stmt =
-  let sql = make_sql ~join_ctors:(join_ctors_of_vars stmt.Gen.vars) @@ get_sql stmt in
+let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
+  let sql = make_sql ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces in
   match subst with
   | [] -> sql
   | vars ->
@@ -1001,17 +1009,18 @@ let emit_sql_with_subst subst stmt =
 
 let empty_exec_result = {|IO.return { T.affected_rows = 0L; insert_id = None }|}
 
-let generate_stmt ~module_kind index stmt =
+let generate_stmt ~module_kind index ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
   let c = consumer module_kind in
   if Props.has Noop stmt.props then begin
-    let _ = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
+    let _ = gen_func_signature ~dynamic_infos:[] ~module_kind q in
     output "ignore db;";
     output "%s" empty_exec_result;
     complete_func c
   end else
-  let subst = gen_func_signature ~dynamic_infos:[] ~module_kind ~index stmt in
-  let sql = emit_sql_with_subst subst stmt in
+  let subst = gen_func_signature ~dynamic_infos:[] ~module_kind q in
+  let sql_pieces = Gen.get_sql q in
+  let sql = emit_sql_with_subst subst stmt sql_pieces in
   let (func, callback) =
     match stmt.schema with
     | [] -> "execute", ""
@@ -1033,18 +1042,18 @@ let generate_stmt ~module_kind index stmt =
   let (bind, bind_end) = c.c_bind in
   let exec =
     if unprepared then
-      sprintf "T.execute_unprepared db %s%s" (query_expr ~sql index stmt) bind_end
+      sprintf "T.execute_unprepared db %s%s" (query_expr ~sql q) bind_end
     else
-      sprintf "T.%s db %s %s %s%s" func (query_expr ~sql index stmt) params_binder_name callback bind_end
+      sprintf "T.%s db %s %s %s%s" func (query_expr ~sql q) params_binder_name callback bind_end
   in
   let exec =
     match
       List.find_map
         (function
-          | SubstTuple (id, Insertion _) -> Some id
-          | SubstTuple (_, ( Where_in _| ValueRows _ ))
-          | Static _ | Dynamic _ | DynamicIn _ | SubstIn _ | Cond _ -> None)
-        (get_sql stmt)
+          | `SubstTuple (id, Insertion _) -> Some id
+          | `SubstTuple (_, ( Where_in _| ValueRows _ ))
+          | `Text _ | `Choice _ | `Optional _ | `DynamicSelect _ | `DynamicIn _ | `SubstIn _ | `Cond _ -> None)
+        sql_pieces
     with
     | None -> exec
     | Some { value = None; _ } -> failwith "empty label in tuple substitution"
@@ -1068,8 +1077,8 @@ let sanitize_to_variant_name s =
 let generate_enum_modules stmts = 
   let open Sql.Type.Enum_kind in
 
-  let schemas = List.concat_map (fun stmt -> stmt.Gen.schema) stmts in
-  let vars = List.concat_map (fun stmt -> stmt.Gen.vars) stmts in
+  let schemas = List.concat_map (fun (q : Query.named) -> q.stmt.schema) stmts in
+  let vars = List.concat_map (fun (q : Query.named) -> q.stmt.vars) stmts in
 
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
@@ -1143,25 +1152,24 @@ let generate_enum_modules stmts =
     in ())
 
   
-let get_all_dynamic_select_infos index stmt =
-  let query_name = Gen.choose_name stmt.Gen.props stmt.Gen.kind index in
-  let ds_from_vars = stmt.Gen.vars |> List.filter_map (function Sql.DynamicSelect (param_id, ctors) -> Some (param_id, ctors) | _ -> None) in
-  let ds_from_schema = stmt.Gen.schema |> List.filter_map (function Sql.Dynamic (param_id, fields) -> Some (param_id, fields) | _ -> None) in
+let get_all_dynamic_select_infos ({ name = query_name; stmt; _ } : Query.named) =
+  let ds_from_vars = stmt.vars |> List.filter_map (function Sql.DynamicSelect (param_id, ctors) -> Some (param_id, ctors) | _ -> None) in
+  let ds_from_schema = stmt.schema |> List.filter_map (function Sql.Dynamic (param_id, fields) -> Some (param_id, fields) | _ -> None) in
   let module_name = match ds_from_vars with
     | [_] -> fun _param_name -> String.capitalize_ascii query_name
     | _ -> fun param_name -> sprintf "%s_%s" (String.capitalize_ascii query_name) param_name
   in
   List.mapi (fun i ((param_id, ctors), (_, schema_fields)) ->
-    let param_name = Gen.make_param_name i param_id in
+    let param_name = make_param_name i param_id in
     { param_id; module_name = module_name param_name; param_name; ctors; schema_fields }
   ) (List.combine ds_from_vars ds_from_schema)
 
 let generate_dynamic_select_modules stmts =
-  List.iteri (fun index stmt ->
-    let all_dis = get_all_dynamic_select_infos index stmt in
+  List.iter (fun ({ stmt; _ } as q : Query.named) ->
+    let all_dis = get_all_dynamic_select_infos q in
     let single_di = List.length all_dis = 1 in
-    let sql_pieces = get_sql stmt in
-    let join_ctors = join_ctors_of_vars stmt.Gen.vars in
+    let sql_pieces = Gen.get_sql q in
+    let join_ctors = join_ctors_of_vars stmt.vars in
     let deps_of_field (field : _ Sql.dynamic_field) =
       match field.Sql.join_deps with
       | [] -> "[]"
@@ -1176,8 +1184,8 @@ let generate_dynamic_select_modules stmts =
     all_dis |> List.iter (fun di ->
       let module_name = di.module_name in
       let field_sqls = List.find_map (function
-        | Gen.Dynamic (pid, ctors) when Sql.equal_param_id pid di.param_id ->
-          Some (List.map (fun c -> c.Gen.ctor, c.Gen.sql) ctors)
+        | `DynamicSelect (pid, arms) when Sql.equal_param_id pid di.param_id ->
+          Some (List.map (fun (arm : _ Sql_template.arm) -> arm.sql) arms)
         | _ -> None
       ) sql_pieces |> Option.default [] in
       
@@ -1190,7 +1198,7 @@ let generate_dynamic_select_modules stmts =
       ) di.ctors di.schema_fields in
       
       emit_module module_name (fun () ->
-        let emit_field { field_name; field_args; field_schema; field_ctor } (_, sql) =
+        let emit_field { field_name; field_args; field_schema; field_ctor } sql =
           let read_body = sprintf "(fun row idx -> (%s, idx + 1))" (format_get_column ~row:"row" ~idx:"idx" field_schema.Sql.field_attr) in
           let column_body = match field_ctor with
             | Sql.Verbatim (_, v) -> quote v
@@ -1229,23 +1237,24 @@ let generate_dynamic_select_modules stmts =
 
         if single_di then begin
           empty_line ();
-          emit_dynamic_module_select ~module_kind:`Direct ~dynamic_infos:[di] index stmt;
+          emit_dynamic_module_select ~module_kind:`Direct ~dynamic_infos:[di] ~sql_pieces q;
           emit_module_kind_variants stmt (fun module_kind ->
-            emit_dynamic_module_select ~module_kind ~dynamic_infos:[di] index stmt)
+            emit_dynamic_module_select ~module_kind ~dynamic_infos:[di] ~sql_pieces q)
         end);
       empty_line ()
     )
   ) stmts
 
-let generate_stmt_wrapper ~module_kind index stmt =
-  let dynamic_infos = get_all_dynamic_select_infos index stmt in
+let generate_stmt_wrapper ~module_kind index ({ stmt; _ } as q : Query.named) =
+  let dynamic_infos = get_all_dynamic_select_infos q in
   match dynamic_infos with
-  | [] -> generate_stmt ~module_kind index stmt
+  | [] -> generate_stmt ~module_kind index q
   | [_] -> ()
   | _ :: _ :: _ ->
     if supports_module_kind module_kind stmt then begin
-      let _subst = gen_func_signature ~dynamic_infos ~module_kind ~index stmt in
-      emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:false ~with_callback:true index stmt
+      let _subst = gen_func_signature ~dynamic_infos ~module_kind q in
+      emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:false ~with_callback:true
+        ~sql_pieces:(Gen.get_sql q) q
     end
 
 let generate ~gen_io ~migration_names name stmts =
@@ -1268,7 +1277,8 @@ let generate ~gen_io ~migration_names name stmts =
   empty_line ();
   List.iteri (generate_stmt_wrapper ~module_kind:`Direct) stmts;
   [`Single; `Fold; `List]
-  |> List.filter (fun module_kind -> List.exists (supports_module_kind module_kind) stmts)
+  |> List.filter (fun module_kind ->
+    List.exists (fun (q : Query.named) -> supports_module_kind module_kind q.stmt) stmts)
   |> List.iteri (fun i module_kind ->
     if i > 0 then output "";
     emit_module_annotated (module_kind_name module_kind) (fun () ->
@@ -1312,11 +1322,11 @@ module Header = Gen.Make(Generator_io)
 
 let generate_migrations name migrations =
   let named = List.mapi (fun index (m : Gen_migrations.migration) ->
-    Gen.choose_name m.props m.kind index, m
+    Query.name m.props m.kind index, m
   ) migrations in
   let migration_names = List.map fst named in
   let make_stmt ?(props = []) fn_name sql =
-    { Gen.schema = []; vars = []; kind = Stmt.Other; props = Props.Name fn_name :: Props.Sql sql :: props }
+    Query.verbatim ~props:(Props.Name fn_name :: props) sql
   in
   let revert_stmt name (m : Gen_migrations.migration) =
     match m.revert with
@@ -1327,4 +1337,4 @@ let generate_migrations name migrations =
     [make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
   ) named in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
-  generate ~gen_io:true ~migration_names:(Some migration_names) name stmts
+  generate ~gen_io:true ~migration_names:(Some migration_names) name (List.mapi Query.named stmts)

@@ -141,7 +141,7 @@ let struct_ctor name values k =
 let output_params_binder _ params =
   out_private ();
   let name = "params" in
-  let values = Values.inject @@ values_of_params params in
+  let values = Values.inject @@ all_params_to_values params in
   struct_ctor name (make_const_values values) (fun () ->
     comment () "binding slots in a query (one param may be bound several times)";
     output "enum { count = %u };" (List.length params);
@@ -162,21 +162,19 @@ type t = unit
 
 let start () = ()
 
-let make_stmt index stmt =
-   let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql_string_only stmt) in
+let make_stmt index ({ name; stmt; _ } as q : Query.named) =
+   let sql = quote (get_sql_string_only q) in
    let params = params_only stmt.vars in
    struct_params name ["stmt","typename Traits::statement"] (fun () ->
     func "" name ["db","typename Traits::connection"] ~tail:(sprintf ": stmt(db,SQLGG_STR(%s))" sql) identity;
    let schema = List.concat_map (function
     | Sql.Attr attr -> [attr]
-    | Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
+    | Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.schema in
    let schema_binder_name = output_schema_binder index schema in
    let params_binder_name = output_params_binder index params in
-(*    if (Option.is_some schema_binder_name) then output_schema_data index stmt.schema; *)
    out_public ();
    if (Option.is_some schema_binder_name) then output "template<class T>";
-   let values = Values.inject @@ values_of_params params in
+   let values = Values.inject @@ all_params_to_values params in
    let result = match schema_binder_name with None -> [] | Some _ -> ["result","T"] in
    let all_params = (make_const_values values) @ result in
    let inline_params = Values.inline (make_const_values values) in

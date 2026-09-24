@@ -23,14 +23,21 @@ type stmt_annotations = {
   select_scopes : select_scope list;
 }
 
-type result = {
+type signature = {
   sql : string;
   schema : schema_column list;
   vars : var list;
   kind : Stmt.kind;
+}
+[@@deriving show, eq, json, jsonschema]
+
+type result = {
+  typed : signature;
   dialect_features : Dialect.dialect_support list;
   annotations : stmt_annotations;
 }
+
+val no_stmt_annotations : stmt_annotations
 
 val scope_of : ?cte:cte -> nested option -> stmt_annotations
 

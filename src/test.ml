@@ -2,6 +2,7 @@ open Printf
 open ExtLib
 open OUnit
 open Sqlgg
+open Query
 open Sql
 (* open Sql.Type *)
 open Stmt
@@ -50,7 +51,7 @@ let assert_params_with_meta stmt meta =
           | DynamicSelect _ -> failwith "dynamic selects not supported for this host language"
           | _ -> assert false
           ) 
-        stmt.Gen.vars)
+        stmt.vars)
 
 let cmp_attrs = Stdlib.List.equal Sql.equal_attr
 
@@ -1486,7 +1487,7 @@ let test_type_mapping_params _ =
       | _ -> false
     )
     ~printer:show_vars
-    stmt.vars 
+    stmt.vars
     [
       TupleList (make_located ~value:(Some "txt2") ~pos:(0, 0), Where_in (make_located ~value:([
         Type.strict Text, Meta.empty ();
@@ -2924,9 +2925,10 @@ let test_join_hole_whitespace =
       source = { table = make_table_name "b"; alias = None };
     }
   in
+  let open Sql_template in
   let rec show_piece = function
-    | Gen.Static s -> sprintf "Static %S" s
-    | Gen.Cond (_, body) -> sprintf "Cond [%s]" (String.concat "; " (List.map show_piece body))
+    | `Text s -> sprintf "Text %S" s
+    | `Cond (_, body) -> sprintf "Cond [%s]" (String.concat "; " (List.map show_piece body))
     | _ -> "Other"
   in
   let check name sql joins expected =
@@ -2935,37 +2937,37 @@ let test_join_hole_whitespace =
         ~cmp:(fun a b -> List.map show_piece a = List.map show_piece b)
         ~printer:(fun l -> String.concat "; " (List.map show_piece l))
         expected
-        (Gen.substitute_vars sql (List.map (join_var sql) joins) None))
+        (fill ~spell:(fun _ bind -> bind.original) (of_sql sql (List.map (join_var sql) joins))))
   in
-  let join text = Gen.Cond (Gen.Dep_selected ({ value = Some "col"; pos = (0,0) }, 0), [Gen.Static text]) in
+  let join text = `Cond (Dep_selected ({ value = Some "col"; pos = (0,0) }, 0), [`Text text]) in
   [
     check "no holes"
       "SELECT x\nFROM a\nWHERE y = 1" []
-      [Gen.Static "SELECT x\nFROM a\nWHERE y = 1"];
+      [`Text "SELECT x\nFROM a\nWHERE y = 1"];
     check "newline before hole absorbed"
       "SELECT x FROM a\nLEFT JOIN b ON b.a = a.id\nWHERE y = 1"
       ["LEFT JOIN b ON b.a = a.id"]
-      [Gen.Static "SELECT x FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nWHERE y = 1"];
+      [`Text "SELECT x FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nWHERE y = 1"];
     check "space before hole absorbed"
       "FROM a LEFT JOIN b ON b.a = a.id WHERE y = 1"
       ["LEFT JOIN b ON b.a = a.id"]
-      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static " WHERE y = 1"];
+      [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text " WHERE y = 1"];
     check "hole at end of query"
       "FROM a\nLEFT JOIN b ON b.a = a.id"
       ["LEFT JOIN b ON b.a = a.id"]
-      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"];
+      [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"];
     check "adjacent holes leave no gap"
       "FROM a\nLEFT JOIN b ON b.a = a.id\nLEFT JOIN c ON c.a = a.id\nWHERE y = 1"
       ["LEFT JOIN b ON b.a = a.id"; "LEFT JOIN c ON c.a = a.id"]
-      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; join " LEFT JOIN c ON c.a = a.id"; Gen.Static "\nWHERE y = 1"];
+      [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; join " LEFT JOIN c ON c.a = a.id"; `Text "\nWHERE y = 1"];
     check "static join between holes"
       "FROM a\nLEFT JOIN b ON b.a = a.id\nJOIN o USING (x)\nLEFT JOIN c ON c.a = a.id"
       ["LEFT JOIN b ON b.a = a.id"; "LEFT JOIN c ON c.a = a.id"]
-      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nJOIN o USING (x)"; join " LEFT JOIN c ON c.a = a.id"];
+      [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nJOIN o USING (x)"; join " LEFT JOIN c ON c.a = a.id"];
     check "string literal whitespace preserved"
       "FROM a\nLEFT JOIN b ON b.a = a.id\nWHERE note = '  two  spaces  '"
       ["LEFT JOIN b ON b.a = a.id"]
-      [Gen.Static "FROM a"; join " LEFT JOIN b ON b.a = a.id"; Gen.Static "\nWHERE note = '  two  spaces  '"];
+      [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nWHERE note = '  two  spaces  '"];
   ]
 
 let test_migration_name =

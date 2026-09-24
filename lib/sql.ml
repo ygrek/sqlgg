@@ -3,14 +3,16 @@
 open Printf
 open ExtLib
 open Prelude
+open Jsonkit.Primitives
 
 module Pos = struct
-  type t = int * int [@@deriving show, eq]
+  type t = int * int [@@deriving show, eq, json, jsonschema]
 
   let contains (start, stop) offset = offset >= start && offset < stop
   let covers (start, stop) offset = offset >= start && offset <= stop
   let shift offset (start, stop) = offset + start, offset + stop
   let is_empty (start, stop) = stop <= start
+  let nonempty pos = if is_empty pos then None else Some pos
   let span (start, _) (_, stop) = start, stop
 
   let find_innermost_by_opt includes offset candidates =
@@ -26,8 +28,8 @@ module Pos = struct
     find_innermost_by_opt contains offset candidates
 end
 
-type 'a located  = { value : 'a; pos : Pos.t } [@@deriving show, make, eq]
-type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make]
+type 'a located  = { value : 'a; pos : Pos.t } [@@deriving show, make, eq, json, jsonschema]
+type 'a collated = { collated: 'a; collation: string located option } [@@deriving show, make, eq, json, jsonschema]
 
 let dummy_pos : Pos.t = (0, 0)
 let dummy_loc value = { value; pos = dummy_pos }
@@ -37,22 +39,22 @@ struct
 
   module Enum_kind = struct
 
-    module Ctors =  struct 
-      include Set.Make(String)
-  
-      let pp fmt s = 
-        Format.fprintf fmt "{%s}" 
-          (String.concat "; " (elements s))  
+    module Ctors =  struct
+      include String_set
+
+      let pp fmt s =
+        Format.fprintf fmt "{%s}"
+          (String.concat "; " (elements s))
     end
 
-    type t = Ctors.t [@@deriving eq, show{with_path=false}]
+    type t = Ctors.t [@@deriving eq, show{with_path=false}, json, jsonschema]
 
     let make ctors = Ctors.of_list ctors
   end
 
-  type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}]
+  type union = { ctors: Enum_kind.t; is_closed: bool } [@@deriving eq, show{with_path=false}, json, jsonschema]
 
-  type decimal = { precision: int option; scale: int option } [@@deriving eq, show{with_path=false}]
+  type decimal = { precision: int option; scale: int option } [@@deriving eq, show{with_path=false}, json, jsonschema]
 
   type kind =
     | Int
@@ -70,7 +72,7 @@ struct
     | One_or_all
     | Json
     | Any (* FIXME - Top and Bottom ? *)
-    [@@deriving eq, show{with_path=false}]
+    [@@deriving eq, show{with_path=false}, json, jsonschema] [@@compact_variants]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
 
     let show_kind = function
@@ -86,9 +88,9 @@ struct
   | Nullable (** can be NULL *)
   | Strict (** cannot be NULL *)
   | Depends (** unknown, to be determined *)
-  [@@deriving eq, show{with_path=false}]
+  [@@deriving eq, show{with_path=false}, json, jsonschema] [@@compact_variants]
 
-  type t = { t : kind; nullability : nullability; }[@@deriving eq, show{with_path=false}]
+  type t = { t : kind; nullability : nullability; }[@@deriving eq, show{with_path=false}, json, jsonschema]
 
   let nullability nullability = fun t -> { t; nullability }
   let strict = nullability Strict
@@ -97,7 +99,7 @@ struct
   let make_nullable { t; nullability=_ } = nullable t
 
   let make_strict { t; nullability=_ } = strict t
-  
+
   let make_enum_kind ctors = Union { ctors = (Enum_kind.make ctors); is_closed = true }
 
   let is_strict { nullability; _ } = nullability = Strict
@@ -126,10 +128,10 @@ struct
   | _ -> true
 
   (** @return (subtype, supertype) *)
-  let order_kind x y =  
+  let order_kind x y =
     match x, y with
     | x, y when equal_kind x y -> `Equal
-    | StringLiteral a, StringLiteral b -> 
+    | StringLiteral a, StringLiteral b ->
       `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
 
     | StringLiteral a, Union u | Union u, StringLiteral a ->
@@ -155,7 +157,7 @@ struct
     | Any, t | t, Any -> `Order (t, t)
 
     | Int, Decimal dec | Decimal dec, Int -> `Order (Int, Decimal dec)
-    | Decimal d1, Decimal d2 when d1 <> d2 -> 
+    | Decimal d1, Decimal d2 when not (equal_decimal d1 d2) ->
         let scale = match d1.scale, d2.scale with
           | None, _ | _, None -> None
           | Some a, Some b -> Some (max a b) in
@@ -166,9 +168,9 @@ struct
     | Decimal _, Float | Float, Decimal _ -> `No
     | FloatingLiteral _, Int | Int, FloatingLiteral _ -> `Order (Int, Float)
     | FloatingLiteral x, Float | Float, FloatingLiteral x -> `Order (FloatingLiteral x, Float)
-    | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f -> 
+    | FloatingLiteral f, Decimal dec | Decimal dec, FloatingLiteral f ->
         if check_exact_exact_number f dec then `Order (Decimal dec, Decimal dec) else `No
-    (* UInt64 cannot be a subtype of Float: double precision only guarantees exact 
+    (* UInt64 cannot be a subtype of Float: double precision only guarantees exact
      representation up to 2^53 (~9e15), but UInt64 can hold values up to 2^64-1 (~18e18).
      Converting large UInt64 values to Float would lose precision *)
     | UInt64, Int | Int, UInt64 -> `Order (Int, UInt64)
@@ -178,26 +180,26 @@ struct
 
     (*  JSON literal validation:
        sqlgg can statically validate JSON string literals at compile time:
-       
+
        Valid JSON literals are accepted:
        '{"valid": "example"}' -> StringLiteral is subtype of Json
        '["array", "example"]' -> StringLiteral is subtype of Json
        '"simple string"'      -> StringLiteral is subtype of Json
-       
+
        Invalid JSON literals are rejected:
        '{NOTVALID|}' -> No subtype relation, compile error
        '{missing: quotes}' -> No subtype relation, compile error
-       
+
        However, sqlgg cannot validate JSON strings constructed dynamically:
        CONCAT('{"key": "', user_input, '"}') -> Text type, no validation
        CONCAT('{"key": "', column_name, '"}') -> Text type, no validation (column value unknown)
        JSON_EXTRACT(dynamic_column, '$.path') -> Json type, runtime validation
-       
+
        This static validation helps catch JSON syntax errors early in development
-       while still allowing dynamic JSON construction when needed. 
+       while still allowing dynamic JSON construction when needed.
     *)
 
-    | Json, StringLiteral x | StringLiteral x, Json -> 
+    | Json, StringLiteral x | StringLiteral x, Json ->
       begin match Yojson.Safe.from_string x with
         | _ -> `Order (StringLiteral x, Json)
         | exception Yojson.Json_error _ -> `No
@@ -205,7 +207,7 @@ struct
     | Text, Json | Json, Text -> `Order (Json, Text)
     | Blob, Json | Json, Blob -> `Order (Json, Blob)
 
-    | (Json_path, StringLiteral x | StringLiteral x, Json_path) 
+    | (Json_path, StringLiteral x | StringLiteral x, Json_path)
         when Sqlgg_json_path.Json_path.is_valid x -> `Order (StringLiteral x, Json_path)
     | Json_path, Text | Text, Json_path -> `Order (Json_path, Text)
 
@@ -213,7 +215,7 @@ struct
     | Json, One_or_all | One_or_all, Json -> `Order (One_or_all, Text)
 
     | _ -> `No
-    
+
 
   let order_nullability x y =
     match x,y with
@@ -251,23 +253,23 @@ struct
   | [] -> None
   | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> common_type_ order prev t) (Some t) ts
 
-  let get_subtype = function 
+  let get_subtype = function
   | `CommonType t -> Some (fst t)
   | `StringLiteralUnion t -> Some t
 
-  let get_supertype = function 
+  let get_supertype = function
   | `CommonType t -> Some (snd t)
   | `StringLiteralUnion t -> Some t
 
   let subtype = common_type_ get_subtype
   let supertype = common_type_ get_supertype
-  
-  let common_subtype types = 
+
+  let common_subtype types =
     match common_type_l_ get_subtype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
 
-  let common_supertype types = 
+  let common_supertype types =
     match common_type_l_ get_supertype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
@@ -276,26 +278,26 @@ struct
 
   let has_common_type x y = Option.is_some @@ subtype x y
 
-  type tyvar = Typ of t | Var of int [@@deriving show{with_path=false}]
+  type tyvar = Typ of t | Var of int [@@deriving show{with_path=false}, eq, json, jsonschema]
   let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
 end
 
 module Constraint =
 struct
   module StringSet = struct
-    include Set.Make(String)
+    include String_set
     let show s = [%derive.show: string list] (elements s)
     let pp fmt s = Format.fprintf fmt "%s" (show s)
   end
 
   type conflict_algo = | Ignore | Replace | Abort | Fail | Rollback
-    [@@deriving show{with_path=false}, ord, eq]
+    [@@deriving show{with_path=false}, ord, eq, json, jsonschema] [@@compact_variants]
 
   type composite = | CompositePrimary of StringSet.t | CompositeUnique of StringSet.t
-    [@@deriving show{with_path=false}, ord, eq]
+    [@@deriving show{with_path=false}, ord, eq, json, jsonschema]
 
   type t = | PrimaryKey | NotNull | Null | Unique | Autoincrement | OnConflict of conflict_algo | WithDefault | Composite of composite
-    [@@deriving show{with_path=false}, ord, eq]
+    [@@deriving show{with_path=false}, ord, eq, json, jsonschema] [@@compact_variants]
 
   let make_composite_primary cols = Composite (CompositePrimary (StringSet.of_list cols))
   let make_composite_unique cols = Composite (CompositeUnique (StringSet.of_list cols))
@@ -305,30 +307,30 @@ module Constraints = struct
   include Set.Make(Constraint)
   let show s = [%derive.show: Constraint.t list] (elements s)
   let pp fmt s = Format.fprintf fmt "%s" (show s)
+  let to_json s = [%to_json: Constraint.t list] (elements s)
+  let of_json j = of_list ([%of_json: Constraint.t list] j)
+  let t_jsonschema = list_jsonschema Constraint.t_jsonschema
 end
 
 module Meta = struct
 
-  module StringMap = Map.Make(String)
+  type t = string String_map.t [@@deriving json, jsonschema]
 
-  
-  type t = string StringMap.t
-  
-  let of_list list = List.fold_left (fun map (k, v) -> StringMap.add k v map) StringMap.empty list
-  
-  let empty () = StringMap.empty
-  let is_empty = StringMap.is_empty
-  let find_opt map key = StringMap.find_opt key map
-  
+  let of_list list = List.fold_left (fun map (k, v) -> String_map.add k v map) String_map.empty list
+
+  let empty () = String_map.empty
+  let is_empty = String_map.is_empty
+  let find_opt map key = String_map.find_opt key map
+
   let pp fmt t =
     Format.fprintf fmt "{%s}"
-      (String.concat "; " (List.map (fun (k, v) -> sprintf "%s = %s" k v) (StringMap.bindings t)))
+      (String.concat "; " (List.map (fun (k, v) -> sprintf "%s = %s" k v) (String_map.bindings t)))
 
-  let equal = StringMap.equal String.equal
+  let equal = String_map.equal String.equal
 
-  let merge_right a b = StringMap.union (fun _ _ v -> Some v) a b
+  let merge_right a b = String_map.union (fun _ _ v -> Some v) a b
 
-  let inter a b = StringMap.filter (fun k v -> Option.map_default (String.equal v) false (find_opt b k)) a
+  let inter a b = String_map.filter (fun k v -> Option.map_default (String.equal v) false (find_opt b k)) a
 
   let common x y =
     match x, y with
@@ -341,13 +343,13 @@ module Meta = struct
   let shared metas = of_option (common_all (List.map declared metas))
   let internal_keys = [ "non_nullifiable"; "json_null_kind"; "text_as_json" ]
 
-  let of_domain m = List.fold_left (fun m k -> StringMap.remove k m) m internal_keys
+  let of_domain m = List.fold_left (fun m k -> String_map.remove k m) m internal_keys
 
-  let get_is_non_nullifiable meta = String.equal (Option.default "false" (find_opt meta "non_nullifiable")) "true" 
+  let get_is_non_nullifiable meta = String.equal (Option.default "false" (find_opt meta "non_nullifiable")) "true"
 end
 
 type attr = {name : string; domain : Type.t; extra : Constraints.t; meta: Meta.t; }
-  [@@deriving eq, show {with_path=false}]
+  [@@deriving eq, show {with_path=false}, json, jsonschema]
 
 let unique_keys schema =
   let keys_of a =
@@ -373,7 +375,7 @@ let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { na
 module Schema =
 struct
   type t = attr list
-    [@@deriving show]
+    [@@deriving show, eq, json, jsonschema]
 
   exception Error of t * string
 
@@ -450,8 +452,8 @@ struct
 
   module Join = struct
 
-    type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show]
-    type typ = Left | Right | Full | Inner | Straight [@@deriving show]
+    type 'a condition = On of 'a | Default | Natural | Using of string list [@@deriving show, eq, json, jsonschema] [@@compact_variants]
+    type typ = Left | Right | Full | Inner | Straight [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
     let cross t1 t2 = t1 @ t2
 
@@ -545,17 +547,17 @@ struct
 
 end
 
-type table_name = { db : string option; tn : string } [@@deriving eq, ord, show]
+type table_name = { db : string option; tn : string } [@@deriving eq, ord, show, json, jsonschema]
 let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn | None -> tn
 let make_table_name ?db tn = { db; tn }
-type schema = Schema.t [@@deriving show]
+type schema = Schema.t [@@deriving show, eq, json, jsonschema]
 type table = table_name * schema [@@deriving show]
 type table_alias = {
   alias : table_name located;
   target : table_name option;
 } [@@deriving show]
 
-type join_source = { table : table_name; alias : table_name option } [@@deriving show]
+type join_source = { table : table_name; alias : table_name option } [@@deriving show, eq, json, jsonschema]
 let join_source_name { table; alias } = Option.default table alias
 
 let print_table out (name,schema) =
@@ -566,20 +568,20 @@ let print_table out (name,schema) =
   IO.write_line out ""
 
 (** optional name and start/end position in string *)
-type param_id = string option located [@@deriving show, eq]
-type shared_query_ref_id = string located [@@deriving show]
+type param_id = string option located [@@deriving show, eq, json, jsonschema]
+type shared_query_ref_id = string located [@@deriving show, eq, json, jsonschema]
 
 type int_size = Tiny | Small | Medium | Big
-  [@@deriving show {with_path=false}, eq]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type lob_size = Tiny | Medium | Long
-  [@@deriving show {with_path=false}, eq]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type signedness = Signed | Unsigned
-  [@@deriving show {with_path=false}, eq]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type float_precision = Single | Double
-  [@@deriving show {with_path=false}, eq]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 module Source_type = struct
   type text_flavor =
@@ -587,21 +589,21 @@ module Source_type = struct
     | Char of int option
     | Varchar of int option
     | Varchar2 of int option
-    [@@deriving show, eq]
+    [@@deriving show, eq, json, jsonschema]
 
   type blob_flavor =
     | PlainBlob of lob_size option
     | Varbinary of int option
-    [@@deriving show, eq]
+    [@@deriving show, eq, json, jsonschema]
 
   type kind = Infer of Type.kind
     | Int of { size : int_size option; sign : signedness; display_width : int option }
     | Float of float_precision
     | Blob of blob_flavor
     | Text of text_flavor
-    [@@deriving show, eq]
+    [@@deriving show, eq, json, jsonschema]
 
-  type t = { t : kind; nullability : Type.nullability; } [@@deriving eq, show{with_path=false}, make]
+  type t = { t : kind; nullability : Type.nullability; } [@@deriving eq, show{with_path=false}, make, json, jsonschema]
 
   let nullability nullability t = { t = Infer t; nullability }
   let strict = nullability Type.Strict
@@ -620,11 +622,12 @@ module Source_type = struct
 
 end
 
-type 't param = { id : param_id; typ : 't; } [@@deriving show, make]
-type option_actions_kind = BoolChoices | SetDefault [@@deriving show]
+type 't param = { id : param_id; typ : 't; } [@@deriving show, make, eq, json, jsonschema]
+type option_actions_kind = BoolChoices | SetDefault [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 type params = Type.t param list [@@deriving show]
-type in_or_not_in = [`In | `NotIn] [@@deriving show]
-type 'expr choice = { ctor : param_id; ctor_pos : Pos.t; body : 'expr option } [@@deriving show]
+type in_or_not_in = [`In | `NotIn] [@@deriving show, eq, json, jsonschema] [@@compact_variants]
+type 'expr choice = { ctor : param_id; ctor_pos : Pos.t; body : 'expr option } [@@deriving show, eq, json, jsonschema]
+type 'expr choices = 'expr choice list [@@deriving show, eq, json, jsonschema]
 
 type ctor =
 | Simple of var list choice
@@ -640,12 +643,12 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (Pos.t * Pos.t) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
-and tuple_list_kind = 
-  | Insertion of schema 
-  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located 
+and tuple_list_kind =
+  | Insertion of schema
+  | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located
   | ValueRows of { types: Type.t list; values_start_pos: int; }
-[@@deriving show]
-and vars = var list [@@deriving show]
+and vars = var list
+[@@deriving show, eq, json, jsonschema]
 
 let ctor_vars = function
   | Simple { body; _ } -> Stdlib.Option.value ~default:[] body
@@ -679,13 +682,13 @@ let var_pos = function
   | SharedVarsGroup (_, id) -> fst id.pos
   | DynamicSelectJoin { pos = (j1, _); _ } -> j1
 
-type alter_pos = [ `After of string | `Default | `First ] [@@deriving show {with_path=false}]
+type alter_pos = [ `After of string | `Default | `First ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
-type direction = [ `Fixed | `Param of param_id ] [@@deriving show]
+type direction = [ `Fixed | `Param of param_id ] [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
-type cte_supported_compound_op = [ `Union | `Union_all ] [@@deriving show]
+type cte_supported_compound_op = [ `Union | `Union_all ] [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
-type compound_op = [ cte_supported_compound_op | `Except | `Intersect ] [@@deriving show]
+type compound_op = [ cte_supported_compound_op | `Except | `Intersect ] [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
 type int_or_param = [`Const of int | `Limit of Source_type.t param]
 type limit_t = [ `Limit | `Offset ]
@@ -693,14 +696,21 @@ type col_name = {
   cname : string; (** column name *)
   tname : table_name option;
   cpos : Pos.t;
-} [@@deriving show]
-type logical_op = And | Or | Xor [@@deriving eq, show]
-type comparison_op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show]
-type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show]
-type source_alias = { table_name : table_name located; column_aliases : schema option } [@@deriving show]
-type select_row_locking_kind = For_update | For_share [@@deriving show]
+} [@@deriving show, eq, json, jsonschema]
+type logical_op = And | Or | Xor [@@deriving eq, show, json, jsonschema] [@@compact_variants]
+type comparison_op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq | Not_distinct_op | Is_null | Is_not_null [@@deriving eq, show, json, jsonschema] [@@compact_variants]
+type quantifier = [ `Any | `All ] [@@deriving eq, show, json, jsonschema] [@@compact_variants]
+type select_expr_kind = [ `AsValue | `Exists ] [@@deriving eq, show, json, jsonschema] [@@compact_variants]
+type null_handling_fn_kind = Coalesce of Type.tyvar * Type.tyvar | Null_if | If_null [@@deriving show, eq, json, jsonschema] [@@compact_variants]
+type source_alias = { table_name : table_name located; column_aliases : schema option } [@@deriving show, eq, json, jsonschema]
+
+open struct
+  let t = Source_type.t_jsonschema
+end
+
+type select_row_locking_kind = For_update | For_share [@@compact_variants]
 and limit = Source_type.t param list * bool
-and nested = source * (source * Schema.Join.typ located * join_condition) located list [@@deriving show]
+and nested = source * (source * Schema.Join.typ located * join_condition) located list
 and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
 and source = (source_kind * source_alias option) (* alias, position *)
 and join_condition = expr Schema.Join.condition
@@ -712,9 +722,9 @@ and select = {
   group : expr list;
   having : expr option;
 }
-and cte_item = { cte_name: string located; cols: schema option; stmt: cte_stmt; } [@@deriving show]
-and cte_stmt = CteInline of select_complete | CteSharedQuery of shared_query_ref_id [@@deriving show]
-and cte = { cte_items: cte_item list; is_recursive: bool; } [@@deriving show]
+and cte_item = { cte_name: string located; cols: schema option; stmt: cte_stmt; }
+and cte_stmt = CteInline of select_complete | CteSharedQuery of shared_query_ref_id
+and cte = { cte_items: cte_item list; is_recursive: bool; }
 and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
@@ -722,28 +732,28 @@ and select_complete = {
   select_row_locking: select_row_locking_kind located option;
 }
 and select_full = { select_complete: select_complete; cte: cte option; }
-and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Source_type.t list; values_start_pos: int; } 
+and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Source_type.t list; values_start_pos: int; }
 and row_values = {
   row_constructor_list: row_constructor_list;
   row_order: order;
   row_limit: limit option;
 }
 and order = (expr * direction option) list
-and agg_with_order_kind = 
+and agg_with_order_kind =
     | Group_concat
-    | Json_arrayagg
-and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min, sum *) 
-    | Count (* count it's count function which never returns null  *) 
+    | Json_arrayagg [@@compact_variants]
+and agg_fun = Self (* self means that it returns the same type what aggregated columns have. ie: max, min, sum *)
+    | Count (* count it's count function which never returns null  *)
     | Avg (* avg it's avg function that returns float *)
     | With_order of {
         with_order_kind: agg_with_order_kind;
-        order: order; 
-      }
+        order: order;
+      } [@@compact_variants]
 and 't func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
   | Null_handling of null_handling_fn_kind
   | Comparison of comparison_op
-  | Quantified_comparison of { op: comparison_op; quantifier: [ `Any | `All ] } 
+  | Quantified_comparison of { op: comparison_op; quantifier: quantifier }
   | Logical of logical_op
   | Negation
   | Arith of 't  (* 'a -> 'a -> t *)
@@ -754,28 +764,26 @@ and 't func =
   | Ret of 't (* _ -> t *) (* TODO eliminate *)
   | F of Type.tyvar * Type.tyvar list
   | Col_assign of { ret_t: Type.tyvar; col_t: Type.tyvar; arg_t: Type.tyvar; }
-  | Multi of { 
-    ret: Type.tyvar; 
-    fixed_args: Type.tyvar list; 
-    repeating_pattern: Type.tyvar list 
-  }
+  | Multi of {
+    ret: Type.tyvar;
+    fixed_args: Type.tyvar list;
+    repeating_pattern: Type.tyvar list
+  } [@@compact_variants]
   (* repeating_pattern is needed for functions with fixed initial args + optional repeating pattern
      Example: JSON_ARRAY_APPEND(json_doc, path, val[, path, val] ...)
      - return_type: what function returns
-     - fixed_args: required initial arguments [json_doc, path, val] 
+     - fixed_args: required initial arguments [json_doc, path, val]
      - repeating_pattern: list of types that repeat [path_type, val_type]
      Valid calls: f(a,b,c) or f(a,b,c,d,e) or f(a,b,c,d,e,f,g) etc. *)
-  [@@deriving show]
-and 'expr choices = 'expr choice list
-and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; over: over option; fn_pos: Pos.t } [@@deriving show]
-and over = { frame_has_a_row: bool } [@@deriving show]
+and 't fun_ = { fn_name: string; kind: 't func; parameters: expr list; over: over option; fn_pos: Pos.t }
+and over = { frame_has_a_row: bool }
 and case_branch = { when_: expr; then_: expr }
-and case = {  
+and case = {
   case: expr option;
   branches: case_branch list;
   else_: expr option;
-} [@@deriving show]
-and in_tuple_list = { exprs: expr list; param_id: param_id; kind_in_tuple_list: in_or_not_in; } [@@deriving show]
+}
+and in_tuple_list = { exprs: expr list; param_id: param_id; kind_in_tuple_list: in_or_not_in; }
 and expr =
   | Value of Type.t collated (** literal value *)
   | Param of Source_type.t param * Meta.t
@@ -783,7 +791,7 @@ and expr =
   | Choices of param_id * expr choices
   | InChoice of param_id * in_or_not_in * expr
   | Fun of Source_type.t fun_
-  | SelectExpr of select_full * [ `AsValue | `Exists ]
+  | SelectExpr of select_full * select_expr_kind
   | Column of col_name collated
   | InTupleList of in_tuple_list located
    (* pos - full syntax pos from {, to }?, pos is only sql, that inside {}?
@@ -792,11 +800,12 @@ and expr =
   | OptionActions of { choice: expr; pos: (Pos.t * Pos.t); kind: option_actions_kind }
   | Case of case located
   | Of_values of string (** VALUES(col_name) *)
-and column = column_kind located [@@deriving show {with_path=false}]
+and column = column_kind located
 and column_kind =
   | All
   | AllOf of table_name
   | Expr of expr located * string located option
+[@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type columns = column list [@@deriving show]
 
@@ -856,9 +865,9 @@ let signature kind arity =
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
   | Arith t -> Arith (Source_type.to_infer_type t)
-  | Agg (Self | Count | Avg | With_order _) 
+  | Agg (Self | Count | Avg | With_order _)
   | Null_handling _ | Comparison _ | Quantified_comparison _
-  | Logical _ | Negation | F _ 
+  | Logical _ | Negation | F _
   | Membership | Range | Like | Like_escape
   | Col_assign _ | Multi _ as fn -> fn
 
@@ -910,22 +919,22 @@ let make_partition_by = List.iter (function
   | Value _ -> fail "ORDER BY or PARTITION BY uses legacy position indication which is not supported, use expression."
   | _ -> ())
 
-type assignment_expr = 
-  | RegularExpr of expr 
+type assignment_expr =
+  | RegularExpr of expr
   | AssignDefault
   | WithDefaultParam of expr * (Pos.t * Pos.t)
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
-type assignments = (col_name * assignment_expr) list [@@deriving show]
+type assignments = (col_name * assignment_expr) list [@@deriving show, eq, json, jsonschema]
 
-type on_conflict = Do_update of assignments | Do_nothing [@@deriving show]
+type on_conflict = Do_update of assignments | Do_nothing [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
-type conflict_clause = 
+type conflict_clause =
   | On_duplicate of { assignments: assignments; }
   | On_conflict of { action: on_conflict; attrs: col_name list; }
-  [@@deriving show]
+  [@@deriving show, eq, json, jsonschema]
 
-type insert_action_kind = Insert_into | Replace_into of Pos.t [@@deriving show]
+type insert_action_kind = Insert_into | Replace_into of Pos.t [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
 type insert_action =
 {
@@ -936,38 +945,38 @@ type insert_action =
            | `Param of (string list option * param_id)
            | `Select of (string list option * select_full) ];
   on_conflict_clause : conflict_clause located option;
-} [@@deriving show {with_path=false}]
+} [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type foreign_key = {
   fk_cols : string list;
   fk_ref_table : table_name;
   fk_ref_cols : string list;
-} [@@deriving show {with_path=false}]
+} [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list
-  | `Foreign of foreign_key ] [@@deriving show {with_path=false}]
+  | `Foreign of foreign_key ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
-type index_kind  = 
+type index_kind  =
   | Regular_idx
   | Fulltext
   | Spatial
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 module Alter_action_attr = struct
 
   type default = { expr : expr located; sql : string option }
-    [@@deriving show {with_path=false}]
+    [@@deriving show {with_path=false}, eq, json, jsonschema]
 
   type constraint_ = Syntax_constraint of Constraint.t | Default of default
-    [@@deriving show {with_path=false}]
+    [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-  type t = {  
+  type t = {
     name : string located;
     kind : Source_type.kind collated located option;
     extra : constraint_ located list;
-    meta: (string * string) list; 
+    meta: (string * string) list;
   }
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
 
   let constraint_to_syntax_constraint = function
     | Syntax_constraint c -> c
@@ -980,7 +989,7 @@ module Alter_action_attr = struct
       | Syntax_constraint _ -> None
     ) col.extra
 
-  let to_attr (x: t): attr = make_attribute x.name.value 
+  let to_attr (x: t): attr = make_attribute x.name.value
     (Option.map (fun k -> Source_type.kind_to_type_kind k.value.collated) x.kind)
     (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
@@ -989,7 +998,7 @@ module Alter_action_attr = struct
      we deliberately make the fields dummy to reconstruct
    *)
   let from_attr (attr: attr): t =
-    let extra = attr.extra |> Constraints.elements |> List.map (fun c -> 
+    let extra = attr.extra |> Constraints.elements |> List.map (fun c ->
       let c = match c with
       | Constraint.WithDefault -> Default {
           expr = make_located ~pos:(0,0) ~value:(Value (make_collated ~collated:(Type.depends Any) ()));
@@ -1000,7 +1009,7 @@ module Alter_action_attr = struct
       make_located ~pos:(0,0) ~value:c
     ) in
     let kind = Some (make_located ~pos:dummy_pos ~value:(make_collated ~collated:(Source_type.Infer attr.domain.Type.t) ())) in
-    let meta = Meta.StringMap.bindings attr.meta in
+    let meta = String_map.bindings attr.meta in
     { name = make_located ~pos:dummy_pos ~value:attr.name; kind; extra; meta }
 end
 
@@ -1009,7 +1018,7 @@ type index_op_kind =
   | Unique_idx
   | Fulltext_idx
   | Spatial_idx
-  [@@deriving show {with_path=false}, eq]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type table_inline_index = {
   idx_kind : index_kind;
@@ -1017,10 +1026,10 @@ type table_inline_index = {
   idx_cols : string list;
   idx_unique : bool;
 }
-[@@deriving show {with_path=false}]
+[@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type add_index = { add_idx_name : string option; add_idx_kind : index_op_kind; add_idx_cols : string list }
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type create_index_def = {
   ci_name : string;
@@ -1028,27 +1037,27 @@ type create_index_def = {
   ci_cols : string collated list;
   ci_kind : index_op_kind;
 }
-[@@deriving show {with_path=false}]
+[@@deriving show {with_path=false}, eq, json, jsonschema]
 
-type create_target_schema = { 
-  schema: Alter_action_attr.t list; 
-  constraints: table_constraints list; 
-  indexes: table_inline_index located list; 
+type create_target_schema = {
+  schema: Alter_action_attr.t list;
+  constraints: table_constraints list;
+  indexes: table_inline_index located list;
 }
-[@@deriving show]
+[@@deriving show, eq, json, jsonschema]
 
-type create_target = 
+type create_target =
   | Schema of create_target_schema
   | Select of select_full located
-[@@deriving show {with_path=false}]
+[@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type charset_name = Named of string | Binary | Ascii | Unicode
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type ttl_option =
   [ `TtlSet of string * int * string
   | `TtlEnable of string
-  | `TtlJobInterval of string ] [@@deriving show {with_path=false}]
+  | `TtlJobInterval of string ] [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 module Alter_column_pg = struct
   type t =
@@ -1057,7 +1066,7 @@ module Alter_column_pg = struct
     | Drop_not_null
     | Set_default
     | Drop_default
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 end
 
 type alter_action = [
@@ -1078,37 +1087,37 @@ type alter_action = [
     | `RemoveTtl of Pos.t
     | `Cache of Pos.t
     | `NoCache of Pos.t
-    | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}]
+    | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type alter_algorithm =
   | Algorithm_default [@as "default"]
   | Algorithm_instant [@as "instant"]
   | Algorithm_inplace [@as "inplace"]
   | Algorithm_copy [@as "copy"]
-  [@@deriving show {with_path=false}, enumerate, to_string, of_string]
+  [@@deriving show {with_path=false}, eq, enumerate, to_string, of_string, json, jsonschema] [@@compact_variants]
 
 type alter_lock =
   | Lock_default [@as "default"]
   | Lock_none [@as "none"]
   | Lock_shared [@as "shared"]
   | Lock_exclusive [@as "exclusive"]
-  [@@deriving show {with_path=false}, enumerate, to_string, of_string]
+  [@@deriving show {with_path=false}, eq, enumerate, to_string, of_string, json, jsonschema] [@@compact_variants]
 
 type alter_option =
   | Alter_algorithm of alter_algorithm
   | Alter_lock of alter_lock
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type alter = {
   alter_table : table_name;
   alter_actions : alter_action list;
   alter_options : alter_option located list;
 }
-[@@deriving show]
+[@@deriving show, eq, json, jsonschema]
 
 type create_type_target =
   | TypeEnum of string list
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type stmt =
   | Create of table_name located * create_target
@@ -1128,7 +1137,7 @@ type stmt =
   | DropType of string * bool
   | CreateExtension of string
   | DropExtension of string list
-  [@@deriving show {with_path=false}]
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 (*
 open Schema
@@ -1146,7 +1155,7 @@ type 'attr dynamic_field = {
   field_attr : 'attr;
   join_deps : int list;
 }
-[@@deriving show]
+[@@deriving show, eq, json, jsonschema]
 
 type schema_column_with_sources =
   | AttrWithSources of table_name Schema.Source.Attr.t
@@ -1156,7 +1165,7 @@ type schema_column_with_sources =
 type schema_column =
   | Attr of attr
   | Dynamic of param_id * attr dynamic_field list
-  [@@deriving show]
+  [@@deriving show, eq, json, jsonschema]
 
 let schema_of_columns : schema_column list -> schema =
   List.concat_map (function
@@ -1257,9 +1266,9 @@ let exclude narg name = add_ (Some narg) None name
 let add_multi typ name = add_ None (Some typ) name
 let add narg typ name = add_ (Some narg) (Some typ) name
 
-let sponge = 
-  let open Type in 
-  let any = depends Any in 
+let sponge =
+  let open Type in
+  let any = depends Any in
   Multi { ret = Typ any; fixed_args = []; repeating_pattern = [Typ any] }
 
 let lookup name narg =
@@ -1277,7 +1286,7 @@ let lookup name narg =
     eprintfn "W: unknown function %S of %d arguments, treating as untyped" name narg;
     sponge
 
-let lookup_agg name narg = match lookup name narg with 
+let lookup_agg name narg = match lookup name narg with
   | Agg _ as a -> a
   | _ -> fail "Function %s is not an aggregate function" name
 
@@ -1286,13 +1295,13 @@ let names () =
   |> List.sort_uniq String.compare
 
 let monomorphic ret args name = add (List.length args) (monomorphic ret args) name
-let multi_polymorphic name = 
+let multi_polymorphic name =
   add_multi (Multi { ret = Var 0; fixed_args = []; repeating_pattern = [Var 0] }) name
 
-let multi ~ret args name = 
+let multi ~ret args name =
   add_multi (Multi { ret; fixed_args = []; repeating_pattern = [args] }) name
 
-let add_fixed_then_pairs ~ret ~fixed_args ~repeating_pattern name = 
+let add_fixed_then_pairs ~ret ~fixed_args ~repeating_pattern name =
   add_multi (Multi { ret; fixed_args; repeating_pattern }) name
 
 end
@@ -1359,60 +1368,60 @@ let () =
   "strict_word_similarity" |> monomorphic float [text; text];
   (*
      Any is used instead of Var because MySQL JSON functions have unique semantics:
-   
+
    1. ACCEPT ANY DATA TYPE: MySQL JSON functions accept values of any type
       and automatically serialize them to JSON according to built-in rules
-   
+
    2. PRESERVE TYPES IN JSON: each type is serialized differently:
       - Numbers → JSON numbers (123 → 123)
-      - Strings → JSON strings ("text" → "text")  
+      - Strings → JSON strings ("text" → "text")
       - Booleans → JSON booleans (true → true)
       - NULL → JSON null
       - JSON-like strings remain STRINGS: '{"a":1}' → "{\"a\":1}" (not parsed!)
-   
+
    3. ONLY RESULTS OF JSON FUNCTIONS become JSON objects:
       JSON_SET(data, '$.obj', JSON_OBJECT('key', 'value'))  -- JSON object
       JSON_SET(data, '$.str', '{"key": "value"}')           -- string!
-   
+
    4. CRITICAL: different values in a single call can have DIFFERENT types
-      
+
       Example of valid MySQL query:
       JSON_SET(
-        data, 
+        data,
         '$.user.name',    'Alice',              -- Text
         '$.user.age',     25,                   -- Int
         '$.user.active',  true,                 -- Bool
         '$.user.score',   99.5,                 -- Float
         '$.user.meta',    JSON_OBJECT('x', 1)   -- Json
       )
-   
+
    WHY NOT Var 0:
    If we used ~repeating_pattern:[Typ json_path; Var 0], then:
    - First value 'Alice' (Text) → Var 0 becomes Text
    - Second value 25 (Int) → requires Text, but gets Int → TYPE ERROR
    - Valid MySQL query would be rejected!
-   
+
    WHY NOT fresh Var for each cycle:
    Consider this example:
    JSON_ARRAY_APPEND(
-     data, 
+     data,
      '$[0].items',     123,           -- Int
-     '$[1].props',     "hello",       -- Text  
+     '$[1].props',     "hello",       -- Text
      '$[2].flags',     true,          -- Bool
      '$[3].meta',      null,          -- Null
      '$[4].nested',    JSON_OBJECT('x', 'y')  -- Json
    )
-   
+
    With fresh Var this would be:
    json -> json_path -> 'a -> json_path -> 'b -> json_path -> 'c -> json_path -> 'd -> json_path -> 'e -> json
-   
+
   This is essentially an existential type: json -> (json_path -> ∃a. a)* -> json
-   
+
    But this complicates implementation for the same effect as Any:
    - Fresh Var can be any type = Any
    - In our type system: | Any, t | t, Any -> `Order (t, t)
    - Any already correctly handles unification with any types
-   
+
    Applied to: JSON_SET, JSON_ARRAY_APPEND, JSON_OBJECT, JSON_ARRAY, etc.
   *)
   "json_array_append" |> add_fixed_then_pairs
@@ -1427,7 +1436,7 @@ let () =
   "json_remove" |> add_fixed_then_pairs
     ~ret:(Typ (depends Json))
     ~fixed_args:[Typ (depends Json); Typ (depends Json_path)]
-    ~repeating_pattern:[Typ (depends Json_path)];   
+    ~repeating_pattern:[Typ (depends Json_path)];
   "json_set" |> add_fixed_then_pairs
     ~ret:(Typ (depends Json))
     ~fixed_args:[(Typ (depends Json)); Typ (depends Json_path); Typ (depends Any)]
@@ -1437,7 +1446,7 @@ let () =
   "json_object" |> add_fixed_then_pairs
     ~ret:(Typ json)
     ~fixed_args:[Typ text; Typ (depends Any)]
-    ~repeating_pattern:[Typ text; Typ (depends Any)]; 
+    ~repeating_pattern:[Typ text; Typ (depends Any)];
   "json_contains" |> add 2 (F (Typ (nullable Bool), [Typ json; Typ json]));
   "json_contains" |> add 3 (F (Typ (nullable Bool), [Typ json; Typ json; Typ json_path]));
   "json_unquote" |> monomorphic (depends Text) [depends (Json)];
