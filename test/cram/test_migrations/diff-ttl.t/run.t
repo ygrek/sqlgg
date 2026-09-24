@@ -38,6 +38,22 @@ Changing the interval: the down restores the previous expression:
   ALTER TABLE `foo` TTL = `created_at` + INTERVAL 90 DAY TTL_ENABLE = 'ON';
   ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON';
 
+Changing TTL_JOB_INTERVAL from its implicit 1h default is reversible:
+
+  $ sqlgg -no-header -dialect tidb -diff -now 20260101000000 -gen sql -base initial.sql -base initial.ttl.sql -target initial.sql -target initial.ttl.sql -target target.ttl-job-24h.sql
+  -- [sqlgg] generated
+  -- [sqlgg] id=20260101000000_alter_foo_set_ttl
+  ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '24h';
+  ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h';
+
+Returning from an explicit interval to the implicit default also emits 1h:
+
+  $ sqlgg -no-header -dialect tidb -diff -now 20260101000000 -gen sql -base initial.sql -base initial.ttl.sql -base target.ttl-job-24h.sql -target initial.sql -target initial.ttl.sql
+  -- [sqlgg] generated
+  -- [sqlgg] id=20260101000000_alter_foo_set_ttl
+  ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '1h';
+  ALTER TABLE `foo` TTL = `created_at` + INTERVAL 6 MONTH TTL_ENABLE = 'ON' TTL_JOB_INTERVAL = '24h';
+
 TTL survives schema materialization (and parses back, closing the loop):
 
   $ sqlgg -no-header -dialect tidb -gen sql -base initial.sql -base initial.ttl.sql

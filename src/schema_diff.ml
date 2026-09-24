@@ -191,9 +191,12 @@ let diff_charset =
         [`Default_or_convert_to (charset, Option.map Gen_migrations.loc collation)])
       [])
 
+let default_tidb_ttl_job_interval = "1h"
+
 let ttl_options_of (t : Tables.table_ttl) =
   [ `TtlSet (t.ttl_col, t.ttl_n, t.ttl_unit);
     `TtlEnable (if t.ttl_enabled then "ON" else "OFF") ]
+  @ Option.map_default (fun v -> [`TtlJobInterval v]) [] t.ttl_job_interval
 
 let diff_ttl =
   diff_property (fun t -> t.Tables.tbl_ttl)
@@ -201,6 +204,16 @@ let diff_ttl =
       [`RemoveTtl (0, 0)])
 
 let diff_table ~from_ ~to_ =
+  let to_ =
+    match from_.Tables.tbl_ttl, to_.Tables.tbl_ttl with
+    | Some { ttl_job_interval = Some _; _ },
+      Some ({ ttl_job_interval = None; _ } as ttl) ->
+      let ttl =
+        { ttl with ttl_job_interval = Some default_tidb_ttl_job_interval }
+      in
+      { to_ with tbl_ttl = Some ttl }
+    | _ -> to_
+  in
   diff_columns ~from_ ~to_ @ diff_pk ~from_ ~to_
   @ diff_indexes ~from_ ~to_ @ diff_charset ~from_ ~to_ @ diff_ttl ~from_ ~to_
 
@@ -313,8 +326,9 @@ let canonical ts =
   in
   let ttl_sig =
     Option.map_default
-      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled } : Tables.table_ttl) ->
-        sprintf "%s+%d %s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off"))
+      (fun ({ ttl_col; ttl_n; ttl_unit; ttl_enabled; ttl_job_interval } : Tables.table_ttl) ->
+        sprintf "%s+%d %s/%s/%s" ttl_col ttl_n ttl_unit (if ttl_enabled then "on" else "off")
+          (Option.default default_tidb_ttl_job_interval ttl_job_interval))
       ""
   in
   let table_sig (t : Tables.stored_table) =
