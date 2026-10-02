@@ -6,7 +6,6 @@ open Sqlgg
 open Prelude
 
 open Stmt
-open Gen
 
 let schema_to_attrs schema =
   List.filter_map (function
@@ -53,7 +52,7 @@ let _ =
 let comment (x,_) fmt = Printf.ksprintf (fun s -> x := Comment s :: !x) fmt
 let empty_line _ = ()
 
-let value ?(inparam=false) v =
+let value ?(inparam=false) (v : Gen.value) =
   let attrs =
     List.concat
       [
@@ -92,16 +91,16 @@ type t = xml list ref * xml list ref
 
 let start () = ref [], ref []
 
-let get_sql_string stmt =
+let get_sql_string q =
   let rec map i = function
-  | Static s -> s
-  | SubstIn (param, _) -> "@@" ^ show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
-  | SubstTuple (id, _) -> "@@@" ^ make_param_name i id
-  | DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
-  | Dynamic _ -> "{TODO dynamic choice}"
-  | Cond _ -> "{TODO dynamic join}"
+  | `Text s -> s
+  | `SubstIn (param, _) -> "@@" ^ Gen.show_param_name param i (* TODO join text and prepared params earlier for single indexing *)
+  | `SubstTuple (id, _) -> "@@@" ^ Gen.make_param_name i id
+  | `DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
+  | `Choice _ | `Optional _ | `DynamicSelect _ -> "{TODO dynamic choice}"
+  | `Cond _ -> "{TODO dynamic join}"
   in
-  String.concat "" @@ List.mapi map @@ get_sql stmt
+  String.concat "" @@ List.mapi map @@ Gen.get_sql q
 
 let rec params_only l =
   List.concat @@
@@ -111,16 +110,15 @@ let rec params_only l =
       | v -> params_only (Sql.sub_vars v)) (* TODO prefix names *)
     l
 
-let generate_code (x,_) index stmt =
-  let name = choose_name stmt.props stmt.kind index in
+let generate_code (x,_) ({ name; stmt; _ } as q : Query.named) =
   let input =
     Node ("in",[],
           (tuplelist_values_only stmt.vars)
           @ (params_to_values @@ params_only stmt.vars)
-          @ (inparams_to_values @@ inparams_only stmt.vars))
+          @ (inparams_to_values @@ Gen.inparams_only stmt.vars))
   in
   let output = Node ("out",[],schema_to_values (schema_to_attrs stmt.schema)) in
-  let sql = get_sql_string stmt in
+  let sql = get_sql_string q in
   let attrs =
     match stmt.kind with
     | Select `Nat      -> ["kind", "select"; "cardinality", "n"]
@@ -177,13 +175,13 @@ let finish_output (x,pre) =
 
 let generate out _ stmts =
   start_output out;
-  List.iteri (generate_code out) stmts;
+  List.iter (generate_code out) stmts;
   List.iter (generate_table out) (Tables.all ());
   finish_output out
 
 let generate_migrations _name migrations =
   let nodes = List.mapi (fun index (m : Gen_migrations.migration) ->
-    let name = Gen.choose_name m.props m.kind index in
+    let name = Query.name m.props m.kind index in
     Node ("migration", ["name", name; "apply", String.concat ";\n" m.apply; "revert", String.concat ";\n" m.revert], [])
   ) migrations in
   let root = Node ("migrations", [], nodes) in

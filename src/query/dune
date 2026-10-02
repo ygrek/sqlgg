@@ -1,0 +1,6 @@
+(library
+ (name sqlgg_ir)
+ (public_name sqlgg.ir)
+ (libraries extlib yojson sqlgg jsonkit)
+ (preprocess
+  (pps ppx_deriving.std ppx_deriving_variant_string jsonkit.ppx)))

@@ -1,0 +1,4 @@
+(test
+ (name test_json)
+ (modules test_json)
+ (libraries oUnit yojson jsonkit extlib sqlgg test_helpers))

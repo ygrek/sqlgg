@@ -1,14 +1,15 @@
 (** Statement *)
 
 open ExtLib
+open Jsonkit.Primitives
 
-type insert_kind = Values | Assign [@@deriving show {with_path=false}]
+type insert_kind = Values | Assign [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 (** inferred inserted values to complete sql statement *)
-type inferred = (insert_kind * Sql.schema) option [@@deriving show]
+type inferred = (insert_kind * Sql.schema) option [@@deriving show, eq, json, jsonschema]
 
 (** possible number of rows in query result *)
-type cardinality = [`Zero_one | `One | `Nat] [@@deriving show]
+type cardinality = [`Zero_one | `One | `Nat] [@@deriving show, eq, json, jsonschema] [@@compact_variants]
 
 let cardinality_to_string = show_cardinality
 
@@ -24,7 +25,7 @@ type kind = | Select of cardinality
             | CreateType of string
             | DropType of string
             | Other
-            [@@deriving show {with_path=false}]
+            [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
 

@@ -1,15 +1,18 @@
 (executable
   (public_name sqlgg)
   (package sqlgg)
-  (modules :standard)
   (name cli)
   (promote (until-clean))
   (libraries
+    dune-build-info
     extlib
     oUnit
     sqlgg
+    sqlgg_ir
     unix
+    yojson
   )
+  (flags (:standard -open Sqlgg_ir))
   (preprocess (pps ppx_deriving.std))
 )
 

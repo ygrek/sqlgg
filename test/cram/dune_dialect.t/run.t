@@ -24,7 +24,7 @@ filenames would not resolve:
    (name queries)
    (libraries sqlgg.traits))
 
-  $ dune build --root .
+  $ dune build --root . 2>&1 | sed '/^ld: warning/d'
 
 Each module contains exactly the functions of its own file, Shared is empty:
 

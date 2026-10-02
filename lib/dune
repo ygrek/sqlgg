@@ -14,6 +14,6 @@
 (library
  (name sqlgg)
  (public_name sqlgg.lib)
- (libraries extlib yojson sqlgg_json_path)
+ (libraries extlib yojson sqlgg_json_path jsonkit)
  (preprocess
-  (pps ppx_deriving.std ppx_deriving_hash ppx_enumerate ppx_deriving_variant_string)))
+  (pps ppx_deriving.std ppx_deriving_hash ppx_enumerate ppx_deriving_variant_string jsonkit.ppx)))

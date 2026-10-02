@@ -68,12 +68,12 @@ let test_meta_laws = List.map qcheck [
     (QCheck.pair arb_meta arb_meta)
     (fun (a, b) ->
       let m = Meta.merge_right a b in
-      Meta.StringMap.for_all (fun k v -> Option.map_default (String.equal v) false (Meta.find_opt m k)) b);
+      Prelude.String_map.for_all (fun k v -> Option.map_default (String.equal v) false (Meta.find_opt m k)) b);
   QCheck.Test.make ~count:2000 ~name:"merge_right keeps the left keys the right side does not mention"
     (QCheck.pair arb_meta arb_meta)
     (fun (a, b) ->
       let m = Meta.merge_right a b in
-      Meta.StringMap.for_all (fun k v ->
+      Prelude.String_map.for_all (fun k v ->
         Option.is_some (Meta.find_opt b k)
         || Option.map_default (String.equal v) false (Meta.find_opt m k)) a);
   QCheck.Test.make ~count:2000 ~name:"an undeclared side does not erase"
@@ -539,6 +539,135 @@ module Narrowing_model = struct
 
 end
 
+module Template_model = struct
+  open Sqlgg_ir
+
+  type cond =
+    | Param_last of string
+    | Param_first of string
+    | In_list of string
+    | In_tuple
+    | Both of cond * cond
+    | Optional of { padded : bool; body : cond }
+    | Choice of cond option list
+
+  let product prefixes suffixes =
+    List.concat_map (fun prefix -> List.map (fun suffix -> prefix ^ suffix) suffixes) prefixes
+
+  let rec render path = function
+    | Param_last column ->
+      let text = sprintf "%s = @p%s" column path in
+      text, [ text ]
+    | Param_first column ->
+      let text = sprintf "@p%s = %s" path column in
+      text, [ text ]
+    | In_list column ->
+      let text = sprintf "%s IN @p%s" column path in
+      text, [ text ]
+    | In_tuple ->
+      let text = sprintf "(a, b) IN @p%s" path in
+      text, [ text ]
+    | Both (left, right) ->
+      let left, lefts = render (path ^ "l") left in
+      let right, rights = render (path ^ "r") right in
+      left ^ " AND " ^ right, product lefts (List.map (( ^ ) " AND ") rights)
+    | Optional { padded; body } ->
+      let pad = if padded then " " else "" in
+      let body, bodies = render (path ^ "o") body in
+      sprintf "{%s%s%s}?" pad body pad,
+      "<None> TRUE " :: List.map (fun body -> sprintf "<Some> ( %s%s%s ) " pad body pad) bodies
+    | Choice arms ->
+      let arms =
+        List.mapi
+          (fun index body ->
+            let name = String.make 1 (Char.chr (Char.code 'A' + index)) in
+            match body with
+            | None -> name, [ sprintf "<%s>" name ]
+            | Some body ->
+              let body, bodies = render (path ^ string_of_int index) body in
+              sprintf "%s {%s}" name body, List.map (sprintf "<%s> (%s) " name) bodies)
+          arms
+      in
+      sprintf "@c%s { %s }" path (String.concat " | " (List.map fst arms)), List.concat_map snd arms
+
+  let show cond = fst (render "" cond)
+
+  let any_cond =
+    let open QCheck2.Gen in
+    let column = map (fun a -> if a then "a" else "b") bool in
+    let leaf =
+      oneof [
+        map (fun column -> Param_last column) column;
+        map (fun column -> Param_first column) column;
+        map (fun column -> In_list column) column;
+        return In_tuple;
+      ]
+    in
+    sized_size (int_range 0 3)
+      (fix (fun self depth ->
+        if depth <= 0 then leaf
+        else oneof [
+          leaf;
+          map2 (fun left right -> Both (left, right)) (self (depth - 1)) (self (depth - 1));
+          map2 (fun padded body -> Optional { padded; body }) bool
+            (oneof [
+              leaf;
+              map2 (fun rest own -> Both (rest, own)) (self (depth - 1)) leaf;
+              map2 (fun own rest -> Both (own, rest)) leaf (self (depth - 1));
+            ]);
+          map2 (fun body arms -> Choice (Some body :: arms)) (self (depth - 1))
+            (list_size (int_range 0 2) (option (self (depth - 1))));
+        ]))
+
+  let name (id : Sql.param_id) = Option.default "" id.value
+
+  let rec alternatives fragments =
+    List.fold_left (fun prefixes fragment -> product prefixes (fragment_alternatives fragment)) [ "" ] fragments
+
+  and fragment_alternatives = function
+    | `Text text -> [ text ]
+    | `Choice (_, arms) ->
+      List.concat_map
+        (fun (arm : _ Sql_template.arm) ->
+          List.map (( ^ ) (sprintf "<%s>" (name arm.ctor))) (alternatives arm.sql))
+        arms
+    | `Optional (_, ({ some; none; _ } : _ Sql_template.optional)) ->
+      ("<None>" ^ none) :: List.map (( ^ ) "<Some>") (alternatives some)
+    | `DynamicIn (_, _, fragments) -> alternatives fragments
+    | `SubstIn ((param : _ Sql.param), _) -> [ "@" ^ name param.id ]
+    | `SubstTuple (id, _) -> [ "@" ^ name id ]
+    | `DynamicSelect _ | `Cond _ -> QCheck2.Test.fail_report "the model does not generate dynamic selects"
+
+  let context = Test_helpers.context "CREATE TABLE t (id INT NOT NULL, a INT NOT NULL, b INT NOT NULL)"
+
+  let select = "SELECT id FROM t WHERE "
+
+  let resolves_to_source cond =
+    let source, expected = render "" cond in
+    match Test_helpers.analyze ~context (select ^ source) with
+    | Error (first, rest) ->
+      QCheck2.Test.fail_reportf "analysis failed: %s" (Test_helpers.messages (first :: rest))
+    | Ok (_, { typed = { sql; vars; _ }; _ }) ->
+      let expected = Stdlib.List.sort String.compare (List.map (( ^ ) select) expected) in
+      let got =
+        Stdlib.List.sort String.compare
+          (alternatives
+             (Sql_template.fill
+                ~spell:(fun _ (bind : Sql_template.bind) -> bind.original)
+                (Sql_template.of_sql sql vars)))
+      in
+      if Stdlib.List.equal String.equal expected got then true
+      else
+        QCheck2.Test.fail_reportf "@[<v>expected:@,%s@,got:@,%s@]"
+          (String.concat "\n" expected) (String.concat "\n" got)
+end
+
+let test_template_laws = [
+  qcheck (QCheck2.Test.make ~count:1000 ~print:Template_model.show
+    ~name:"every way to resolve a template yields the source with each fragment replaced by the chosen arm"
+    Template_model.any_cond Template_model.resolves_to_source);
+]
+
 let test_narrowing_laws = [
   qcheck (QCheck2.Test.make ~count:2000 ~print:Narrowing_model.show
     ~name:"soundness: where Kleene reads the condition TRUE, every column narrowing marked is non-NULL"
@@ -553,6 +682,7 @@ let () =
     "test_type_laws" >::: test_type_laws;
     "test_meta_laws" >::: test_meta_laws;
     "test_narrowing_laws" >::: test_narrowing_laws;
+    "test_template_laws" >::: test_template_laws;
   ] in
   let results = run_test_tt suite in
   exit @@ if List.exists (function RFailure _ | RError _ -> true | _ -> false) results then 1 else 0

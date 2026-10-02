@@ -18,20 +18,34 @@ module CSharp = Gen.Make(Gen_csharp)
      sqlgg [-gen none] ddl.sql -gen cxx dml.sql
 *)
 
-type lang = Cxx | Caml | Caml_io | Xml | Java | CSharp
+type lang = Cxx | Caml | Caml_io | Xml | Json | Java | CSharp
 
 type output = Lang of lang | Sql_ddl
 
 exception Cli_fatal of string
 exception Cli_errors_found
+exception Cli_bad_input of string
 
 let fatal fmt = ksprintf (fun s -> raise (Cli_fatal s)) fmt
+let bad_input fmt = ksprintf (fun s -> raise (Cli_bad_input s)) fmt
+
+let process_json module_name queries =
+  let sqlgg_version =
+    match !Sqlgg_config.gen_header with
+    | Some (`Full | `Without_timestamp) -> Some Sqlgg_config.version
+    | Some `Static | None -> None
+  in
+  Query.document_to_json
+    { sqlgg_version; module_name; dialect = !Dialect.selected; params = !Gen.params_mode;
+      queries; tables = Tables.snapshot () }
+  |> Yojson.Basic.to_channel ~suf:"\n" stdout
 
 let process_stmts = function
   | Cxx -> Cxx.process
   | Caml -> Caml.process
   | Caml_io -> Caml_io.process
   | Xml -> Xml_gen.process
+  | Json -> process_json
   | Java -> Java.process
   | CSharp -> CSharp.process
 
@@ -40,6 +54,7 @@ let process_migrations =
   function
   | Caml | Caml_io -> Gen_caml.generate_migrations
   | Xml -> Gen_xml.generate_migrations
+  | Json -> unsupported "JSON"
   | Cxx -> unsupported "C++"
   | Java -> unsupported "Java"
   | CSharp -> unsupported "C#"
@@ -47,12 +62,11 @@ let process_migrations =
 let set_params_mode s =
   Gen.params_mode :=
   match String.lowercase_ascii s with
-  | "named" -> Some Gen.Named
-  | "unnamed" -> Some Gen.Unnamed
-  | "oracle" -> Some Gen.Oracle
-  | "postgresql" -> Some Gen.PostgreSQL
   | "none" -> None
-  | _ -> failwith (sprintf "Unknown params mode: %s" s)
+  | s ->
+    match Sql_template.placeholder_of_string s with
+    | Some _ as mode -> mode
+    | None -> failwith (sprintf "Unknown params mode: %s" s)
 
 let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
 let category_of_string s =
@@ -81,6 +95,7 @@ let parse_output s =
   | "caml" | "ocaml" | "ml" -> Some (Lang Caml)
   | "caml_io" -> Some (Lang Caml_io)
   | "xml" -> Some (Lang Xml)
+  | "json" -> Some (Lang Json)
   | "java" -> Some (Lang Java)
   | "csharp" | "c#" | "cs" -> Some (Lang CSharp)
   | "sql" | "ddl" -> Some Sql_ddl
@@ -88,7 +103,7 @@ let parse_output s =
   | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let stamp_source filename stmts =
-  List.map (fun (stmt : Gen.stmt) -> { stmt with props = Props.File filename :: stmt.props }) stmts
+  List.map (fun (stmt : Query.t) -> { stmt with props = Props.File filename :: stmt.props }) stmts
 
 (* parse always runs for its schema-registration side effects, even in -gen none *)
 let read_statements = function
@@ -100,13 +115,13 @@ let read_statements = function
 let filter_stmts ~output stmts =
   match output with
   | None -> []
-  | Some _ -> List.filter (fun stmt -> filter_category (Stmt.category_of_stmt_kind stmt.Gen.kind)) stmts
+  | Some _ -> List.filter (fun (stmt : Query.t) -> filter_category (Stmt.category_of_stmt_kind stmt.kind)) stmts
 
 let generate ~output ~name results =
   match output with
   | None | Some Sql_ddl -> ()
   | Some (Lang l) ->
-    process_stmts l name (List.concat results)
+    process_stmts l name (List.mapi Query.named (List.concat results))
 
 let migration_to_sql ~id ~name (m : Gen_migrations.migration) =
   let single label = function
@@ -154,7 +169,7 @@ type entry = { id : string; code_name : string; mig : Gen_migrations.migration }
 let assign_ids ~naming base migs =
   let entries =
     List.mapi (fun i (mig : Gen_migrations.migration) ->
-      let descr = Name.fit naming (Gen.choose_name mig.props mig.kind i) in
+      let descr = Name.fit naming (Query.name mig.props mig.kind i) in
       let id = Migration_id.to_string (Migration_id.make ~name:descr base) in
       { id; code_name = id; mig }) migs
   in
@@ -180,11 +195,15 @@ let read_file_opt path =
   else
     None
 
+let program = Filename.basename Sys.executable_name
+
 let usage_msg =
-  let s1 = sprintf "SQL Guided (code) Generator ver. %s\n" Sqlgg_config.version in
-  let s2 = sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]\n" (Filename.basename Sys.executable_name) in
-  let s3 = "Options are:" in
-  s1 ^ s2 ^ s3
+  String.concat "\n" [
+    sprintf "SQL Guided (code) Generator ver. %s" Sqlgg_config.version;
+    sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]" program;
+    sprintf "       %s ir <options> [<file.sql> ...]" program;
+    "Options are:";
+  ]
 
 type group = { title : string; opts : (Arg.key * Arg.spec * Arg.doc) list }
 
@@ -194,6 +213,11 @@ let render groups =
   String.concat "\n\n" (List.map group groups)
 
 let show_version () = print_endline Sqlgg_config.version
+
+let print_json_schema schema () =
+  Yojson.Basic.pretty_to_channel stdout (Jsonkit.Jsonschema.make schema);
+  print_newline ();
+  exit 0
 
 let set_dialect s =
   let d =
@@ -207,8 +231,8 @@ let set_dialect s =
   | None ->
     Gen.params_mode :=
       match d with
-      | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Gen.Unnamed  (* ? syntax *)
-      | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
+      | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Sql_template.Unnamed  (* ? syntax *)
+      | Dialect.PostgreSQL -> Some Sql_template.PostgreSQL  (* $1, $2, etc. *)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
@@ -284,7 +308,7 @@ let diff_schema ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
 type gen_args = {
   output : output option;
   name : string;
-  inputs : Gen.stmt list list;
+  inputs : Query.t list list;
 }
 
 type delta_args = {
@@ -334,7 +358,7 @@ let parse_args () =
   let ddl_as_migration = ref false in
   let alter_lock = ref None in
   let alter_algorithm = ref None in
-  let files : (string, [ `Open of Gen.stmt list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
+  let files : (string, [ `Open of Query.t list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
   let canonical = function
     | "-" -> "-"
     | f -> (try Unix.realpath f with Unix.Unix_error _ -> fatal "cannot open file : %s" f)
@@ -357,7 +381,7 @@ let parse_args () =
   [
     { title = "Code generation"; opts =
     [
-      "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|csharp|sql|none Set output language (default: none)";
+      "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|json|csharp|sql|none Set output language (default: none)";
       "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
       "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
       "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
@@ -365,6 +389,8 @@ let parse_args () =
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
         " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
       "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
+      "-json-schema", Arg.Unit (print_json_schema Query.document_jsonschema),
+        " Print the JSON Schema of -gen json output and exit";
     ] };
 
     { title = "Schema and migrations"; opts =
@@ -581,12 +607,57 @@ let run_generate ({ output; name; inputs } : gen_args) =
     fail_on_errors "Errors encountered, no code generated";
     generate ~output ~name results
 
+let run_ir () =
+  let read_path = function
+    | "-" -> In_channel.input_all stdin
+    | path ->
+      try In_channel.with_open_bin path In_channel.input_all
+      with Sys_error message -> bad_input "cannot read %s: %s" path message
+  in
+  let schema = ref None in
+  let plain_sql = ref false in
+  let files = ref [] in
+  let add_file f = files := f :: !files in
+  Arg.current := 1;
+  Arg.parse
+    (Arg.align [
+      "-schema",      Arg.String (fun f -> schema := Some f),              "<file> Also check statements against this schema";
+      "-plain-sql",   Arg.Set plain_sql,                                   " Reject sqlgg extensions";
+      "-json-schema", Arg.Unit (print_json_schema Ir.document_jsonschema), " Print the JSON Schema of the document and exit";
+      "-",            Arg.Unit (fun () -> add_file "-"),                   " Read SQL from stdin";
+    ])
+    add_file
+    (String.concat "\n" [
+      sprintf "Usage: %s ir <options> [<file.sql> ...]" program;
+      "Print the AST of every statement as JSON. Exit 1 if any is invalid, 2 if input is unreadable.";
+      "Options are:";
+    ]);
+  let files = match List.rev !files with [] -> [ "-" ] | files -> files in
+  let statements_of_sql =
+    match !schema with
+    | None -> Ir.parse ~allow_extensions:(not !plain_sql)
+    | Some path ->
+      match Analysis.context_of_schema_sql (read_path path) with
+      | Ok context -> Ir.analyze ~allow_extensions:(not !plain_sql) ~context
+      | Error (_, first, rest) ->
+        bad_input "schema %s: %s" path
+          (String.concat "; " (List.map (fun d -> d.Analysis.message) (first :: rest)))
+  in
+  let statements = List.concat_map (fun path -> statements_of_sql (read_path path)) files in
+  Yojson.Basic.to_channel ~suf:"\n" stdout (Ir.document_to_json { statements });
+  if List.exists (fun (statement : Ir.statement) ->
+    match statement.resolution with Invalid _ -> true | Parsed _ | Analyzed _ -> false) statements
+  then raise Cli_errors_found
+
 let main () =
-  match parse_args () with
-  | Generate c -> run_generate c
-  | Diff c -> run_diff c
-  | Migrate c -> run_migrate c
-  | Materialize_schema c -> run_materialize_schema c
+  match Array.to_list Sys.argv with
+  | _ :: "ir" :: _ -> run_ir ()
+  | _ ->
+    match parse_args () with
+    | Generate c -> run_generate c
+    | Diff c -> run_diff c
+    | Migrate c -> run_migrate c
+    | Materialize_schema c -> run_materialize_schema c
 
 let () =
   exit @@
@@ -594,3 +665,4 @@ let () =
   | () -> 0
   | exception Cli_errors_found -> 1
   | exception Cli_fatal msg -> Error.logs msg; 1
+  | exception Cli_bad_input msg -> Error.logs msg; 2

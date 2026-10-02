@@ -11,8 +11,7 @@ let statement ~dynamic_select stmt =
     match dynamic_select with Props.Off -> false | Only | Both -> true
   in
   Syntax.Config.dynamic_select := dynamic_select_enabled;
-  Parser_state.Stmt_metadata.reset ();
-  List.iter (fun (offset, meta) -> Parser_state.Stmt_metadata.add offset meta) stmt.Statements.metadata;
+  Parser_state.Stmt_metadata.load stmt.Statements.metadata;
   match Props.include_ stmt.props with
   | Execute when Props.has Noparse stmt.props -> Verbatim
   | Execute ->

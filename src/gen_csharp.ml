@@ -99,9 +99,9 @@ type t = unit
 
 let start () = ()
 
-let func_execute index stmt =
+let func_execute index (stmt : Query.t) =
     let params = params_only stmt.vars in
-    let values = G.Values.inject @@ values_of_params params in
+    let values = G.Values.inject @@ all_params_to_values params in
     let schema = schema_to_attrs stmt.schema in
     let schema_binder_name = output_schema_binder index schema in
     let is_select = Option.is_some schema_binder_name in
@@ -186,9 +186,8 @@ let func_execute index stmt =
     end
 *)
 
-let generate_code index stmt =
-   let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql_string_only stmt) in
+let generate_code index ({ name; stmt; _ } as q : Query.named) =
+   let sql = quote (get_sql_string_only q) in
    start_class name;
     output "IDbCommand _cmd;";
     output "IDbConnection _conn;";

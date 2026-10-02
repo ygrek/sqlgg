@@ -98,16 +98,15 @@ type t = unit
 
 let start () = ()
 
-let generate_code index stmt =
+let generate_code index ({ name; stmt; _ } as q : Query.named) =
    let params = params_only stmt.vars in
-   let values = G.Values.inject @@ values_of_params params in
-   let name = choose_name stmt.props stmt.kind index in
-   let sql = quote (get_sql_string_only stmt) in
+   let values = G.Values.inject @@ all_params_to_values params in
+   let sql = quote (get_sql_string_only q) in
    output "PreparedStatement pstmt_%s;" name;
    empty_line ();
    let schema = List.concat_map (function
     | Sql.Attr attr -> [attr]
-    | Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
+    | Dynamic _ -> failwith "Dynamic columns not supported in java") stmt.schema in
    let schema_binder_name = output_schema_binder name index schema in
    let result = match schema_binder_name with None -> [] | Some name -> ["result",name] in
    let all_params = values @ result in
@@ -119,9 +118,6 @@ let generate_code index stmt =
       | None -> output "return pstmt_%s.executeUpdate();" name
       | Some _ ->
          output "ResultSet res = pstmt_%s.executeQuery();" name;
-         let schema = List.concat_map (function
-          | Sql.Attr attr -> [attr]
-          | Dynamic _ -> failwith "Dynamic columns not supported in cxx") stmt.Gen.schema in
          let args = List.mapi (fun index attr -> get_column attr index) schema in
          let args = String.concat "," args in
          output "int count = 0;";

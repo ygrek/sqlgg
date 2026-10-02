@@ -1,0 +1,3 @@
+(library
+ (name test_helpers)
+ (libraries oUnit sqlgg))
