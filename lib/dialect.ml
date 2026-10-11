@@ -22,8 +22,6 @@ type configuration =
   | Row_store of row_store
   | ClickHouse_configuration of Sql_semantics.ClickHouse.t
 
-let selected = ref (Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Reject))
-
 let default_configuration = function
   | MySQL -> Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Reject)
   | PostgreSQL -> Row_store PostgreSQL_configuration
@@ -31,20 +29,24 @@ let default_configuration = function
   | TiDB -> Row_store (TiDB_configuration Sql_semantics.Nonnullable_write.Reject)
   | ClickHouse -> ClickHouse_configuration (Sql_semantics.ClickHouse.default ())
 
-let set_selected d = selected := default_configuration d
-
-let set_configuration configuration = selected := configuration
-
 let row_store_dialect = function
   | MySQL_configuration _ -> MySQL
   | PostgreSQL_configuration -> PostgreSQL
   | SQLite_configuration _ -> SQLite
   | TiDB_configuration _ -> TiDB
 
-let current () =
-  match !selected with
+let dialect_of_configuration = function
   | Row_store row_store -> row_store_dialect row_store
   | ClickHouse_configuration _ -> ClickHouse
+
+let with_non_strict_writes = function
+  | Row_store (MySQL_configuration _) ->
+    Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | Row_store (SQLite_configuration _) ->
+    Row_store (SQLite_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | Row_store (TiDB_configuration _) ->
+    Row_store (TiDB_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | (Row_store PostgreSQL_configuration | ClickHouse_configuration _) as configuration -> configuration
 
 type configuration_error =
   | Unknown_dialect of string
@@ -138,11 +140,6 @@ let make_only_state supported = {
 let supported feature l pos = {
   feature; pos;
   state = { supported = l; unsupported = []; unknown = List.filter (fun x -> not (List.mem x l)) all }
-}
-
-let unsupported feature l pos = {
-  feature; pos;
-  state = { supported = []; unsupported = l; unknown = List.filter (fun x -> not (List.mem x l)) all }
 }
 
 let only feature l pos = {
@@ -270,69 +267,89 @@ let get_default_expr ~kind ~expr pos =
     only DefaultExpr dialects pos
 
 
-module Semantic = struct 
-  let enable_non_strict_writes () =
-    selected :=
-      match !selected with
-      | Row_store (MySQL_configuration _) ->
-        Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
-      | Row_store (SQLite_configuration _) ->
-        Row_store (SQLite_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
-      | Row_store (TiDB_configuration _) ->
-        Row_store (TiDB_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
-      | (Row_store PostgreSQL_configuration | ClickHouse_configuration _) as configuration -> configuration
+module Semantic = struct
+  type t = {
+    outer_join_padding : Sql_semantics.Outer_join_padding.t;
+    membership_null_semantics : Sql_semantics.Membership_null_semantics.t;
+    nonnullable_write : Sql_semantics.Nonnullable_write.t;
+    implicit_column_nullability : Sql_semantics.Implicit_column_nullability.t;
+    nullable_scope : Sql_semantics.Nullable_scope.t;
+    key_uniqueness : Sql_semantics.Key_uniqueness.t;
+    omitted_insert_column : Sql_semantics.Omitted_insert_column.t;
+    empty_aggregate : Sql_semantics.Empty_aggregate.t;
+    where_alias_visibility : Sql_semantics.Where_alias_visibility.t;
+    arrow_operator : Sql_semantics.Arrow_operator.t;
+    column_type_syntax : Sql_semantics.Column_type_syntax.t;
+    function_catalog : Sql_semantics.Function_catalog.t;
+  }
 
-  let outer_join_padding () =
-    match !selected with
-    | Row_store _ -> Sql_semantics.Outer_join_padding.Null
-    | ClickHouse_configuration configuration -> configuration.outer_join_padding
+  let of_configuration = function
+    | Row_store row_store -> {
+        outer_join_padding = Sql_semantics.Outer_join_padding.Null;
+        membership_null_semantics = Sql_semantics.Membership_null_semantics.Three_valued;
+        nonnullable_write =
+          begin match row_store with
+          | MySQL_configuration nonnullable_write
+          | SQLite_configuration nonnullable_write
+          | TiDB_configuration nonnullable_write -> nonnullable_write
+          | PostgreSQL_configuration -> Sql_semantics.Nonnullable_write.Reject
+          end;
+        implicit_column_nullability = Sql_semantics.Implicit_column_nullability.Nullable;
+        nullable_scope = Sql_semantics.Nullable_scope.Any_type;
+        key_uniqueness = Sql_semantics.Key_uniqueness.Enforced;
+        omitted_insert_column = Sql_semantics.Omitted_insert_column.Requires_declared_default;
+        empty_aggregate = Sql_semantics.Empty_aggregate.Null;
+        where_alias_visibility =
+          begin match row_store with
+          | SQLite_configuration _ -> Sql_semantics.Where_alias_visibility.Select_aliases_visible
+          | MySQL_configuration _ | PostgreSQL_configuration | TiDB_configuration _ ->
+            Sql_semantics.Where_alias_visibility.Source_columns_only
+          end;
+        arrow_operator = Sql_semantics.Arrow_operator.Json_extract;
+        column_type_syntax = Sql_semantics.Column_type_syntax.Standard_types;
+        function_catalog = Sql_semantics.Function_catalog.Standard_functions;
+      }
+    | ClickHouse_configuration configuration -> {
+        outer_join_padding = configuration.outer_join_padding;
+        membership_null_semantics =
+          Sql_semantics.Membership_null_semantics.Two_valued configuration.null_membership;
+        nonnullable_write = configuration.nonnullable_write;
+        implicit_column_nullability = configuration.implicit_column_nullability;
+        nullable_scope = Sql_semantics.Nullable_scope.Scalar_types;
+        key_uniqueness = Sql_semantics.Key_uniqueness.Not_enforced;
+        omitted_insert_column = Sql_semantics.Omitted_insert_column.Filled_with_type_default;
+        empty_aggregate = configuration.empty_aggregate;
+        where_alias_visibility = Sql_semantics.Where_alias_visibility.Select_aliases_visible;
+        arrow_operator = Sql_semantics.Arrow_operator.Lambda;
+        column_type_syntax = Sql_semantics.Column_type_syntax.ClickHouse_types;
+        function_catalog = Sql_semantics.Function_catalog.ClickHouse_functions;
+      }
 
-  let membership_null_semantics () =
-    match !selected with
-    | Row_store _ -> Sql_semantics.Membership_null_semantics.Three_valued
-    | ClickHouse_configuration configuration ->
-      Sql_semantics.Membership_null_semantics.Two_valued configuration.null_membership
-
-  let nonnullable_write () =
-    match !selected with
-    | Row_store (MySQL_configuration nonnullable_write
-                | SQLite_configuration nonnullable_write
-                | TiDB_configuration nonnullable_write) -> nonnullable_write
-    | Row_store PostgreSQL_configuration -> Sql_semantics.Nonnullable_write.Reject
-    | ClickHouse_configuration configuration -> configuration.nonnullable_write
-
-  let implicit_column_nullability () =
-    match !selected with
-    | Row_store _ -> Sql_semantics.Implicit_column_nullability.Nullable
-    | ClickHouse_configuration configuration -> configuration.implicit_column_nullability
-
-  let is_where_aliases_dialect () = List.mem (current ()) [SQLite; ClickHouse]
-
-  let function_signature name arity =
-    match current (), String.lowercase_ascii name, arity with
-    | ClickHouse, "arraymap", arity when arity >= 2 ->
+  let function_signature { function_catalog; _ } name arity =
+    match function_catalog, String.lowercase_ascii name, arity with
+    | Sql_semantics.Function_catalog.ClickHouse_functions, "arraymap", arity when arity >= 2 ->
       let element_templates = List.init (arity - 1) (fun index -> Sql.Type.Var index) in
       let result_template = Sql.Type.Var (arity - 1) in
       Some Sql.(F
         (Type.Array_of result_template,
          Type.Fun_of (element_templates, result_template)
          :: List.map (fun template -> Type.Array_of template) element_templates))
-    | ClickHouse, "arrayfilter", 2 ->
+    | Sql_semantics.Function_catalog.ClickHouse_functions, "arrayfilter", 2 ->
       Some Sql.(F
         (Type.Array_of (Type.Var 0),
          [Type.Fun_of ([Type.Var 0], Type.Typ (Type.strict Type.Bool));
           Type.Array_of (Type.Var 0)]))
-    | ClickHouse, "arraysum", 1 ->
+    | Sql_semantics.Function_catalog.ClickHouse_functions, "arraysum", 1 ->
       Some Sql.(F (Type.Var 0, [Type.Array_of (Type.Var 0)]))
-    | ClickHouse, "has", 2 ->
+    | Sql_semantics.Function_catalog.ClickHouse_functions, "has", 2 ->
       Some Sql.(F
         (Type.Typ (Type.strict Type.Bool),
          [Type.Array_of (Type.Var 0); Type.Var 0]))
-    | ClickHouse, "length", 1 ->
+    | Sql_semantics.Function_catalog.ClickHouse_functions, "length", 1 ->
       Some Sql.(F
         (Type.Typ (Type.strict Type.Int), [Type.Array_of (Type.Var 0)]))
-    | MySQL, _, _ | PostgreSQL, _, _ | SQLite, _, _ | TiDB, _, _
-    | ClickHouse, _, _ -> None
+    | (Sql_semantics.Function_catalog.Standard_functions
+      | Sql_semantics.Function_catalog.ClickHouse_functions), _, _ -> None
 end
 
 open Sql

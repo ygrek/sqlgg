@@ -72,19 +72,81 @@ defaults unless join_use_nulls=1.
   $ sqlgg -no-header -dialect clickhouse,join_use_nulls=1 -gen xml join.sql | grep -o '<value name="y"[^>]*>' | head -1
   <value name="y" type="Int" nullable="true"/>
 
+Even with join_use_nulls=1 only scalars can become Nullable: padded arrays keep
+their type and are filled with empty arrays. A padded column does not keep NOT NULL.
+
+  $ cat > join_arrays.sql <<'EOF'
+  > CREATE TABLE a (id Int64);
+  > CREATE TABLE b (id Int64, y Int64, ys Array(Int64));
+  > CREATE TABLE r AS SELECT b.y AS y, b.ys AS ys FROM a LEFT JOIN b ON a.id = b.id;
+  > EOF
+  $ sqlgg -dialect clickhouse,join_use_nulls=1 -gen none join_arrays.sql -show-table r | grep .
+  r
+        Int? y []
+  Array(Int) ys [NotNull]
+
+Nullable and LowCardinality wrap only scalar types.
+
+  $ for ty in 'Nullable(Array(Int64))' 'Nullable(Nullable(Int64))' 'Nullable(LowCardinality(String))'; do
+  >   printf 'CREATE TABLE z (a %s);\n' "$ty" | sqlgg -dialect clickhouse -gen none - 2>&1 | grep -c 'Tokens'
+  > done
+  1
+  1
+  1
+  $ printf 'CREATE TABLE z (a LowCardinality(Nullable(String)), b Array(Nullable(Int64)));\n' > z.sql
+  $ sqlgg -dialect clickhouse -gen none z.sql -show-table z | grep .
+  z
+       Text? a [Null]
+  Array(Int?) b [NotNull]
+
+A ClickHouse PRIMARY KEY is a sparse index, not a uniqueness constraint, so a
+lookup by key may return several rows.
+
+  $ cat > pk.sql <<'EOF'
+  > CREATE TABLE p (id Int64, x Int64, PRIMARY KEY (id));
+  > -- @by_id
+  > SELECT x FROM p WHERE id = @id;
+  > EOF
+  $ sqlgg -no-header -dialect clickhouse -gen xml pk.sql | grep -o 'name="by_id"[^>]*cardinality="[^"]*"' | grep -o 'cardinality="[^"]*"'
+  cardinality="n"
+
+INSERT may omit any column: ClickHouse fills it with the type's default value.
+
+  $ cat > insert.sql <<'EOF'
+  > CREATE TABLE p (id Int64, x Int64, s String);
+  > -- @ins
+  > INSERT INTO p (id) VALUES (@id);
+  > EOF
+  $ sqlgg -no-header -dialect clickhouse -gen none insert.sql
+
+Aggregates over an empty set return the type's default value unless
+aggregate_functions_null_for_empty=1.
+
+  $ cat > agg.sql <<'EOF'
+  > CREATE TABLE g (x Int64, n Nullable(Int64));
+  > -- @q
+  > SELECT max(x) AS mx, sum(n) AS sn, avg(x) AS av FROM g;
+  > EOF
+  $ sqlgg -no-header -dialect clickhouse -gen xml agg.sql | grep -o '<value name="\(mx\|sn\|av\)"[^>]*>'
+  <value name="mx" type="Int"/>
+  <value name="sn" type="Int" nullable="true"/>
+  <value name="av" type="Float"/>
+  $ sqlgg -no-header -dialect clickhouse,aggregate_functions_null_for_empty=1 -gen xml agg.sql | grep -o '<value name="\(mx\|sn\|av\)"[^>]*>'
+  <value name="mx" type="Int" nullable="true"/>
+  <value name="sn" type="Int" nullable="true"/>
+  <value name="av" type="Float" nullable="true"/>
+
 Columns without NULL/NOT NULL follow data_type_default_nullable.
 
   $ printf 'CREATE TABLE t (a Int64, b Nullable(Int64));\n' > t.sql
-  $ sqlgg -dialect clickhouse -gen none t.sql -show-table t
+  $ sqlgg -dialect clickhouse -gen none t.sql -show-table t | grep .
   t
          Int a [NotNull]
         Int? b [Null]
-  
-  $ sqlgg -dialect clickhouse,data_type_default_nullable=1 -gen none t.sql -show-table t
+  $ sqlgg -dialect clickhouse,data_type_default_nullable=1 -gen none t.sql -show-table t | grep .
   t
         Int? a []
         Int? b [Null]
-  
 
 With transform_null_in=0 a NULL operand of IN yields false, so IN proves a value
 but NOT IN does not; with transform_null_in=1 neither does.
@@ -121,6 +183,15 @@ Writing a nullable value into a non-nullable column needs insert_null_as_default
   $ sqlgg -no-header -dialect clickhouse -gen none write.sql 2>&1 | grep -o 'Cannot assign nullable value'
   Cannot assign nullable value
   $ sqlgg -no-header -dialect clickhouse,insert_null_as_default=1 -gen none write.sql
+
+The legacy -allow-write-notnull-null flag is part of the configuration whichever
+side of -dialect it is given on, and only non-strict row stores honour it.
+
+  $ printf 'CREATE TABLE w (a INT NOT NULL, b INT);\n-- @upd\nUPDATE w SET a = b;\n' > row_write.sql
+  $ sqlgg -allow-write-notnull-null -dialect mysql -gen none row_write.sql
+  $ sqlgg -dialect mysql -allow-write-notnull-null -gen none row_write.sql
+  $ sqlgg -allow-write-notnull-null -dialect postgresql -gen none row_write.sql 2>&1 | grep -o 'Cannot assign nullable value'
+  Cannot assign nullable value
 
 Settings are parsed at the command-line boundary.
 

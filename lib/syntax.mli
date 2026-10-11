@@ -31,7 +31,7 @@ type result = {
   annotations : stmt_annotations;
 }
 
-val scope_of : ?cte:cte -> nested option -> stmt_annotations
+val scope_of : Dialect.Semantic.t -> ?cte:cte -> nested option -> stmt_annotations
 
-val parse : string -> result
+val parse : Dialect.Semantic.t -> string -> result
 val eval_parsed : string -> Parser.parse_result -> result

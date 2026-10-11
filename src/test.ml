@@ -80,7 +80,9 @@ let tt_schema_only sql ?kind schema =
   sql >:: test
 
 let wrong sql =
-  let compile stmt = ignore (Compile.statement ~dynamic_select:Props.Off stmt) in
+  let compile stmt =
+    ignore (Compile.statement ~semantics:(Sqlgg_config.semantics ()) ~dynamic_select:Props.Off stmt)
+  in
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try List.iter compile (Statements.split sql); false with _ -> true))
 
 let attr ?(extra=[]) ?(meta = []) n d =
@@ -420,7 +422,7 @@ let test_left_join = [
   tt "CREATE TABLE users (id INT NOT NULL, user_id INT NOT NULL PRIMARY KEY, name VARCHAR(255), email VARCHAR(255), account_type_id INT NULL, FOREIGN KEY (account_type_id) REFERENCES account_types(type_id))" [][];
   tt "SELECT users.name, users.email, account_types.type_name FROM users LEFT JOIN account_types ON users.account_type_id = account_types.type_id"
   [attr "name" Text ~extra:[]; attr "email" Text ~extra:[]; 
-  {name="type_name"; domain=Type.nullable Text; extra=(Constraints.of_list [Constraint.NotNull]);meta = Meta.empty();}] [];
+  {name="type_name"; domain=Type.nullable Text; extra=Constraints.empty; meta = Meta.empty();}] [];
 ]
 
 let test_coalesce = [
@@ -1191,7 +1193,7 @@ let test_meta_propagation = [
     attr' ~extra:[PrimaryKey;] ~meta:["module", "HelloWorld"] "col_1" Int;
     attr' ~extra:[NotNull;] "col_2" Int;
     attr' ~extra:[PrimaryKey;] ~meta:["module", "FooBar"] ~nullability:Nullable "col_3" Int;
-    attr' ~extra:[NotNull;] ~nullability:Nullable "col_4" Text;
+    attr' ~nullability:Nullable "col_4" Text;
   ] [];
 
   tt {|
@@ -1964,7 +1966,7 @@ let test_meta_equality =
     [attr' ~extra:[NotNull] "amount" Int] [];
 
   tt "SELECT plain.cid FROM branded LEFT JOIN plain ON branded.cid = plain.cid"
-    [attr' ~extra:[NotNull] ~nullability:Nullable ~meta:["module", "Cid"] "cid" Int] [];
+    [attr' ~nullability:Nullable ~meta:["module", "Cid"] "cid" Int] [];
 
   tt "SELECT plain.cid FROM plain LEFT JOIN branded ON branded.cid = plain.cid"
     [attr' ~extra:[NotNull] "cid" Int] [];

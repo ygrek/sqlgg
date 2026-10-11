@@ -245,6 +245,76 @@ let test_template_laws = List.map qcheck [
       | Ok _ -> false);
 ]
 
+let test_join_padding_laws =
+  let column typ =
+    let extra = if Type.is_strict typ then Constraints.singleton Constraint.NotNull else Constraints.empty in
+    { Schema.Source.Attr.attr = make_attribute' ~extra "c" typ; sources = [ Sql.make_table_name "padded" ] }
+  in
+  let join ~outer_join_padding ~nullable_scope kind typ =
+    match Schema.Join.join ~outer_join_padding ~nullable_scope kind Schema.Join.Default [] [ column typ ] with
+    | [ joined ] -> joined.Schema.Source.Attr.attr
+    | [] | _ :: _ :: _ -> failwith "a single-column cross join must keep exactly one column"
+  in
+  let rec clickhouse_representable { Type.t; nullability } =
+    let nullable_here =
+      match nullability, t with
+      | (Type.Strict | Type.Depends), _ -> true
+      | Type.Nullable, (Type.Array _ | Type.Map _ | Type.Tuple _ | Type.Fun _) -> false
+      | Type.Nullable,
+        (Type.Int | Type.UInt64 | Type.Text | Type.Blob | Type.Float | Type.Bool | Type.Datetime
+        | Type.Decimal _ | Type.Union _ | Type.StringLiteral _ | Type.FloatingLiteral _
+        | Type.Json_path | Type.One_or_all | Type.Json | Type.Any) -> true
+    in
+    nullable_here &&
+    match t with
+    | Type.Array element -> clickhouse_representable element
+    | Type.Map (key, value) -> clickhouse_representable key && clickhouse_representable value
+    | Type.Tuple elements -> List.for_all clickhouse_representable elements
+    | Type.Fun (parameters, result) ->
+      List.for_all clickhouse_representable parameters && clickhouse_representable result
+    | Type.Int | Type.UInt64 | Type.Text | Type.Blob | Type.Float | Type.Bool | Type.Datetime
+    | Type.Decimal _ | Type.Union _ | Type.StringLiteral _ | Type.FloatingLiteral _
+    | Type.Json_path | Type.One_or_all | Type.Json | Type.Any -> true
+  in
+  let policies =
+    QCheck.pair
+      (QCheck.make (any_of Sql_semantics.Outer_join_padding.all))
+      (QCheck.make (any_of Sql_semantics.Nullable_scope.all))
+  in
+  let outer_kinds = QCheck.make (any_of Schema.Join.[ Left; Right; Full ]) in
+  List.map qcheck [
+    QCheck.Test.make ~count:2000 ~name:"outer join padding only widens nullability and keeps the constructor"
+      (QCheck.triple policies outer_kinds arb_type)
+      (fun ((outer_join_padding, nullable_scope), kind, typ) ->
+        let padded = (join ~outer_join_padding ~nullable_scope kind typ).domain in
+        Type.equal_kind padded.t typ.t && (not (Type.is_nullable typ) || Type.is_nullable padded));
+    QCheck.Test.make ~count:2000 ~name:"type-default padding and inner joins leave a column unchanged"
+      (QCheck.pair policies arb_type)
+      (fun ((outer_join_padding, nullable_scope), typ) ->
+        let original = (column typ).attr in
+        equal_attr original
+          (join ~outer_join_padding:Sql_semantics.Outer_join_padding.Type_default ~nullable_scope
+             Schema.Join.Left typ)
+        && equal_attr original (join ~outer_join_padding ~nullable_scope Schema.Join.Inner typ));
+    QCheck.Test.make ~count:2000 ~name:"SQL NULL padding over every type makes the padded column nullable"
+      (QCheck.pair (QCheck.make (any_of Schema.Join.[ Left; Full ])) arb_type)
+      (fun (kind, typ) ->
+        Type.is_nullable
+          (join ~outer_join_padding:Sql_semantics.Outer_join_padding.Null
+             ~nullable_scope:Sql_semantics.Nullable_scope.Any_type kind typ).domain);
+    QCheck.Test.make ~count:2000 ~name:"scalar-only nullability keeps ClickHouse-representable types representable"
+      (QCheck.triple policies outer_kinds arb_type)
+      (fun ((outer_join_padding, _), kind, typ) ->
+        QCheck.assume (clickhouse_representable typ);
+        clickhouse_representable
+          (join ~outer_join_padding ~nullable_scope:Sql_semantics.Nullable_scope.Scalar_types kind typ).domain);
+    QCheck.Test.make ~count:2000 ~name:"a padded column never keeps NOT NULL on a nullable type"
+      (QCheck.triple policies outer_kinds arb_type)
+      (fun ((outer_join_padding, nullable_scope), kind, typ) ->
+        let padded = join ~outer_join_padding ~nullable_scope kind typ in
+        not (Type.is_nullable padded.domain && Constraints.mem Constraint.NotNull padded.extra));
+  ]
+
 let test_semantic_setting_parser = [
   "parses and applies join_use_nulls" >:: (fun () ->
     match Sql_semantics.ClickHouse.Setting.parse "join_use_nulls=1" with
@@ -743,6 +813,7 @@ let () =
     "test_type_laws" >::: test_type_laws;
     "test_template_laws" >::: test_template_laws;
     "test_meta_laws" >::: test_meta_laws;
+    "test_join_padding_laws" >::: test_join_padding_laws;
     "test_semantic_setting_parser" >::: test_semantic_setting_parser;
     "test_narrowing_laws" >::: test_narrowing_laws;
   ] in

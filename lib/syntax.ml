@@ -35,6 +35,7 @@ type env = {
   insert_resolved_types: (string, Type.t) Hashtbl.t; (* for INSERT .. VALUES *)
   scope: query_scope;
   attr_refinement: Attr_refinement.t;
+  semantics: Dialect.Semantic.t;
 }
 
 (* Merge global tables with ctes during resolving sources in SELECT .. FROM sources, JOIN *)
@@ -132,15 +133,16 @@ let attrs_only msg =
     | AttrWithSources attr -> attr
     | DynamicWithSources _ -> failwith msg)
 
-let empty_env = { query_has_grouping = false; 
-  tables = []; schema = []; 
-  set_tyvar_strict = false; 
+let empty_env semantics = { query_has_grouping = false;
+  tables = []; schema = [];
+  set_tyvar_strict = false;
   ctes = [];
   is_order_by = false;
   is_update = false;
   insert_resolved_types = Hashtbl.create 16;
   scope = Top_level;
   attr_refinement = Attr_refinement.empty;
+  semantics;
 }
 
 let schema_of ~env name =
@@ -149,19 +151,22 @@ let schema_of ~env name =
 
 let get_or_failwith = function `Error s -> failwith s | `Ok t -> t
 
-let values_or_all table names =
+let values_or_all env table names =
   let schema = Tables.get_schema table in
   match names with
-  | Some names -> 
+  | Some names ->
     let req_missing =
-      List.filter_map
-        (fun { extra; name; _ } ->
-          let open Constraints in
-          if inter (of_list [Autoincrement; WithDefault; NotNull]) extra = of_list [NotNull]
-            && not @@ List.mem name names then Some name
-          else None
-        )
-        schema
+      match env.semantics.omitted_insert_column with
+      | Sql_semantics.Omitted_insert_column.Filled_with_type_default -> []
+      | Sql_semantics.Omitted_insert_column.Requires_declared_default ->
+        List.filter_map
+          (fun { extra; name; _ } ->
+            let open Constraints in
+            if inter (of_list [Autoincrement; WithDefault; NotNull]) extra = of_list [NotNull]
+              && not @@ List.mem name names then Some name
+            else None
+          )
+          schema
     in
     begin match req_missing with 
     | [] -> ()
@@ -418,7 +423,11 @@ let matches_at_most_one_row ~env table expr =
       (fun a -> if belongs a then Some a.Schema.Source.Attr.attr else None)
       env.schema
   in
-  let keys = unique_keys table_attrs in
+  let keys =
+    match env.semantics.key_uniqueness with
+    | Sql_semantics.Key_uniqueness.Enforced -> unique_keys table_attrs
+    | Sql_semantics.Key_uniqueness.Not_enforced -> []
+  in
   let independent_of_table e =
     not (Table_refs.may_refer table (Table_refs.of_expr ~env e))
   in
@@ -1010,7 +1019,12 @@ and assign_types env expr =
            In both cases, if we're in a context that expects a value (like a subquery), the result should be nullable. *)
         let aggregates_a_row =
           env.query_has_grouping || Option.map_default (fun o -> o.frame_has_a_row) false over in
-        let consider_agg_nullability typ = if aggregates_a_row && is_strict typ then typ else make_nullable typ in
+        let consider_agg_nullability typ =
+          match env.semantics.empty_aggregate with
+          | Sql_semantics.Empty_aggregate.Null ->
+            if aggregates_a_row && is_strict typ then typ else make_nullable typ
+          | Sql_semantics.Empty_aggregate.Type_default -> typ
+        in
 
         let first_strict ret args = 
           let has_one_strict = List.exists (fun arg -> equal_nullability arg.nullability Strict) types in
@@ -1037,7 +1051,14 @@ and assign_types env expr =
               (show_func types) fixed_count pattern_length total_args
           end
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
-        | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
+        | Agg Avg, [argument] ->
+          let ret =
+            match env.semantics.empty_aggregate with
+            | Sql_semantics.Empty_aggregate.Null -> nullable Float
+            | Sql_semantics.Empty_aggregate.Type_default ->
+              undepend (depends Float) (common_nullability [argument])
+          in
+          consider_agg_nullability ret, types
         | Agg Self, [_] -> let args, ret = convert_args Sql.agg_same_type in consider_agg_nullability ret, args
         | Agg (With_order { with_order_kind = Group_concat; _ }), ((_ :: _) as params) -> 
           let ret = depends Text in
@@ -1096,7 +1117,7 @@ and assign_types env expr =
         | Col_assign { ret_t; col_t; arg_t }, [a; b] ->
           let args, ret = convert_args (ret_t, [col_t; arg_t]) in
           let t =
-            match Dialect.Semantic.nonnullable_write () with
+            match env.semantics.nonnullable_write with
             | Sql_semantics.Nonnullable_write.Replace_with_default ->
               undepend ret (common_nullability args)
             | Sql_semantics.Nonnullable_write.Reject ->
@@ -1136,7 +1157,7 @@ and meta_of ~env = function
     Stdlib.Option.bind (resolve_column_opt ~env col)
       (fun a -> Meta.declared (Attr_refinement.apply env.attr_refinement a).attr.meta)
   | `Select { select_complete = { select = ({columns = [{ value = Expr ({ value; _ }, _); _ }]; from; _}, _); _ }; cte } ->
-    let ctes = match cte with Some cte -> let (ctes, _, _) = eval_cte cte in ctes | None -> [] in
+    let ctes = match cte with Some cte -> let (ctes, _, _) = eval_cte env cte in ctes | None -> [] in
     let env, _, _, _ = eval_nested { env with ctes = ctes @ env.ctes; scope = Subquery } from in
     Some (carried_meta ~env value)
   | `Select _ -> Some (Meta.empty ())
@@ -1295,7 +1316,8 @@ and do_join (env, params, annotations) { From.src; kind; cond; _ } =
     | On _ | Default -> []
   in
   let schema = Schema.Join.join
-    ~outer_join_padding:(Dialect.Semantic.outer_join_padding ())
+    ~outer_join_padding:env.semantics.outer_join_padding
+    ~nullable_scope:env.semantics.nullable_scope
     kind cond env.schema src.rsrc_schema
   in
   let equated a =
@@ -1313,7 +1335,7 @@ and do_join (env, params, annotations) { From.src; kind; cond; _ } =
   | On e ->
     let env = { env with attr_refinement = Attr_refinement.add env.attr_refinement
       (survives_padding (narrow_columns
-        ~membership_null_semantics:(Dialect.Semantic.membership_null_semantics ())
+        ~membership_null_semantics:env.semantics.membership_null_semantics
         ~resolve:(resolve_column_opt ~env) ~constrains e)) } in
     (* TODO should use final schema (same as tables)? *)
     let (p, cond_annotations) = get_params { env with set_tyvar_strict = true } e in
@@ -1470,7 +1492,7 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
   let env = { env with query_has_grouping = List.length group > 0 } in
   let narrow = Option.map_default
     (narrow_columns
-      ~membership_null_semantics:(Dialect.Semantic.membership_null_semantics ())
+      ~membership_null_semantics:env.semantics.membership_null_semantics
       ~resolve:(resolve_column_opt ~env) ~constrains:(const true))
     Attr_refinement.empty
   in
@@ -1517,11 +1539,11 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
   let (p1, column_annotations) = get_params_of_columns env projection in
   let env, (p3, where_annotations) =
     let where_params env = get_params_opt { env with set_tyvar_strict = true } where in
-    (* Some dialects support aliasing *)
-    if Dialect.Semantic.is_where_aliases_dialect () then
+    match env.semantics.where_alias_visibility with
+    | Sql_semantics.Where_alias_visibility.Select_aliases_visible ->
       let env = { env with schema = make_unique (Schema.Join.cross env.schema final_schema') } in
       env, where_params env
-    else
+    | Sql_semantics.Where_alias_visibility.Source_columns_only ->
       let sourced = { env with schema = List.filter (fun i -> i.Schema.Source.Attr.sources <> []) env.schema } in
       env, where_params sourced
   in
@@ -1675,7 +1697,7 @@ and eval_source env (x, alias) =
 
 and eval_select_full env { select_complete; cte } =
   let (ctes, p1, cte_annotations) =
-    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:eval_cte cte in
+    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:(eval_cte env) cte in
   let env = { env with ctes = ctes @ env.ctes } in
   let (s, p2, kind, annotations) =
     eval_select_complete ~order:select_complete.order env select_complete
@@ -1688,10 +1710,10 @@ and eval_select_complete ?(order = []) ?(compound_env = fun env _ -> env) env st
     eval_compound ~env:(compound_env env s1) (p1, s1, cardinality, stmt) in
   s, p, kind, merge_stmt_annotations annotations other_annotations
 
-and eval_cte { cte_items; is_recursive } = 
+and eval_cte outer { cte_items; is_recursive } =
   let open Schema.Source in
   List.fold_left begin fun (acc_ctes, acc_vars, acc_annotations) cte ->
-    let env = { empty_env with ctes = acc_ctes; scope = Subquery } in
+    let env = { (empty_env outer.semantics) with ctes = acc_ctes; scope = Subquery } in
     let table_name = make_table_name cte.cte_name.value in
     let a1 = Schema.Source.of_schema in
     let s1, p1, _kind, annotations =
@@ -1913,7 +1935,8 @@ let with_constraints attrs constraints : Schema.t =
   ) attrs
 
 
-let rec eval (stmt:Sql.stmt) =
+let rec eval semantics (stmt:Sql.stmt) =
+  let root = empty_env semantics in
   let open Stmt in
   let open Schema.Source in
   let open Attr in
@@ -1933,7 +1956,7 @@ let rec eval (stmt:Sql.stmt) =
       { no_stmt_annotations with
         table_defs = [ located_name, List.map (fun (c : Alter_action_attr.t) -> c.name) schema ] }
   | Create ({ value = name; _ } as located_name, Select { value=select; _ }) ->
-      let (schema, params, _, annotations) = eval_select_full empty_env select in
+      let (schema, params, _, annotations) = eval_select_full root select in
       let schema = attrs_only "CREATE TABLE AS SELECT cannot have dynamic columns" schema in
       Tables.add (name, to_schema schema);
       [], params, Create name,
@@ -2021,10 +2044,10 @@ let rec eval (stmt:Sql.stmt) =
       Tables.index_add ci_table ~index_name:ci_name ~kind:ci_kind ~cols;
       [], [], CreateIndex ci_name, no_stmt_annotations
   | Insert { target=table; action=`Values (names, values); on_conflict_clause; _ } ->
-    let expect = values_or_all table names in
+    let expect = values_or_all root table names in
     let t = Tables.get_schema table in
     let schema = Schema.Source.of_schema ~sources:[table] t in
-    let env = { empty_env with tables = [Tables.get table]; schema; } in
+    let env = { root with tables = [Tables.get table]; schema; } in
     begin match values with
     | None -> 
       [], [], Insert (Some (Values, expect), table), no_stmt_annotations
@@ -2093,9 +2116,9 @@ let rec eval (stmt:Sql.stmt) =
     end
   | Insert { target=table; action=`Param (names, param_id); on_conflict_clause; _ } ->
     let schema = Schema.Source.of_schema ~sources:[table] (Tables.get_schema table) in
-    let env = { empty_env with tables = [Tables.get table]; schema; } in
+    let env = { root with tables = [Tables.get table]; schema; } in
     let conflict_assigns = resolve_on_conflict_clause ~env table.tn on_conflict_clause in
-    let expect = values_or_all table names in
+    let expect = values_or_all root table names in
     List.iter (fun a -> Hashtbl.add env.insert_resolved_types a.attr.name a.attr.domain ) schema;
     let (params2, annotations) =
       params_of_assigns { env with is_update = true } conflict_assigns
@@ -2103,8 +2126,8 @@ let rec eval (stmt:Sql.stmt) =
     let params = [ TupleList (param_id, Insertion expect) ] in
     [], params @ params2, Insert (None, table), annotations
   | Insert { target=table; action=`Select (names, select); on_conflict_clause; _ } ->
-    let expect = values_or_all table names in
-    let env = { empty_env with tables = [Tables.get table]; 
+    let expect = values_or_all root table names in
+    let env = { root with tables = [Tables.get table];
       schema = Schema.Source.of_schema ~sources:[table] (Tables.get_schema table); 
     } in
     let select_complete = annotate_select select.select_complete expect in
@@ -2121,7 +2144,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ params2, Insert (None,table),
     merge_stmt_annotations annotations conflict_annotations
   | Insert { target=table; action=`Set ss; on_conflict_clause; _ } ->
-    let env = { empty_env with tables = [Tables.get table]; 
+    let env = { root with tables = [Tables.get table];
       schema = Schema.Source.of_schema ~sources:[table] (Tables.get_schema table);
     } in
     let (params, annotations, inferred) = match ss with
@@ -2137,7 +2160,7 @@ let rec eval (stmt:Sql.stmt) =
     merge_stmt_annotations annotations conflict_annotations
   | Delete (table, where) ->
     let t = Tables.get table in
-    let (p, annotations) = get_params_opt { empty_env with tables=[t];
+    let (p, annotations) = get_params_opt { root with tables=[t];
       schema = Schema.Source.of_schema ~sources:[fst t] (snd t); 
       set_tyvar_strict = true 
     } where in
@@ -2150,7 +2173,7 @@ let rec eval (stmt:Sql.stmt) =
     in
     let select_complete = { select; order = []; limit = None; select_row_locking = None } in
     let (_attrs, params, _, annotations) =
-      eval_select_full empty_env {select_complete; cte=None }
+      eval_select_full root {select_complete; cte=None }
     in
     [], params, Delete targets, annotations
   | Set (vars, stmt) ->
@@ -2159,18 +2182,18 @@ let rec eval (stmt:Sql.stmt) =
         match e with
         | Column _ -> [] (* this is not column but some db-specific identifier *)
         | _ ->
-          let (params, _) = get_params_of_res_expr empty_env (ensure_res_expr e) in
+          let (params, _) = get_params_of_res_expr root (ensure_res_expr e) in
           params)
     in
     begin match stmt with
     | None -> [], p, Other, no_stmt_annotations
     | Some stmt ->
-      let (schema, p2, kind, annotations) = eval stmt in
+      let (schema, p2, kind, annotations) = eval semantics stmt in
       schema, p @ p2, kind, annotations
     end
   | Update (table,ss,w,o,lim) ->
     let f, s = Tables.get table in
-    let env = { empty_env with is_update = true } in
+    let env = { root with is_update = true } in
     let r = Schema.Source.of_schema ~sources:[f] s in
     let (params, annotations) =
       update_tables ~env [{ rsrc_schema = r; rsrc_params = [];
@@ -2184,7 +2207,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ p3 @ List.map (fun p -> Single (p, Meta.empty())) lim, Update (Some table),
     merge_stmt_annotations annotations order_annotations
   | UpdateMulti (from,ss,w,o,lim) ->
-    let env = { empty_env with is_update = true } in
+    let env = { root with is_update = true } in
     let src = resolve_source { env with scope = Subquery } ((`Nested from), None) in
     let (params, annotations) = update_tables ~env [src] ss w in
     let (p3, order_annotations) =
@@ -2193,7 +2216,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ p3 @ List.map (fun p -> Single (p, Meta.empty())) lim, Update None,
     merge_stmt_annotations annotations order_annotations
   | Select select -> 
-    let (schema, params, kind, annotations) = eval_select_full empty_env select in
+    let (schema, params, kind, annotations) = eval_select_full root select in
     List.map drop_sources schema, params, kind, annotations
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name, no_stmt_annotations
@@ -2397,17 +2420,18 @@ type result = {
   annotations : stmt_annotations;
 }
 
-let scope_of ?cte from =
+let scope_of semantics ?cte from =
+  let root = empty_env semantics in
   let (ctes, _, cte_annotations) =
-    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:eval_cte cte in
+    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:(eval_cte root) cte in
   let (_, _, _, from_annotations) =
-    eval_nested { empty_env with ctes; scope = Subquery } from
+    eval_nested { root with ctes; scope = Subquery } from
   in
   merge_stmt_annotations cte_annotations from_annotations
 
-let eval_parsed sql { Parser.stmt; dialect_features } =
-  let (schema, p1, kind, annotations) = eval stmt in
+let eval_parsed sql { Parser.stmt; dialect_features; semantics } =
+  let (schema, p1, kind, annotations) = eval semantics stmt in
   let (sql, p2) = complete_sql kind sql in
   { sql; schema; vars = unify_params (p1 @ p2); kind; dialect_features; annotations }
 
-let parse sql = eval_parsed sql (Parser.parse_stmt sql)
+let parse semantics sql = eval_parsed sql (Parser.parse_stmt semantics sql)

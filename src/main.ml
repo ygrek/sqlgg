@@ -18,7 +18,7 @@ let dynamic_select_mode props =
 
 let check_dialect sql dialect_features =
   let open Dialect in
-  let dialect = current () in
+  let dialect = dialect_of_configuration !Sqlgg_config.dialect in
   let position_info ({ pos = (first, last); _ }: dialect_support) = String.slice ~first ~last sql in
   let with_position message position =
     if String.starts_with position ~prefix:"\n" then Printf.sprintf "%s at%s" message position
@@ -59,7 +59,7 @@ let compile ~dynamic_select (stmt : Statements.t) =
   let error_tail_length = 32 in
   if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" stmt.text;
   try
-    Some (Compile.statement ~dynamic_select stmt)
+    Some (Compile.statement ~semantics:(Sqlgg_config.semantics ()) ~dynamic_select stmt)
   with
   | Parser_utils.Error (exn, { pos = (_, stop); token; tail }) ->
     let msg = Parser_utils.message_of_exn exn in

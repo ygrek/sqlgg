@@ -198,9 +198,7 @@ let show_version () = print_endline Sqlgg_config.version
 
 let set_dialect specification =
   begin match Dialect.parse_configuration specification with
-  | Ok configuration ->
-    Dialect.set_configuration configuration;
-    Sqlgg_config.apply_requested_nonnullable_write ()
+  | Ok configuration -> Sqlgg_config.configure_dialect configuration
   | Error (Dialect.Unknown_dialect dialect_name) ->
     failwith (sprintf "Unknown dialect: %s" dialect_name)
   | Error (Dialect.Settings_not_supported row_store) ->
@@ -221,7 +219,7 @@ let set_dialect specification =
   | Some _ -> () (* if manually set via -params, keep user's choice *)
   | None ->
     Gen.params_mode :=
-      match Dialect.current () with
+      match Dialect.dialect_of_configuration !Sqlgg_config.dialect with
       | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Gen.Unnamed  (* ? syntax *)
       | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
       | Dialect.ClickHouse -> Some Gen.ClickHouse  (* {name:Type} *)
@@ -453,12 +451,12 @@ let parse_args () =
   in
   Arg.parse args work usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
-  begin match !alter_lock, Dialect.current () with
+  begin match !alter_lock, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
   | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB | Dialect.ClickHouse) ->
     fatal "-alter-lock is only supported for dialect mysql"
   | None, _ | Some _, Dialect.MySQL -> ()
   end;
-  begin match !alter_algorithm, Dialect.current () with
+  begin match !alter_algorithm, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
   | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.ClickHouse) ->
     fatal "-alter-algorithm is only supported for dialects mysql and tidb"
   | None, _ | Some _, (Dialect.MySQL | Dialect.TiDB) -> ()

@@ -5,7 +5,8 @@ type outcome =
   | Verbatim
   | Not_reusable
 
-val statement : dynamic_select:Props.dynamic_select -> Statements.t -> outcome
+val statement :
+  semantics:Dialect.Semantic.t -> dynamic_select:Props.dynamic_select -> Statements.t -> outcome
 
 val reset : unit -> unit
 

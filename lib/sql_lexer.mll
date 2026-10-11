@@ -262,30 +262,29 @@ let is_keyword =
 
 (* FIXME case sensitivity??! *)
 
-let get_ident str =
+let get_ident (semantics : Dialect.Semantic.t) str =
   let str = String.lowercase_ascii str in
-  match Dialect.current (), str with
-  | Dialect.ClickHouse, ("int8" | "int16" | "int32" | "int64") -> CLICKHOUSE_SCALAR T.Int
-  | Dialect.ClickHouse, ("uint8" | "uint16" | "uint32" | "uint64") -> CLICKHOUSE_SCALAR T.UInt64
-  | Dialect.ClickHouse, ("float32" | "float64") -> CLICKHOUSE_SCALAR T.Float
-  | Dialect.ClickHouse, "string" -> CLICKHOUSE_SCALAR T.Text
-  | Dialect.ClickHouse, ("date" | "date32" | "datetime") -> CLICKHOUSE_SCALAR T.Datetime
-  | Dialect.ClickHouse, ("uuid" | "ipv4" | "ipv6") -> CLICKHOUSE_SCALAR T.Blob
-  | Dialect.ClickHouse, "array" -> CLICKHOUSE_ARRAY
-  | Dialect.ClickHouse, "map" -> CLICKHOUSE_MAP
-  | Dialect.ClickHouse, "tuple" -> CLICKHOUSE_TUPLE
-  | Dialect.ClickHouse, "nullable" -> CLICKHOUSE_NULLABLE
-  | Dialect.ClickHouse, "lowcardinality" -> CLICKHOUSE_LOWCARDINALITY
-  | Dialect.ClickHouse, "fixedstring" -> CLICKHOUSE_FIXED_STRING
-  | Dialect.ClickHouse, "datetime64" -> CLICKHOUSE_DATETIME64
-  | Dialect.ClickHouse, "decimal" -> CLICKHOUSE_DECIMAL None
-  | Dialect.ClickHouse, "decimal32" -> CLICKHOUSE_DECIMAL (Some 9)
-  | Dialect.ClickHouse, "decimal64" -> CLICKHOUSE_DECIMAL (Some 18)
-  | Dialect.ClickHouse, "decimal128" -> CLICKHOUSE_DECIMAL (Some 38)
-  | Dialect.ClickHouse, "decimal256" -> CLICKHOUSE_DECIMAL (Some 76)
-  | Dialect.ClickHouse, ("enum8" | "enum16") -> CLICKHOUSE_ENUM
-  | Dialect.MySQL, _ | Dialect.PostgreSQL, _ | Dialect.SQLite, _
-  | Dialect.TiDB, _ | Dialect.ClickHouse, _ ->
+  match semantics.column_type_syntax, str with
+  | ClickHouse_types, ("int8" | "int16" | "int32" | "int64") -> CLICKHOUSE_SCALAR T.Int
+  | ClickHouse_types, ("uint8" | "uint16" | "uint32" | "uint64") -> CLICKHOUSE_SCALAR T.UInt64
+  | ClickHouse_types, ("float32" | "float64") -> CLICKHOUSE_SCALAR T.Float
+  | ClickHouse_types, "string" -> CLICKHOUSE_SCALAR T.Text
+  | ClickHouse_types, ("date" | "date32" | "datetime") -> CLICKHOUSE_SCALAR T.Datetime
+  | ClickHouse_types, ("uuid" | "ipv4" | "ipv6") -> CLICKHOUSE_SCALAR T.Blob
+  | ClickHouse_types, "array" -> CLICKHOUSE_ARRAY
+  | ClickHouse_types, "map" -> CLICKHOUSE_MAP
+  | ClickHouse_types, "tuple" -> CLICKHOUSE_TUPLE
+  | ClickHouse_types, "nullable" -> CLICKHOUSE_NULLABLE
+  | ClickHouse_types, "lowcardinality" -> CLICKHOUSE_LOWCARDINALITY
+  | ClickHouse_types, "fixedstring" -> CLICKHOUSE_FIXED_STRING
+  | ClickHouse_types, "datetime64" -> CLICKHOUSE_DATETIME64
+  | ClickHouse_types, "decimal" -> CLICKHOUSE_DECIMAL None
+  | ClickHouse_types, "decimal32" -> CLICKHOUSE_DECIMAL (Some 9)
+  | ClickHouse_types, "decimal64" -> CLICKHOUSE_DECIMAL (Some 18)
+  | ClickHouse_types, "decimal128" -> CLICKHOUSE_DECIMAL (Some 38)
+  | ClickHouse_types, "decimal256" -> CLICKHOUSE_DECIMAL (Some 76)
+  | ClickHouse_types, ("enum8" | "enum16") -> CLICKHOUSE_ENUM
+  | (Standard_types | ClickHouse_types), _ ->
     match Keywords.find_opt str keywords with
     | Some token -> token
     | None -> IDENT str
@@ -346,8 +345,8 @@ and
 ruleTail = parse
   | _* as tail { tail }
 and
-ruleMain = parse
-  | blank { ruleMain lexbuf }
+ruleMain semantics = parse
+  | blank { ruleMain semantics lexbuf }
 
   | '('                { LPAREN }
   | ')'                { RPAREN }
@@ -356,7 +355,7 @@ ruleMain = parse
   | '{'   { LCURLY (lexeme_start lexbuf) }
   | '}'   { RCURLY (lexeme_start lexbuf) }
 
-  | line_comment | block_comment { ruleMain lexbuf }
+  | line_comment | block_comment { ruleMain semantics lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -377,9 +376,9 @@ ruleMain = parse
   | "<->" | "<<->" | "<->>" | "<<<->" | "<->>>" { TEXT_DIST_OP }
 
   | "->"  {
-      match Dialect.current () with
-      | Dialect.ClickHouse -> LAMBDA_ARROW
-      | Dialect.MySQL | Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB -> JSON_EXTRACT_OP
+      match semantics.Dialect.Semantic.arrow_operator with
+      | Sql_semantics.Arrow_operator.Lambda -> LAMBDA_ARROW
+      | Sql_semantics.Arrow_operator.Json_extract -> JSON_EXTRACT_OP
     }
   | "->>" { JSON_UNQUOTE_EXTRACT_OP }
 
@@ -405,7 +404,7 @@ ruleMain = parse
   | open_string { error lexbuf "unterminated string literal" }
   | open_comment { error lexbuf "unterminated comment" }
 
-  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
+  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident semantics str }
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
@@ -418,8 +417,8 @@ ruleInDollarQuotes tag = parse
 
 {
 
-  let parse_rule lexbuf =
-    let token = ruleMain lexbuf in
+  let parse_rule semantics lexbuf =
+    let token = ruleMain semantics lexbuf in
     match !Parser_state.mode with
     | Normal -> token
     | Ignore ->

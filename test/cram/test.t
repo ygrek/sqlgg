@@ -3718,3 +3718,15 @@ harmless pair:
   > EOF
       T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
 
+VALUES(col) is the value inserted by the current statement only: a nullable value
+inserted into a same-named column of another table earlier does not leak into it.
+
+  $ sqlgg -no-header -gen xml - <<'EOF' | grep -A2 'name="upsert"' | grep -o '<value name="_0"[^>]*>'
+  > CREATE TABLE test (x INT, k VARBINARY(200));
+  > CREATE TABLE other (x INT);
+  > INSERT INTO other (x) VALUES (@x);
+  > -- @upsert
+  > INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + ?;
+  > EOF
+  <value name="_0" type="Int"/>
+

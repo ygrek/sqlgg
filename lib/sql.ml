@@ -745,16 +745,21 @@ struct
       let common = List.map fst (common_columns (Using l) t1 t2) in
       common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
-    let join ~outer_join_padding typ cond a b =
-      let padded schema =
-        match outer_join_padding with
-        | Sql_semantics.Outer_join_padding.Null ->
-          List.map (fun data ->
-            Source.Attr.{data with attr={
-              data.attr with domain = Type.make_nullable data.attr.domain
-            }}) schema
-        | Sql_semantics.Outer_join_padding.Type_default -> schema
+    let join ~outer_join_padding ~nullable_scope typ cond a b =
+      let pad (attr : attr) =
+        match outer_join_padding, nullable_scope, attr.domain.t with
+        | Sql_semantics.Outer_join_padding.Type_default, _, _
+        | Sql_semantics.Outer_join_padding.Null, Sql_semantics.Nullable_scope.Scalar_types,
+          (Array _ | Map _ | Tuple _ | Fun _) -> attr
+        | Sql_semantics.Outer_join_padding.Null, Sql_semantics.Nullable_scope.Any_type, _
+        | Sql_semantics.Outer_join_padding.Null, Sql_semantics.Nullable_scope.Scalar_types,
+          (Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _ | Union _
+          | StringLiteral _ | FloatingLiteral _ | Json_path | One_or_all | Json | Any) ->
+          { attr with
+            domain = Type.make_nullable attr.domain;
+            extra = Constraints.remove Constraint.NotNull attr.extra }
       in
+      let padded schema = List.map (fun data -> Source.Attr.{ data with attr = pad data.attr }) schema in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
       | Inner | Straight -> action a b

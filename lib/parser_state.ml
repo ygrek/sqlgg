@@ -12,15 +12,24 @@ module Stmt_metadata = struct
   let reset () = Hashtbl.reset stmt_metadata
 end
 
-let current_lexbuf : Lexing.lexbuf option ref = ref None
+(* Menhir semantic actions cannot take arguments, so the statement being parsed is scoped
+   to the parse call. *)
+type parse = { lexbuf : Lexing.lexbuf; semantics : Dialect.Semantic.t }
 
-let with_lexbuf lexbuf f =
-  let saved = !current_lexbuf in
-  current_lexbuf := Some lexbuf;
-  Fun.protect f ~finally:(fun () -> current_lexbuf := saved)
+let current : parse option ref = ref None
+
+let with_parse parse f =
+  let saved = !current in
+  current := Some parse;
+  Fun.protect f ~finally:(fun () -> current := saved)
+
+let semantics () =
+  match !current with
+  | Some { semantics; _ } -> semantics
+  | None -> failwith "SQL grammar actions ran outside Parser_state.with_parse"
 
 let extract_source (start_, end_) =
-  Stdlib.Option.bind !current_lexbuf (fun lexbuf ->
+  Stdlib.Option.bind !current (fun { lexbuf; _ } ->
     let len = end_ - start_ in
     if len > 0 && start_ >= 0 && end_ <= lexbuf.Lexing.lex_buffer_len then
       Some (Bytes.sub_string lexbuf.lex_buffer start_ len)

@@ -21,13 +21,17 @@
   let call name parameters =
     let arity = List.length parameters in
     let signature =
-      match Dialect.Semantic.function_signature name arity with
+      match Dialect.Semantic.function_signature (Parser_state.semantics ()) name arity with
       | Some signature -> signature
       | None -> Function.lookup name arity
     in
     fn name signature parameters
 
   let arith name ret e1 e2 = fn name (Arith (Source_type.depends ret)) [e1; e2]
+
+  let clickhouse_value_type = function
+    | `Strict kind -> Type.strict kind
+    | `Nullable kind -> Type.nullable kind
 
 %}
 
@@ -108,6 +112,7 @@
 %nonassoc ESCAPE
 
 %type <Sql.expr> expr
+%type <[ `Strict of Sql.Type.kind | `Nullable of Sql.Type.kind ]> clickhouse_type
 
 %start <Sql.stmt> input
 
@@ -490,7 +495,7 @@ column_def: name=located(ident) sql_kind=column_sql_type? extra=located(column_d
       | { value = Alter_action_attr.Default _; _ } -> false
     ) extra in
     let extra =
-      match Dialect.Semantic.implicit_column_nullability (),
+      match (Parser_state.semantics ()).implicit_column_nullability,
             has_explicit_nullability with
       | Sql_semantics.Implicit_column_nullability.Strict, false ->
         make_located ~value:(Alter_action_attr.Syntax_constraint NotNull) ~pos:name.pos
@@ -860,38 +865,35 @@ sql_type_flavor_plain:
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
   | name=ident { Source_type.Infer (User_types.get name) }
 
+(* Nullable and LowCardinality wrap only scalar types; containers carry nullability in their elements. *)
 clickhouse_type:
-  | kind=CLICKHOUSE_SCALAR { Type.strict kind }
+  | kind=clickhouse_scalar_type { `Strict kind }
+  | CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN { `Nullable kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN kind=clickhouse_scalar_type RPAREN { `Strict kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN RPAREN
+    { `Nullable kind }
   | CLICKHOUSE_ARRAY LPAREN element=clickhouse_type RPAREN
-    { Type.strict (Type.Array element) }
+    { `Strict (Type.Array (clickhouse_value_type element)) }
   | CLICKHOUSE_MAP LPAREN key=clickhouse_type COMMA value=clickhouse_type RPAREN
-    { Type.strict (Type.Map (key, value)) }
+    { `Strict (Type.Map (clickhouse_value_type key, clickhouse_value_type value)) }
   | CLICKHOUSE_TUPLE elements=sequence(clickhouse_type)
-    { Type.strict (Type.Tuple elements) }
-  | CLICKHOUSE_NULLABLE LPAREN value=clickhouse_type RPAREN
-    {
-      match value.Type.nullability with
-      | Type.Strict -> Type.make_nullable value
-      | Type.Nullable -> failwith "ClickHouse Nullable cannot be nested"
-      | Type.Depends -> assert false
-    }
-  | CLICKHOUSE_LOWCARDINALITY LPAREN value=clickhouse_type RPAREN { value }
-  | CLICKHOUSE_FIXED_STRING LPAREN INTEGER RPAREN { Type.strict Type.Text }
+    { `Strict (Type.Tuple (List.map clickhouse_value_type elements)) }
+
+clickhouse_scalar_type:
+  | kind=CLICKHOUSE_SCALAR { kind }
+  | CLICKHOUSE_FIXED_STRING LPAREN INTEGER RPAREN { Type.Text }
   | CLICKHOUSE_DATETIME64
     option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, TEXT))), RPAREN))
-    { Type.strict Type.Datetime }
+    { Type.Datetime }
   | precision=CLICKHOUSE_DECIMAL parameters=sequence(INTEGER)
     {
       match precision, parameters with
-      | None, [precision; scale] ->
-        Type.strict (Type.Decimal { precision = Some precision; scale = Some scale })
-      | Some precision, [scale] ->
-        Type.strict (Type.Decimal { precision = Some precision; scale = Some scale })
+      | None, [precision; scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
+      | Some precision, [scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
       | None, _ -> failwith "ClickHouse Decimal requires precision and scale"
       | Some _, _ -> failwith "ClickHouse Decimal32/64/128/256 requires a scale"
     }
-  | CLICKHOUSE_ENUM ctors=sequence(clickhouse_enum_ctor)
-    { Type.strict (Type.make_enum_kind ctors) }
+  | CLICKHOUSE_ENUM ctors=sequence(clickhouse_enum_ctor) { Type.make_enum_kind ctors }
 
 clickhouse_enum_ctor:
   | name=TEXT EQUAL option(MINUS) INTEGER { name }
@@ -900,19 +902,13 @@ column_sql_type:
   | t=located_sql_type { t, [] }
   | t=located(clickhouse_type)
     {
-      let kind =
-        make_located ~pos:t.pos
-          ~value:(make_collated ~collated:(Source_type.Infer t.value.Type.t) ())
+      let kind, constraints =
+        match t.value with
+        | `Strict kind -> kind, []
+        | `Nullable kind ->
+          kind, [make_located ~pos:t.pos ~value:(Alter_action_attr.Syntax_constraint Constraint.Null)]
       in
-      let constraints =
-        match t.value.Type.nullability with
-        | Type.Strict -> []
-        | Type.Nullable ->
-          [make_located ~pos:t.pos
-             ~value:(Alter_action_attr.Syntax_constraint Constraint.Null)]
-        | Type.Depends -> assert false
-      in
-      kind, constraints
+      make_located ~pos:t.pos ~value:(make_collated ~collated:(Source_type.Infer kind) ()), constraints
     }
 
 type_args: LPAREN INTEGER RPAREN UNSIGNED? | LPAREN INTEGER COMMA INTEGER RPAREN { }

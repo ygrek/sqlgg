@@ -2,6 +2,7 @@ module Outer_join_padding = struct
   type t =
     | Null
     | Type_default
+  [@@deriving enumerate]
 end
 
 module Null_membership = struct
@@ -30,12 +31,62 @@ module Implicit_column_nullability = struct
     | Nullable
 end
 
+module Nullable_scope = struct
+  type t =
+    | Any_type
+    | Scalar_types
+  [@@deriving enumerate]
+end
+
+module Key_uniqueness = struct
+  type t =
+    | Enforced
+    | Not_enforced
+end
+
+module Omitted_insert_column = struct
+  type t =
+    | Requires_declared_default
+    | Filled_with_type_default
+end
+
+module Empty_aggregate = struct
+  type t =
+    | Null
+    | Type_default
+end
+
+module Where_alias_visibility = struct
+  type t =
+    | Source_columns_only
+    | Select_aliases_visible
+end
+
+module Arrow_operator = struct
+  type t =
+    | Json_extract
+    | Lambda
+end
+
+module Column_type_syntax = struct
+  type t =
+    | Standard_types
+    | ClickHouse_types
+end
+
+module Function_catalog = struct
+  type t =
+    | Standard_functions
+    | ClickHouse_functions
+end
+
 module ClickHouse = struct
   type t = {
     outer_join_padding : Outer_join_padding.t;
     null_membership : Null_membership.t;
     nonnullable_write : Nonnullable_write.t;
     implicit_column_nullability : Implicit_column_nullability.t;
+    empty_aggregate : Empty_aggregate.t;
   }
 
   let default () = {
@@ -43,6 +94,7 @@ module ClickHouse = struct
     null_membership = Null_membership.Null_never_matches;
     nonnullable_write = Nonnullable_write.Reject;
     implicit_column_nullability = Implicit_column_nullability.Strict;
+    empty_aggregate = Empty_aggregate.Type_default;
   }
 
   module Setting = struct
@@ -51,6 +103,7 @@ module ClickHouse = struct
       | Transform_null_in [@as "transform_null_in"]
       | Insert_null_as_default [@as "insert_null_as_default"]
       | Data_type_default_nullable [@as "data_type_default_nullable"]
+      | Aggregate_functions_null_for_empty [@as "aggregate_functions_null_for_empty"]
     [@@deriving of_string, to_string]
 
     type t =
@@ -58,6 +111,7 @@ module ClickHouse = struct
       | Transform_null_in of Null_membership.t
       | Insert_null_as_default of Nonnullable_write.t
       | Data_type_default_nullable of Implicit_column_nullability.t
+      | Aggregate_functions_null_for_empty of Empty_aggregate.t
 
     type error =
       | Malformed_setting of string
@@ -78,7 +132,7 @@ module ClickHouse = struct
         | Some setting ->
           match setting, binary_of_string value with
           | (Join_use_nulls | Transform_null_in | Insert_null_as_default
-            | Data_type_default_nullable), None ->
+            | Data_type_default_nullable | Aggregate_functions_null_for_empty), None ->
             Error (Invalid_setting_value { setting; value })
           | Join_use_nulls, Some Disabled -> Ok (Join_use_nulls Outer_join_padding.Type_default)
           | Join_use_nulls, Some Enabled -> Ok (Join_use_nulls Outer_join_padding.Null)
@@ -91,6 +145,10 @@ module ClickHouse = struct
             Ok (Data_type_default_nullable Implicit_column_nullability.Strict)
           | Data_type_default_nullable, Some Enabled ->
             Ok (Data_type_default_nullable Implicit_column_nullability.Nullable)
+          | Aggregate_functions_null_for_empty, Some Disabled ->
+            Ok (Aggregate_functions_null_for_empty Empty_aggregate.Type_default)
+          | Aggregate_functions_null_for_empty, Some Enabled ->
+            Ok (Aggregate_functions_null_for_empty Empty_aggregate.Null)
   end
 
   let apply_setting configuration = function
@@ -99,4 +157,6 @@ module ClickHouse = struct
     | Setting.Insert_null_as_default nonnullable_write -> { configuration with nonnullable_write }
     | Setting.Data_type_default_nullable implicit_column_nullability ->
       { configuration with implicit_column_nullability }
+    | Setting.Aggregate_functions_null_for_empty empty_aggregate ->
+      { configuration with empty_aggregate }
 end
