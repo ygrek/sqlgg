@@ -12,15 +12,30 @@ let arb_type =
   let open QCheck.Gen in
   let simple = Type.[ Int; UInt64; Text; Blob; Float; Bool; Datetime; Json; Json_path; One_or_all; Any ] in
   let ctors = list_size (int_range 1 3) (any_of [ "a"; "b"; "c" ]) in
-  let kind = oneof [
+  let scalar_kind = oneof [
     any_of simple;
     map2 (fun ctors is_closed -> Type.Union { ctors = Type.Enum_kind.make ctors; is_closed }) ctors bool;
     map (fun s -> Type.StringLiteral s) (any_of [ "a"; "b"; "{}" ]);
     map (fun f -> Type.FloatingLiteral f) (any_of [ 0.; 1.5 ]);
     map2 (fun precision scale -> Type.Decimal { precision; scale }) (option (int_range 1 10)) (option (int_range 0 4));
   ] in
+  let nullability_gen = any_of Type.[ Nullable; Strict; Depends ] in
   QCheck.make ~print:Type.show
-    (map2 (fun t nullability -> { Type.t; nullability }) kind (any_of Type.[ Nullable; Strict; Depends ]))
+    (sized_size (int_range 0 4)
+       (fix (fun self depth ->
+          let scalar = map2 (fun t n -> { Type.t; nullability = n }) scalar_kind nullability_gen in
+          if depth <= 0 then scalar
+          else
+            let child = self (depth - 1) in
+            oneof_weighted [
+              8, scalar;
+              3, map2 (fun t n -> Type.{ t = Array t; nullability = n }) child nullability_gen;
+              2, map3 (fun k v n -> Type.{ t = Map (k, v); nullability = n }) child child nullability_gen;
+              2, map2 (fun ts n -> Type.{ t = Tuple ts; nullability = n })
+                   (list_size (int_range 1 3) child) nullability_gen;
+              2, map3 (fun args ret n -> Type.{ t = Fun (args, ret); nullability = n })
+                   (list_size (int_range 1 3) child) child nullability_gen;
+            ])))
 
 let same_result a b =
   match a, b with
@@ -80,9 +95,19 @@ let test_meta_laws = List.map qcheck [
     arb_meta (fun a -> Meta.equal (Meta.shared [ a; Meta.empty () ]) a);
 ]
 
-let enums_of_different_shape a b =
+let rec enums_of_different_shape a b =
   match a.Type.t, b.Type.t with
   | Type.Union x, Type.Union y -> not (Type.Enum_kind.Ctors.equal x.ctors y.ctors)
+  | Type.Array x, Type.Array y -> enums_of_different_shape x y
+  | Type.Map (kx, vx), Type.Map (ky, vy) ->
+    enums_of_different_shape kx ky || enums_of_different_shape vx vy
+  | Type.Tuple xs, Type.Tuple ys ->
+    Int.equal (List.length xs) (List.length ys)
+    && List.exists2 enums_of_different_shape xs ys
+  | Type.Fun (xa, xr), Type.Fun (ya, yr) ->
+    (Int.equal (List.length xa) (List.length ya)
+     && List.exists2 enums_of_different_shape xa ya)
+    || enums_of_different_shape xr yr
   | _ -> false
 
 let test_type_laws = List.map qcheck [
@@ -96,6 +121,67 @@ let test_type_laws = List.map qcheck [
   QCheck.Test.make ~count:2000 ~name:"common_type is idempotent"
     arb_type
     (fun a -> same_result (Type.common_type a a) (Some a));
+  QCheck.Test.make ~count:2000 ~name:"common_type is associative for non-literal types where both orders are defined"
+    (QCheck.triple arb_type arb_type arb_type)
+    (fun (a, b, c) ->
+      let rec contains_literal Type.{ t; _ } =
+        match t with
+        | StringLiteral _ | FloatingLiteral _ -> true
+        | Array element -> contains_literal element
+        | Map (key, value) -> contains_literal key || contains_literal value
+        | Tuple elements -> List.exists contains_literal elements
+        | Fun (parameters, result) ->
+          List.exists contains_literal parameters || contains_literal result
+        | Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _
+        | Union _ | Json_path | One_or_all | Json | Any -> false
+      in
+      QCheck.assume (not (contains_literal a || contains_literal b || contains_literal c));
+      let left = match Type.common_type a b with
+        | Some ab -> Type.common_type ab c
+        | None -> None
+      in
+      let right = match Type.common_type b c with
+        | Some bc -> Type.common_type a bc
+        | None -> None
+      in
+      QCheck.assume (Option.is_some left && Option.is_some right);
+      same_result left right);
+  QCheck.Test.make ~count:2000 ~name:"Array lifts common_type structurally"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      let expected =
+        match Type.common_type a b with
+        | Some element -> Some Type.(strict (Array element))
+        | None -> None
+      in
+      same_result
+        (Type.common_type Type.(strict (Array a)) Type.(strict (Array b)))
+        expected);
+  QCheck.Test.make ~count:2000 ~name:"Map lifts common_type componentwise"
+    (QCheck.pair (QCheck.pair arb_type arb_type) (QCheck.pair arb_type arb_type))
+    (fun ((ka, va), (kb, vb)) ->
+      let expected =
+        match Type.common_type ka kb, Type.common_type va vb with
+        | Some key, Some value -> Some Type.(strict (Map (key, value)))
+        | None, _ | _, None -> None
+      in
+      same_result
+        (Type.common_type Type.(strict (Map (ka, va))) Type.(strict (Map (kb, vb))))
+        expected);
+  QCheck.Test.make ~count:2000 ~name:"Tuple rejects unequal arities"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      Option.is_none
+        (Type.common_type
+           Type.(strict (Tuple [a]))
+           Type.(strict (Tuple [a; b]))));
+  QCheck.Test.make ~count:2000 ~name:"Fun rejects unequal arities"
+    (QCheck.pair arb_type arb_type)
+    (fun (a, b) ->
+      Option.is_none
+        (Type.common_type
+           Type.(strict (Fun ([a], b)))
+           Type.(strict (Fun ([a; b], b)))));
   QCheck.Test.make ~count:2000 ~name:"subtype and supertype are defined together"
     (QCheck.pair arb_type arb_type)
     (fun (a, b) -> Bool.equal (Option.is_some (Type.subtype a b)) (Option.is_some (Type.supertype a b)));
@@ -111,6 +197,77 @@ let test_type_laws = List.map qcheck [
       match Type.common_type a b with
       | Some r -> not (Type.is_strict a && Type.is_strict b) || Type.is_strict r
       | None -> true);
+]
+
+let test_template_laws = List.map qcheck [
+  QCheck.Test.make ~count:2000 ~name:"binding Array('a) recovers its element type"
+    arb_type
+    (fun element ->
+      match Type.Template.bind_all Type.Template.empty
+              [(Type.Array_of (Type.Var 0), Type.(strict (Array element)))] with
+      | Ok substitution ->
+        begin match Type.Template.instantiate substitution (Type.Var 0) with
+        | Ok inferred -> Type.equal inferred element
+        | Error _ -> false
+        end
+      | Error _ -> false);
+  QCheck.Test.make ~count:2000 ~name:"binding rejects a different constructor"
+    (QCheck.pair arb_type arb_type)
+    (fun (key, value) ->
+      match Type.Template.bind_all Type.Template.empty
+              [(Type.Array_of (Type.Var 0), Type.(strict (Map (key, value))))] with
+      | Error _ -> true
+      | Ok _ -> false);
+  QCheck.Test.make ~count:2000 ~name:"a failed binding leaves substitution unchanged"
+    arb_type
+    (fun key ->
+      match Type.Template.bind_all Type.Template.empty [
+        (Type.Map_of (Type.Var 0, Type.Array_of (Type.Var 1)),
+         Type.(strict (Map (key, strict Int))));
+      ] with
+      | Ok _ -> false
+      | Error _ ->
+        begin match Type.Template.instantiate Type.Template.empty (Type.Var 0) with
+        | Error (Type.Template.Unbound_variable 0) -> true
+        | Error (Type.Template.Unbound_variable _)
+        | Error (Type.Template.Constructor_mismatch _)
+        | Error (Type.Template.Variable_mismatch _)
+        | Ok _ -> false
+        end);
+  QCheck.Test.make ~count:1 ~name:"instantiation rejects an unbound variable"
+    arb_type
+    (fun _ ->
+      match Type.Template.instantiate Type.Template.empty (Type.Var 0) with
+      | Error (Type.Template.Unbound_variable 0) -> true
+      | Error (Type.Template.Unbound_variable _)
+      | Error (Type.Template.Constructor_mismatch _)
+      | Error (Type.Template.Variable_mismatch _)
+      | Ok _ -> false);
+]
+
+let test_semantic_setting_parser = [
+  "parses and applies join_use_nulls" >:: (fun () ->
+    match Sql_semantics.ClickHouse.Setting.parse "join_use_nulls=1" with
+    | Ok setting ->
+      let configuration =
+        Sql_semantics.ClickHouse.apply_setting
+          (Sql_semantics.ClickHouse.default ()) setting
+      in
+      assert_equal
+        Sql_semantics.Outer_join_padding.Null
+        configuration.outer_join_padding
+    | Error _ -> assert_failure "expected a parsed join_use_nulls setting");
+  "rejects an unknown setting" >:: (fun () ->
+    assert_equal
+      (Error (Sql_semantics.ClickHouse.Setting.Unknown_setting "unknown"))
+      (Sql_semantics.ClickHouse.Setting.parse "unknown=0"));
+  "rejects a non-binary value" >:: (fun () ->
+    assert_equal
+      (Error (Sql_semantics.ClickHouse.Setting.Invalid_setting_value {
+        setting = Sql_semantics.ClickHouse.Setting.Transform_null_in;
+        value = "2";
+      }))
+      (Sql_semantics.ClickHouse.Setting.parse "transform_null_in=2"));
 ]
 
 module Narrowing_model = struct
@@ -168,13 +325,13 @@ module Narrowing_model = struct
 
   let binary_comparisons = [ Comp_equal; Comp_num_eq; Comp_num_cmp; Comp_text_cmp; Not_distinct_op ]
 
-  let narrowed e =
+  let narrowed membership_null_semantics e =
     let resolve (c : col_name) : table_name Schema.Source.Attr.t option =
       column_of_ref c |> Option.map (fun i ->
         let (tn, name) = columns.(i) in
         { Schema.Source.Attr.attr = make_attribute' name Type.(nullable Int); sources = [ tn ] })
     in
-    (Narrowing.narrow_columns ~resolve ~constrains:(fun _ -> true) e)
+    (Narrowing.narrow_columns ~membership_null_semantics ~resolve ~constrains:(fun _ -> true) e)
       .Narrowing.Attr_refinement.not_null
 
   let any_of l = QCheck2.Gen.(oneof (List.map return l))
@@ -186,7 +343,7 @@ module Narrowing_model = struct
   let rec gen_scalar depth =
     let open QCheck2.Gen in
     if depth <= 0 then gen_column
-    else frequency [
+    else oneof_weighted [
       5, gen_column;
       2, map2 (fun a b -> call (Arith (Source_type.depends Any)) [ a; b ])
            (gen_scalar (depth - 1)) (gen_scalar (depth - 1));
@@ -210,7 +367,7 @@ module Narrowing_model = struct
   and gen_cond depth =
     let open QCheck2.Gen in
     let scalar = gen_scalar (min depth 2) in
-    let leaf = frequency [
+    let leaf = oneof_weighted [
       4, map3 (fun op a b -> call (Comparison op) [ a; b ]) (any_of binary_comparisons) scalar scalar;
       2, map is_not_null scalar;
       2, map (fun x -> call (Comparison Is_null) [ x ]) scalar;
@@ -225,7 +382,7 @@ module Narrowing_model = struct
       1, map3 like_escape scalar scalar scalar;
     ] in
     if depth <= 0 then leaf
-    else frequency [
+    else oneof_weighted [
       3, leaf;
       3, map2 conj (gen_cond (depth - 1)) (gen_cond (depth - 1));
       3, map2 (fun a b -> call (Logical Or) [ a; b ]) (gen_cond (depth - 1)) (gen_cond (depth - 1));
@@ -267,7 +424,7 @@ module Narrowing_model = struct
       | InChoice (_, _, Fun { kind = Membership; parameters = _ :: _; _ }) -> 1
       | InTupleList { value = { exprs; _ }; _ } -> List.length exprs
       | Value _ | Param _ | Inparam _ | Choices _ | InChoice _ | Fun _ | SelectExpr _
-      | Column _ | OptionActions _ | Case _ | Of_values _ -> 0
+      | Column _ | OptionActions _ | Case _ | Of_values _ | Lambda _ -> 0
     in
     List.fold_left (fun acc e -> max acc (max_in_arity e)) own (Sql.sub_exprs e)
 
@@ -282,12 +439,19 @@ module Narrowing_model = struct
     | Some false, Some false -> Some false
     | None, _ | _, None -> None
 
-  let in_side_holds row values =
+  let in_side_holds membership row values =
     let compare_element element x =
-      match x, element with
-      | None, _ | Some _, Null -> None
-      | Some _, Equal -> Some true
-      | Some _, Distinct -> Some false
+      match membership, x, element with
+      | Sql_semantics.Membership_null_semantics.Three_valued, None, (Equal | Distinct | Null)
+      | Sql_semantics.Membership_null_semantics.Three_valued, Some _, Null -> None
+      | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, None, (Equal | Distinct | Null)
+      | Sql_semantics.Membership_null_semantics.Two_valued (Null_never_matches | Null_matches_null), Some _, Null
+      | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null, None, (Equal | Distinct) -> Some false
+      | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null, None, Null -> Some true
+      | (Sql_semantics.Membership_null_semantics.Three_valued
+        | Sql_semantics.Membership_null_semantics.Two_valued _), Some _, Equal -> Some true
+      | (Sql_semantics.Membership_null_semantics.Three_valued
+        | Sql_semantics.Membership_null_semantics.Two_valued _), Some _, Distinct -> Some false
     in
     match row.in_side with
     | Empty_list -> Some false
@@ -295,30 +459,36 @@ module Narrowing_model = struct
       List.fold_left2 (fun acc element x -> kleene_and acc (compare_element element x))
         (Some true) (List.take (List.length values) pattern) values
 
-  let rec eval_scalar row = function
+  let rec eval_scalar membership row = function
     | Column c -> Option.map_default (Array.get row.cols) None (column_of_ref c.collated)
     | Fun { kind = Arith _; parameters = [ a; b ]; _ } ->
-      (match eval_scalar row a, eval_scalar row b with Some a, Some b -> Some (a + b) | _ -> None)
+      (match eval_scalar membership row a, eval_scalar membership row b with
+       | Some a, Some b -> Some (a + b)
+       | _ -> None)
     | Fun { kind = Null_handling (Coalesce _ | If_null); parameters = [ a; b ]; _ } ->
-      (match eval_scalar row a with None -> eval_scalar row b | v -> v)
+      (match eval_scalar membership row a with None -> eval_scalar membership row b | v -> v)
     | Case { value = { case; branches; else_ }; _ } ->
       let rec taken = function
-        | [] -> Option.map_default (eval_scalar row) None else_
-        | b :: rest -> if guard row case b = Some true then eval_scalar row b.then_ else taken rest
+        | [] -> Option.map_default (eval_scalar membership row) None else_
+        | b :: rest ->
+          if guard membership row case b = Some true then eval_scalar membership row b.then_
+          else taken rest
       in
       taken branches
     | Value _ -> None
-    | Fun _ | Param _ | Inparam _ | Choices _ | InChoice _ | SelectExpr _
+    | Fun _ | Param _ | Inparam _ | Choices _ | InChoice _ | SelectExpr _ | Lambda _
     | InTupleList _ | OptionActions _ | Of_values _ as e ->
       failwith ("oracle: not a scalar: " ^ Format.asprintf "%a" Sql.pp_expr e)
 
-  and strict_binop op row a b =
-    match eval_scalar row a, eval_scalar row b with Some a, Some b -> Some (op a b) | _ -> None
+  and strict_binop op membership row a b =
+    match eval_scalar membership row a, eval_scalar membership row b with
+    | Some a, Some b -> Some (op a b)
+    | _ -> None
 
-  and guard row case { when_; _ } =
+  and guard membership row case { when_; _ } =
     match case with
-    | None -> eval_condition row when_
-    | Some scrutinee -> strict_binop ( = ) row scrutinee when_
+    | None -> eval_condition membership row when_
+    | Some scrutinee -> strict_binop ( = ) membership row scrutinee when_
 
   and kleene_cmp op a b =
     let strict f = match a, b with Some a, Some b -> Some (f a b) | None, _ | _, None -> None in
@@ -330,38 +500,50 @@ module Narrowing_model = struct
     | Not_distinct_op -> Some (Stdlib.Option.equal Int.equal a b)
     | Is_null | Is_not_null -> failwith "oracle: unary comparison used as a binary one"
 
-  and eval_condition row e =
+  and eval_condition membership row e =
+    let member x candidates =
+      match membership with
+      | Sql_semantics.Membership_null_semantics.Three_valued ->
+        List.fold_left (fun acc c -> kleene_or acc (kleene_cmp Comp_equal x c)) (Some false) candidates
+      | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches ->
+        Some (Option.is_some x && List.exists (Stdlib.Option.equal Int.equal x) candidates)
+      | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null ->
+        Some (List.exists (Stdlib.Option.equal Int.equal x) candidates)
+    in
     match e with
     | Fun { kind = Comparison ((Comp_equal | Comp_num_eq | Comp_num_cmp | Comp_text_cmp
                                | Not_distinct_op) as op); parameters = [ a; b ]; _ } ->
-      kleene_cmp op (eval_scalar row a) (eval_scalar row b)
-    | Fun { kind = Like; parameters = [ a; b ]; _ } -> strict_binop ( = ) row a b
+      kleene_cmp op (eval_scalar membership row a) (eval_scalar membership row b)
+    | Fun { kind = Like; parameters = [ a; b ]; _ } -> strict_binop ( = ) membership row a b
     | Fun { kind = Like_escape; parameters = [ e; esc ]; _ } ->
-      Option.map_default (fun _ -> eval_condition row e) None (eval_scalar row esc)
-    | Fun { kind = Comparison Is_null; parameters = [ a ]; _ } -> Some (eval_scalar row a = None)
-    | Fun { kind = Comparison Is_not_null; parameters = [ a ]; _ } -> Some (eval_scalar row a <> None)
-    | Fun { kind = Logical And; parameters = [ a; b ]; _ } -> kleene_and (eval_condition row a) (eval_condition row b)
-    | Fun { kind = Logical Or; parameters = [ a; b ]; _ } -> kleene_or (eval_condition row a) (eval_condition row b)
+      Option.map_default (fun _ -> eval_condition membership row e) None (eval_scalar membership row esc)
+    | Fun { kind = Comparison Is_null; parameters = [ a ]; _ } -> Some (eval_scalar membership row a = None)
+    | Fun { kind = Comparison Is_not_null; parameters = [ a ]; _ } -> Some (eval_scalar membership row a <> None)
+    | Fun { kind = Logical And; parameters = [ a; b ]; _ } ->
+      kleene_and (eval_condition membership row a) (eval_condition membership row b)
+    | Fun { kind = Logical Or; parameters = [ a; b ]; _ } ->
+      kleene_or (eval_condition membership row a) (eval_condition membership row b)
     | Fun { kind = Logical Xor; parameters = [ a; b ]; _ } ->
-      (match eval_condition row a, eval_condition row b with Some a, Some b -> Some (a <> b) | _ -> None)
-    | Fun { kind = Negation; parameters = [ a ]; _ } -> Option.map not (eval_condition row a)
+      (match eval_condition membership row a, eval_condition membership row b with
+       | Some a, Some b -> Some (a <> b)
+       | _ -> None)
+    | Fun { kind = Negation; parameters = [ a ]; _ } -> Option.map not (eval_condition membership row a)
     | Fun { kind = Membership; parameters = [ x; SelectExpr _ ]; _ } ->
-      let x = eval_scalar row x in
-      List.fold_left (fun acc v -> kleene_or acc (kleene_cmp Comp_equal x v)) (Some false) row.sub
+      member (eval_scalar membership row x) row.sub
     | Fun { kind = Membership; parameters = x :: candidates; _ } ->
-      let x = eval_scalar row x in
-      List.fold_left (fun acc c -> kleene_or acc (kleene_cmp Comp_equal x (eval_scalar row c)))
-        (Some false) candidates
+      member (eval_scalar membership row x) (List.map (eval_scalar membership row) candidates)
     | Fun { kind = Range; parameters = [ x; lo; hi ]; _ } ->
-      kleene_and (strict_binop ( >= ) row x lo) (strict_binop ( <= ) row x hi)
+      kleene_and (strict_binop ( >= ) membership row x lo) (strict_binop ( <= ) membership row x hi)
     | InChoice (_, kind, Fun { kind = Membership; parameters = x :: _; _ }) ->
-      let member = in_side_holds row [ eval_scalar row x ] in
+      let member = in_side_holds membership row [ eval_scalar membership row x ] in
       begin match kind with `In -> member | `NotIn -> Option.map not member end
     | InTupleList { value = { exprs; kind_in_tuple_list; _ }; _ } ->
-      let member = in_side_holds row (List.map (eval_scalar row) exprs) in
+      let member = in_side_holds membership row (List.map (eval_scalar membership row) exprs) in
       begin match kind_in_tuple_list with `In -> member | `NotIn -> Option.map not member end
+    | Fun { kind = Quantified_comparison { op = Comp_equal; quantifier = `Any }; parameters = x :: _; _ } ->
+      member (eval_scalar membership row x) row.sub
     | Fun { kind = Quantified_comparison { op; quantifier }; parameters = x :: _; _ } ->
-      let x = eval_scalar row x in
+      let x = eval_scalar membership row x in
       let fold combine unit = List.fold_left (fun acc v -> combine acc (kleene_cmp op x v)) unit row.sub in
       begin match quantifier with
       | `All -> fold kleene_and (Some true)
@@ -369,11 +551,13 @@ module Narrowing_model = struct
       end
     | Case { value = { case; branches; else_ }; _ } ->
       let rec taken = function
-        | [] -> Option.map_default (eval_condition row) None else_
-        | b :: rest -> if guard row case b = Some true then eval_condition row b.then_ else taken rest
+        | [] -> Option.map_default (eval_condition membership row) None else_
+        | b :: rest ->
+          if guard membership row case b = Some true then eval_condition membership row b.then_
+          else taken rest
       in
       taken branches
-    | Fun _ | Value _ | Param _ | Inparam _ | Choices _ | InChoice _ | SelectExpr _
+    | Fun _ | Value _ | Param _ | Inparam _ | Choices _ | InChoice _ | SelectExpr _ | Lambda _
     | OptionActions _ | Column _ | Of_values _ as e ->
       failwith ("oracle: not a condition: " ^ Format.asprintf "%a" Sql.pp_expr e)
 
@@ -388,12 +572,9 @@ module Narrowing_model = struct
     | Fun ({ kind = Like_escape; parameters = [ Fun ({ kind = Like; parameters = [ a; b ]; _ } as inner); esc ]; _ } as f) ->
       List.concat_map (fun a ->
         List.concat_map (fun b ->
-          List.concat_map (fun esc ->
-            let node = Fun { f with parameters = [ Fun { inner with parameters = [ a; b ] }; esc ] } in
-            [ node; neg node ]) (disambiguate esc)) (disambiguate b)) (disambiguate a)
-    | Fun ({ kind = Membership | Range | Like | Like_escape; _ } as f) ->
-      List.concat_map (fun parameters ->
-        let node = Fun { f with parameters } in [ node; neg node ]) (cartesian f.parameters)
+          List.map (fun esc ->
+            Fun { f with parameters = [ Fun { inner with parameters = [ a; b ] }; esc ] })
+            (disambiguate esc)) (disambiguate b)) (disambiguate a)
     | Fun ({ parameters; _ } as f) ->
       List.map (fun parameters -> Fun { f with parameters }) (cartesian parameters)
     | InChoice (id, kind, Fun ({ kind = Membership; parameters = x :: rest; _ } as f)) ->
@@ -442,7 +623,7 @@ module Narrowing_model = struct
     | Case { value = { case = Some _; branches; else_ }; _ } ->
       List.map (fun b -> b.then_) branches @ opt else_
     | Choices (_, alternatives) -> List.filter_map (fun c -> c.Sql.body) alternatives
-    | Fun _ | Value _ | Param _ | Inparam _ | InChoice _ | SelectExpr _ | Column _
+    | Fun _ | Value _ | Param _ | Inparam _ | InChoice _ | SelectExpr _ | Column _ | Lambda _
     | InTupleList _ | OptionActions _ | Of_values _ -> []
 
   let any_condition = QCheck2.Gen.(set_shrink shrink (sized_size (int_range 0 3) gen_cond))
@@ -462,8 +643,8 @@ module Narrowing_model = struct
 
   let column_set l = let a = Array.make n_columns false in List.iter (fun i -> a.(i) <- true) l; a
 
-  let marks_only_non_null e =
-    let promised = marked_columns (narrowed e) in
+  let marks_only_non_null (membership, e) =
+    let promised = marked_columns (narrowed membership e) in
     let promised_null row = List.find_opt (fun i -> row.cols.(i) = None) promised in
     let broken =
       if promised = [] then None
@@ -472,7 +653,7 @@ module Narrowing_model = struct
         List.find_map (fun instance ->
           List.find_map (fun row ->
             match promised_null row with
-            | Some i when eval_condition row instance = Some true -> Some (instance, row, i)
+            | Some i when eval_condition membership row instance = Some true -> Some (instance, row, i)
             | Some _ | None -> None)
             rows)
           (disambiguate e)
@@ -498,13 +679,13 @@ module Narrowing_model = struct
     | Fun { parameters; _ } -> List.fold_left mentions acc parameters
     | InChoice (_, _, e) -> mentions acc e
     | InTupleList { value = { exprs; _ }; _ } -> List.fold_left mentions acc exprs
-    | Case _ | Value _ | Param _ | Inparam _ | Choices _ | SelectExpr _
+    | Case _ | Value _ | Param _ | Inparam _ | Choices _ | SelectExpr _ | Lambda _
     | OptionActions _ | Of_values _ -> acc
 
   let rec gen_strict_scalar depth =
     let open QCheck2.Gen in
     if depth <= 0 then gen_column
-    else frequency [
+    else oneof_weighted [
       3, gen_column;
       2, map2 (fun a b -> call (Arith (Source_type.depends Any)) [ a; b ])
            (gen_strict_scalar (depth - 1)) (gen_strict_scalar (depth - 1));
@@ -513,7 +694,7 @@ module Narrowing_model = struct
   let any_strict_conjunction =
     let open QCheck2.Gen in
     let scalar = gen_strict_scalar 2 in
-    let atom = frequency [
+    let atom = oneof_weighted [
       3, map3 (fun op a b -> call (Comparison op) [ a; b ])
            (any_of [ Comp_equal; Comp_num_eq; Comp_num_cmp; Comp_text_cmp ]) scalar scalar;
       2, map is_not_null scalar;
@@ -526,11 +707,11 @@ module Narrowing_model = struct
       (sized_size (int_range 0 3)
          (fix (fun self depth ->
            if depth <= 0 then atom
-           else frequency [ 2, atom; 3, map2 conj (self (depth - 1)) (self (depth - 1)) ])))
+           else oneof_weighted [ 2, atom; 3, map2 conj (self (depth - 1)) (self (depth - 1)) ])))
 
-  let marks_every_non_null e =
+  let marks_every_non_null (membership, e) =
     let expected = column_set (mentions [] e) in
-    let got = column_set (marked_columns (narrowed e)) in
+    let got = column_set (marked_columns (narrowed membership e)) in
     if expected = got then true
     else
       QCheck2.Test.fail_reportf
@@ -539,19 +720,30 @@ module Narrowing_model = struct
 
 end
 
-let test_narrowing_laws = [
-  qcheck (QCheck2.Test.make ~count:2000 ~print:Narrowing_model.show
-    ~name:"soundness: where Kleene reads the condition TRUE, every column narrowing marked is non-NULL"
-    Narrowing_model.any_condition Narrowing_model.marks_only_non_null);
-  qcheck (QCheck2.Test.make ~count:1000 ~print:Narrowing_model.show
-    ~name:"completeness: on ANDed strict atoms, narrowing marks every column Kleene forces non-NULL"
-    Narrowing_model.any_strict_conjunction Narrowing_model.marks_every_non_null);
-]
+let test_narrowing_laws =
+  let print (membership, e) =
+    sprintf "%s under %s" (Narrowing_model.show e) (Sql_semantics.Membership_null_semantics.show membership)
+  in
+  [
+    qcheck (QCheck2.Test.make ~count:3000 ~print
+      ~name:"soundness: where the membership semantics reads the condition TRUE, every column narrowing marked is non-NULL"
+      QCheck2.Gen.(pair (Narrowing_model.any_of Sql_semantics.Membership_null_semantics.all) Narrowing_model.any_condition)
+      Narrowing_model.marks_only_non_null);
+    qcheck (QCheck2.Test.make ~count:1000 ~print
+      ~name:"completeness: where IN rejects NULL operands, ANDed strict atoms narrow every column they mention"
+      QCheck2.Gen.(pair
+        (Narrowing_model.any_of Sql_semantics.Membership_null_semantics.
+          [ Three_valued; Two_valued Null_never_matches ])
+        Narrowing_model.any_strict_conjunction)
+      Narrowing_model.marks_every_non_null);
+  ]
 
 let () =
   let suite = "qcheck laws" >::: [
     "test_type_laws" >::: test_type_laws;
+    "test_template_laws" >::: test_template_laws;
     "test_meta_laws" >::: test_meta_laws;
+    "test_semantic_setting_parser" >::: test_semantic_setting_parser;
     "test_narrowing_laws" >::: test_narrowing_laws;
   ] in
   let results = run_test_tt suite in

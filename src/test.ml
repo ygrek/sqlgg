@@ -83,7 +83,8 @@ let wrong sql =
   let compile stmt = ignore (Compile.statement ~dynamic_select:Props.Off stmt) in
   sql >:: (fun () -> ("Expected error in : " ^ sql) @? (try List.iter compile (Statements.split sql); false with _ -> true))
 
-let attr ?(extra=[]) ?(meta = []) n d = make_attribute ~meta n (Some d) (Constraints.of_list extra)
+let attr ?(extra=[]) ?(meta = []) n d =
+  make_attribute ~meta n (Some d) (Constraints.of_list extra)
 let check name sql expected = name >:: (fun () -> assert_params_with_meta (parse sql) expected)
 
 let attr' ?(extra=[]) ?(nullability=Type.Strict) ?(meta = []) name kind =

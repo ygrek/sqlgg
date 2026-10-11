@@ -8,8 +8,6 @@ open Narrowing
 
 module Config = struct 
   let debug = ref false
-  (* If strict mode is not enabled, some dbs allow this. *)
-  let allow_write_notnull_null = ref false
   let dynamic_select = ref false
 end
 
@@ -96,7 +94,17 @@ type res_expr =
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (Pos.t * Pos.t); kind: Sql.option_actions_kind }
   | ResCase of res_case located
-  [@@deriving show] 
+  | ResLambda of res_lambda
+  | ResLambdaParam of string (** reference to a parameter of an enclosing lambda; typed from the lambda scope *)
+  [@@deriving show]
+
+and res_lambda =
+  | Unresolved_lambda of { lambda_params : string list; lambda_body : res_expr }
+  | Typed_lambda of {
+      lambda_body : res_expr;
+      lambda_type : Type.t;
+    }
+  [@@deriving show]
 
 and res_case = {
   case: res_expr option;
@@ -432,7 +440,7 @@ let matches_at_most_one_row ~env table expr =
        | [] -> SS.empty
        | hd :: tl -> List.fold_left (fun acc b -> SS.inter acc (of_branch b)) (of_branch hd) tl)
     | Fun _ | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _
-    | InChoice _ | OptionActions _ | InTupleList _ | Case _ -> SS.empty
+    | InChoice _ | OptionActions _ | InTupleList _ | Case _ | Lambda _ -> SS.empty
   in
   let bound = bound_parts expr in
   List.exists (fun k -> SS.subset k bound) keys
@@ -457,7 +465,7 @@ module Table_elimination = struct
       let has_params = expr_exists (function
         | Sql.Param _ | Inparam _ | InTupleList _ | Choices _ | InChoice _
         | OptionActions _ | SelectExpr _ -> true
-        | Value _ | Column _ | Of_values _ | Fun _ | Case _ -> false)
+        | Value _ | Column _ | Of_values _ | Fun _ | Case _ | Lambda _ -> false)
       in
       match kind, cond, src.rsrc_physical_table with
       | Schema.Join.Left, Schema.Join.On e, Some table
@@ -596,7 +604,7 @@ let propagate_meta ~meta_of =
     | Column col -> meta_of (`Column col.collated), const e
     | SelectExpr (select, _) -> meta_of (`Select select), const e
     | Of_values _ -> opaque, const e
-    | InTupleList _ -> opaque, (fun _ -> map_sub_exprs without_meta e)
+    | Lambda _ | InTupleList _ -> opaque, (fun _ -> map_sub_exprs without_meta e)
     | InChoice (n, k, x) -> unary x (fun x -> Sql.InChoice (n, k, x))
     | OptionActions ({ choice; _ } as o) -> unary choice (fun choice -> Sql.OptionActions { o with choice })
     | Choices (n, l) ->
@@ -621,15 +629,23 @@ let propagate_meta ~meta_of =
       match Sql.signature kind (List.length parameters) with
       | None -> opaque, const (Fun { fn with kind; parameters = List.map without_meta parameters })
       | Some (ret, sig_args) ->
-        let is_var v = function Type.Var w -> Int.equal v w | Type.Typ _ -> false in
+        (* meta flows only between positions that are the same bare type variable;
+           a variable under a container is a different domain (array vs element) *)
+        let is_var v = function
+          | Type.Var w -> Int.equal v w
+          | Type.Typ _ | Array_of _ | Map_of _ | Tuple_of _ | Fun_of _ -> false
+        in
         let paired = List.combine sig_args (List.map aux parameters) in
         let sharing v = List.filter_map (fun (a, x) -> if is_var v a then Some x else None) paired in
-        let same_domain = match ret with Type.Var v -> sharing v | Type.Typ _ -> [] in
+        let same_domain = match ret with
+          | Type.Var v -> sharing v
+          | Type.Typ _ | Array_of _ | Map_of _ | Tuple_of _ | Fun_of _ -> []
+        in
         let push_arg ctx (a, x) =
           push_to (match a with
             | Type.Var v when is_var v ret -> ctx
             | Type.Var v -> seal (sharing v)
-            | Type.Typ _ -> Meta.empty ()) x
+            | Type.Typ _ | Array_of _ | Map_of _ | Tuple_of _ | Fun_of _ -> Meta.empty ()) x
         in
         node same_domain (fun ctx -> Fun { fn with kind; parameters = List.map (push_arg ctx) paired })
   and unary x rebuild =
@@ -650,9 +666,10 @@ let rec resolve_columns env expr =
     Tables.print stderr env.tables;
   end;
   let expr = push_meta ~meta_of:(meta_of ~env) (Meta.empty ()) expr in
-  let rec each e =
+  let rec each scope e =
     match e with
     | Value x -> ResValue x.collated
+    | Column { collated = { cname; tname = None; _ }; _ } when List.mem cname scope -> ResLambdaParam cname
     | Column col ->
       let attr = (Attr_refinement.refine_nullability env.attr_refinement (resolve_column ~env col.collated)).attr in
       let json_null_kind = Meta.find_opt attr.meta "json_null_kind" in
@@ -703,11 +720,11 @@ let rec resolve_columns env expr =
       | None -> 
         fail "BoolChoices expected a parameter, but isn't presented. Use regular Choices for this kind of logic"
       in
-      ResOptionActions { res_choice = each choice; choice_id; pos; kind }
+      ResOptionActions { res_choice = each scope choice; choice_id; pos; kind }
     | Param (x, m) -> ResParam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
     | InTupleList ({ value = { exprs; param_id; kind_in_tuple_list; }; pos } ) -> 
       let res_exprs = List.map (fun expr ->
-        let res_expr = each expr in
+        let res_expr = each scope expr in
         match res_expr with 
         | ResCase _
         | ResValue _
@@ -718,7 +735,9 @@ let rec resolve_columns env expr =
         | ResChoices _
         | ResInTupleList _
         | ResOptionActions _
-        | ResInChoice _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
+        | ResInChoice _
+        | ResLambda _
+        | ResLambdaParam _ -> fail "unsupported expression %s kind for WHERE e IN @tuplelist" (show_res_expr res_expr)
       ) exprs in
       let res_exprs = List.map2 (fun e re ->
         match e with
@@ -727,15 +746,20 @@ let rec resolve_columns env expr =
       ) exprs res_exprs in
       ResInTupleList {param_id; res_in_tuple_list = Res res_exprs; kind = kind_in_tuple_list; pos }
     | Inparam (x, m) -> ResInparam (make_param ~id:x.id ~typ:(Source_type.to_infer_type x.typ), m)
-    | InChoice (n, k, x) -> ResInChoice (n, k, each x)
-    | Choices (n, l) -> ResChoices (n, List.map (fun c -> { c with body = Option.map each c.body }) l)
+    | InChoice (n, k, x) -> ResInChoice (n, k, each scope x)
+    | Choices (n, l) -> ResChoices (n, List.map (fun c -> { c with body = Option.map (each scope) c.body }) l)
     | Fun { kind; parameters; over; fn_pos; _ } ->
-      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map each parameters; over; fn_pos; ret = None }
+      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map (each scope) parameters; over; fn_pos; ret = None }
     | Case { value = { case; branches; else_ }; pos } ->
-      let case = Option.map each case in
-      let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each when_; then_ = each then_ }) branches in
-      let else_ = Option.map each else_ in
+      let case = Option.map (each scope) case in
+      let branches = List.map (fun { Sql.when_; then_ } -> { when_ = each scope when_; then_ = each scope then_ }) branches in
+      let else_ = Option.map (each scope) else_ in
       ResCase { value = { case; branches; else_; result_type = None }; pos }
+    | Lambda { lambda_params; lambda_body } ->
+      ResLambda (Unresolved_lambda {
+        lambda_params;
+        lambda_body = each (lambda_params @ scope) lambda_body;
+      })
     | Of_values col -> begin match Hashtbl.find_opt env.insert_resolved_types col with
       | Some t -> ResValue t
       | None -> fail "VALUES(col) as an expression is only acceptable in ON DUPLICATE KEY UPDATE context" 
@@ -765,7 +789,7 @@ let rec resolve_columns env expr =
             | OptionActions { choice; _ } -> with_count choice  
             | Fun { over = Some _; _ }
             | Value _| Param _| Inparam _ | InChoice _
-            | Column _| InTupleList _ | Of_values _ -> None
+            | Column _| InTupleList _ | Of_values _ | Lambda _ -> None
         in
         let default_null = Type.make_nullable domain in
         (* The only way to have a result in a subquery is to use the COUNT function wihout the HAVING expression. 
@@ -780,7 +804,7 @@ let rec resolve_columns env expr =
       | _, `AsValue -> raise (Schema.Error (schema', "only one column allowed for SELECT operator in this expression"))
       | _, `Exists -> ResSelect (Type.depends Any, p, annotations)
   in
-  each expr
+  each [] expr
 
 (** assign types to parameters where possible *)
 and assign_types env expr =
@@ -792,9 +816,19 @@ and assign_types env expr =
     | ResInparam ({ id; typ; }, m) when Type.is_any typ -> ResInparam (make_param ~id ~typ:inferred, m)
     | x -> x
   in
-  let rec typeof_ (e:res_expr) = (* FIXME simplify *)
+  (* [scope] holds the parameters of the enclosing lambdas with their types *)
+  let rec typeof_ scope (e:res_expr) = (* FIXME simplify *)
+    let typeof e = typeof scope e in
     match e with
     | ResValue t -> e, `Ok t
+    | ResLambdaParam name ->
+      begin match List.assoc_opt name scope with
+      | Some t -> e, `Ok t
+      | None -> fail "lambda parameter %s used outside of its lambda" name
+      end
+    | ResLambda (Unresolved_lambda _) ->
+      fail "a lambda can only be an argument of a higher-order function"
+    | ResLambda (Typed_lambda { lambda_type; _ }) -> e, `Ok lambda_type
     | ResParam (p, _) -> e, `Ok p.typ
     | ResInparam (p, _) -> e, `Ok p.typ
     | ResSelect (t, _, _) -> e, `Ok t
@@ -850,7 +884,8 @@ and assign_types env expr =
             let values = Type.Enum_kind.Ctors.of_list @@ List.filter_map (function ResValue { t = StringLiteral v; _ } -> Some v | _ -> None) whens_e in
             Type.Enum_kind.Ctors.compare values ctors = 0
           | Int | UInt64 | Text | Blob | Float | Datetime | FloatingLiteral _
-          | Decimal _ | Any | One_or_all | Json | StringLiteral _ | Json_path | Bool -> false in
+          | Decimal _ | Any | One_or_all | Json | StringLiteral _ | Json_path | Bool
+          | Array _ | Map _ | Tuple _ | Fun _ -> false in
         let exhaust_checked = if is_exhausted then types else List.map Type.make_nullable types in  
         match Type.common_supertype @@ Option.map_default (fun else_t -> types @ [get_or_failwith else_t]) exhaust_checked else_t with
         | None -> failwith "no common supertype for all case then branches"
@@ -867,50 +902,109 @@ and assign_types env expr =
       }, `Ok thens_t
     | ResFun { kind; parameters; over; fn_pos; ret = _ }  ->
         let open Type in
-        let (params,types) = parameters |> List.map typeof |> List.split in
-        let types = List.map get_or_failwith types in
-        let show_func () =
+        let show_func types =
           sprintf "%s applied to (%s)"
             (string_of_func kind)
             (String.concat ", " @@ List.map show types)
         in
-        if !Config.debug then eprintfn "func %s" (show_func ());
-        let convert_args ret args = 
-          let typevar = Hashtbl.create 10 in
-          let resolved_typs = Hashtbl.create 10 in
-
-          List.iteri (fun idx (arg, typ) ->
-            match arg with
-            | Typ arg_ty ->
-                begin match common_type arg_ty typ with
-                | Some unified -> Hashtbl.add resolved_typs idx unified
-                | None -> fail "types %s and %s do not match in %s" (show arg_ty) (show typ) (show_func ())
-                end
-            | Var i ->
-                let var = Hashtbl.find_default typevar i typ in
-                begin match common_type var typ with
-                | Some t ->
-                    if !Config.debug then Type.(eprintfn "common_type %s %s = %s" (show var) (show typ) (show t));
-                    Hashtbl.replace typevar i t
-                | None ->
-                    fail "types %s and %s for %s do not match in %s"
-                      (show var) (show typ) (string_of_tyvar arg) (show_func ())
-                end
-          ) (List.combine args types);
-
-          if !Config.debug then
-            Hashtbl.iter (fun i typ -> eprintfn "%s : %s" (string_of_tyvar (Var i)) (show typ)) typevar;
-
-          let resolve_arg idx = function
-            | Typ t -> Hashtbl.find_default resolved_typs idx t
-            | Var i -> Hashtbl.find typevar i
+        let template_error context = function
+          | Template.Constructor_mismatch { template; actual } ->
+            fail "types %s and %s do not match in %s"
+              (string_of_tyvar template) (show actual) (context ())
+          | Template.Variable_mismatch { variable; previous; actual } ->
+            fail "types %s and %s for %s do not match in %s"
+              (show previous) (show actual) (string_of_tyvar (Var variable)) (context ())
+          | Template.Unbound_variable variable ->
+            fail "type variable %s is not bound in %s"
+              (string_of_tyvar (Var variable)) (context ())
+        in
+        let template_or_fail context = function
+          | Ok value -> value
+          | Error error -> template_error context error
+        in
+        let params, types, substitution_state =
+          match kind with
+          | F (_, templates) ->
+            if not (Int.equal (List.length templates) (List.length parameters)) then
+              fail "wrong number of arguments : %s" (string_of_func kind);
+            let substitution = Template.empty in
+            let context () = string_of_func kind in
+            let arguments =
+              List.map2 (fun template parameter ->
+                match parameter with
+                | ResLambda (Unresolved_lambda { lambda_params; lambda_body }) ->
+                  `Lambda (template, lambda_params, lambda_body)
+                | _ ->
+                  let typed, result = typeof parameter in
+                  let typ = get_or_failwith result in
+                  `Typed (template, typed, typ)
+              ) templates parameters
+            in
+            let substitution =
+              Template.bind_all substitution (List.filter_map (function
+                | `Typed (template, _, typ) -> Some (template, typ)
+                | `Lambda _ -> None
+              ) arguments)
+              |> template_or_fail context
+            in
+            let substitution, typed =
+              List.fold_left_map (fun substitution -> function
+                | `Typed (_, typed, typ) -> substitution, (typed, typ)
+                | `Lambda (template, lambda_params, lambda_body) ->
+                  begin match template with
+                  | Fun_of (argument_templates, result_template)
+                    when Int.equal (List.length argument_templates) (List.length lambda_params) ->
+                    let argument_types =
+                      List.map (fun template ->
+                        Template.instantiate substitution template
+                        |> template_or_fail context
+                      ) argument_templates
+                    in
+                    let body, body_result =
+                      typeof_ ((List.combine lambda_params argument_types) @ scope) lambda_body
+                    in
+                    let body_type = get_or_failwith body_result in
+                    let substitution =
+                      Template.bind_all substitution [(result_template, body_type)]
+                      |> template_or_fail context
+                    in
+                    let lambda_type = strict (Fun (argument_types, body_type)) in
+                    substitution, (ResLambda (Typed_lambda {
+                      lambda_body = body;
+                      lambda_type;
+                    }), lambda_type)
+                  | Fun_of _ ->
+                    fail "lambda has the wrong number of parameters in %s" (string_of_func kind)
+                  | Typ _ | Var _ | Array_of _ | Map_of _ | Tuple_of _ ->
+                    fail "a lambda was passed to a non-function argument in %s" (string_of_func kind)
+                  end
+              ) substitution arguments
+            in
+            let params, types = List.split typed in
+            params, types, `Bound substitution
+          | Multi _ | Agg _ | Ret _ | Null_handling _ | Comparison _
+          | Negation | Logical _ | Quantified_comparison _ | Arith _ | Membership
+          | Range | Like | Like_escape | Col_assign _ ->
+            let params, results = parameters |> List.map typeof |> List.split in
+            params, List.map get_or_failwith results, `Unbound
+        in
+        if !Config.debug then eprintfn "func %s" (show_func types);
+        let convert_args (ret, args) =
+          let context () = show_func types in
+          let substitution =
+            match substitution_state with
+            | `Bound substitution -> substitution
+            | `Unbound ->
+              Template.bind_all Template.empty (List.combine args types)
+              |> template_or_fail context
           in
-          let args = List.mapi resolve_arg args in
-          let ret = match ret with
-            | Typ t -> t
-            | Var i -> Hashtbl.find typevar i
-          in
-          args, ret in
+          List.map2 (fun template typ ->
+            Template.refine substitution template typ
+            |> template_or_fail context
+          ) args types,
+          Template.instantiate substitution ret
+          |> template_or_fail context
+        in
 
         (* With GROUP BY, the query returns no rows if no groups exist. With OVER clause, the query returns no rows if the outer query filter eliminates all rows.
            In both cases, if we're in a context that expects a value (like a subquery), the result should be nullable. *)
@@ -925,7 +1019,6 @@ and assign_types env expr =
           ret , args
         in
 
-        let convert (ret, args) = convert_args ret args in
         let rec infer_fn func types = match func, types with
         | Multi { ret; fixed_args; repeating_pattern }, t ->
           let fixed_count = List.length fixed_args in
@@ -935,17 +1028,17 @@ and assign_types env expr =
           | Some args -> infer_fn (F (ret, args)) t
           | None when total_args < fixed_count ->
             fail "function %s requires at least %d arguments, got %d"
-              (show_func ()) fixed_count total_args
+              (show_func types) fixed_count total_args
           | None when Int.equal pattern_length 0 ->
             fail "function %s requires exactly %d arguments, got %d"
-              (show_func ()) fixed_count total_args
+              (show_func types) fixed_count total_args
           | None ->
             fail "function %s requires %d fixed args + multiples of %d args, got %d"
-              (show_func ()) fixed_count pattern_length total_args
+              (show_func types) fixed_count pattern_length total_args
           end
         | Agg Count, ([] (* asterisk *) | [_]) -> strict Int, types
         | Agg Avg, [_] -> consider_agg_nullability @@ nullable Float, types
-        | Agg Self, [_] -> let args, ret = convert Sql.agg_same_type in consider_agg_nullability ret, args
+        | Agg Self, [_] -> let args, ret = convert_args Sql.agg_same_type in consider_agg_nullability ret, args
         | Agg (With_order { with_order_kind = Group_concat; _ }), ((_ :: _) as params) -> 
           let ret = depends Text in
           let nullability = common_nullability (ret :: params) in
@@ -955,21 +1048,21 @@ and assign_types env expr =
           let nullability = common_nullability [ret; t1] in
           consider_agg_nullability @@ (undepend ret nullability), types
         | Agg _, _ -> fail "cannot use this grouping function with %d parameters" (List.length types)
-        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func ())
+        | F (_, args), _ when List.length args <> List.length types -> fail "wrong number of arguments : %s" (show_func types)
         | Null_handling nulls, _ ->
-          let args, ret = convert (Sql.null_handling_signature nulls (List.length types)) in
+          let args, ret = convert_args (Sql.null_handling_signature nulls (List.length types)) in
           begin match nulls with
           | Null_if -> make_nullable ret, args
           | Coalesce _ | If_null -> first_strict ret args
           end
         | F (ret, args), _ ->
-          let args, ret = convert (ret, args) in
+          let args, ret = convert_args (ret, args) in
           undepend ret (common_nullability args), args
         | Arith t, _ -> infer_fn (Ret t) types
         | (Membership | Range | Like | Like_escape) as func, _ ->
           begin match Sql.signature func (List.length types) with
           | Some (ret, args) -> infer_fn (F (ret, args)) types
-          | None -> fail "wrong number of arguments : %s" (show_func ())
+          | None -> fail "wrong number of arguments : %s" (show_func types)
           end
         | Ret t, _ when Type.is_any t -> (* lame *)
           begin match common_supertype types with
@@ -981,7 +1074,7 @@ and assign_types env expr =
           { ret with nullability }, types (* ignoring arguments FIXME *)
         | Quantified_comparison { op; _ }, _ -> infer_fn (Comparison op) types
         | Comparison op, _ ->
-          let args, ret = convert (Sql.comparison_signature op) in
+          let args, ret = convert_args (Sql.comparison_signature op) in
           begin match op with
           | Not_distinct_op | Is_null | Is_not_null -> ret, args
           (* In this expression, where set_tyvar_strict is set (currently only for WHERE) we treat the parameters as non-null by default. *)
@@ -1001,29 +1094,30 @@ and assign_types env expr =
           infer_fn (fixed Bool [Bool; Bool]) types
         | Logical _, _ -> fail "logical operators require two arguments"
         | Col_assign { ret_t; col_t; arg_t }, [a; b] ->
-          let args, ret = convert (ret_t, [col_t; arg_t]) in
+          let args, ret = convert_args (ret_t, [col_t; arg_t]) in
           let t =
-            if !Config.allow_write_notnull_null && Dialect.Semantic.is_non_strict_mode_is_exists() then 
-            undepend ret (common_nullability args)
-            else 
-            let nullability = match order_nullability a.nullability b.nullability with
-              | `Equal n -> n
-              | `Nullable_Strict -> b.nullability
-              | `Strict_Nullable -> fail "Cannot assign nullable value to a non-nullable column %s" (show_func ())
-            in 
-            { ret with nullability }
+            match Dialect.Semantic.nonnullable_write () with
+            | Sql_semantics.Nonnullable_write.Replace_with_default ->
+              undepend ret (common_nullability args)
+            | Sql_semantics.Nonnullable_write.Reject ->
+              let nullability = match order_nullability a.nullability b.nullability with
+                | `Equal n -> n
+                | `Nullable_Strict -> b.nullability
+                | `Strict_Nullable -> fail "Cannot assign nullable value to a non-nullable column %s" (show_func types)
+              in
+              { ret with nullability }
           in
           t, args
         | Col_assign _, _ -> fail "SET operation requires two arguments"
         in
         let (ret,inferred_params) = infer_fn kind types in
         ResFun { kind; parameters = (List.map2 assign_params inferred_params params); over; fn_pos; ret = Some ret }, `Ok ret
-  and typeof expr =
-    let r = typeof_ expr in
+  and typeof scope expr =
+    let r = typeof_ scope expr in
     if !Config.debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
     r
   in
-  typeof expr
+  typeof [] expr
 
 and resolve_types env expr =
   let expr = expr |> resolve_columns env in
@@ -1200,7 +1294,10 @@ and do_join (env, params, annotations) { From.src; kind; cond; _ } =
     | Natural | Using _ -> Schema.Join.common_columns cond env.schema src.rsrc_schema
     | On _ | Default -> []
   in
-  let schema = Schema.Join.join kind cond env.schema src.rsrc_schema in
+  let schema = Schema.Join.join
+    ~outer_join_padding:(Dialect.Semantic.outer_join_padding ())
+    kind cond env.schema src.rsrc_schema
+  in
   let equated a =
     if constrains a then Attr_refinement.not_null (Qualified_attr.of_attr a) else Attr_refinement.empty in
   let inherited =
@@ -1215,7 +1312,9 @@ and do_join (env, params, annotations) { From.src; kind; cond; _ } =
   | Default | Natural | Using _ -> env, params, annotations
   | On e ->
     let env = { env with attr_refinement = Attr_refinement.add env.attr_refinement
-      (survives_padding (narrow_columns ~resolve:(resolve_column_opt ~env) ~constrains e)) } in
+      (survives_padding (narrow_columns
+        ~membership_null_semantics:(Dialect.Semantic.membership_null_semantics ())
+        ~resolve:(resolve_column_opt ~env) ~constrains e)) } in
     (* TODO should use final schema (same as tables)? *)
     let (p, cond_annotations) = get_params { env with set_tyvar_strict = true } e in
     env, params @ p, merge_stmt_annotations annotations cond_annotations
@@ -1273,7 +1372,11 @@ and get_params_of_res_expr env e =
       let (acc, annotations) = List.fold_left loop (acc, annotations) parameters in
       p1 @ acc, annotations
     | ResInTupleList _
-    | ResValue _ -> acc, annotations
+    | ResValue _
+    | ResLambdaParam _ -> acc, annotations
+    | ResLambda (Unresolved_lambda _) -> failwith "untyped lambda after type assignment"
+    | ResLambda (Typed_lambda { lambda_body; lambda_type = _ }) ->
+      loop (acc, annotations) lambda_body
     | ResInChoice (param, kind, e) ->
       let (vars, annotations) = vars_of annotations e in
       ChoiceIn { param; kind; vars } :: acc, annotations
@@ -1328,7 +1431,7 @@ and ensure_res_expr = function
   | InTupleList { value = { param_id; _ }; _ } -> failed ~at:param_id.pos "ensure_res_expr InTupleList TBD"
   | Choices (p,_) -> failed ~at:p.pos "ensure_res_expr Choices TBD"
   | InChoice (p,_,_) -> failed ~at:p.pos "ensure_res_expr InChoice TBD"
-  | Column _ | Of_values _ -> failwith "Not a simple expression"
+  | Column _ | Of_values _ | Lambda _ -> failwith "Not a simple expression"
   | Fun { kind; _ } when Sql.is_grouping kind -> failwith "Grouping function not allowed in simple expression"
   | Fun { kind; parameters; over; fn_pos; _ } ->
      ResFun { kind = source_fun_kind_to_infer kind; parameters = List.map ensure_res_expr parameters; over; fn_pos; ret = None } (* FIXME *)
@@ -1365,7 +1468,12 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
   in
   let env = { from_env with scope = env.scope } in
   let env = { env with query_has_grouping = List.length group > 0 } in
-  let narrow = Option.map_default (narrow_columns ~resolve:(resolve_column_opt ~env) ~constrains:(const true)) Attr_refinement.empty in
+  let narrow = Option.map_default
+    (narrow_columns
+      ~membership_null_semantics:(Dialect.Semantic.membership_null_semantics ())
+      ~resolve:(resolve_column_opt ~env) ~constrains:(const true))
+    Attr_refinement.empty
+  in
   let grouping_keys = Qualified_attr.Set.of_list @@
     List.filter_map (fun e -> Option.map Qualified_attr.of_attr (as_column ~env e)) group
   in
@@ -1835,13 +1943,21 @@ let rec eval (stmt:Sql.stmt) =
       | `Add (col,pos) ->
         let source_kind = Option.map (fun k -> k.value) col.Alter_action_attr.kind in
         let default_sql = Alter_action_attr.default_sql col in
-        Tables.alter_add name ~col:{ attr = Alter_action_attr.to_attr col; source_kind; default_sql } ~pos
+        Tables.alter_add name ~col:{
+          attr = Alter_action_attr.to_attr col;
+          source_kind;
+          default_sql;
+        } ~pos
       | `Drop col ->
         Tables.alter_drop name ~col
       | `Change (oldcol,col,pos) ->
         let source_kind = Option.map (fun k -> k.value) col.Alter_action_attr.kind in
         let default_sql = Alter_action_attr.default_sql col in
-        Tables.alter_change name ~oldcol ~col:{ attr = Alter_action_attr.to_attr col; source_kind; default_sql } ~pos
+        Tables.alter_change name ~oldcol ~col:{
+          attr = Alter_action_attr.to_attr col;
+          source_kind;
+          default_sql;
+        } ~pos
       | `RenameColumn (oldcol,newcol) ->
         Tables.rename_column name ~old_name:oldcol ~new_name:newcol
       | `RenameTable new_name ->

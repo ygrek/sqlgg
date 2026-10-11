@@ -91,7 +91,7 @@ Test TiDB dialect with subquery JOINs (should fail):
   >     GROUP BY user_id
   > ) stats ON u.id = stats.user_id;
   > EOF
-  Feature JoinOnSubquery is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at 
+  Feature JoinOnSubquery is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at
   JOIN (
       SELECT user_id, SUM(amount) as total 
       FROM orders 
@@ -200,7 +200,7 @@ Test TiDB dialect with CREATE TABLE AS SELECT (should fail):
   > CREATE TABLE users (id INT, name TEXT);
   > CREATE TABLE summary AS SELECT id, name FROM users;
   > EOF
-  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at  SELECT id, name FROM users
+  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at  SELECT id, name FROM users
   Errors encountered, no code generated
   [1]
 
@@ -719,7 +719,7 @@ Test PostgreSQL dialect with UNSIGNED (should fail):
   > );
   > EOF
   Feature AutoIncrement is not supported for dialect PostgreSQL (supported by: SQLite, MySQL, TiDB) at AUTO_INCREMENT
-  Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
+  Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB, ClickHouse) at INT UNSIGNED
   Errors encountered, no code generated
   [1]
 
@@ -3350,7 +3350,7 @@ Test DEFAULT dialect feature invalid for tidb:
   >   ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
   Errors encountered, no code generated
   [1]
 
@@ -3377,7 +3377,7 @@ Test DEFAULT dialect feature invalid for tidb:
   >   ts INTEGER DEFAULT (1 + 2)
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (1 + 2)
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT (1 + 2)
   Errors encountered, no code generated
   [1]
 
@@ -3424,7 +3424,7 @@ Test DEFAULT dialect feature invalid json for tidb:
   >   j json DEFAULT ('{"a": 1, "b": 2}')
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ('{"a": 1, "b": 2}')
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT ('{"a": 1, "b": 2}')
   Errors encountered, no code generated
   [1]
 
@@ -3471,7 +3471,7 @@ Test DEFAULT dialect feature valid json for tidb:
   >  f1 INT NOT NULL DEFAULT ( 1 + 1 )
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ( 1 + 1 )
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT ( 1 + 1 )
   Errors encountered, no code generated
   [1]
 

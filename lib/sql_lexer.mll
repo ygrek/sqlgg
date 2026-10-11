@@ -264,9 +264,31 @@ let is_keyword =
 
 let get_ident str =
   let str = String.lowercase_ascii str in
-  match Keywords.find_opt str keywords with
-  | Some token -> token
-  | None -> IDENT str
+  match Dialect.current (), str with
+  | Dialect.ClickHouse, ("int8" | "int16" | "int32" | "int64") -> CLICKHOUSE_SCALAR T.Int
+  | Dialect.ClickHouse, ("uint8" | "uint16" | "uint32" | "uint64") -> CLICKHOUSE_SCALAR T.UInt64
+  | Dialect.ClickHouse, ("float32" | "float64") -> CLICKHOUSE_SCALAR T.Float
+  | Dialect.ClickHouse, "string" -> CLICKHOUSE_SCALAR T.Text
+  | Dialect.ClickHouse, ("date" | "date32" | "datetime") -> CLICKHOUSE_SCALAR T.Datetime
+  | Dialect.ClickHouse, ("uuid" | "ipv4" | "ipv6") -> CLICKHOUSE_SCALAR T.Blob
+  | Dialect.ClickHouse, "array" -> CLICKHOUSE_ARRAY
+  | Dialect.ClickHouse, "map" -> CLICKHOUSE_MAP
+  | Dialect.ClickHouse, "tuple" -> CLICKHOUSE_TUPLE
+  | Dialect.ClickHouse, "nullable" -> CLICKHOUSE_NULLABLE
+  | Dialect.ClickHouse, "lowcardinality" -> CLICKHOUSE_LOWCARDINALITY
+  | Dialect.ClickHouse, "fixedstring" -> CLICKHOUSE_FIXED_STRING
+  | Dialect.ClickHouse, "datetime64" -> CLICKHOUSE_DATETIME64
+  | Dialect.ClickHouse, "decimal" -> CLICKHOUSE_DECIMAL None
+  | Dialect.ClickHouse, "decimal32" -> CLICKHOUSE_DECIMAL (Some 9)
+  | Dialect.ClickHouse, "decimal64" -> CLICKHOUSE_DECIMAL (Some 18)
+  | Dialect.ClickHouse, "decimal128" -> CLICKHOUSE_DECIMAL (Some 38)
+  | Dialect.ClickHouse, "decimal256" -> CLICKHOUSE_DECIMAL (Some 76)
+  | Dialect.ClickHouse, ("enum8" | "enum16") -> CLICKHOUSE_ENUM
+  | Dialect.MySQL, _ | Dialect.PostgreSQL, _ | Dialect.SQLite, _
+  | Dialect.TiDB, _ | Dialect.ClickHouse, _ ->
+    match Keywords.find_opt str keywords with
+    | Some token -> token
+    | None -> IDENT str
 
 let ident str = IDENT (String.lowercase_ascii str)
 
@@ -354,7 +376,11 @@ ruleMain = parse
   | "<%" | "%>" | "<<%" | "%>>" { TEXT_CMP_OP }
   | "<->" | "<<->" | "<->>" | "<<<->" | "<->>>" { TEXT_DIST_OP }
 
-  | "->"  { JSON_EXTRACT_OP }
+  | "->"  {
+      match Dialect.current () with
+      | Dialect.ClickHouse -> LAMBDA_ARROW
+      | Dialect.MySQL | Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB -> JSON_EXTRACT_OP
+    }
   | "->>" { JSON_UNQUOTE_EXTRACT_OP }
 
   | "?"   { QSTN }

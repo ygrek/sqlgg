@@ -176,7 +176,7 @@ let check ~file (stmt : Statements.t) =
       msg = Parser_utils.message_of_exn exn }
   in
   let dialect_errors (result : Syntax.result) =
-    let dialect = !Dialect.selected in
+    let dialect = Dialect.current () in
     result.dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
       let error msg = Some { pos = error_pos ds.pos; msg } in
       match Dialect.support ds dialect with

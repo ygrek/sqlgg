@@ -23,4 +23,13 @@ let no_check_features: Dialect.feature list ref = ref []
 
 let set_no_check_features l = no_check_features := l
 
-let allow_write_notnull_null b = Syntax.Config.allow_write_notnull_null := b
+let requested_nonnullable_write = ref Sql_semantics.Nonnullable_write.Reject
+
+let apply_requested_nonnullable_write () =
+  match !requested_nonnullable_write with
+  | Sql_semantics.Nonnullable_write.Replace_with_default -> Dialect.Semantic.enable_non_strict_writes ()
+  | Sql_semantics.Nonnullable_write.Reject -> ()
+
+let allow_write_notnull_null () =
+  requested_nonnullable_write := Sql_semantics.Nonnullable_write.Replace_with_default;
+  apply_requested_nonnullable_write ()

@@ -59,7 +59,7 @@ module Attr_refinement = struct
       (Schema.Source.Attr.map_attr (fun attr -> { attr with meta = Meta.merge_right inherited attr.meta }) a)
 end
 
-let narrow_columns ~resolve ~constrains e =
+let narrow_columns ~membership_null_semantics ~resolve ~constrains e =
   let open Attr_refinement in
   let strict col =
     match resolve col with
@@ -100,7 +100,12 @@ let narrow_columns ~resolve ~constrains e =
           | (Comparison (Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq)
             | Negation | Arith _ | Like | Like_escape), _ -> parameters
           | Membership, _ :: (SelectExpr _ | Inparam _) :: _ -> []
-          | (Membership | Range), _ -> List.take 1 parameters
+          | Membership, _ ->
+            begin match membership_null_semantics with
+            | Sql_semantics.Membership_null_semantics.Three_valued -> List.take 1 parameters
+            | Sql_semantics.Membership_null_semantics.Two_valued _ -> []
+            end
+          | Range, _ -> List.take 1 parameters
           | (Comparison (Not_distinct_op | Is_null | Is_not_null)
             | Quantified_comparison _
             | Agg _ | Null_handling _ | Logical _ | Ret _ | F _ | Col_assign _ | Multi _), _ -> []
@@ -108,9 +113,24 @@ let narrow_columns ~resolve ~constrains e =
         keep_all (List.map same strict_args)
       | Case c -> every_path c
       | Value _ | Param _ | Inparam _ | Choices _ | InChoice _ | InTupleList _
-      | SelectExpr _ | OptionActions _ | Of_values _ -> empty
+      | SelectExpr _ | OptionActions _ | Of_values _ | Lambda _ -> empty
       end
     | (`Holds | `Fails) as known ->
+      let membership_evidence kind expressions =
+        match membership_null_semantics, kind, known with
+        | Sql_semantics.Membership_null_semantics.Three_valued, `In, `Holds
+        | Sql_semantics.Membership_null_semantics.Three_valued, `NotIn, `Fails
+        | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `In, `Holds
+        | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `NotIn, `Fails ->
+          keep_all (List.map has_value expressions)
+        | Sql_semantics.Membership_null_semantics.Three_valued, `In, `Fails
+        | Sql_semantics.Membership_null_semantics.Three_valued, `NotIn, `Holds
+        | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `In, `Fails
+        | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `NotIn, `Holds
+        | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null,
+          (`In | `NotIn), (`Holds | `Fails) ->
+          empty
+      in
       let required =
         match e with
         | Fun { kind = Logical ((And | Or) as op); parameters; _ } ->
@@ -123,19 +143,39 @@ let narrow_columns ~resolve ~constrains e =
           narrow e opposite
         | Fun { kind = Comparison Is_not_null; parameters = [e]; _ }
         | Fun { kind = Quantified_comparison
-                  { op = Comp_equal | Comp_num_cmp | Comp_text_cmp | Comp_num_eq; quantifier = `Any };
+                  { op = Comp_num_cmp | Comp_text_cmp | Comp_num_eq; quantifier = `Any };
                 parameters = e :: _; _ } ->
           begin match known with `Holds -> has_value e | `Fails -> empty end
+        | Fun { kind = Quantified_comparison { op = Comp_equal; quantifier = `Any }; parameters = e :: _; _ } ->
+          begin match membership_null_semantics, known with
+          | (Sql_semantics.Membership_null_semantics.Three_valued
+            | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches), `Holds ->
+            has_value e
+          | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null, `Holds
+          | (Sql_semantics.Membership_null_semantics.Three_valued
+            | Sql_semantics.Membership_null_semantics.Two_valued _), `Fails -> empty
+          end
         | Fun { kind = Comparison Is_null; parameters = [e]; _ } ->
           begin match known with `Holds -> empty | `Fails -> has_value e end
         | Fun { kind = Quantified_comparison _; _ } -> empty
         | Case c -> every_path c
         | Choices (_, alternatives) ->
           keep_shared (List.map (fun c -> Stdlib.Option.fold ~none:empty ~some:same c.Sql.body) alternatives)
-        | InChoice (_, `In, Fun { kind = Membership; parameters = x :: _; _ }) ->
-          begin match known with `Holds -> has_value x | `Fails -> empty end
-        | InTupleList { value = { exprs; kind_in_tuple_list = `In; _ }; _ } ->
-          begin match known with `Holds -> keep_all (List.map has_value exprs) | `Fails -> empty end
+        | Fun { kind = Membership; parameters = _ :: (SelectExpr _ | Inparam _) :: _; _ } ->
+          empty
+        | Fun { kind = Membership; parameters = x :: _; _ } ->
+          begin match membership_null_semantics, known with
+          | Sql_semantics.Membership_null_semantics.Three_valued, (`Holds | `Fails)
+          | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `Holds ->
+            has_value x
+          | Sql_semantics.Membership_null_semantics.Two_valued Null_never_matches, `Fails
+          | Sql_semantics.Membership_null_semantics.Two_valued Null_matches_null, (`Holds | `Fails) ->
+            empty
+          end
+        | InChoice (_, kind, Fun { kind = Membership; parameters = x :: _; _ }) ->
+          membership_evidence kind [x]
+        | InTupleList { value = { exprs; kind_in_tuple_list; _ }; _ } ->
+          membership_evidence kind_in_tuple_list exprs
         | InChoice _ | OptionActions _ -> empty
         | e -> has_value e
       in

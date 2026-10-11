@@ -166,6 +166,8 @@ module L = struct
   | { t = One_or_all; _ }
   | { t = UInt64; _ }
   | { t = Any; _ } as t -> type_name t
+  | { t = (Array _ | Map _ | Tuple _ | Fun _); _ } as t ->
+    failwith (sprintf "type %s is not supported by the OCaml generator yet (no codec for containers)" (show t))
 
   let as_runtime_repr_name = function
   | { t = Blob; _ }
@@ -183,6 +185,8 @@ module L = struct
   | { t = Json; _ } -> "json"
   | { t = UInt64; _ } -> "uint64"
   | { t = One_or_all; _ } -> "text"
+  | { t = (Array _ | Map _ | Tuple _ | Fun _); _ } as t ->
+    failwith (sprintf "type %s is not supported by the OCaml generator yet (no codec for containers)" (show t))
 
 
   let as_api_type = as_lang_type
@@ -1074,7 +1078,8 @@ let generate_enum_modules stmts =
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
     | Int | Text | Blob | Float | Bool | Json | UInt64
-    | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
+    | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all
+    | Array _ | Map _ | Tuple _ | Fun _ -> None
   in
 
   let enum_unless_codec codec typ meta =

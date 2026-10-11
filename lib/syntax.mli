@@ -2,7 +2,6 @@ open Sql
 
 module Config: sig
   val debug : bool ref
-  val allow_write_notnull_null : bool ref
   val dynamic_select : bool ref
 end
 
