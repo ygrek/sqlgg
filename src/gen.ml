@@ -249,31 +249,6 @@ let subst_oracle index p = ":" ^ (show_param_name p index)
 let subst_postgresql index _ = "$" ^ string_of_int (index + 1)
 let subst_unnamed _ _ = "?"
 
-(* ClickHouse query parameters carry their type in the placeholder: {name:Type}.
-   The type is the one inferred for the parameter, spelled in ClickHouse syntax. *)
-let subst_clickhouse index (p : Sql.Type.t Sql.param) =
-  let rec clickhouse_type { Sql.Type.t; nullability } =
-    let base =
-      match t with
-      | Int -> "Int64"
-      | UInt64 -> "UInt64"
-      | Float | FloatingLiteral _ -> "Float64"
-      | Bool -> "Bool"
-      | Datetime -> "DateTime"
-      | Decimal { precision; scale } ->
-        sprintf "Decimal(%d, %d)" (Option.default 10 precision) (Option.default 0 scale)
-      | Text | Blob | Json | Union _ | StringLiteral _ | Json_path | One_or_all | Any -> "String"
-      | Array elt -> sprintf "Array(%s)" (clickhouse_type elt)
-      | Map (k, v) -> sprintf "Map(%s, %s)" (clickhouse_type k) (clickhouse_type v)
-      | Tuple ts -> sprintf "Tuple(%s)" (String.concat ", " (List.map clickhouse_type ts))
-      | Fun _ as k -> failwith (sprintf "a parameter cannot have type %s" (Sql.Type.show_kind k))
-    in
-    match nullability with
-    | Nullable -> sprintf "Nullable(%s)" base
-    | Strict | Depends -> base
-  in
-  sprintf "{%s:%s}" (show_param_name p index) (clickhouse_type p.typ)
-
 let get_sql stmt =
   let sql = List.find_map (function Props.Sql s -> Some s | _ -> None) stmt.props |> Option.get in
   let subst =
@@ -285,7 +260,32 @@ let get_sql stmt =
       | Unnamed -> subst_unnamed
       | Oracle -> subst_oracle
       | PostgreSQL -> subst_postgresql
-      | ClickHouse -> subst_clickhouse)
+      | ClickHouse ->
+        fun index (p : Sql.Type.t Sql.param) ->
+          let rec clickhouse_type { Sql.Type.t; nullability } =
+            let base =
+              match t with
+              | Int -> "Int64"
+              | UInt64 -> "UInt64"
+              | Float | FloatingLiteral _ -> "Float64"
+              | Bool -> "Bool"
+              | Datetime -> "DateTime"
+              | Decimal { precision; scale } ->
+                sprintf "Decimal(%d, %d)" (Option.default 10 precision) (Option.default 0 scale)
+              | Text | Blob | Json | Union _ | StringLiteral _ | Json_path | One_or_all | Any ->
+                "String"
+              | Array elt -> sprintf "Array(%s)" (clickhouse_type elt)
+              | Map (k, v) -> sprintf "Map(%s, %s)" (clickhouse_type k) (clickhouse_type v)
+              | Tuple ts -> sprintf "Tuple(%s)" (String.concat ", " (List.map clickhouse_type ts))
+              | Fun _ as kind ->
+                failwith
+                  (sprintf "a parameter cannot have type %s" (Sql.Type.show_kind kind))
+            in
+            match nullability with
+            | Nullable -> sprintf "Nullable(%s)" base
+            | Strict | Depends -> base
+          in
+          sprintf "{%s:%s}" (show_param_name p index) (clickhouse_type p.typ))
   in
   substitute_vars sql stmt.vars subst
 

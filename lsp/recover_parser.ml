@@ -76,8 +76,7 @@ let run semantics sql offset =
   in
   let next_lexeme lexbuf =
     match Sql_lexer.parse_rule semantics lexbuf with
-    | exception (Out_of_memory as exn) -> raise exn
-    | exception _ -> None
+    | exception Sql_lexer.Error _ -> None
     | token -> Some (make_lexeme lexbuf token)
   in
   let rec loop (acc : trace) env =
@@ -130,7 +129,7 @@ let tokens semantics sql =
   let lexbuf = lexbuf_of sql in
   List.of_seq @@ Seq.of_dispenser (fun () ->
     match Sql_lexer.parse_rule semantics lexbuf with
-    | exception _ | EOF -> None
+    | exception Sql_lexer.Error _ | EOF -> None
     | token -> Some (make_lexeme lexbuf token))
 
 let accepts run token =

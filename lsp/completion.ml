@@ -174,7 +174,7 @@ let make (document : Document.t) offset =
       in
       recovery_sources, sources
     in
-    let functions = Sql.Function.names () in
+    let functions = Dialect.Semantic.function_names semantics in
     let role = function
       | Recover_parser.Table_name ->
         let has_column symbol name =

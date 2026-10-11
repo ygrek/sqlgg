@@ -719,7 +719,7 @@ Test PostgreSQL dialect with UNSIGNED (should fail):
   > );
   > EOF
   Feature AutoIncrement is not supported for dialect PostgreSQL (supported by: SQLite, MySQL, TiDB) at AUTO_INCREMENT
-  Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB, ClickHouse) at INT UNSIGNED
+  Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at INT UNSIGNED
   Errors encountered, no code generated
   [1]
 

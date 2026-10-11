@@ -189,7 +189,7 @@ let get_lock_in_share_mode pos = only LockInShareMode [MySQL] pos
 
 let get_fulltext_index pos = only FulltextIndex [MySQL] pos
 
-let get_unsigned_types pos = only UnsignedTypes [MySQL; TiDB; ClickHouse] pos
+let get_unsigned_types pos = only UnsignedTypes [MySQL; TiDB] pos
 
 let get_autoincrement pos = only AutoIncrement [SQLite; MySQL; TiDB] pos
 
@@ -268,6 +268,60 @@ let get_default_expr ~kind ~expr pos =
 
 
 module Semantic = struct
+  module ClickHouse_function = struct
+    type t =
+      | Array_map of unit list [@as "arraymap"] [@no_args]
+      | Array_filter [@as "arrayfilter"]
+      | Array_sum [@as "arraysum"]
+      | Has [@as "has"]
+      | Length [@as "length"]
+    [@@deriving of_string, to_string]
+
+    type parse_error =
+      | Unknown_name
+      | Invalid_arity
+
+    let names = List.map to_string [Array_map []; Array_filter; Array_sum; Has; Length]
+
+    let parse raw_name argument_count =
+      match raw_name, argument_count with
+      | "arraymap", count when count >= 2 ->
+        Ok (Array_map (List.init (count - 2) (fun _ -> ())))
+      | "arraymap", _ -> Error Invalid_arity
+      | name, count ->
+        match of_string name, count with
+        | Some Array_filter, 2 -> Ok Array_filter
+        | Some Array_sum, 1 -> Ok Array_sum
+        | Some Has, 2 -> Ok Has
+        | Some Length, 1 -> Ok Length
+        | Some (Array_map _ | Array_filter | Array_sum | Has | Length), _ ->
+          Error Invalid_arity
+        | None, _ -> Error Unknown_name
+
+    let signature = function
+      | Array_map additional_arrays ->
+        let array_count = 1 + List.length additional_arrays in
+        let element_templates = List.init array_count (fun index -> Sql.Type.Var index) in
+        let result_template = Sql.Type.Var array_count in
+        Sql.(F
+          (Type.Array_of result_template,
+           Type.Fun_of (element_templates, result_template)
+           :: List.map (fun template -> Type.Array_of template) element_templates))
+      | Array_filter ->
+        Sql.(F
+          (Type.Array_of (Type.Var 0),
+           [Type.Fun_of ([Type.Var 0], Type.Typ (Type.strict Type.Bool));
+            Type.Array_of (Type.Var 0)]))
+      | Array_sum -> Sql.(F (Type.Var 0, [Type.Array_of (Type.Var 0)]))
+      | Has ->
+        Sql.(F
+          (Type.Typ (Type.strict Type.Bool),
+           [Type.Array_of (Type.Var 0); Type.Var 0]))
+      | Length ->
+        Sql.(F
+          (Type.Typ (Type.strict Type.Int), [Type.Array_of (Type.Var 0)]))
+  end
+
   type t = {
     outer_join_padding : Sql_semantics.Outer_join_padding.t;
     membership_null_semantics : Sql_semantics.Membership_null_semantics.t;
@@ -282,6 +336,11 @@ module Semantic = struct
     column_type_syntax : Sql_semantics.Column_type_syntax.t;
     function_catalog : Sql_semantics.Function_catalog.t;
   }
+
+  type function_resolution =
+    | Standard_function
+    | Dialect_function of Sql.Source_type.t Sql.func
+    | Invalid_arity of { name : string; argument_count : int }
 
   let of_configuration = function
     | Row_store row_store -> {
@@ -325,37 +384,30 @@ module Semantic = struct
         function_catalog = Sql_semantics.Function_catalog.ClickHouse_functions;
       }
 
-  let function_signature { function_catalog; _ } name arity =
-    match function_catalog, String.lowercase_ascii name, arity with
-    | Sql_semantics.Function_catalog.ClickHouse_functions, "arraymap", arity when arity >= 2 ->
-      let element_templates = List.init (arity - 1) (fun index -> Sql.Type.Var index) in
-      let result_template = Sql.Type.Var (arity - 1) in
-      Some Sql.(F
-        (Type.Array_of result_template,
-         Type.Fun_of (element_templates, result_template)
-         :: List.map (fun template -> Type.Array_of template) element_templates))
-    | Sql_semantics.Function_catalog.ClickHouse_functions, "arrayfilter", 2 ->
-      Some Sql.(F
-        (Type.Array_of (Type.Var 0),
-         [Type.Fun_of ([Type.Var 0], Type.Typ (Type.strict Type.Bool));
-          Type.Array_of (Type.Var 0)]))
-    | Sql_semantics.Function_catalog.ClickHouse_functions, "arraysum", 1 ->
-      Some Sql.(F (Type.Var 0, [Type.Array_of (Type.Var 0)]))
-    | Sql_semantics.Function_catalog.ClickHouse_functions, "has", 2 ->
-      Some Sql.(F
-        (Type.Typ (Type.strict Type.Bool),
-         [Type.Array_of (Type.Var 0); Type.Var 0]))
-    | Sql_semantics.Function_catalog.ClickHouse_functions, "length", 1 ->
-      Some Sql.(F
-        (Type.Typ (Type.strict Type.Int), [Type.Array_of (Type.Var 0)]))
-    | (Sql_semantics.Function_catalog.Standard_functions
-      | Sql_semantics.Function_catalog.ClickHouse_functions), _, _ -> None
+  let function_names { function_catalog; _ } =
+    match function_catalog with
+    | Sql_semantics.Function_catalog.Standard_functions -> Sql.Function.names ()
+    | Sql_semantics.Function_catalog.ClickHouse_functions ->
+      List.rev_append (Sql.Function.names ()) ClickHouse_function.names
+      |> List.sort_uniq String.compare
+
+  let resolve_function { function_catalog; _ } name parameters =
+    match function_catalog with
+    | Sql_semantics.Function_catalog.Standard_functions -> Standard_function
+    | Sql_semantics.Function_catalog.ClickHouse_functions ->
+      let argument_count = List.length parameters in
+      match ClickHouse_function.parse name argument_count with
+      | Ok function_ -> Dialect_function (ClickHouse_function.signature function_)
+      | Error ClickHouse_function.Unknown_name -> Standard_function
+      | Error ClickHouse_function.Invalid_arity -> Invalid_arity { name; argument_count }
 end
 
 open Sql
 
 let check_unsigned_type pos = function
-  | Source_type.Infer Type.UInt64 -> [get_unsigned_types pos]
+  (* UInt64 is a native ClickHouse type. [UNSIGNED] is a separate MySQL/TiDB
+     type modifier even though both map to the same inference type. *)
+  | Source_type.Infer Type.UInt64 -> []
   | Source_type.Int { sign = Unsigned; _ } -> [get_unsigned_types pos]
   | _ -> []
 

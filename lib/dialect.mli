@@ -99,5 +99,12 @@ module Semantic : sig
   }
 
   val of_configuration : configuration -> t
-  val function_signature : t -> string -> int -> Sql.Source_type.t Sql.func option
+
+  type function_resolution = private
+    | Standard_function
+    | Dialect_function of Sql.Source_type.t Sql.func
+    | Invalid_arity of { name : string; argument_count : int }
+
+  val function_names : t -> string list
+  val resolve_function : t -> string -> Sql.expr list -> function_resolution
 end

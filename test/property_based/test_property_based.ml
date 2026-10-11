@@ -338,6 +338,15 @@ let test_semantic_setting_parser = [
         value = "2";
       }))
       (Sql_semantics.ClickHouse.Setting.parse "transform_null_in=2"));
+  "exposes ClickHouse functions to completion" >:: (fun () ->
+    let functions =
+      Dialect.Semantic.function_names
+        (Dialect.Semantic.of_configuration
+           (Dialect.default_configuration Dialect.ClickHouse))
+    in
+    List.iter
+      (fun name -> assert_bool name (List.mem name functions))
+      ["arraymap"; "arrayfilter"; "arraysum"; "has"; "length"]);
 ]
 
 module Narrowing_model = struct

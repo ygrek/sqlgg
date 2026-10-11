@@ -25,6 +25,14 @@ remain strict unless the outer type is Nullable.
   > );
   > EOF
 
+UInt64 is native ClickHouse syntax; the MySQL/TiDB UNSIGNED modifier is not.
+
+  $ printf 'CREATE TABLE native_unsigned (id UInt64);\n' | sqlgg -no-header -dialect clickhouse -gen none -
+  $ printf 'CREATE TABLE mysql_unsigned (id INT UNSIGNED);\n' | sqlgg -no-header -dialect clickhouse -gen none - 2>&1
+  Feature UnsignedTypes is not supported for dialect ClickHouse (supported by: MySQL, TiDB) at INT UNSIGNED
+  Errors encountered, no code generated
+  [1]
+
 Higher-order signatures bind their type variables from arrays before checking
 the lambda body.
 
@@ -40,6 +48,15 @@ the lambda body.
   >        has(arrayMap(x -> x + 1, xs), 1)
   > FROM paired;
   > EOF
+
+Known ClickHouse functions reject invalid arities instead of falling back to an
+untyped unknown function.
+
+  $ printf 'SELECT arraySum([1], [2]);\n' | sqlgg -no-header -dialect clickhouse -gen none - 2>&1
+  ==> SELECT arraySum([1], [2])
+  Error: wrong number of arguments for ClickHouse function "arraysum": 2
+  Errors encountered, no code generated
+  [1]
 
 ClickHouse placeholders carry the inferred parameter type.
 

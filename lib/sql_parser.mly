@@ -19,11 +19,14 @@
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
   let call name parameters =
-    let arity = List.length parameters in
     let signature =
-      match Dialect.Semantic.function_signature (Parser_state.semantics ()) name arity with
-      | Some signature -> signature
-      | None -> Function.lookup name arity
+      match Dialect.Semantic.resolve_function (Parser_state.semantics ()) name parameters with
+      | Dialect.Semantic.Dialect_function signature -> signature
+      | Dialect.Semantic.Standard_function -> Function.lookup name (List.length parameters)
+      | Dialect.Semantic.Invalid_arity { name; argument_count } ->
+        failwith
+          (Printf.sprintf "wrong number of arguments for ClickHouse function %S: %d"
+             name argument_count)
     in
     fn name signature parameters
 
