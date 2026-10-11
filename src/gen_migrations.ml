@@ -38,8 +38,11 @@ let type_kind_to_sql (k : Sql.Type.kind) = match k with
     let ctors = Sql.Type.Enum_kind.Ctors.elements ctors in
     sprintf "ENUM(%s)"
       (String.concat ", " (List.map (fun c -> sprintf "'%s'" (escape_sql_string c)) ctors))
-  | (Any | StringLiteral _ | Json_path | One_or_all) as k ->
+  | (Any | StringLiteral _ | Json_path | One_or_all | Fun _) as k ->
     fail "cannot serialize inferred type %s for migration SQL (non-storable)"
+      (Sql.Type.show_kind k)
+  | (Array _ | Map _ | Tuple _) as k ->
+    fail "cannot serialize type %s for migration SQL (containers are not supported by the migration generator yet)"
       (Sql.Type.show_kind k)
   | FloatingLiteral _ -> "FLOAT"
 

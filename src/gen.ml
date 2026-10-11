@@ -6,7 +6,7 @@ open Sqlgg
 open Prelude
 open Stmt
 
-type subst_mode = | Named | Unnamed | Oracle | PostgreSQL
+type subst_mode = | Named | Unnamed | Oracle | PostgreSQL | ClickHouse
 
 type stmt = { schema : Sql.schema_column list; vars : Sql.var list; kind : kind; props : Props.t list; }
 
@@ -259,7 +259,33 @@ let get_sql stmt =
       | Named -> subst_named
       | Unnamed -> subst_unnamed
       | Oracle -> subst_oracle
-      | PostgreSQL -> subst_postgresql)
+      | PostgreSQL -> subst_postgresql
+      | ClickHouse ->
+        fun index (p : Sql.Type.t Sql.param) ->
+          let rec clickhouse_type { Sql.Type.t; nullability } =
+            let base =
+              match t with
+              | Int -> "Int64"
+              | UInt64 -> "UInt64"
+              | Float | FloatingLiteral _ -> "Float64"
+              | Bool -> "Bool"
+              | Datetime -> "DateTime"
+              | Decimal { precision; scale } ->
+                sprintf "Decimal(%d, %d)" (Option.default 10 precision) (Option.default 0 scale)
+              | Text | Blob | Json | Union _ | StringLiteral _ | Json_path | One_or_all | Any ->
+                "String"
+              | Array elt -> sprintf "Array(%s)" (clickhouse_type elt)
+              | Map (k, v) -> sprintf "Map(%s, %s)" (clickhouse_type k) (clickhouse_type v)
+              | Tuple ts -> sprintf "Tuple(%s)" (String.concat ", " (List.map clickhouse_type ts))
+              | Fun _ as kind ->
+                failwith
+                  (sprintf "a parameter cannot have type %s" (Sql.Type.show_kind kind))
+            in
+            match nullability with
+            | Nullable -> sprintf "Nullable(%s)" base
+            | Strict | Depends -> base
+          in
+          sprintf "{%s:%s}" (show_param_name p index) (clickhouse_type p.typ))
   in
   substitute_vars sql stmt.vars subst
 

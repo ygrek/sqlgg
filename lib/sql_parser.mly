@@ -18,9 +18,24 @@
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
-  let call name parameters = fn name (Function.lookup name (List.length parameters)) parameters
+  let call name parameters =
+    let signature =
+      match Dialect.Semantic.resolve_function (Parser_state.semantics ()) name parameters with
+      | Dialect.Semantic.Dialect_function signature -> signature
+      | Dialect.Semantic.Standard_function -> Function.lookup name (List.length parameters)
+      | Dialect.Semantic.Invalid_arity { name; argument_count } ->
+        failwith
+          (Printf.sprintf "wrong number of arguments for ClickHouse function %S: %d"
+             name argument_count)
+    in
+    fn name signature parameters
 
   let arith name ret e1 e2 = fn name (Arith (Source_type.depends ret)) [e1; e2]
+
+  let clickhouse_value_type = function
+    | `Strict kind -> Type.strict kind
+    | `Nullable kind -> Type.nullable kind
+
 %}
 
 %token <int> INTEGER
@@ -57,11 +72,15 @@
 %token JSON_ARRAYAGG
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token TEXT_CMP_OP TEXT_DIST_OP
-%token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
+%token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP LAMBDA_ARROW
 %token <Sql.int_size option> T_INTEGER
 %token T_TEXT T_TINYTEXT T_MEDIUMTEXT T_LONGTEXT T_CHAR T_VARCHAR T_VARCHAR2
 %token T_BLOB T_TINYBLOB T_MEDIUMBLOB T_LONGBLOB T_VARBINARY
 %token T_FLOAT T_DOUBLE T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
+%token <Sql.Type.kind> CLICKHOUSE_SCALAR
+%token CLICKHOUSE_ARRAY CLICKHOUSE_MAP CLICKHOUSE_TUPLE CLICKHOUSE_NULLABLE CLICKHOUSE_LOWCARDINALITY
+%token CLICKHOUSE_FIXED_STRING CLICKHOUSE_DATETIME64 CLICKHOUSE_ENUM
+%token <int option> CLICKHOUSE_DECIMAL
 
 (*
 %left COMMA_JOIN
@@ -70,6 +89,7 @@
 (* FIXME precedence of COMMA and JOIN *)
 
 %nonassoc LOWEST
+%right LAMBDA_ARROW
 %nonassoc COLLATE KEY ON WITH NULL
 
 (* https://dev.mysql.com/doc/refman/8.0/en/operator-precedence.html *)
@@ -95,6 +115,7 @@
 %nonassoc ESCAPE
 
 %type <Sql.expr> expr
+%type <[ `Strict of Sql.Type.kind | `Nullable of Sql.Type.kind ]> clickhouse_type
 
 %start <Sql.stmt> input
 
@@ -249,7 +270,8 @@ routine_extra: LANGUAGE ident { }
 
 (* cf. ColId / unreserved_keyword in PostgreSQL's gram.y (TYPE_P is unreserved there too):
    https://github.com/postgres/postgres/blob/REL_18_0/src/backend/parser/gram.y#L17632 *)
-ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION { x }
+ident:
+  | x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION { x }
 
 table_ident: x=ident { x }
 qual_ident: x=ident { x }
@@ -454,11 +476,37 @@ alter_pos: AFTER col=ident { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=located(ident) sql_kind=located_sql_type? extra=located(column_def_extra)*
+column_def: name=located(ident) sql_kind=column_sql_type? extra=located(column_def_extra)*
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
     let extra = List.filter_map (fun { value; pos } -> Option.map (fun v -> { value = v; pos }) value) extra in
+    let sql_kind, implied_extra = match sql_kind with
+      | Some (kind, constraints) -> Some kind, constraints
+      | None -> None, []
+    in
+    let extra = implied_extra @ extra in
+    let has_explicit_nullability = List.exists (function
+      | { value = Alter_action_attr.Syntax_constraint Null; _ }
+      | { value = Alter_action_attr.Syntax_constraint NotNull; _ } -> true
+      | { value = Alter_action_attr.Syntax_constraint PrimaryKey; _ }
+      | { value = Alter_action_attr.Syntax_constraint Unique; _ }
+      | { value = Alter_action_attr.Syntax_constraint Autoincrement; _ }
+      | { value = Alter_action_attr.Syntax_constraint (OnConflict _); _ }
+      | { value = Alter_action_attr.Syntax_constraint WithDefault; _ }
+      | { value = Alter_action_attr.Syntax_constraint (Composite _); _ }
+      | { value = Alter_action_attr.Default _; _ } -> false
+    ) extra in
+    let extra =
+      match (Parser_state.semantics ()).implicit_column_nullability,
+            has_explicit_nullability with
+      | Sql_semantics.Implicit_column_nullability.Strict, false ->
+        make_located ~value:(Alter_action_attr.Syntax_constraint NotNull) ~pos:name.pos
+        :: extra
+      | Sql_semantics.Implicit_column_nullability.Nullable, false
+      | (Sql_semantics.Implicit_column_nullability.Strict
+        | Sql_semantics.Implicit_column_nullability.Nullable), true -> extra
+    in
     { Alter_action_attr.name = name; meta; kind = sql_kind; extra; }
   }
 
@@ -532,7 +580,7 @@ set_column_expr:
 anyall: ANY | SOME { `Any }
       | ALL { `All }
 
-mnot(X): NOT x = X | x = X { x }
+mnot(X): NOT X { fun e -> fn "not" Negation [e] } | X { fun e -> e }
 
 attr_name: cname=ident { { cname; tname=None; cpos = ($startofs, $endofs) } }
          | table=qualifier DOT cname=ident { {cname; tname=Some table; cpos = ($startofs, $endofs) } } (* FIXME database identifier *)
@@ -577,14 +625,28 @@ b_expr_:
 
 expr_:
       e=c_expr | e=operators(expr) { e }
+    | LPAREN parameter=expr COMMA parameters=commas(expr) RPAREN LAMBDA_ARROW body=expr
+      {
+        let parameter_name = function
+          | Column { collated = { cname; tname = None; _ }; collation = None } -> cname
+          | parameter ->
+            failwith
+              (Printf.sprintf "lambda parameter must be an unqualified identifier, got %s"
+                 (expr_to_string parameter))
+        in
+        Lambda {
+          lambda_params = List.map parameter_name (parameter :: parameters);
+          lambda_body = body;
+        }
+      }
     | e1=expr AND e2=expr { fn "boolean_bin_op" (Logical And) [e1;e2] }
     | e1=expr XOR e2=expr { fn "boolean_bin_op" (Logical Xor) [e1;e2] }
     | e1=expr OR e2=expr { fn "boolean_bin_op" (Logical Or) [e1;e2] }
     | NOT e=expr %prec NOT { fn "not" Negation [e] }
-    | e1=expr mnot(like) e2=expr %prec LIKE { fn "like" Like [e1;e2] }
-    | e1=expr mnot(like) e2=expr ESCAPE esc=expr { fn "like_escape" Like_escape [fn "like" Like [e1;e2]; esc] }
-    | e1=expr mnot(IN) l=sequence(expr) { fn "in" Membership (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { fn "in_select" Membership [e1; SelectExpr (select, `AsValue)] }
+    | e1=expr negate=mnot(like) e2=expr %prec LIKE { negate (fn "like" Like [e1;e2]) }
+    | e1=expr negate=mnot(like) e2=expr ESCAPE esc=expr { negate (fn "like_escape" Like_escape [fn "like" Like [e1;e2]; esc]) }
+    | e1=expr negate=mnot(IN) l=sequence(expr) { negate (fn "in" Membership (e1::l)) }
+    | e1=expr negate=mnot(IN) LPAREN select=select_stmt RPAREN { negate (fn "in_select" Membership [e1; SelectExpr (select, `AsValue)]) }
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | e1=expr k=in_or_not_in p=param
       {
@@ -599,11 +661,17 @@ expr_:
     | e=expr IS NOT NULL { fn "is_not_null" (Comparison Is_not_null) [e] }
     | e=expr IS NULL { fn "is_null" (Comparison Is_null) [e] }
     | e1=expr IS is_not distinct_from e2=expr %prec IS { fn "is_distinct" (Comparison Not_distinct_op) [e1;e2] }
-    | e=expr mnot(BETWEEN) a=b_expr AND b=expr { fn "between" Range [e;a;b] }
+    | e=expr negate=mnot(BETWEEN) a=b_expr AND b=expr { negate (fn "between" Range [e;a;b]) }
 
 c_expr_:
       MOD LPAREN e1=expr COMMA e2=expr RPAREN { arith "mod" Any e1 e2 } (* mysql special *)
     | LPAREN e=expr RPAREN { e }
+    | a=attr_name LAMBDA_ARROW body=expr
+      {
+        match a.tname with
+        | None -> Lambda { lambda_params = [a.cname]; lambda_body = body }
+        | Some _ -> failwith "lambda parameter must be an unqualified identifier"
+      }
     | a=attr_name c=collate? { column ?collation:c a }
     | VALUES LPAREN n=ident RPAREN { Of_values n }
     | v=literal_value | v=datetime_value { v }
@@ -799,6 +867,52 @@ sql_type_flavor_plain:
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
   | name=ident { Source_type.Infer (User_types.get name) }
+
+(* Nullable and LowCardinality wrap only scalar types; containers carry nullability in their elements. *)
+clickhouse_type:
+  | kind=clickhouse_scalar_type { `Strict kind }
+  | CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN { `Nullable kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN kind=clickhouse_scalar_type RPAREN { `Strict kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN RPAREN
+    { `Nullable kind }
+  | CLICKHOUSE_ARRAY LPAREN element=clickhouse_type RPAREN
+    { `Strict (Type.Array (clickhouse_value_type element)) }
+  | CLICKHOUSE_MAP LPAREN key=clickhouse_type COMMA value=clickhouse_type RPAREN
+    { `Strict (Type.Map (clickhouse_value_type key, clickhouse_value_type value)) }
+  | CLICKHOUSE_TUPLE elements=sequence(clickhouse_type)
+    { `Strict (Type.Tuple (List.map clickhouse_value_type elements)) }
+
+clickhouse_scalar_type:
+  | kind=CLICKHOUSE_SCALAR { kind }
+  | CLICKHOUSE_FIXED_STRING LPAREN INTEGER RPAREN { Type.Text }
+  | CLICKHOUSE_DATETIME64
+    option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, TEXT))), RPAREN))
+    { Type.Datetime }
+  | precision=CLICKHOUSE_DECIMAL parameters=sequence(INTEGER)
+    {
+      match precision, parameters with
+      | None, [precision; scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
+      | Some precision, [scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
+      | None, _ -> failwith "ClickHouse Decimal requires precision and scale"
+      | Some _, _ -> failwith "ClickHouse Decimal32/64/128/256 requires a scale"
+    }
+  | CLICKHOUSE_ENUM ctors=sequence(clickhouse_enum_ctor) { Type.make_enum_kind ctors }
+
+clickhouse_enum_ctor:
+  | name=TEXT EQUAL option(MINUS) INTEGER { name }
+
+column_sql_type:
+  | t=located_sql_type { t, [] }
+  | t=located(clickhouse_type)
+    {
+      let kind, constraints =
+        match t.value with
+        | `Strict kind -> kind, []
+        | `Nullable kind ->
+          kind, [make_located ~pos:t.pos ~value:(Alter_action_attr.Syntax_constraint Constraint.Null)]
+      in
+      make_located ~pos:t.pos ~value:(make_collated ~collated:(Source_type.Infer kind) ()), constraints
+    }
 
 type_args: LPAREN INTEGER RPAREN UNSIGNED? | LPAREN INTEGER COMMA INTEGER RPAREN { }
 

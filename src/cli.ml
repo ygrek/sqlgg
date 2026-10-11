@@ -51,6 +51,7 @@ let set_params_mode s =
   | "unnamed" -> Some Gen.Unnamed
   | "oracle" -> Some Gen.Oracle
   | "postgresql" -> Some Gen.PostgreSQL
+  | "clickhouse" -> Some Gen.ClickHouse
   | "none" -> None
   | _ -> failwith (sprintf "Unknown params mode: %s" s)
 
@@ -195,20 +196,33 @@ let render groups =
 
 let show_version () = print_endline Sqlgg_config.version
 
-let set_dialect s =
-  let d =
-    match Dialect.of_string s with
-    | Some d -> d
-    | None -> failwith (sprintf "Unknown dialect: %s" s)
-  in
-  Dialect.set_selected d;
+let set_dialect specification =
+  begin match Dialect.parse_configuration specification with
+  | Ok configuration -> Sqlgg_config.configure_dialect configuration
+  | Error (Dialect.Unknown_dialect dialect_name) ->
+    failwith (sprintf "Unknown dialect: %s" dialect_name)
+  | Error (Dialect.Settings_not_supported row_store) ->
+    fatal "dialect %s does not accept settings"
+      (Dialect.to_string (Dialect.row_store_dialect row_store))
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Malformed_setting raw_setting)) ->
+    fatal "malformed ClickHouse setting %S (expected name=value)" raw_setting
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Unknown_setting setting)) ->
+    fatal "unknown ClickHouse setting %S" setting
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Invalid_setting_value { setting; value })) ->
+    fatal "invalid value %S for ClickHouse setting %s (expected 0 or 1)"
+      value (Sql_semantics.ClickHouse.Setting.name_to_string setting)
+  end;
   match !Gen.params_mode with
   | Some _ -> () (* if manually set via -params, keep user's choice *)
   | None ->
     Gen.params_mode :=
-      match d with
+      match Dialect.dialect_of_configuration !Sqlgg_config.dialect with
       | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Gen.Unnamed  (* ? syntax *)
       | Dialect.PostgreSQL -> Some Gen.PostgreSQL  (* $1, $2, etc. *)
+      | Dialect.ClickHouse -> Some Gen.ClickHouse  (* {name:Type} *)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
@@ -359,7 +373,7 @@ let parse_args () =
     [
       "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|csharp|sql|none Set output language (default: none)";
       "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
+      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|clickhouse|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
       "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
       "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
@@ -391,12 +405,13 @@ let parse_args () =
     { title = "Dialect and checks"; opts =
     [
       "-dialect", Arg.String set_dialect,
-        sprintf "%s Set SQL dialect. Queries can only use its features"
+        sprintf "%s[,<setting=value>...] Set SQL dialect and semantic settings. Queries can only use its features"
           (enum_values Dialect.to_string Dialect.all);
       "-no-check", Arg.String set_no_check,
         sprintf "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: %s)"
           (enum_values Dialect.feature_to_string Dialect.all_of_feature);
-      "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
+      "-allow-write-notnull-null", Arg.Unit Sqlgg_config.allow_write_notnull_null,
+        " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only; for ClickHouse use -dialect clickhouse,insert_null_as_default=1)";
     ] };
 
     { title = "Generated header"; opts =
@@ -436,13 +451,13 @@ let parse_args () =
   in
   Arg.parse args work usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
-  begin match !alter_lock, !Dialect.selected with
-  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB) ->
+  begin match !alter_lock, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB | Dialect.ClickHouse) ->
     fatal "-alter-lock is only supported for dialect mysql"
   | None, _ | Some _, Dialect.MySQL -> ()
   end;
-  begin match !alter_algorithm, !Dialect.selected with
-  | Some _, (Dialect.PostgreSQL | Dialect.SQLite) ->
+  begin match !alter_algorithm, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.ClickHouse) ->
     fatal "-alter-algorithm is only supported for dialects mysql and tidb"
   | None, _ | Some _, (Dialect.MySQL | Dialect.TiDB) -> ()
   end;

@@ -262,11 +262,32 @@ let is_keyword =
 
 (* FIXME case sensitivity??! *)
 
-let get_ident str =
+let get_ident (semantics : Dialect.Semantic.t) str =
   let str = String.lowercase_ascii str in
-  match Keywords.find_opt str keywords with
-  | Some token -> token
-  | None -> IDENT str
+  match semantics.column_type_syntax, str with
+  | ClickHouse_types, ("int8" | "int16" | "int32" | "int64") -> CLICKHOUSE_SCALAR T.Int
+  | ClickHouse_types, ("uint8" | "uint16" | "uint32" | "uint64") -> CLICKHOUSE_SCALAR T.UInt64
+  | ClickHouse_types, ("float32" | "float64") -> CLICKHOUSE_SCALAR T.Float
+  | ClickHouse_types, "string" -> CLICKHOUSE_SCALAR T.Text
+  | ClickHouse_types, ("date" | "date32" | "datetime") -> CLICKHOUSE_SCALAR T.Datetime
+  | ClickHouse_types, ("uuid" | "ipv4" | "ipv6") -> CLICKHOUSE_SCALAR T.Blob
+  | ClickHouse_types, "array" -> CLICKHOUSE_ARRAY
+  | ClickHouse_types, "map" -> CLICKHOUSE_MAP
+  | ClickHouse_types, "tuple" -> CLICKHOUSE_TUPLE
+  | ClickHouse_types, "nullable" -> CLICKHOUSE_NULLABLE
+  | ClickHouse_types, "lowcardinality" -> CLICKHOUSE_LOWCARDINALITY
+  | ClickHouse_types, "fixedstring" -> CLICKHOUSE_FIXED_STRING
+  | ClickHouse_types, "datetime64" -> CLICKHOUSE_DATETIME64
+  | ClickHouse_types, "decimal" -> CLICKHOUSE_DECIMAL None
+  | ClickHouse_types, "decimal32" -> CLICKHOUSE_DECIMAL (Some 9)
+  | ClickHouse_types, "decimal64" -> CLICKHOUSE_DECIMAL (Some 18)
+  | ClickHouse_types, "decimal128" -> CLICKHOUSE_DECIMAL (Some 38)
+  | ClickHouse_types, "decimal256" -> CLICKHOUSE_DECIMAL (Some 76)
+  | ClickHouse_types, ("enum8" | "enum16") -> CLICKHOUSE_ENUM
+  | (Standard_types | ClickHouse_types), _ ->
+    match Keywords.find_opt str keywords with
+    | Some token -> token
+    | None -> IDENT str
 
 let ident str = IDENT (String.lowercase_ascii str)
 
@@ -324,8 +345,8 @@ and
 ruleTail = parse
   | _* as tail { tail }
 and
-ruleMain = parse
-  | blank { ruleMain lexbuf }
+ruleMain semantics = parse
+  | blank { ruleMain semantics lexbuf }
 
   | '('                { LPAREN }
   | ')'                { RPAREN }
@@ -334,7 +355,7 @@ ruleMain = parse
   | '{'   { LCURLY (lexeme_start lexbuf) }
   | '}'   { RCURLY (lexeme_start lexbuf) }
 
-  | line_comment | block_comment { ruleMain lexbuf }
+  | line_comment | block_comment { ruleMain semantics lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -354,7 +375,11 @@ ruleMain = parse
   | "<%" | "%>" | "<<%" | "%>>" { TEXT_CMP_OP }
   | "<->" | "<<->" | "<->>" | "<<<->" | "<->>>" { TEXT_DIST_OP }
 
-  | "->"  { JSON_EXTRACT_OP }
+  | "->"  {
+      match semantics.Dialect.Semantic.arrow_operator with
+      | Sql_semantics.Arrow_operator.Lambda -> LAMBDA_ARROW
+      | Sql_semantics.Arrow_operator.Json_extract -> JSON_EXTRACT_OP
+    }
   | "->>" { JSON_UNQUOTE_EXTRACT_OP }
 
   | "?"   { QSTN }
@@ -379,7 +404,7 @@ ruleMain = parse
   | open_string { error lexbuf "unterminated string literal" }
   | open_comment { error lexbuf "unterminated comment" }
 
-  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
+  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident semantics str }
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
@@ -392,8 +417,8 @@ ruleInDollarQuotes tag = parse
 
 {
 
-  let parse_rule lexbuf =
-    let token = ruleMain lexbuf in
+  let parse_rule semantics lexbuf =
+    let token = ruleMain semantics lexbuf in
     match !Parser_state.mode with
     | Normal -> token
     | Ignore ->

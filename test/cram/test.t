@@ -91,7 +91,7 @@ Test TiDB dialect with subquery JOINs (should fail):
   >     GROUP BY user_id
   > ) stats ON u.id = stats.user_id;
   > EOF
-  Feature JoinOnSubquery is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at 
+  Feature JoinOnSubquery is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at
   JOIN (
       SELECT user_id, SUM(amount) as total 
       FROM orders 
@@ -200,7 +200,7 @@ Test TiDB dialect with CREATE TABLE AS SELECT (should fail):
   > CREATE TABLE users (id INT, name TEXT);
   > CREATE TABLE summary AS SELECT id, name FROM users;
   > EOF
-  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at  SELECT id, name FROM users
+  Feature CreateTableAsSelect is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at  SELECT id, name FROM users
   Errors encountered, no code generated
   [1]
 
@@ -3350,7 +3350,7 @@ Test DEFAULT dialect feature invalid for tidb:
   >   ts DATETIME DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT (CURRENT_TIMESTAMP + INTERVAL 12 HOUR)
   Errors encountered, no code generated
   [1]
 
@@ -3377,7 +3377,7 @@ Test DEFAULT dialect feature invalid for tidb:
   >   ts INTEGER DEFAULT (1 + 2)
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT (1 + 2)
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT (1 + 2)
   Errors encountered, no code generated
   [1]
 
@@ -3424,7 +3424,7 @@ Test DEFAULT dialect feature invalid json for tidb:
   >   j json DEFAULT ('{"a": 1, "b": 2}')
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ('{"a": 1, "b": 2}')
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT ('{"a": 1, "b": 2}')
   Errors encountered, no code generated
   [1]
 
@@ -3471,7 +3471,7 @@ Test DEFAULT dialect feature valid json for tidb:
   >  f1 INT NOT NULL DEFAULT ( 1 + 1 )
   > );
   > EOF
-  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite) at DEFAULT ( 1 + 1 )
+  Feature with this kind of default expressions is not supported for dialect TiDB (supported by: MySQL, PostgreSQL, SQLite, ClickHouse) at DEFAULT ( 1 + 1 )
   Errors encountered, no code generated
   [1]
 
@@ -3717,4 +3717,16 @@ harmless pair:
   > SELECT 1 WHERE FALSE AND @b { None { TRUE } | Some { (FALSE OR TRUE) } };
   > EOF
       T.select_one_maybe db (Sqlgg_traits.Query.make ~sql:("SELECT 1 WHERE FALSE AND " ^ (match b with `None -> " ( TRUE ) " | `Some -> " ( (FALSE OR TRUE) ) ")) ~name:"select_0" ~kind:Sqlgg_traits.Query.(Select Zero_one) ()) set_params get_row
+
+VALUES(col) is the value inserted by the current statement only: a nullable value
+inserted into a same-named column of another table earlier does not leak into it.
+
+  $ sqlgg -no-header -gen xml - <<'EOF' | grep -A2 'name="upsert"' | grep -o '<value name="_0"[^>]*>'
+  > CREATE TABLE test (x INT, k VARBINARY(200));
+  > CREATE TABLE other (x INT);
+  > INSERT INTO other (x) VALUES (@x);
+  > -- @upsert
+  > INSERT INTO test VALUES (20, 'twenty') ON DUPLICATE KEY UPDATE x = VALUES(x) + ?;
+  > EOF
+  <value name="_0" type="Int"/>
 

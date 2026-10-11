@@ -26,6 +26,7 @@ type item = {
 }
 
 let make (document : Document.t) offset =
+  let semantics = Dialect.Semantic.of_configuration document.configuration in
   let hole = "sqlgg__completion_hole" in
   let column_items ~rank (source : Symbol.t) =
     Symbol.columns source |> List.map (fun (attr : Sql.attr) ->
@@ -60,7 +61,7 @@ let make (document : Document.t) offset =
         | _ -> None
     in
     Option.bind stmt (fun (stmt : Statements.t) ->
-      List.find_map (range (fst stmt.pos)) (Recover_parser.tokens stmt.text))
+      List.find_map (range (fst stmt.pos)) (Recover_parser.tokens semantics stmt.text))
     |> Option.value ~default:(offset, offset)
   in
   let opaque =
@@ -109,8 +110,8 @@ let make (document : Document.t) offset =
     in
     let base = fst stmt.pos in
     let hole_start = start - base in
-    let run = Recover_parser.run stmt.text hole_start in
-    let full = Recover_parser.run stmt.text (String.length stmt.text) in
+    let run = Recover_parser.run semantics stmt.text hole_start in
+    let full = Recover_parser.run semantics stmt.text (String.length stmt.text) in
     let hole_end = hole_start + String.length hole in
     let next =
       List.find_map (fun (lexeme : Recover_parser.lexeme) ->
@@ -173,7 +174,7 @@ let make (document : Document.t) offset =
       in
       recovery_sources, sources
     in
-    let functions = Sql.Function.names () in
+    let functions = Dialect.Semantic.function_names semantics in
     let role = function
       | Recover_parser.Table_name ->
         let has_column symbol name =

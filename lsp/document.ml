@@ -82,6 +82,7 @@ type t = {
   statements : checked_statement array;
   index : Symbol.t Symbol.Index.t;
   snapshot : Compile.state;
+  configuration : Dialect.configuration;
 }
 
 let find_statement t offset =
@@ -102,7 +103,8 @@ let find_reusable_opt t name =
 let assoc_string name l =
   List.find_map (fun (key, x) -> if String.equal key name then Some x else None) l
 
-let check ~file (stmt : Statements.t) =
+let check ~configuration ~file (stmt : Statements.t) =
+  let semantics = Dialect.Semantic.of_configuration configuration in
   let tn (name : Sql.table_name) = name.tn in
   let props_errors = List.map (fun (pos, msg) -> { pos; msg }) stmt.errors in
   let base = fst stmt.pos in
@@ -124,14 +126,14 @@ let check ~file (stmt : Statements.t) =
     in
     let scope ?cte from =
       try
-        let annotations = Syntax.scope_of ?cte from in
+        let annotations = Syntax.scope_of semantics ?cte from in
         annotations.src_tbls, annotations.cte_defs, annotations.table_aliases
       with
       | Out_of_memory as exn -> raise exn
       | _ -> [], [], []
     in
     let recovery_scope sql =
-      let run = Recover_parser.run sql (String.length sql) in
+      let run = Recover_parser.run semantics sql (String.length sql) in
       scope (cross run.trace.sources)
     in
     let from_stmt : Sql.stmt -> _ = function
@@ -148,7 +150,7 @@ let check ~file (stmt : Statements.t) =
     match exn with
     | Parser_utils.Error _ -> recovery_scope stmt.text
     | _ ->
-      match Parser.parse_stmt stmt.text with
+      match Parser.parse_stmt semantics stmt.text with
       | exception Parser_utils.Error _ -> recovery_scope stmt.text
       | { Parser.stmt; _ } -> from_stmt stmt
   in
@@ -176,7 +178,7 @@ let check ~file (stmt : Statements.t) =
       msg = Parser_utils.message_of_exn exn }
   in
   let dialect_errors (result : Syntax.result) =
-    let dialect = !Dialect.selected in
+    let dialect = Dialect.dialect_of_configuration configuration in
     result.dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
       let error msg = Some { pos = error_pos ds.pos; msg } in
       match Dialect.support ds dialect with
@@ -198,7 +200,7 @@ let check ~file (stmt : Statements.t) =
     result.annotations
   in
   let compile () =
-    match Compile.statement ~dynamic_select stmt with
+    match Compile.statement ~semantics ~dynamic_select stmt with
     | Compile.Verbatim -> `Verbatim, no_annotations
     | Compile.Reusable parsed -> success (Syntax.eval_parsed stmt.text parsed)
     | Compile.Not_reusable ->
@@ -295,7 +297,7 @@ let check ~file (stmt : Statements.t) =
     | `Checked checked -> Checked checked
   in
   { pos = stmt.pos; name = Props.name stmt.props; props_errors;
-    tokens = lazy (Recover_parser.tokens stmt.text); analysis; outcome }
+    tokens = lazy (Recover_parser.tokens semantics stmt.text); analysis; outcome }
 
 module Cache = struct
   module Schema_key = struct
@@ -326,9 +328,9 @@ module Cache = struct
 end
 
 let analyze ?(cache = Cache.create ()) ~path text =
-  let apply ~file index blocks =
+  let apply ~configuration ~file index blocks =
     List.fold_left_map (fun index block ->
-      let stmt = check ~file block in
+      let stmt = check ~configuration ~file block in
       let statement = { block; stmt } in
       match stmt.outcome with
       | Checked { new_table = Some table; _ } ->
@@ -353,7 +355,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
         Hashtbl.replace cache.projects config { Cache.stamps = List.map mtime project.watch_paths; project };
         project
   in
-  Dialect.set_selected dialect;
+  let configuration = Dialect.default_configuration dialect in
   let same_file a b =
     let id file =
       match Unix.stat file with
@@ -376,7 +378,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
         | exception Sys_error _ -> index
         | text ->
           let blocks = Statements.glue_downs (Statements.split text) in
-          let (index, _) = apply ~file index blocks in
+          let (index, _) = apply ~configuration ~file index blocks in
           index
       in
       let index = List.fold_left load Symbol.Index.empty files in
@@ -389,9 +391,10 @@ let analyze ?(cache = Cache.create ()) ~path text =
   | Some _ | None ->
     Compile.restore schema.snapshot;
     let blocks = Statements.split text in
-    let (index, statements) = apply ~file:path schema.index blocks in
+    let (index, statements) = apply ~configuration ~file:path schema.index blocks in
     let result =
-      { path; text; statements = Array.of_list statements; index; snapshot = schema.snapshot }
+      { path; text; statements = Array.of_list statements; index; snapshot = schema.snapshot;
+        configuration }
     in
     Hashtbl.replace cache.documents path { schema; result };
     result
@@ -401,6 +404,6 @@ let recheck result (stmt : Statements.t) =
   Array.to_seq result.statements
   |> Seq.take_while (fun statement -> snd statement.block.pos <= fst stmt.pos)
   |> Seq.iter (fun statement ->
-    ignore (check ~file:result.path statement.block));
-  check ~file:result.path stmt
+    ignore (check ~configuration:result.configuration ~file:result.path statement.block));
+  check ~configuration:result.configuration ~file:result.path stmt
 

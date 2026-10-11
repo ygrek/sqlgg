@@ -12,7 +12,7 @@ type stop =
 
 type trace = { seen : lexeme list; recovery : bool; tables : string list; sources : Sql.source list }
 
-type run = { trace : trace; stop : stop }
+type run = { trace : trace; stop : stop; parse : Parser_state.parse }
 
 let lexbuf_of sql =
   Parser_state.mode_normal ();
@@ -35,11 +35,12 @@ let protect_mode f =
   let mode = !Parser_state.mode in
   Fun.protect ~finally:(fun () -> Parser_state.mode := mode) f
 
-let run sql offset =
+let run semantics sql offset =
   let max_recovery_states = 4 in
   let max_recovery_skips = 3 in
   let lexbuf = lexbuf_of sql in
-  Parser_state.with_lexbuf lexbuf @@ fun () ->
+  let parse = { Parser_state.lexbuf; semantics } in
+  Parser_state.with_parse parse @@ fun () ->
   let rec settle (acc : trace) = function
     | I.Shifting _ as checkpoint -> settle acc (I.resume checkpoint)
     | I.AboutToReduce _ as checkpoint ->
@@ -70,12 +71,12 @@ let run sql offset =
           seen = List.rev acc.seen;
           tables = List.rev acc.tables;
           sources = List.rev acc.sources };
-      stop }
+      stop;
+      parse }
   in
   let next_lexeme lexbuf =
-    match Sql_lexer.parse_rule lexbuf with
-    | exception (Out_of_memory as exn) -> raise exn
-    | exception _ -> None
+    match Sql_lexer.parse_rule semantics lexbuf with
+    | exception Sql_lexer.Error _ -> None
     | token -> Some (make_lexeme lexbuf token)
   in
   let rec loop (acc : trace) env =
@@ -124,16 +125,17 @@ let run sql offset =
   | `Accept (acc, stmt) -> finish acc (Complete stmt)
   | `Reject -> finish empty Fail
 
-let tokens sql =
+let tokens semantics sql =
   let lexbuf = lexbuf_of sql in
   List.of_seq @@ Seq.of_dispenser (fun () ->
-    match Sql_lexer.parse_rule lexbuf with
-    | exception _ | EOF -> None
+    match Sql_lexer.parse_rule semantics lexbuf with
+    | exception Sql_lexer.Error _ | EOF -> None
     | token -> Some (make_lexeme lexbuf token))
 
 let accepts run token =
   match run.stop with
   | Pause (env, { pos = (start, _); _ }) ->
+    Parser_state.with_parse run.parse @@ fun () ->
     protect_mode (fun () ->
       I.acceptable (I.input_needed env) token (position start))
   | Complete _ | Fail -> false
@@ -164,7 +166,10 @@ let slot ?next run =
         end
       | I.HandlingError _ | I.Accepted _ | I.Rejected -> acc
     in
-    try loop ~after_shift:false [] [ IDENT ""; follow ] checkpoint with
+    try
+      Parser_state.with_parse run.parse @@ fun () ->
+      loop ~after_shift:false [] [ IDENT ""; follow ] checkpoint
+    with
     | Out_of_memory as exn -> raise exn
     | _ -> []
   in

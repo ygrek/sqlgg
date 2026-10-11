@@ -6,7 +6,7 @@ type outcome =
   | Verbatim
   | Not_reusable
 
-let statement ~dynamic_select stmt =
+let statement ~semantics ~dynamic_select stmt =
   let dynamic_select_enabled =
     match dynamic_select with Props.Off -> false | Only | Both -> true
   in
@@ -16,9 +16,9 @@ let statement ~dynamic_select stmt =
   match Props.include_ stmt.props with
   | Execute when Props.has Noparse stmt.props -> Verbatim
   | Execute ->
-    Executable (Syntax.eval_parsed stmt.text (Parser.parse_stmt stmt.text))
+    Executable (Syntax.eval_parsed stmt.text (Parser.parse_stmt semantics stmt.text))
   | (Reuse | Reuse_and_execute) as include_ ->
-    match Parser.parse_stmt stmt.text with
+    match Parser.parse_stmt semantics stmt.text with
     | { stmt = Sql.Select select; _ } as parse_result ->
       Shared_queries.add
         (Option.value ~default:"" (Props.name stmt.props))

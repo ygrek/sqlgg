@@ -18,26 +18,34 @@ let dynamic_select_mode props =
 
 let check_dialect sql dialect_features =
   let open Dialect in
+  let dialect = dialect_of_configuration !Sqlgg_config.dialect in
   let position_info ({ pos = (first, last); _ }: dialect_support) = String.slice ~first ~last sql in
+  let with_position message position =
+    if String.starts_with position ~prefix:"\n" then Printf.sprintf "%s at%s" message position
+    else Printf.sprintf "%s at %s" message position
+  in
   dialect_features |> List.iter (fun ds ->
     let skip = List.mem ds.feature !Sqlgg_config.no_check_features in
-    match support ds !selected, skip with
+    match support ds dialect, skip with
     | `Supported, _ -> ()
     | `Unsupported, true ->
-        Error.warn "%s, proceeding anyway at %s\n" (unsupported_message ~alternatives:false ds !selected) (position_info ds)
+        Error.warn "%s\n"
+          (with_position
+             (unsupported_message ~alternatives:false ds dialect ^ ", proceeding anyway")
+             (position_info ds))
     | `Unsupported, false ->
-        Error.log "%s at %s" (unsupported_message ds !selected) (position_info ds)
+        Error.log "%s" (with_position (unsupported_message ds dialect) (position_info ds))
     | `Unknown, true ->
         (match ds.feature with
         | Collation ->
             Error.warn "Assuming custom collation implementation for %s\n"
-              (show !selected)
+              (show dialect)
         | _ ->
-            Error.warn "%s at %s\n" (unknown_message ds !selected) (position_info ds))
+            Error.warn "%s\n" (with_position (unknown_message ds dialect) (position_info ds)))
     | `Unknown, false ->
         Error.log
           "Unknown dialect support for feature %s with dialect %s at %s, use -no-check=all to skip all checks or -no-check=%s to skip this feature check"
-          (show_feature ds.feature) (show !selected) (position_info ds) (feature_to_string ds.feature))
+          (show_feature ds.feature) (show dialect) (position_info ds) (feature_to_string ds.feature))
 
 let stmt_of_syntax props ({ sql; schema; vars; kind; dialect_features; _ } : Syntax.result) =
   check_dialect sql dialect_features;
@@ -51,7 +59,7 @@ let compile ~dynamic_select (stmt : Statements.t) =
   let error_tail_length = 32 in
   if Sqlgg_config.debug1 () then Printf.eprintf "------\n%s\n%!" stmt.text;
   try
-    Some (Compile.statement ~dynamic_select stmt)
+    Some (Compile.statement ~semantics:(Sqlgg_config.semantics ()) ~dynamic_select stmt)
   with
   | Parser_utils.Error (exn, { pos = (_, stop); token; tail }) ->
     let msg = Parser_utils.message_of_exn exn in
