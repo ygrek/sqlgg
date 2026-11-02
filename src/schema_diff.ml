@@ -1,13 +1,12 @@
 open Printf
 open Sqlgg
 
-module SMap = Tables.SMap
 module Name = Migration_id.Name
 
 let mig_name naming head actions = Name.render naming (Name.make head actions)
 
 let index_by key xs =
-  List.fold_left (fun m x -> SMap.add (key x) x m) SMap.empty xs
+  List.fold_left (fun m x -> Prelude.String_map.add (key x) x m) Prelude.String_map.empty xs
 
 let attr_of_column (c : Tables.column) =
   let attr =
@@ -69,7 +68,7 @@ let table_by_name ts =
   index_by (fun t -> t.Tables.name.tn) ts
 
 let unique_singleton_cols t =
-  SMap.fold (fun _ idx acc ->
+  Prelude.String_map.fold (fun _ idx acc ->
     match Tables.singleton_unique_col idx with Some c -> c :: acc | None -> acc)
     t.Tables.tbl_indexes []
 
@@ -142,16 +141,16 @@ let diff_columns ~from_ ~to_ =
   let a = cols_by_name from_cols in
   let b = cols_by_name to_cols in
   let adds =
-    to_cols |> List.filter (fun (c : Tables.column) -> not (SMap.mem c.attr.Sql.name a))
+    to_cols |> List.filter (fun (c : Tables.column) -> not (Prelude.String_map.mem c.attr.Sql.name a))
     |> List.map (fun c -> `Add (attr_of_column c, `Default))
   in
   let drops =
-    from_cols |> List.filter (fun (c : Tables.column) -> not (SMap.mem c.attr.Sql.name b))
+    from_cols |> List.filter (fun (c : Tables.column) -> not (Prelude.String_map.mem c.attr.Sql.name b))
     |> List.map (fun (c : Tables.column) -> `Drop c.attr.Sql.name)
   in
   let changes =
     to_cols |> List.filter_map (fun (c : Tables.column) ->
-      match SMap.find_opt c.attr.Sql.name a with
+      match Prelude.String_map.find_opt c.attr.Sql.name a with
       | Some old when Column_sig.changed old c ->
         Some (`Change (c.attr.Sql.name, attr_of_column c, `Default))
       | _ -> None)
@@ -165,10 +164,10 @@ let diff_indexes ~from_ ~to_ =
   let a = from_.Tables.tbl_indexes and b = to_.Tables.tbl_indexes in
   let same (x : Tables.stored_index) (y : Tables.stored_index) =
     Sql.equal_index_op_kind x.kind y.kind && x.cols = y.cols in
-  let drops = SMap.fold (fun name _ acc ->
-    if SMap.mem name b then acc else `DropIndex name :: acc) a [] in
-  let adds = SMap.fold (fun name idx acc ->
-    match SMap.find_opt name a with
+  let drops = Prelude.String_map.fold (fun name _ acc ->
+    if Prelude.String_map.mem name b then acc else `DropIndex name :: acc) a [] in
+  let adds = Prelude.String_map.fold (fun name idx acc ->
+    match Prelude.String_map.find_opt name a with
     | Some old when same old idx -> acc
     | Some _ -> `DropIndex name :: add_index name idx :: acc
     | None -> add_index name idx :: acc) b [] in
@@ -231,14 +230,14 @@ let diff ~alter_options ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
   let creates =
     if not ddl_as_migration then []
     else
-      to_ |> List.filter (fun (t : Tables.stored_table) -> not (SMap.mem t.name.tn by_from))
+      to_ |> List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_from))
           |> List.map (fun t -> Create_table t) in
   let drops =
-    from_ |> List.filter (fun (t : Tables.stored_table) -> not (SMap.mem t.name.tn by_to))
+    from_ |> List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_to))
          |> List.map (fun t -> Drop_table t) in
   let alters =
     to_ |> List.filter_map (fun (t : Tables.stored_table) ->
-      Stdlib.Option.bind (SMap.find_opt t.name.tn by_from)
+      Stdlib.Option.bind (Prelude.String_map.find_opt t.name.tn by_from)
         (fun old -> alter_change ~alter_options t.name t (diff_table ~from_:old ~to_:t))) in
   drops @ creates @ alters
 
@@ -252,7 +251,7 @@ let create_table_of t =
   { Gen_migrations.table = t.Tables.name;
     columns = List.map ddl_column (columns_without_index_unique t);
     primary_key = Tables.get_primary_key_columns t.Tables.columns;
-    indexes = List.map ddl_index (SMap.bindings t.Tables.tbl_indexes);
+    indexes = List.map ddl_index (Prelude.String_map.bindings t.Tables.tbl_indexes);
     charset = t.Tables.tbl_charset |> Option.map (fun ({ charset; collation } : Tables.table_charset) ->
       { Gen_migrations.ch_name = charset; ch_collation = collation });
     ttl = Option.map ttl_options_of t.Tables.tbl_ttl }
@@ -290,7 +289,7 @@ let invert ~alter_options ~by_from ~by_to up =
   | Create_table t -> Drop_table t
   | Drop_table t -> Create_table t
   | Alter_table { table = name; _ } ->
-    match SMap.find_opt name.Sql.tn by_from, SMap.find_opt name.Sql.tn by_to with
+    match Prelude.String_map.find_opt name.Sql.tn by_from, Prelude.String_map.find_opt name.Sql.tn by_to with
     | None, _ | _, None ->
       irreversible "table is missing from the baseline or target snapshot"
     | Some f, Some t ->
@@ -333,7 +332,7 @@ let canonical ts =
   in
   let table_sig (t : Tables.stored_table) =
     let cols = List.sort compare (List.map col_fragment t.columns) in
-    let idx = SMap.bindings t.tbl_indexes |> List.map index_sig |> List.sort compare in
+    let idx = Prelude.String_map.bindings t.tbl_indexes |> List.map index_sig |> List.sort compare in
     let fields =
       [ "pk", String.concat "," (Tables.get_primary_key_columns t.columns);
         "idx", String.concat ";" idx;

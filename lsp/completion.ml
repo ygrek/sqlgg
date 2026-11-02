@@ -209,7 +209,7 @@ let make (document : Document.t) offset =
         listing_items ~rank:(Fun.const Rank.source) ~kind:Module
           ~kind_name:"source" sources
       | Function_name ->
-        functions |> List.filter (fun name -> not (Sql_lexer.Keywords.mem name Sql_lexer.keywords)) |> List.map function_item
+        functions |> List.filter (fun name -> not (Prelude.String_map.mem name Sql_lexer.keywords)) |> List.map function_item
     in
     let completions =
       match slot with
@@ -233,7 +233,7 @@ let make (document : Document.t) offset =
           (Symbol.find_opt sources q)
       | Name roles ->
         let keywords =
-          Sql_lexer.Keywords.to_seq Sql_lexer.keywords
+          Prelude.String_map.to_seq Sql_lexer.keywords
           |> Seq.filter (fun (_, token) ->
             Option.is_none (Recover_parser.ident_name token)
             && Recover_parser.accepts run token)

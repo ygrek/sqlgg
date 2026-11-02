@@ -3,31 +3,35 @@
 open Printf
 open ExtLib
 open Prelude
+open Jsonkit.Primitives
 
 type column = {
   attr : Sql.attr;
   source_kind : Sql.Source_type.kind Sql.collated option;
   default_sql : string option;
 }
+[@@deriving json, jsonschema]
 
 type table = Sql.table
 
 type table_charset = { charset : Sql.charset_name; collation : string option }
+[@@deriving json, jsonschema]
 
 type table_ttl = { ttl_col : string; ttl_n : int; ttl_unit : string; ttl_enabled : bool; ttl_job_interval : string option }
-
-module SMap = Map.Make(String)
+[@@deriving json, jsonschema]
 
 type stored_index = { kind : Sql.index_op_kind; cols : string list }
+[@@deriving json, jsonschema]
 
 type stored_table = {
   name : Sql.table_name;
   columns : column list;
   tbl_charset : table_charset option;
   tbl_ttl : table_ttl option;
-  tbl_indexes : stored_index SMap.t;
+  tbl_indexes : stored_index String_map.t;
   tbl_foreign_keys : Sql.foreign_key list;
 }
+[@@deriving json, jsonschema]
 
 let store : stored_table list ref = ref []
 
@@ -46,8 +50,8 @@ let columns_to_schema cols = List.map (fun c -> c.attr) cols
 
 let column_of_attr attr = { attr; source_kind = None; default_sql = None }
 
-let no_such_table name = failwith (sprintf "no such table %s" (Sql.show_table_name name))
-let table_exists name = failwith (sprintf "table %s already exists" (Sql.show_table_name name))
+let no_such_table name = fail "no such table %s" (Sql.show_table_name name)
+let table_exists name = fail "table %s already exists" (Sql.show_table_name name)
 
 let to_table t = (t.name, columns_to_schema t.columns)
 
@@ -78,7 +82,7 @@ let add_columns (name, cols) =
   | None ->
     store :=
       { name; columns = cols; tbl_charset = None; tbl_ttl = None;
-        tbl_indexes = SMap.empty; tbl_foreign_keys = [] }
+        tbl_indexes = String_map.empty; tbl_foreign_keys = [] }
       :: !store
   | Some _ -> table_exists name
 
@@ -100,7 +104,7 @@ let get_ttl name = with_stored name None (fun t -> t.tbl_ttl)
 
 let set_ttl name ttl = alter name (fun t -> { t with tbl_ttl = ttl })
 
-let index_find name ~index_name = with_stored name None (fun t -> SMap.find_opt index_name t.tbl_indexes)
+let index_find name ~index_name = with_stored name None (fun t -> String_map.find_opt index_name t.tbl_indexes)
 
 let column_find name ~column_name = with_stored name None (fun t -> find_column ~name:column_name t.columns)
 
@@ -124,15 +128,15 @@ let add_index_record t ~index_name ~kind ~cols =
   let columns = match kind with
     | Sql.Unique_idx -> mark_unique_columns t.columns ~cols
     | _ -> t.columns in
-  { t with columns; tbl_indexes = SMap.add index_name { kind; cols } t.tbl_indexes }
+  { t with columns; tbl_indexes = String_map.add index_name { kind; cols } t.tbl_indexes }
 
 let synth_index_name existing cols =
   let base = match cols with c :: _ -> c | [] -> "index" in
-  if not (SMap.mem base existing) then base
+  if not (String_map.mem base existing) then base
   else
     let rec loop n =
       let candidate = sprintf "%s_%d" base n in
-      if SMap.mem candidate existing then loop (n + 1) else candidate
+      if String_map.mem candidate existing then loop (n + 1) else candidate
     in
     loop 2
 
@@ -174,13 +178,13 @@ let singleton_unique_col (i : stored_index) =
 
 let index_drop name ~index_name =
   alter name (fun t ->
-    match SMap.find_opt index_name t.tbl_indexes with
+    match String_map.find_opt index_name t.tbl_indexes with
     | None -> t
     | Some idx ->
-      let tbl_indexes = SMap.remove index_name t.tbl_indexes in
+      let tbl_indexes = String_map.remove index_name t.tbl_indexes in
       let columns =
         match singleton_unique_col idx with
-        | Some col when not (SMap.exists (fun _ i -> singleton_unique_col i = Some col) tbl_indexes) ->
+        | Some col when not (String_map.exists (fun _ i -> singleton_unique_col i = Some col) tbl_indexes) ->
           remove_constraint_from_columns t.columns ~cols:[col] Sql.Constraint.Unique
         | _ -> t.columns
       in
@@ -189,10 +193,10 @@ let index_drop name ~index_name =
 let index_rename name ~old_name ~new_name =
   alter name (fun t ->
     t.tbl_indexes
-    |> SMap.find_opt old_name
+    |> String_map.find_opt old_name
     |> Option.map_default (fun idx ->
-      let m = SMap.remove old_name t.tbl_indexes in
-      { t with tbl_indexes = SMap.add new_name idx m }) t)
+      let m = String_map.remove old_name t.tbl_indexes in
+      { t with tbl_indexes = String_map.add new_name idx m }) t)
 
 let drop name =
   check name;

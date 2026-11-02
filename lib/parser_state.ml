@@ -7,9 +7,9 @@ let mode_ident () = mode := Ident
 module Stmt_metadata = struct
   let stmt_metadata: (int, (string * string) list) Hashtbl.t = Hashtbl.create 16
 
-  let add k v = Hashtbl.add stmt_metadata k v
   let find_all k = Hashtbl.find_all stmt_metadata k
   let reset () = Hashtbl.reset stmt_metadata
+  let load entries = reset (); Hashtbl.add_seq stmt_metadata (List.to_seq entries)
 end
 
 let current_lexbuf : Lexing.lexbuf option ref = ref None

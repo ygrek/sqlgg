@@ -4,4 +4,6 @@
    extlib
    oUnit
    qcheck-core
-   sqlgg))
+   sqlgg
+   sqlgg_ir
+   test_helpers))

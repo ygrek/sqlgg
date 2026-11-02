@@ -323,9 +323,8 @@ let semantic_tokens ~lines document =
     Params.all_nodes (Document.params statement.stmt))
   |> Seq.filter_map (fun (node : Params.node) ->
     let* { token; _ } = node.placement in
-    let* pos = token in
-    if Sql.Pos.is_empty pos then None
-    else Some { pos; typ = Params.token_type node })
+    let* pos = Option.bind token Sql.Pos.nonempty in
+    Some { pos; typ = Params.token_type node })
   |> Seq.filter single_line
   |> List.of_seq
   |> List.stable_sort (fun a b -> Int.compare (fst a.pos) (fst b.pos))

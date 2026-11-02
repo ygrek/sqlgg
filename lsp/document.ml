@@ -111,9 +111,8 @@ let check ~file (stmt : Statements.t) =
       (Line_index.clamp_offset stmt.text start,
        Line_index.clamp_offset stmt.text stop)
   in
-  let nonempty pos = if Sql.Pos.is_empty pos then None else Some pos in
   let error_pos pos = let (start, stop) = rebase pos in start, Int.max stop (start + 1) in
-  let loc pos = Option.map (fun pos -> Symbol.loc ~file (rebase pos)) (nonempty pos) in
+  let loc pos = Option.map (fun pos -> Symbol.loc ~file (rebase pos)) (Sql.Pos.nonempty pos) in
   let recover_scope exn =
     let of_table table : Sql.nested = (`Table table, None), [] in
     let cross : Sql.source list -> Sql.nested option = function
@@ -163,17 +162,10 @@ let check ~file (stmt : Statements.t) =
       table_defs
   in
   let error_of_exn exn =
-    let (pos, exn) =
-      match exn with
-      | Parser_utils.Error (Sql_lexer.Error (_, pos) as exn, _) -> nonempty pos, exn
-      | Parser_utils.Error (exn, { pos; _ }) -> Some pos, exn
-      | Prelude.At (pos, exn) -> nonempty pos, exn
-      | exn -> None, exn
-    in
-    { pos =
-        error_pos
-          (Option.value ~default:(0, String.length stmt.text) pos);
-      msg = Parser_utils.message_of_exn exn }
+    match Analysis.diagnostic_of_exn exn with
+    | { Analysis.message; location = Span pos } -> { pos = error_pos pos; msg = message }
+    | { message; location = Properties | Statement } ->
+      { pos = error_pos (0, String.length stmt.text); msg = message }
   in
   let dialect_errors (result : Syntax.result) =
     let dialect = !Dialect.selected in
@@ -184,25 +176,21 @@ let check ~file (stmt : Statements.t) =
       | `Unknown -> error (Dialect.unknown_message ds dialect)
       | `Unsupported -> error (Dialect.unsupported_message ds dialect))
   in
-  let dynamic_select = Option.value ~default:Props.Off (Props.dynamic_select stmt.props) in
-  let no_annotations : Syntax.stmt_annotations =
-    { src_tbls = []; cte_defs = []; table_aliases = []; table_defs = [];
-      expr_types = []; result_aliases = []; select_scopes = [] }
-  in
+  let dynamic_select = Props.resolve_dynamic_select ~default_enabled:false stmt.props in
   let success (result : Syntax.result) =
-    `Checked { kind = result.kind;
-               schema = Sql.schema_of_columns result.schema;
-               params = Params.of_vars ~base result.vars;
+    `Checked { kind = result.typed.kind;
+               schema = Sql.schema_of_columns result.typed.schema;
+               params = Params.of_vars ~base result.typed.vars;
                dialect_errors = dialect_errors result;
                new_table = new_table result.annotations.table_defs },
     result.annotations
   in
   let compile () =
     match Compile.statement ~dynamic_select stmt with
-    | Compile.Verbatim -> `Verbatim, no_annotations
+    | Compile.Verbatim -> `Verbatim, Syntax.no_stmt_annotations
     | Compile.Reusable parsed -> success (Syntax.eval_parsed stmt.text parsed)
     | Compile.Not_reusable ->
-      `Rejected { pos = stmt.pos; msg = "include=reuse requires a SELECT statement" }, no_annotations
+      `Rejected { pos = stmt.pos; msg = "include=reuse requires a SELECT statement" }, Syntax.no_stmt_annotations
     | Compile.Executable result -> success result
   in
   let (compiled, annotations) =
@@ -211,7 +199,7 @@ let check ~file (stmt : Statements.t) =
     | exception (Out_of_memory as exn) -> raise exn
     | exception exn ->
       let (src_tbls, cte_defs, table_aliases) = recover_scope exn in
-      `Rejected (error_of_exn exn), { no_annotations with src_tbls; cte_defs; table_aliases }
+      `Rejected (error_of_exn exn), { Syntax.no_stmt_annotations with src_tbls; cte_defs; table_aliases }
   in
   let { Syntax.src_tbls; cte_defs; table_aliases; expr_types;
         result_aliases; _ } = annotations in
@@ -275,18 +263,12 @@ let check ~file (stmt : Statements.t) =
       scope, rebase select_scope.pos)
       annotations.select_scopes
   in
-  let rebase_types types =
-    List.filter_map (fun (expr : Sql.Type.t Sql.located) ->
-      Option.map (fun pos -> expr.value, rebase pos) (nonempty expr.pos))
-      types
+  let rebase_located (x : _ Sql.located) =
+    Option.map (fun pos -> x.value, rebase pos) (Sql.Pos.nonempty x.pos)
   in
   let analysis =
-    { scope; select_scopes; exprs = rebase_types expr_types;
-      result_aliases =
-        List.filter_map (fun (alias : Sql.attr Sql.located) ->
-          Option.map (fun pos -> alias.value, rebase pos)
-            (nonempty alias.pos))
-          result_aliases }
+    { scope; select_scopes; exprs = List.filter_map rebase_located expr_types;
+      result_aliases = List.filter_map rebase_located result_aliases }
   in
   let outcome =
     match compiled with
@@ -370,7 +352,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
     match Cache.Schemas.find_opt cache.schemas (dialect, files) with
     | Some entry when List.equal Float.equal entry.stamps stamps -> entry
     | Some _ | None ->
-      Compile.reset ();
+      Analysis.with_context @@ fun () ->
       let load index file =
         match In_channel.with_open_bin file In_channel.input_all with
         | exception Sys_error _ -> index
@@ -387,7 +369,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
   match Hashtbl.find_opt cache.documents path with
   | Some doc when String.equal doc.result.text text && doc.schema == schema -> doc.result
   | Some _ | None ->
-    Compile.restore schema.snapshot;
+    Analysis.with_context ~context:schema.snapshot @@ fun () ->
     let blocks = Statements.split text in
     let (index, statements) = apply ~file:path schema.index blocks in
     let result =
@@ -397,7 +379,7 @@ let analyze ?(cache = Cache.create ()) ~path text =
     result
 
 let recheck result (stmt : Statements.t) =
-  Compile.restore result.snapshot;
+  Analysis.with_context ~context:result.snapshot @@ fun () ->
   Array.to_seq result.statements
   |> Seq.take_while (fun statement -> snd statement.block.pos <= fst stmt.pos)
   |> Seq.iter (fun statement ->

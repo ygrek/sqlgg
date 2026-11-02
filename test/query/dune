@@ -1,0 +1,4 @@
+(test
+ (name test_query)
+ (flags (:standard -open Sqlgg_ir))
+ (libraries oUnit sqlgg sqlgg_ir test_helpers))

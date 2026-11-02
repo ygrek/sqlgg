@@ -2,7 +2,10 @@
 open Sqlgg
 
 (** Sqlgg version *)
-let version = "%%VERSION%%"
+let version =
+  match Build_info.V1.version () with
+  | Some version -> Build_info.V1.Version.to_string version
+  | None -> "unknown"
 
 (** Debug level *)
 let debug_level = ref 0

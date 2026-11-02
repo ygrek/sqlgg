@@ -1,9 +1,11 @@
 open Stdlib
+open Jsonkit.Primitives
 
 type parse_result = {
   stmt : Sql.stmt;
   dialect_features : Dialect.dialect_support list;
 }
+[@@deriving json, jsonschema]
 
 let parse_stmt sql =
   Parser_state.mode_normal ();
