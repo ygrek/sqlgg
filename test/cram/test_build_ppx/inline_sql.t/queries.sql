@@ -6,6 +6,9 @@ WHERE id = @id;
 -- @add_user
 INSERT INTO users (id, name, email) VALUES (@id, @name, @email);
 
+-- @add_users
+INSERT INTO users (id, name, email) VALUES @rows;
+
 -- @rename_user
 UPDATE users SET name = @name, nickname = @nickname WHERE id = @id;
 

@@ -48,3 +48,15 @@ module Make (T : Sqlgg_traits.M_io) = struct
         UPDATE posts SET state = @state WHERE id = @id
       |}]
 end
+
+module With_database (Database : Sqlgg_traits.M_io) = struct
+  let find_user =
+    [%sql.Database {| SELECT id, name FROM users WHERE id = @id |}]
+end
+
+module With_nested_database
+    (Runtime : sig module Database : Sqlgg_traits.M_io end) =
+struct
+  let find_user =
+    [%sql.Runtime.Database {| SELECT id, name FROM users WHERE id = @id |}]
+end

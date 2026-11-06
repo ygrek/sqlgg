@@ -59,10 +59,13 @@ let process_migrations =
   | Java -> unsupported "Java"
   | CSharp -> unsupported "C#"
 
+let params_selection = ref `From_dialect
+
 let set_params_mode s =
-  Gen.params_mode :=
   match Gen.params_mode_of_string s with
-  | Ok mode -> mode
+  | Ok mode ->
+    params_selection := `Explicit mode;
+    Gen.params_mode := mode
   | Error msg -> failwith msg
 
 let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
@@ -223,9 +226,8 @@ let set_dialect s =
     | None -> failwith (sprintf "Unknown dialect: %s" s)
   in
   Dialect.set_selected d;
-  match !Gen.params_mode with
-  | Some _ -> () (* if manually set via -params, keep user's choice *)
-  | None -> Gen.params_mode := Some (Gen.dialect_params_mode d)
+  Gen.params_mode :=
+    Gen.resolve_params_mode ~dialect:(Some d) !params_selection
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)

@@ -20,8 +20,28 @@
  (modules cli_queries)
  (libraries sqlgg.traits))
 
+(library
+ (name print_impl)
+ (modules print_impl)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits))
+
 (executable
  (name main)
- (modules main print_impl)
+ (modules main)
  (flags (:standard -w -a))
- (libraries queries cli_queries sqlgg.traits))
+ (libraries queries cli_queries print_impl sqlgg.traits))
+
+(library
+ (name requests)
+ (modules requests)
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema schema.sql -schema more_schema.sql
+   -schema wide_schema.sql))
+ (preprocessor_deps schema.sql more_schema.sql wide_schema.sql))
+
+(executable
+ (name request_main)
+ (modules request_main custom_driver)
+ (libraries requests print_impl sqlgg.traits))

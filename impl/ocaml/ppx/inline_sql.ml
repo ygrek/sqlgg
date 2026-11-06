@@ -53,7 +53,7 @@ let () =
     ~doc:"<mode> Parameter substitution for [%sql], as sqlgg -params (default: from -dialect)";
   let schema_state =
     let loaded = ref None in
-    fun ~loc schema_files ->
+    fun ~loc ~dialect schema_files ->
       match !loaded with
       | Some state -> state
       | None ->
@@ -65,7 +65,7 @@ let () =
                 | text -> text
                 | exception Sys_error msg -> fail ~loc "cannot read -schema file: %s" msg
               in
-              match Sqlgg.Analysis.context_of_schema_sql ~context text with
+              match Sqlgg.Analysis.context_of_schema_sql ~context ~dialect text with
               | Ok state -> state
               | Error (block, diagnostic, _) ->
                 let at_text =
@@ -80,7 +80,7 @@ let () =
         loaded := Some state;
         state
   in
-  let expand ~ctxt payload =
+  let expand ~ctxt ~arg payload =
     let loc = Expansion_context.Extension.extension_point_loc ctxt in
     let input_name = Expansion_context.Extension.input_name ctxt in
     let schema_files =
@@ -108,14 +108,12 @@ let () =
           in
           (text, literal_loc, at_text))
     in
-    Sqlgg.Dialect.set_selected (Stdlib.Option.value !dialect ~default:Sqlgg.Dialect.MySQL);
-    let () =
-      match !params with
-      | `Explicit mode -> Gen.params_mode := mode
-      | `From_dialect ->
-        Gen.params_mode := Stdlib.Option.map Gen.dialect_params_mode !dialect
+    let selected_dialect =
+      Stdlib.Option.value !dialect ~default:Sqlgg.Dialect.MySQL
     in
-    let context = schema_state ~loc schema_files in
+    Sqlgg.Dialect.set_selected selected_dialect;
+    Gen.params_mode := Gen.resolve_params_mode ~dialect:!dialect !params;
+    let context = schema_state ~loc ~dialect:selected_dialect schema_files in
     let block =
       match Sqlgg.Statements.split text with
       | [ block ] -> block
@@ -133,6 +131,10 @@ let () =
         "[%%sql] does not support the %s property: %s"
         property why
     in
+    let reject_migration_property property =
+      reject_property property
+        "migration properties belong in a sqlgg .sql file"
+    in
     List.iter
       (fun (prop : Sqlgg.Props.t) ->
         match prop with
@@ -140,12 +142,19 @@ let () =
           reject_property "subst" "it splices runtime strings into the SQL"
         | Noparse ->
           reject_property "noparse" "the statement must be type-checked"
-        | Include (Reuse | Reuse_and_execute) ->
-          reject_property "include" "reusable queries need a sqlgg .sql file"
-        | Dynamic_select (Only | Both) ->
-          reject_property "dynamic_select" "dynamic selects need a sqlgg .sql file"
-        | Include Execute | Dynamic_select Off | Name _ | Id _ | Down _
-        | Irreversible | Auto | Manual | File _ | Noop -> ())
+        | Include _ ->
+          reject_property "include" "include modes belong in a sqlgg .sql file"
+        | Dynamic_select _ ->
+          reject_property "dynamic_select"
+            "dynamic select modes belong in a sqlgg .sql file"
+        | Id _ -> reject_migration_property "id"
+        | Down _ -> reject_migration_property "down"
+        | Irreversible -> reject_migration_property "irreversible"
+        | Auto -> reject_migration_property "generated"
+        | Manual -> reject_migration_property "manual"
+        | File _ | Noop ->
+          reject_property "internal" "this property is reserved for generated queries"
+        | Name _ -> ())
       block.props;
     let statement = at_text block.pos in
     let syntax =
@@ -158,7 +167,10 @@ let () =
       match Sqlgg.Analysis.analyze ~context (Sqlgg.Statements.strip_comments block) with
       | Error (diagnostic, _) -> fail_diagnostic ~at_span ~statement diagnostic
       | Ok (_, syntax) ->
-        match Sqlgg.Analysis.dialect_diagnostics syntax with
+        match
+          Sqlgg.Analysis.dialect_diagnostics
+            ~dialect:selected_dialect syntax.dialect_features
+        with
         | diagnostic :: _ -> fail_diagnostic ~at_span ~statement diagnostic
         | [] -> syntax
     in
@@ -169,39 +181,62 @@ let () =
         fail ~loc:statement
           "[%%sql] accepts SELECT, INSERT, UPDATE or DELETE; put DDL in a -schema file"
     in
-    Stdlib.Option.iter (fail ~loc:statement "%s") (Gen.params_mode_error syntax.typed.kind);
+    Stdlib.Option.iter
+      (fail ~loc:statement "%s")
+      (Gen.params_mode_error ~params_mode:!Gen.params_mode syntax.typed.kind);
     let query =
       Query.of_result
         (Sqlgg.Props.File (Filename.basename input_name) :: block.props)
         syntax
       |> Query.named 0
     in
-    let code =
-      Gen.capture (fun () ->
-        Gen_caml.generate_direct_body ~io:`Traits_module [ query ])
-    in
     let loc = { loc with loc_ghost = true } in
-    let generated_items =
-      (object
-        inherit Ast_traverse.map
-        method! location _ = loc
-      end)#structure
-        (Parse.implementation (Lexing.from_string code))
-    in
-    let generated_module =
-      Ast_builder.Default.pmod_structure ~loc
-        ([%stri module _ = (T : Sqlgg_traits.M_io)] :: generated_items)
-    in
-    [%expr
-      fun sqlgg__db ->
-        let module Sqlgg_inline = [%m generated_module] in
-        [%e
-          Ast_builder.Default.evar ~loc
-            ("Sqlgg_inline." ^ String.uncapitalize_ascii query.name)]
-          sqlgg__db]
+    match arg with
+    | Some { txt = Longident.Lident "Request"; _ } ->
+      Request_expansion.expand ~loc ~statement query
+    | Some _ | None ->
+      let code =
+        Gen.capture (fun () ->
+          Gen_caml.generate_direct_body ~io:`Traits_module [ query ])
+      in
+      let generated_items =
+        (object
+          inherit Ast_traverse.map
+          method! location _ = loc
+        end)#structure
+          (Parse.implementation (Lexing.from_string code))
+      in
+      let traits_path =
+        Stdlib.Option.value arg
+          ~default:(Ast_builder.Default.Located.lident ~loc "T")
+      in
+      let traits_module_type =
+        Ast_builder.Default.pmty_ident ~loc
+          (Ast_builder.Default.Located.lident ~loc "Sqlgg_traits.M_io")
+      in
+      let generated_functor =
+        Ast_builder.Default.pmod_functor ~loc
+          (Named
+             ( Ast_builder.Default.Located.mk ~loc (Some "T"),
+               traits_module_type ))
+          (Ast_builder.Default.pmod_structure ~loc generated_items)
+      in
+      let generated_module =
+        Ast_builder.Default.pmod_apply ~loc generated_functor
+          (Ast_builder.Default.pmod_ident
+             ~loc:traits_path.loc traits_path)
+      in
+      [%expr
+        fun sqlgg__db ->
+          let module Sqlgg_inline = [%m generated_module] in
+          [%e
+            Ast_builder.Default.evar ~loc
+              ("Sqlgg_inline." ^ String.uncapitalize_ascii query.name)]
+            sqlgg__db]
   in
   Driver.register_transformation "sqlgg.sql"
     ~rules:
       [ Context_free.Rule.extension
-          (Extension.V3.declare "sql" Extension.Context.expression Ast_pattern.__ expand)
+          (Extension.V3.declare_with_path_arg
+             "sql" Extension.Context.expression Ast_pattern.__ expand)
       ]
