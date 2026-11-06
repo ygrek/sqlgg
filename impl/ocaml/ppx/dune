@@ -1,7 +1,12 @@
+(copy_files#
+  ../../../src/{gen,gen_caml,gen_migrations}.ml)
+
 (library
  (name ppx_sqlgg)
  (public_name sqlgg.ppx)
  (kind ppx_deriver)
- (libraries ppxlib)
+ (libraries ppxlib extlib sqlgg sqlgg_ir unix)
+ (flags (:standard -open Sqlgg_ir))
+ (private_modules inline_sql gen gen_caml gen_migrations sqlgg_config)
  (preprocess
   (pps ppxlib.metaquot)))

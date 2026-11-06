@@ -1,0 +1,27 @@
+(library
+ (name queries)
+ (modules queries)
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema schema.sql -schema more_schema.sql))
+ (preprocessor_deps schema.sql more_schema.sql))
+
+(rule
+ (target cli_queries.ml)
+ (deps schema.sql more_schema.sql queries.sql)
+ (action
+  (with-stdout-to
+   %{target}
+   (run sqlgg -no-header -dialect mysql -gen none schema.sql more_schema.sql
+    -gen caml_io queries.sql))))
+
+(library
+ (name cli_queries)
+ (modules cli_queries)
+ (libraries sqlgg.traits))
+
+(executable
+ (name main)
+ (modules main print_impl)
+ (flags (:standard -w -a))
+ (libraries queries cli_queries sqlgg.traits))

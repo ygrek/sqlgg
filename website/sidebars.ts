@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
           label: 'Expressions',
         },
         'ocaml/ppx',
+        'ocaml/inline-sql',
         'ocaml/json',
       ],
     },

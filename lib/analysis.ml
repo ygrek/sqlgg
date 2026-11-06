@@ -214,8 +214,17 @@ let parse ?(allow_extensions = true) (statement : Statements.t) =
     | [] -> Ok parsed
     | first :: rest -> Error (first, rest)
 
-let context_of_schema_sql sql =
-  with_context @@ fun () ->
+let dialect_diagnostics (result : Syntax.result) =
+  let dialect = !Dialect.selected in
+  result.dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
+    let diagnostic message = Some { message; location = Span ds.pos } in
+    match Dialect.support ds dialect with
+    | `Supported -> None
+    | `Unknown -> diagnostic (Dialect.unknown_message ds dialect)
+    | `Unsupported -> diagnostic (Dialect.unsupported_message ds dialect))
+
+let context_of_schema_sql ?context sql =
+  with_context ?context @@ fun () ->
   List.fold_left
     (fun compiled (statement : Statements.t) ->
       Result.bind compiled @@ fun () ->

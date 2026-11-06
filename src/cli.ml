@@ -61,12 +61,9 @@ let process_migrations =
 
 let set_params_mode s =
   Gen.params_mode :=
-  match String.lowercase_ascii s with
-  | "none" -> None
-  | s ->
-    match Sql_template.placeholder_of_string s with
-    | Some _ as mode -> mode
-    | None -> failwith (sprintf "Unknown params mode: %s" s)
+  match Gen.params_mode_of_string s with
+  | Ok mode -> mode
+  | Error msg -> failwith msg
 
 let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
 let category_of_string s =
@@ -228,11 +225,7 @@ let set_dialect s =
   Dialect.set_selected d;
   match !Gen.params_mode with
   | Some _ -> () (* if manually set via -params, keep user's choice *)
-  | None ->
-    Gen.params_mode :=
-      match d with
-      | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Some Sql_template.Unnamed  (* ? syntax *)
-      | Dialect.PostgreSQL -> Some Sql_template.PostgreSQL  (* $1, $2, etc. *)
+  | None -> Gen.params_mode := Some (Gen.dialect_params_mode d)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)

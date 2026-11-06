@@ -22,4 +22,6 @@ type lexeme = [
 
 val lexemes : string -> (Sql.Pos.t * lexeme) Seq.t
 val split : string -> t list
+val strip_comments : t -> t
+val unstripped_offset : t -> int -> int
 val glue_downs : t list -> t list
