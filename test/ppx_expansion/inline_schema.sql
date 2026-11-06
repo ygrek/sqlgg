@@ -16,3 +16,8 @@ CREATE TABLE posts (
   id INT PRIMARY KEY,
   state ENUM('draft', 'published') NOT NULL
 );
+
+CREATE TABLE docs (
+  id INT PRIMARY KEY,
+  body JSON NOT NULL
+);

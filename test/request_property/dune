@@ -1,0 +1,49 @@
+(library
+ (name model_driver)
+ (modules model_driver)
+ (libraries sqlgg.traits))
+
+(test
+ (name test_request_property)
+ (modules test_request_property)
+ (libraries oUnit qcheck-core sqlgg.traits model_driver))
+
+(executable
+ (name gen)
+ (modules gen))
+
+(rule
+ (targets generated_schema.sql generated.ml generated.mli generated_run.ml)
+ (deps
+  (env_var SQLGG_PBT_SEED))
+ (action
+  (run ./gen.exe %{env:SQLGG_PBT_SEED=1})))
+
+(library
+ (name generated)
+ (modules generated)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema generated_schema.sql))
+ (preprocessor_deps generated_schema.sql))
+
+(executable
+ (name generated_run)
+ (modules generated_run)
+ (flags (:standard -w -a))
+ (libraries generated model_driver sqlgg.traits))
+
+(rule
+ (targets generated.actual)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./generated_run.exe))))
+
+(rule
+ (alias runtest)
+ (action
+  (progn
+   (diff generated.expected generated.actual)
+   (diff generated.expected.mli generated.mli))))

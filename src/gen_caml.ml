@@ -501,7 +501,7 @@ let rec has_set_params vars =
     | Choice_group (_, ctors) -> has_set_params (List.concat_map Sql.ctor_vars ctors)
   ) vars
 
-let set_var index var =
+let set_var ~leaf index var =
   let execute_generators = List.iter (fun f -> f ()) in
   let with_indent action = inc_indent (); action (); dec_indent () in
   let unless_empty gens use = if gens = [] then None else Some (fun () -> use gens) in
@@ -547,7 +547,7 @@ let set_var index var =
   and aux index var =
     match classify_var var with
     | Bound_param (p, meta) ->
-      Some (fun () -> set_param ~meta index p)
+      Some (fun () -> leaf ~meta index p)
     | Substituted | No_params ->
       None
     | Shared_group vars ->
@@ -671,7 +671,7 @@ let rec exclude_in_vars l =
 let output_params_binder _ vars =
   match exclude_in_vars vars with
   | [] -> "T.no_params"
-  | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri set_var vars)
+  | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri (set_var ~leaf:set_param) vars)
 
 let rec has_bound_params vars =
   List.exists (function
@@ -694,13 +694,13 @@ let make_to_literal meta typ =
   | Enum_codec m -> sprintf "%s.to_literal" m
   | Builtin_codec t -> sprintf "T.Types.%s.to_literal" (as_literal_type t)
 
-let gen_in_substitution meta var =
+let gen_in_substitution ~to_literal meta var =
   if Option.is_none var.id.value then failwith "empty label in IN param";
   sprintf {code| "(" ^ String.concat ", " (List.map %s %s) ^ ")"|code}
-    (make_to_literal meta var.typ)
+    (to_literal meta var.typ)
     (Option.get var.id.value)
 
-let gen_tuple_printer ~is_row _label schema =
+let gen_tuple_printer ~to_literal ~is_row _label schema =
   let params = idents_of_attrs ~prefix:"col" schema in
   let open_paren = if is_row then {|then "ROW(" else ", ROW("|} else {|then "(" else ", ("|} in
   sprintf
@@ -713,21 +713,33 @@ let gen_tuple_printer ~is_row _label schema =
         let { domain; meta; _ } = attr in
         (if idx = 0 then "" else {|Buffer.add_string _sqlgg_b ", "; |}) ^
         sprintf {|Buffer.add_string _sqlgg_b (%s);|}
-          (let to_literal = sprintf "%s %s" (make_to_literal meta domain) in
+          (let render = sprintf "%s %s" (to_literal meta domain) in
            if is_attr_nullable attr then 
-           (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (to_literal "v") )
-           else to_literal name))
+           (sprintf {|match %s with None -> "NULL" | Some v -> %s|} name (render "v") )
+           else render name))
      (List.combine params schema))
 
 let resolve_tuple_label id = match id.value with
 | None -> failwith "empty label in tuple param"
 | Some value -> value
 
-let gen_tuple_substitution ~is_row label schema =
+let gen_tuple_substitution ~to_literal ~is_row label schema =
   sprintf
     {|(let _sqlgg_b = Buffer.create 13 in List.iteri %s %s; Buffer.contents _sqlgg_b)|}
-    (gen_tuple_printer ~is_row label schema)
+    (gen_tuple_printer ~to_literal ~is_row label schema)
     label 
+
+let guard_empty_insertion sql_pieces ~empty body =
+  match
+    List.find_map
+      (function
+        | `SubstTuple (id, Insertion _) -> Some (resolve_tuple_label id)
+        | `SubstTuple (_, (Where_in _ | ValueRows _))
+        | `Text _ | `Choice _ | `Optional _ | `DynamicSelect _ | `DynamicIn _ | `SubstIn _ | `Cond _ -> None)
+      sql_pieces
+  with
+  | None -> body
+  | Some rows -> sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|} rows empty body
 
 let make_schema_of_tuple_types label =
   List.mapi (fun idx (domain, meta) -> {
@@ -764,7 +776,7 @@ let cond_test ~ctor_of ~deps_of = function
 let render_cond ~ctor_of ~deps_of cond body =
   sprintf {|(if %s then %s else "")|} (cond_test cond ~ctor_of ~deps_of) body
 
-let make_sql ~join_ctors l =
+let make_sql ~to_literal ~join_ctors l =
   let rec render l =
     let parts =
       match l with
@@ -777,7 +789,7 @@ let make_sql ~join_ctors l =
   and piece = function
     | `Text "" -> None
     | `Text s -> Some (quote s)
-    | `SubstIn (param, m) -> Some (gen_in_substitution m param)
+    | `SubstIn (param, m) -> Some (gen_in_substitution ~to_literal m param)
     | `DynamicIn (name, in_or_not_in, sqls) ->
       Some (sprintf "(match %s with [] -> \"%s\" | _ :: _ -> %s)"
         (make_param_name 0 name)
@@ -795,12 +807,12 @@ let make_sql ~join_ctors l =
         ~ctor_of:(fun id -> join_ctor join_ctors id)
         ~deps_of:(fun pid -> make_param_name 0 pid ^ ".deps"))
     | `SubstTuple (id, Insertion schema) ->
-      Some (gen_tuple_substitution ~is_row:false (resolve_tuple_label id) schema)
+      Some (gen_tuple_substitution ~to_literal ~is_row:false (resolve_tuple_label id) schema)
     | `SubstTuple (id, Where_in { value = (types, _); pos = _ }) ->
       let label = resolve_tuple_label id in
       let schema = make_schema_of_tuple_types label types in
       Some (sprintf "%s ^ %s ^ %s"
-        (quote "(") (gen_tuple_substitution ~is_row:false label schema) (quote ")"))
+        (quote "(") (gen_tuple_substitution ~to_literal ~is_row:false label schema) (quote ")"))
     | `SubstTuple (id, ValueRows { types; _ }) ->
       let label = resolve_tuple_label id in
       (* TODO: Implement meta for ValueRows *)
@@ -810,7 +822,7 @@ let make_sql ~join_ctors l =
         |> List.map (const "NULL")
         |> String.join ", "
         |> sprintf {|"SELECT %s WHERE FALSE"|} in
-      let not_empty = gen_tuple_substitution ~is_row:true label schema in
+      let not_empty = gen_tuple_substitution ~to_literal ~is_row:true label schema in
       Some (sprintf {|( if %s = [] then %s else ( "VALUES " ^ %s ) )|} label empty not_empty)
   and render_arms ~is_poly name arms =
     sprintf "(match %s with %s)"
@@ -856,7 +868,7 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
   let set_vars_in_order () =
     let set index = function
       | Sql.DynamicSelect (pid, _) -> output "%s.set p;" (col_ref (find_di_by_pid pid)); index
-      | var -> set_var index var; index + 1
+      | var -> set_var ~leaf:set_param index var; index + 1
     in
     let (_ : int) = List.fold_left set 0 stmt.vars in
     ()
@@ -901,7 +913,7 @@ let emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module ~with_callba
       in
       build_parts (expr :: acc) pending_comma rest
     | (`Choice _ | `Optional _ | `DynamicSelect _ | `SubstIn _ | `DynamicIn _ | `SubstTuple _) as piece :: rest ->
-      let expr = make_sql ~join_ctors [piece] in
+      let expr = make_sql ~to_literal:make_to_literal ~join_ctors [piece] in
       let acc = if pending_comma then expr :: quote "," :: acc else expr :: acc in
       build_parts acc false rest
   in
@@ -990,7 +1002,7 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos ~sql_pieces ({ stmt; 
   emit_dynamic_select_body ~module_kind ~dynamic_infos ~in_module:true ~with_callback ~sql_pieces q
 
 let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
-  let sql = make_sql ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces in
+  let sql = make_sql ~to_literal:make_to_literal ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces in
   match subst with
   | [] -> sql
   | vars ->
@@ -1047,22 +1059,7 @@ let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.name
     else
       sprintf "T.%s db %s %s %s%s" func (query_expr ~sql q) params_binder_name callback bind_end
   in
-  let exec =
-    match
-      List.find_map
-        (function
-          | `SubstTuple (id, Insertion _) -> Some id
-          | `SubstTuple (_, ( Where_in _| ValueRows _ ))
-          | `Text _ | `Choice _ | `Optional _ | `DynamicSelect _ | `DynamicIn _ | `SubstIn _ | `Cond _ -> None)
-        sql_pieces
-    with
-    | None -> exec
-    | Some { value = None; _ } -> failwith "empty label in tuple substitution"
-    | Some { value = Some value; _ } ->
-      sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|}
-        value empty_exec_result exec
-  in
-  output "%s%s" bind exec;
+  output "%s%s" bind (guard_empty_insertion sql_pieces ~empty:empty_exec_result exec);
   complete_func c
 
 let sanitize_to_variant_name s =
@@ -1204,7 +1201,7 @@ let generate_dynamic_select_modules stmts =
           let read_body = sprintf "(fun row idx -> (%s, idx + 1))" (format_get_column ~row:"row" ~idx:"idx" field_schema.Sql.field_attr) in
           let column_body = match field_ctor with
             | Sql.Verbatim (_, v) -> quote v
-            | _ -> make_sql ~join_ctors sql
+            | _ -> make_sql ~to_literal:make_to_literal ~join_ctors sql
           in
           let count_expr = eval_count_params field_args in
           let set_helper_name = sprintf "_set_%s" field_name in
@@ -1217,7 +1214,7 @@ let generate_dynamic_select_modules stmts =
               if field_args <> [] && has_set_params field_args then begin
                 output "let %s p =" set_helper_name;
                 indented (fun () ->
-                  List.iteri set_var field_args;
+                  List.iteri (set_var ~leaf:set_param) field_args;
                   output "()");
                 output "in";
                 set_helper_name

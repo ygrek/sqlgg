@@ -42,3 +42,22 @@ module Make (T : Sqlgg_traits.M_io) : sig
     id:T.Types.Int.t ->
     T.execute_response T.IO.future
 end
+
+module With_database (Database : Sqlgg_traits.M_io) : sig
+  val find_user :
+    [> `RO ] Database.connection ->
+    id:Database.Types.Int.t ->
+    (Database.Types.Int.t * Database.Types.Text.t option) option
+      Database.IO.future
+end
+
+module With_nested_database
+    (Runtime : sig module Database : Sqlgg_traits.M_io end) :
+sig
+  val find_user :
+    [> `RO ] Runtime.Database.connection ->
+    id:Runtime.Database.Types.Int.t ->
+    (Runtime.Database.Types.Int.t *
+     Runtime.Database.Types.Text.t option) option
+      Runtime.Database.IO.future
+end

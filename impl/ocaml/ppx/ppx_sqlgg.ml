@@ -1,4 +1,3 @@
-open Stdlib
 open Ppxlib
 module D = Ast_builder.Default
 
@@ -177,7 +176,9 @@ let raw_ty ~loc ~converted f c =
   | Opaque x -> converted f x
 
 let impl_raw ~loc = raw_ty ~loc ~converted:(fun f _ -> opaque f)
-let sig_raw ~loc = raw_ty ~loc ~converted:(fun f t -> Option.value t ~default:(opaque f))
+let sig_raw ~loc =
+  raw_ty ~loc
+    ~converted:(fun f t -> Stdlib.Option.value t ~default:(opaque f))
 
 let cols_obj ~loc ~is_nullable ~raw cols =
   D.ptyp_object ~loc
@@ -243,10 +244,10 @@ let resolve_field ~pick_spec ld =
   let default = Attribute.get default_attr ld in
   let by = Attribute.has_flag by_attr ld in
   let opt_ty = option_arg ld.pld_type in
-  let is_nullable = Option.is_some opt_ty in
+  let is_nullable = Stdlib.Option.is_some opt_ty in
   let column how =
     Column
-      { col = Option.value col ~default:ld.pld_name
+      { col = Stdlib.Option.value col ~default:ld.pld_name
       ; conv = { by; is_nullable; how }
       ; fty = ld.pld_type
       }
@@ -255,9 +256,9 @@ let resolve_field ~pick_spec ld =
     let clash =
       List.filter_map
         (fun (name, present) -> if present then Some name else None)
-        [ "[@sqlgg.col]", Option.is_some col
-        ; "[@sqlgg.map]", Option.is_some map
-        ; "[@sqlgg.default]", Option.is_some default
+        [ "[@sqlgg.col]", Stdlib.Option.is_some col
+        ; "[@sqlgg.map]", Stdlib.Option.is_some map
+        ; "[@sqlgg.default]", Stdlib.Option.is_some default
         ; "[@sqlgg.by]", by
         ]
     in
@@ -573,7 +574,7 @@ let dispatch ~loc ~ext ~pick_spec ~record ~nullable tds =
             ; subs
             ; witness
             ; decls =
-                cols_decls ~loc ~nullable:(Option.is_some witness) td.ptype_name.txt
+                cols_decls ~loc ~nullable:(Stdlib.Option.is_some witness) td.ptype_name.txt
                   subs cols
             })
     tds

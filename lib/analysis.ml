@@ -214,23 +214,37 @@ let parse ?(allow_extensions = true) (statement : Statements.t) =
     | [] -> Ok parsed
     | first :: rest -> Error (first, rest)
 
-let dialect_diagnostics (result : Syntax.result) =
-  let dialect = !Dialect.selected in
-  result.dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
+let dialect_diagnostics ~dialect dialect_features =
+  dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
     let diagnostic message = Some { message; location = Span ds.pos } in
     match Dialect.support ds dialect with
     | `Supported -> None
     | `Unknown -> diagnostic (Dialect.unknown_message ds dialect)
     | `Unsupported -> diagnostic (Dialect.unsupported_message ds dialect))
 
-let context_of_schema_sql ?context sql =
+let context_of_schema_sql ?context ?dialect sql =
   with_context ?context @@ fun () ->
+  let check_dialect dialect_features =
+    match dialect with
+    | None -> Ok ()
+    | Some dialect ->
+      match dialect_diagnostics ~dialect dialect_features with
+      | [] -> Ok ()
+      | first :: rest -> Error (first, rest)
+  in
   List.fold_left
     (fun compiled (statement : Statements.t) ->
       Result.bind compiled @@ fun () ->
       with_valid_properties statement (fun () ->
-        catch_diagnostics (fun () ->
-          ignore (Compile.statement ~dynamic_select:Props.Off statement : Compile.outcome)))
+        Result.bind
+          (catch_diagnostics (fun () ->
+             Compile.statement ~dynamic_select:Props.Off statement))
+          (function
+            | Compile.Executable result ->
+              check_dialect result.dialect_features
+            | Compile.Reusable { dialect_features; _ } ->
+              check_dialect dialect_features
+            | Compile.Verbatim | Compile.Not_reusable -> Ok ()))
       |> Result.map_error (fun (first, rest) -> statement, first, rest))
     (Ok ()) (Statements.split sql)
   |> Result.map Compile.snapshot

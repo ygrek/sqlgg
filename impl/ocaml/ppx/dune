@@ -7,6 +7,7 @@
  (kind ppx_deriver)
  (libraries ppxlib extlib sqlgg sqlgg_ir unix)
  (flags (:standard -open Sqlgg_ir))
- (private_modules inline_sql gen gen_caml gen_migrations sqlgg_config)
+ (private_modules inline_sql request_expansion gen gen_caml gen_migrations
+   sqlgg_config)
  (preprocess
   (pps ppxlib.metaquot)))
