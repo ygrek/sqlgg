@@ -125,6 +125,34 @@ let split text =
   let (acc, state) = Seq.fold_left step ([], initial) (lexemes text) in
   List.rev (finish_all acc state)
 
+let strip_comments (stmt : t) =
+  let text =
+    let buffer = Buffer.create (String.length stmt.text) in
+    let last =
+      List.fold_left
+        (fun start (comment_start, comment_stop) ->
+          Buffer.add_substring buffer stmt.text start (comment_start - start);
+          comment_stop)
+        0 stmt.comments
+    in
+    Buffer.add_substring buffer stmt.text last (String.length stmt.text - last);
+    Buffer.contents buffer
+  in
+  let removed_before offset =
+    List.fold_left
+      (fun n (start, stop) -> if stop <= offset then n + stop - start else n)
+      0 stmt.comments
+  in
+  { stmt with
+    text;
+    metadata = List.map (fun (offset, props) -> offset - removed_before offset, props) stmt.metadata;
+    comments = [] }
+
+let unstripped_offset (stmt : t) offset =
+  List.fold_left
+    (fun offset (start, stop) -> if start <= offset then offset + stop - start else offset)
+    offset stmt.comments
+
 let glue_downs blocks =
   let has_id (block : t) = Option.is_some (Props.id block.props) in
   let rec loop = function

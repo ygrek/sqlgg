@@ -12,7 +12,10 @@ type diagnostic = {
 
 val diagnostic_of_exn : exn -> diagnostic
 
+val dialect_diagnostics : Syntax.result -> diagnostic list
+
 val context_of_schema_sql :
+  ?context:Compile.state ->
   string -> (Compile.state, Statements.t * diagnostic * diagnostic list) result
 
 val with_context : ?context:Compile.state -> (unit -> 'a) -> 'a

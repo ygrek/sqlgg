@@ -161,27 +161,17 @@ let check ~file (stmt : Statements.t) =
           (List.map column (Tables.get_schema name.value))))
       table_defs
   in
-  let error_of_exn exn =
-    match Analysis.diagnostic_of_exn exn with
+  let error_of_diagnostic = function
     | { Analysis.message; location = Span pos } -> { pos = error_pos pos; msg = message }
     | { message; location = Properties | Statement } ->
       { pos = error_pos (0, String.length stmt.text); msg = message }
-  in
-  let dialect_errors (result : Syntax.result) =
-    let dialect = !Dialect.selected in
-    result.dialect_features |> List.filter_map (fun (ds : Dialect.dialect_support) ->
-      let error msg = Some { pos = error_pos ds.pos; msg } in
-      match Dialect.support ds dialect with
-      | `Supported -> None
-      | `Unknown -> error (Dialect.unknown_message ds dialect)
-      | `Unsupported -> error (Dialect.unsupported_message ds dialect))
   in
   let dynamic_select = Props.resolve_dynamic_select ~default_enabled:false stmt.props in
   let success (result : Syntax.result) =
     `Checked { kind = result.typed.kind;
                schema = Sql.schema_of_columns result.typed.schema;
                params = Params.of_vars ~base result.typed.vars;
-               dialect_errors = dialect_errors result;
+               dialect_errors = List.map error_of_diagnostic (Analysis.dialect_diagnostics result);
                new_table = new_table result.annotations.table_defs },
     result.annotations
   in
@@ -199,7 +189,8 @@ let check ~file (stmt : Statements.t) =
     | exception (Out_of_memory as exn) -> raise exn
     | exception exn ->
       let (src_tbls, cte_defs, table_aliases) = recover_scope exn in
-      `Rejected (error_of_exn exn), { Syntax.no_stmt_annotations with src_tbls; cte_defs; table_aliases }
+      `Rejected (error_of_diagnostic (Analysis.diagnostic_of_exn exn)),
+      { Syntax.no_stmt_annotations with src_tbls; cte_defs; table_aliases }
   in
   let { Syntax.src_tbls; cte_defs; table_aliases; expr_types;
         result_aliases; _ } = annotations in

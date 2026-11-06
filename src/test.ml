@@ -2970,6 +2970,34 @@ let test_join_hole_whitespace =
       [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nWHERE note = '  two  spaces  '"];
   ]
 
+let test_capture_restores_on_exception () =
+  let outer =
+    Gen.capture (fun () ->
+      Gen.inc_indent ();
+      Gen.output "before";
+      begin match
+        Gen.capture (fun () ->
+          Gen.output "fresh";
+          Gen.inc_indent ();
+          Gen.inc_indent ();
+          Gen.output "lost";
+          failwith "generator failure")
+      with
+      | (_ : string) -> assert_failure "the failing capture returned"
+      | exception Failure _ -> ()
+      end;
+      Gen.output "after";
+      Gen.dec_indent ())
+  in
+  assert_equal ~printer:(sprintf "%S") "  before\n  after\n" outer;
+  assert_equal ~printer:(sprintf "%S") "next\n" (Gen.capture (fun () -> Gen.output "next"))
+
+let test_params_mode_parsing () =
+  assert_equal (Ok (Some Sql_template.Named)) (Gen.params_mode_of_string "NaMeD");
+  assert_equal (Ok None) (Gen.params_mode_of_string "NONE");
+  assert_equal (Error "Unknown params mode: positional")
+    (Gen.params_mode_of_string "Positional")
+
 let test_migration_name =
   let module Name = Migration_id.Name in
   let head = Name.words "alter_blog_sync_jobs" in
@@ -3057,6 +3085,8 @@ let run () =
     "test_nullability_narrowing" >::: test_nullability_narrowing;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
+    "test_capture_restores_on_exception" >:: test_capture_restores_on_exception;
+    "test_params_mode_parsing" >:: test_params_mode_parsing;
     "migration name" >::: test_migration_name;
   ]
   in

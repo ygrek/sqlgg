@@ -115,7 +115,7 @@ let quote_comment_inline str =
 let make_comment str = "(* " ^ (quote_comment_inline str) ^ " *)"
 let comment () fmt = Printf.ksprintf (indent_endline $ make_comment) fmt
 
-let empty_line () = print_newline ()
+let empty_line () = emit "\n"
 
 let enums_hash_tbl = Hashtbl.create 100
 
@@ -342,8 +342,8 @@ let emit_verbatim_block src =
   let ind = make_indent () in
   String.split_on_char '\n' src
   |> List.iter (fun line ->
-    if line = "" then print_newline ()
-    else Printf.printf "%s%s\n" ind line)
+    if line = "" then emit "\n"
+    else emit (ind ^ line ^ "\n"))
 
 let append_func_params ~has_callback ~module_kind inputs =
   inputs
@@ -1007,11 +1007,12 @@ let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
     output "in";
     "__sqlgg_sql"
 
-let empty_exec_result = {|IO.return { T.affected_rows = 0L; insert_id = None }|}
-
-let generate_stmt ~module_kind index ({ stmt; _ } as q : Query.named) =
+let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
   let c = consumer module_kind in
+  let empty_exec_result =
+    sprintf {|%s { T.affected_rows = 0L; insert_id = None }|} return_expr
+  in
   if Props.has Noop stmt.props then begin
     let _ = gen_func_signature ~dynamic_infos:[] ~module_kind q in
     output "ignore db;";
@@ -1058,7 +1059,8 @@ let generate_stmt ~module_kind index ({ stmt; _ } as q : Query.named) =
     | None -> exec
     | Some { value = None; _ } -> failwith "empty label in tuple substitution"
     | Some { value = Some value; _ } ->
-      sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|} value empty_exec_result exec
+      sprintf {|( match %s with [] -> %s | _ :: _ -> %s)|}
+        value empty_exec_result exec
   in
   output "%s%s" bind exec;
   complete_func c
@@ -1245,10 +1247,10 @@ let generate_dynamic_select_modules stmts =
     )
   ) stmts
 
-let generate_stmt_wrapper ~module_kind index ({ stmt; _ } as q : Query.named) =
+let generate_stmt_wrapper ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
   let dynamic_infos = get_all_dynamic_select_infos q in
   match dynamic_infos with
-  | [] -> generate_stmt ~module_kind index q
+  | [] -> generate_stmt ~return_expr ~module_kind index q
   | [_] -> ()
   | _ :: _ :: _ ->
     if supports_module_kind module_kind stmt then begin
@@ -1257,12 +1259,18 @@ let generate_stmt_wrapper ~module_kind index ({ stmt; _ } as q : Query.named) =
         ~sql_pieces:(Gen.get_sql q) q
     end
 
-let generate ~gen_io ~migration_names name stmts =
-(*
-  let types =
-    String.concat " and " (List.map (fun s -> sprintf "%s = T.%s" s s) ["num";"text";"any"])
+let generate_direct_body ~io stmts =
+  let return_expr =
+    match io with
+    | `Generated_module -> "IO.return"
+    | `Traits_module -> "T.IO.return"
   in
-*)
+  generate_enum_modules stmts;
+  generate_dynamic_select_modules stmts;
+  empty_line ();
+  List.iteri (generate_stmt_wrapper ~return_expr ~module_kind:`Direct) stmts
+
+let generate ~gen_io ~migration_names name stmts =
   let (traits, io) =
     match gen_io with
     | true -> "Sqlgg_traits.M_io", "T.IO"
@@ -1272,17 +1280,14 @@ let generate ~gen_io ~migration_names name stmts =
   empty_line ();
   inc_indent ();
   output "module IO = %s" io;
-  generate_enum_modules stmts;
-  generate_dynamic_select_modules stmts;
-  empty_line ();
-  List.iteri (generate_stmt_wrapper ~module_kind:`Direct) stmts;
+  generate_direct_body ~io:`Generated_module stmts;
   [`Single; `Fold; `List]
   |> List.filter (fun module_kind ->
     List.exists (fun (q : Query.named) -> supports_module_kind module_kind q.stmt) stmts)
   |> List.iteri (fun i module_kind ->
     if i > 0 then output "";
     emit_module_annotated (module_kind_name module_kind) (fun () ->
-      List.iteri (generate_stmt_wrapper ~module_kind) stmts)
+      List.iteri (generate_stmt_wrapper ~return_expr:"IO.return" ~module_kind) stmts)
   );
   Option.may (fun names ->
     output "let migrations = [";
