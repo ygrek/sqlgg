@@ -48,7 +48,7 @@ module Column_sig = struct
           match e.value with
           | Default _ -> cs, true
           | Syntax_constraint cst when Gen_migrations.constraint_to_sql cst <> None -> cst :: cs, dflt
-          | Syntax_constraint _ -> cs, dflt)
+          | Syntax_constraint _ | On_update -> cs, dflt)
         ([], false) a.extra
     in
     { name = a.name.value;
