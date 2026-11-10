@@ -19,7 +19,32 @@ type table = { table_name : string; primary_key : bool; columns : columns }
 
 let columns table = table.columns.first :: table.columns.rest
 
-let choose state items = List.nth items (Random.State.int state (List.length items))
+(* SplitMix64. Stdlib.Random yields a different sequence on OCaml 4 and OCaml 5
+   for the same seed, which would make generated.expected compiler-specific. *)
+module Prng : sig
+  type t
+
+  val make : seed:int -> t
+  val int : t -> int -> int
+  val bool : t -> bool
+end = struct
+  type t = { mutable position : int64 }
+
+  let make ~seed = { position = Int64.of_int seed }
+
+  let next generator =
+    let mix shift factor value =
+      Int64.mul (Int64.logxor value (Int64.shift_right_logical value shift)) factor
+    in
+    generator.position <- Int64.add generator.position 0x9E3779B97F4A7C15L;
+    let mixed = mix 27 0x94D049BB133111EBL (mix 30 0xBF58476D1CE4E5B9L generator.position) in
+    Int64.logxor mixed (Int64.shift_right_logical mixed 31)
+
+  let int generator bound = Int64.to_int (Int64.unsigned_rem (next generator) (Int64.of_int bound))
+  let bool generator = Int64.logand (next generator) 1L = 1L
+end
+
+let choose state items = List.nth items (Prng.int state (List.length items))
 
 let enum_values =
   [ "red", "Red"; "green", "Green"; "in progress", "In_progress"; "on-hold", "On_hold";
@@ -38,7 +63,7 @@ let kinds state =
 
 let enum_column state =
   let values =
-    List.filter (fun _ -> Random.State.int state 3 > 0) enum_values
+    List.filter (fun _ -> Prng.int state 3 > 0) enum_values
     |> function [] -> [ List.hd enum_values ] | values -> values
   in
   ( Enum values,
@@ -47,13 +72,13 @@ let enum_column state =
 
 let random_column state index =
   let kind, sql_type =
-    if Random.State.int state 10 = 0 then enum_column state else choose state (kinds state)
+    if Prng.int state 10 = 0 then enum_column state else choose state (kinds state)
   in
-  { name = Printf.sprintf "c%d" index; sql_type; kind; nullable = Random.State.bool state }
+  { name = Printf.sprintf "c%d" index; sql_type; kind; nullable = Prng.bool state }
 
 let random_table state index =
-  let primary_key = Random.State.bool state in
-  let width = 1 + Random.State.int state 12 in
+  let primary_key = Prng.bool state in
+  let width = 1 + Prng.int state 12 in
   let column position =
     if primary_key && position = 0 then
       { name = "c1"; sql_type = "INT"; kind = Int; nullable = false }
@@ -146,44 +171,44 @@ let labelled columns =
 
 let text state =
   let pieces = [ ""; "a"; "it's"; "say \"hi\""; "back\\slash"; "line\nbreak"; "nul\000byte"; "é"; "%s ? @x" ] in
-  String.concat "" (List.init (Random.State.int state 3) (fun _ -> choose state pieces))
+  String.concat "" (List.init (Prng.int state 3) (fun _ -> choose state pieces))
 
 let rec json state depth =
-  match Random.State.int state (if depth = 0 then 4 else 6) with
+  match Prng.int state (if depth = 0 then 4 else 6) with
   | 0 -> "`Null"
-  | 1 -> Printf.sprintf "`Bool %b" (Random.State.bool state)
-  | 2 -> Printf.sprintf "`Int (%d)" (Random.State.int state 200 - 100)
+  | 1 -> Printf.sprintf "`Bool %b" (Prng.bool state)
+  | 2 -> Printf.sprintf "`Int (%d)" (Prng.int state 200 - 100)
   | 3 -> Printf.sprintf "`String %S" (text state)
   | 4 ->
     Printf.sprintf "`List [%s]"
-      (String.concat "; " (List.init (Random.State.int state 3) (fun _ -> json state (depth - 1))))
+      (String.concat "; " (List.init (Prng.int state 3) (fun _ -> json state (depth - 1))))
   | _ ->
     Printf.sprintf "`Assoc [%s]"
       (String.concat "; "
-         (List.init (Random.State.int state 3) (fun index ->
+         (List.init (Prng.int state 3) (fun index ->
               Printf.sprintf "(%S, %s)" (Printf.sprintf "k%d" index) (json state (depth - 1)))))
 
 let scalar state = function
   | Int ->
     choose state
-      [ Printf.sprintf "(%dL)" (Random.State.int state 2000 - 1000); "Int64.max_int"; "Int64.min_int" ]
+      [ Printf.sprintf "(%dL)" (Prng.int state 2000 - 1000); "Int64.max_int"; "Int64.min_int" ]
   | Uint64 ->
     choose state
       [ "(Unsigned.UInt64.of_string \"0\")"; "(Unsigned.UInt64.of_string \"18446744073709551615\")";
-        Printf.sprintf "(Unsigned.UInt64.of_string \"%d\")" (Random.State.int state 100000) ]
-  | Double | Decimal -> Printf.sprintf "(%F)" (float_of_int (Random.State.int state 4000 - 2000) /. 4.)
+        Printf.sprintf "(Unsigned.UInt64.of_string \"%d\")" (Prng.int state 100000) ]
+  | Double | Decimal -> Printf.sprintf "(%F)" (float_of_int (Prng.int state 4000 - 2000) /. 4.)
   | Text | Blob -> Printf.sprintf "%S" (text state)
-  | Bool -> string_of_bool (Random.State.bool state)
+  | Bool -> string_of_bool (Prng.bool state)
   | Datetime ->
     Printf.sprintf "%S"
-      (Printf.sprintf "20%02d-%02d-%02d %02d:%02d:%02d" (Random.State.int state 30)
-         (1 + Random.State.int state 12) (1 + Random.State.int state 28) (Random.State.int state 24)
-         (Random.State.int state 60) (Random.State.int state 60))
+      (Printf.sprintf "20%02d-%02d-%02d %02d:%02d:%02d" (Prng.int state 30)
+         (1 + Prng.int state 12) (1 + Prng.int state 28) (Prng.int state 24)
+         (Prng.int state 60) (Prng.int state 60))
   | Json -> Printf.sprintf "(%s)" (json state 2)
   | Enum values -> "`" ^ snd (choose state values)
 
 let value state column =
-  if column.nullable && Random.State.int state 3 = 0 then "None"
+  if column.nullable && Prng.int state 3 = 0 then "None"
   else if column.nullable then Printf.sprintf "(Some %s)" (scalar state column.kind)
   else scalar state column.kind
 
@@ -330,7 +355,7 @@ let interface ~partner table =
     (base_type partner.columns.first.kind) row lookups
 
 let rows_of state table =
-  let count = 1 + Random.State.int state 5 in
+  let count = 1 + Prng.int state 5 in
   List.init count (fun index ->
       List.map
         (fun column ->
@@ -363,7 +388,7 @@ let runner ~partner state table =
   let columns = columns table in
   let name = table.table_name in
   let rows = rows_of state table in
-  let ids = List.init (Random.State.int state 4) (fun _ -> Random.State.int state 2000 - 1000) in
+  let ids = List.init (Prng.int state 4) (fun _ -> Prng.int state 2000 - 1000) in
   let cells =
     String.concat "; "
       (List.map (fun column -> Printf.sprintf "%s %s" (literal_of column) column.name) columns)
@@ -532,7 +557,7 @@ let () =
      end\n\n"
   in
   let footer = "let () = if !failures > 0 then exit 1\n" in
-  let state = Random.State.make [| seed |] in
+  let state = Prng.make ~seed in
   let tables = List.init 16 (fun index -> random_table state (index + 1)) @ [ kitchen_sink state ] in
   let partner index = List.nth tables ((index + 1) mod List.length tables) in
   write (prefix ^ "_schema.sql") (String.concat "\n" (List.map ddl tables) ^ "\n");

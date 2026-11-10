@@ -1,7 +1,7 @@
-type zero_or_one = |
-type exactly_one = |
-type many = |
-type affected_rows = |
+type zero_or_one = [ `Zero_or_one ]
+type exactly_one = [ `Exactly_one ]
+type many = [ `Many ]
+type affected_rows = [ `Affected_rows ]
 
 type 'types bool_of = 'a constraint 'types = < bool : 'a ; .. >
 type 'types int_of = 'a constraint 'types = < int : 'a ; .. >
