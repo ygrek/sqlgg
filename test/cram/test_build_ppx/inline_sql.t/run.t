@@ -33,6 +33,9 @@ CLI does) and what the queries return:
   find_user: 2, name Ann
   [SQL] INSERT INTO users (id, name, email) VALUES (3, NULL, 'bob@example.com')
   add_user: 1 row(s)
+  add_users_empty: 0 row(s)
+  [SQL] INSERT INTO users (id, name, email) VALUES (4, NULL, 'four@example.com'), (5, 'Five', 'five@example.com')
+  add_users: 2 row(s)
   [SQL] UPDATE users SET name = 'Robert', nickname = NULL WHERE id = 3
   rename_user: 1 row(s)
   [SQL] SELECT p.title, u.nickname
@@ -43,6 +46,75 @@ CLI does) and what the queries return:
   titles_by: Again by bob
   [SQL] UPDATE posts SET state = 'published' WHERE id = 7
   publish: 1 row(s)
+
+[%sql.Request] builds driver-independent descriptors: requests.ml has no traits
+module in scope, requests.mli keeps the host types open as projections of the
+driver's type record 't, and the driver is chosen when the request is executed:
+Sqlgg_request.Make fixes 't, so the same find_user returns int64 * string under
+Print_impl and int * Bytes.t under Custom_driver. custom_driver.ml is a traits
+implementation written from scratch with different host types (Int = int,
+Text = Bytes.t) and IO monad (result); the same request values run through both:
+
+  $ dune build --root . ./request_main.exe 2>&1
+  $ ./_build/default/request_main.exe | grep -Ev '^(\[MOCK|  Row)'
+  -- Print_impl: Int = int64, Text = string, IO = identity
+  [SQL] SELECT id, name FROM users WHERE id = 1
+  find_user: 1, name is NULL
+  [SQL] UPDATE users SET name = 'Ann' WHERE id = 1
+  rename_user: 1 row(s)
+  -- Custom_driver: Int = int, Text = Bytes.t, IO = result
+  [CUSTOM] SELECT id, name FROM users WHERE id = 2
+  find_user: 2, name Bob
+  [CUSTOM] UPDATE users SET name = 'Robert' WHERE id = 2
+  rename_user: 1 row(s)
+  -- Print_impl: 12 columns, 12 parameters
+  [SQL] INSERT INTO wide (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12) VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+  [SQL] SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 FROM wide WHERE c1 = 1
+  find_wide: 1 2 3 4 5 6 7 8 9 10 11 12
+  -- Custom_driver: enum
+  [CUSTOM] SELECT state FROM posts WHERE id = 1
+  post_state: draft
+  [CUSTOM] UPDATE posts SET state = 'published' WHERE id = 1
+  publish: 1 row(s)
+  -- Print_impl: lists are spliced into the SQL as literals
+  [SQL] SELECT id, name FROM users WHERE id IN (1, 2, 3)
+  [SQL] SELECT id, name FROM users WHERE FALSE
+  [SQL] INSERT INTO users (id, name, email) VALUES (1, 'Ann', 'ann@x.org'), (2, NULL, 'bob@x.org')
+  insert_users: 2 row(s)
+  insert_users, no rows: 0 row(s)
+  -- Custom_driver: the same lists, quoted by this driver
+  [CUSTOM] SELECT id, name FROM users WHERE id IN (4, 5)
+  [CUSTOM] INSERT INTO users (id, name, email) VALUES (4, 'O''Neil', 'o@x.org'), (5, NULL, 'n@x.org')
+  insert_users: 0 row(s)
+  -- Print_impl: nested (CTE, IN-subquery)
+  [SQL] WITH x AS (SELECT id, name FROM users) SELECT id, name FROM x WHERE id = 1
+  users_cte: 1, name is NULL
+  [SQL] SELECT id, name FROM users WHERE id IN (SELECT id FROM users WHERE id = 1)
+  -- Custom_driver: nested (CTE, IN-subquery)
+  [CUSTOM] WITH x AS (SELECT id, name FROM users) SELECT id, name FROM x WHERE id = 2
+  users_cte: 2, name Bob
+  [CUSTOM] SELECT id, name FROM users WHERE id IN (SELECT id FROM users WHERE id = 2)
+  -- Print_impl: only the chosen branch binds its parameters
+  [SQL] SELECT id FROM users WHERE  ( id = 7 ) 
+  [SQL] SELECT id FROM users WHERE  ( name = 'Ann' ) 
+  [SQL] SELECT id FROM users WHERE id > 1 AND  ( TRUE ) 
+  [SQL] SELECT id FROM users WHERE id > 1 AND  ( name = 'Bob' ) 
+  -- Any: untyped column and parameter go through the driver's Types.Any
+  [SQL] SELECT id, NULL AS extra FROM users WHERE 'id > 0'
+  untyped: 1, extra NULL
+  [CUSTOM] SELECT id, NULL AS extra FROM users WHERE 'id > 1'
+  untyped: 2, extra raw
+  -- module= codecs wrap canonical values under either driver
+  [SQL] SELECT id, parent_id FROM wrapped_users WHERE id = 10
+  wrapped_user: 10, parent NULL
+  [SQL] SELECT id FROM wrapped_users WHERE id IN (10, 11)
+  [SQL] INSERT INTO wrapped_users (id, parent_id) VALUES (12, NULL), (13, 10)
+  insert_wrapped: 2 row(s)
+  [CUSTOM] SELECT id, parent_id FROM wrapped_users WHERE id = 20
+  wrapped_user custom: 20, parent 10
+  [CUSTOM] SELECT id FROM wrapped_users WHERE id IN (20, 21)
+  [CUSTOM] INSERT INTO wrapped_users (id, parent_id) VALUES (22, NULL), (23, 20)
+  insert_wrapped custom: 1 row(s)
 
 Compile-time errors point into the SQL inside the OCaml string literal.
 
@@ -134,9 +206,7 @@ The expansion uses the module T of the enclosing functor (T : Sqlgg_traits.M_io)
   File "errors/missing_traits.ml", line 1, characters 27-60:
   1 | let outside_of_a_functor = [%sql {| SELECT id FROM users |}]
                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  Error: Signature mismatch:
-         Modules do not match: (module T) is not included in Sqlgg_traits.M_io
-         Unbound module T
+  Error: Unbound module T
   [1]
 
 -schema files are replayed in the given order, so the ALTER TABLE in
@@ -145,4 +215,20 @@ more_schema.sql fails when it comes first; the error points into that file:
   $ dune build --root . ./errors/schema_order.exe 2>&1
   File "errors/../more_schema.sql", line 1, characters 0-42:
   Error: sqlgg: no such table users
+  [1]
+
+Schema DDL is checked against the selected dialect:
+
+  $ dune build --root . ./errors/schema_dialect.exe 2>&1
+  File "errors/../unsupported_schema.sql", line 1, characters 30-42:
+  Error: sqlgg: Feature UnsignedTypes is not supported for dialect PostgreSQL (supported by: MySQL, TiDB)
+  [1]
+
+An explicit -params none is preserved:
+
+  $ dune build --root . ./errors/params_none.exe 2>&1
+  File "errors/params_none.ml", line 1, characters 22-46:
+  1 | let insert = [%sql {| INSERT INTO users VALUES |}]
+                            ^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: sqlgg: Cannot use `-params none` with autogenerated parameters
   [1]

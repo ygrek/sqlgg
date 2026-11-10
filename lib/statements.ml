@@ -125,32 +125,67 @@ let split text =
   let (acc, state) = Seq.fold_left step ([], initial) (lexemes text) in
   List.rev (finish_all acc state)
 
+let comment_separator text (start, stop) =
+  let is_whitespace = function
+    | ' ' | '\t' | '\n' | '\r' -> true
+    | _ -> false
+  in
+  let has_token_before =
+    start > 0 && not (is_whitespace text.[start - 1])
+  in
+  let has_token_after =
+    stop < String.length text && not (is_whitespace text.[stop])
+  in
+  if has_token_before && has_token_after then " " else ""
+
 let strip_comments (stmt : t) =
-  let text =
-    let buffer = Buffer.create (String.length stmt.text) in
-    let last =
+  match stmt.comments with
+  | [] -> stmt
+  | _ :: _ ->
+    let text =
+      let buffer = Buffer.create (String.length stmt.text) in
+      let last =
+        List.fold_left
+          (fun start (comment_start, comment_stop) ->
+            Buffer.add_substring buffer stmt.text start (comment_start - start);
+            Buffer.add_string buffer
+              (comment_separator stmt.text (comment_start, comment_stop));
+            comment_stop)
+          0 stmt.comments
+      in
+      Buffer.add_substring buffer stmt.text last (String.length stmt.text - last);
+      Buffer.contents buffer
+    in
+    let removed_before offset =
       List.fold_left
-        (fun start (comment_start, comment_stop) ->
-          Buffer.add_substring buffer stmt.text start (comment_start - start);
-          comment_stop)
+        (fun n (start, stop) ->
+          let separator_length =
+            String.length (comment_separator stmt.text (start, stop))
+          in
+          if stop <= offset then
+            n + stop - start - separator_length
+          else
+            n)
         0 stmt.comments
     in
-    Buffer.add_substring buffer stmt.text last (String.length stmt.text - last);
-    Buffer.contents buffer
-  in
-  let removed_before offset =
-    List.fold_left
-      (fun n (start, stop) -> if stop <= offset then n + stop - start else n)
-      0 stmt.comments
-  in
-  { stmt with
-    text;
-    metadata = List.map (fun (offset, props) -> offset - removed_before offset, props) stmt.metadata;
-    comments = [] }
+    { stmt with
+      text;
+      metadata =
+        List.map
+          (fun (offset, props) -> offset - removed_before offset, props)
+          stmt.metadata;
+      comments = [] }
 
 let unstripped_offset (stmt : t) offset =
   List.fold_left
-    (fun offset (start, stop) -> if start <= offset then offset + stop - start else offset)
+    (fun offset (start, stop) ->
+      let separator_length =
+        String.length (comment_separator stmt.text (start, stop))
+      in
+      if start + separator_length <= offset then
+        offset + stop - start - separator_length
+      else
+        offset)
     offset stmt.comments
 
 let glue_downs blocks =

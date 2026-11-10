@@ -505,8 +505,10 @@ let bind_param value_str (params : params) =
 let start_params (stmt : statement) (n : int) : params = 
   (stmt, ref [], ref 0, n)
 
-let finish_params (params : params) : result = 
-  let (stmt, param_list, _, _) = params in
+let finish_params (params : params) : result =
+  let (stmt, param_list, index, declared) = params in
+  if !index <> declared then
+    raise (Oops (sprintf "declared %d parameters, bound %d" declared !index));
   let final_sql = substitute_params stmt.sql (List.rev !param_list) in
   printf "[SQL] %s\n" final_sql;
   flush stdout;

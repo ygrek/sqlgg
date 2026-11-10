@@ -171,7 +171,10 @@ let check ~file (stmt : Statements.t) =
     `Checked { kind = result.typed.kind;
                schema = Sql.schema_of_columns result.typed.schema;
                params = Params.of_vars ~base result.typed.vars;
-               dialect_errors = List.map error_of_diagnostic (Analysis.dialect_diagnostics result);
+               dialect_errors =
+                 List.map error_of_diagnostic
+                   (Analysis.dialect_diagnostics
+                      ~dialect:!Dialect.selected result.dialect_features);
                new_table = new_table result.annotations.table_defs },
     result.annotations
   in

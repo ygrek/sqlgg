@@ -1,7 +1,7 @@
 module Inline = Queries.Make (Print_impl)
 module Cli = Cli_queries.Sqlgg (Print_impl)
 
-let scenario ~find_user ~add_user ~rename_user ~titles_by ~publish =
+let scenario ~find_user ~add_user ~add_users ~rename_user ~titles_by ~publish =
   let open Print_impl in
   let show_user = function
     | None -> print_endline "find_user: no row"
@@ -18,6 +18,13 @@ let scenario ~find_user ~add_user ~rename_user ~titles_by ~publish =
   show_user (find_user () ~id:2L);
   setup_execute_response ~affected_rows:1L ();
   show_affected "add_user" (add_user () ~id:3L ~name:None ~email:"bob@example.com");
+  show_affected "add_users_empty" (add_users () ~rows:[]);
+  setup_execute_response ~affected_rows:2L ();
+  show_affected "add_users"
+    (add_users () ~rows:
+       [ 4L, None, "four@example.com"
+       ; 5L, Some "Five", "five@example.com"
+       ]);
   setup_execute_response ~affected_rows:1L ();
   show_affected "rename_user"
     (rename_user () ~name:(Some "Robert") ~nickname:None ~id:3L);
@@ -35,10 +42,10 @@ let () =
   match Sys.argv with
   | [| _; "inline" |] ->
     scenario ~find_user:Inline.find_user ~add_user:Inline.add_user
-      ~rename_user:Inline.rename_user ~titles_by:Inline.titles_by
-      ~publish:Inline.publish
+      ~add_users:Inline.add_users ~rename_user:Inline.rename_user
+      ~titles_by:Inline.titles_by ~publish:Inline.publish
   | [| _; "cli" |] ->
     scenario ~find_user:Cli.find_user ~add_user:Cli.add_user
-      ~rename_user:Cli.rename_user ~titles_by:Cli.titles_by
-      ~publish:Cli.publish
+      ~add_users:Cli.add_users ~rename_user:Cli.rename_user
+      ~titles_by:Cli.titles_by ~publish:Cli.publish
   | _ -> prerr_endline "usage: main.exe (inline|cli)"
