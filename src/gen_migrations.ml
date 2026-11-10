@@ -96,6 +96,7 @@ let alter_action_attr_to_sql ~default_sql_lookup (col : Sql.Alter_action_attr.t)
     col.extra |> List.filter_map (fun (c : Sql.Alter_action_attr.constraint_ Sql.located) ->
       match c.value with
       | Syntax_constraint cst -> constraint_to_sql cst
+      | On_update -> None
       | Default _ ->
         match default_sql_lookup col.name.value with
          | Some sql -> Some (sprintf "DEFAULT %s" sql)

@@ -141,7 +141,7 @@ module Extensions = struct
       (fun (c : Alter_action_attr.constraint_ located) ->
         match c.value with
         | Alter_action_attr.Default { expr = default; _ } -> expr default.value
-        | Syntax_constraint _ -> [])
+        | Syntax_constraint _ | On_update -> [])
       attr.extra
 
   let update assigns where order_by limit =

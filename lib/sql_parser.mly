@@ -513,7 +513,7 @@ column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint Prima
                     })
                   }
                 | on_conflict { None }
-                | ON UPDATE datetime_value { None }
+                | ON UPDATE datetime_value { Some Alter_action_attr.On_update }
                 | CHECK LPAREN expr RPAREN { None }
                 | COLLATE ident { None }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)

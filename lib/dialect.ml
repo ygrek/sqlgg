@@ -37,6 +37,7 @@ type feature =
   | AlterLock [@as "alter_lock"]
   | UserDefinedType [@as "user_defined_type"]
   | Extension [@as "extension"]
+  | OnUpdateTimestamp [@as "on_update_timestamp"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string, json, jsonschema] [@@compact_variants]
 
 let show_feature x =
@@ -165,6 +166,8 @@ let get_alter_option ({ Sql.value; pos } : Sql.alter_option Sql.located) =
 let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
 
 let get_extension pos = only Extension [PostgreSQL] pos
+
+let get_on_update_timestamp pos = only OnUpdateTimestamp [MySQL; TiDB] pos
 
 let get_default_expr ~kind ~expr pos =
   let open Sql in
@@ -355,16 +358,12 @@ and analyze_assignment_expr acc aes k = match aes with
 and analyze_column_def_internal acc cds k = match cds with
   | [] -> k acc
   | ({ kind; extra; _ }: Alter_action_attr.t) :: rest ->
-    let acc =
-      let autoincrement = List.find_opt (fun c ->
-        match c.value with
-        | Alter_action_attr.Syntax_constraint Autoincrement -> true
-        | _ -> false
-      ) extra in
-      match autoincrement with
-      | Some { pos; _ } -> get_autoincrement pos :: acc
-      | None -> acc
-    in
+    let acc = List.fold_left (fun acc (c : Alter_action_attr.constraint_ located) ->
+      match c.value with
+      | Syntax_constraint Autoincrement -> get_autoincrement c.pos :: acc
+      | On_update -> get_on_update_timestamp c.pos :: acc
+      | Syntax_constraint _ | Default _ -> acc
+    ) acc extra in
     let acc = extra
       |> List.find_map (fun c ->
           match c.value with

@@ -967,7 +967,7 @@ module Alter_action_attr = struct
   type default = { expr : expr located; sql : string option }
     [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-  type constraint_ = Syntax_constraint of Constraint.t | Default of default
+  type constraint_ = Syntax_constraint of Constraint.t | Default of default | On_update
     [@@deriving show {with_path=false}, eq, json, jsonschema]
 
   type t = {
@@ -979,19 +979,20 @@ module Alter_action_attr = struct
   [@@deriving show {with_path=false}, eq, json, jsonschema]
 
   let constraint_to_syntax_constraint = function
-    | Syntax_constraint c -> c
-    | Default _ -> WithDefault
+    | Syntax_constraint c -> Some c
+    | Default _ -> Some WithDefault
+    | On_update -> None
 
   let default_sql (col : t) =
     List.find_map (fun (c : constraint_ located) ->
       match c.value with
       | Default { sql; _ } -> sql
-      | Syntax_constraint _ -> None
+      | Syntax_constraint _ | On_update -> None
     ) col.extra
 
   let to_attr (x: t): attr = make_attribute x.name.value
     (Option.map (fun k -> Source_type.kind_to_type_kind k.value.collated) x.kind)
-    (Constraints.of_list (List.map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
+    (Constraints.of_list (List.filter_map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
     ~meta:x.meta
 
   (* All attributes were already checked for dialect and default expression when writing to Tables,
