@@ -1,7 +1,7 @@
 (executables
  (names unknown_table unknown_column syntax_error type_error ddl_rejected
    two_statements not_a_literal missing_traits plain_string escaped_string)
- (modules :standard \ schema_order)
+ (modules :standard \ schema_order schema_dialect params_none)
  (libraries sqlgg.traits)
  (preprocess
   (pps sqlgg.ppx -- -dialect mysql -schema %{dep:../schema.sql}
@@ -13,4 +13,20 @@
  (libraries sqlgg.traits)
  (preprocess
   (pps sqlgg.ppx -- -dialect mysql -schema %{dep:../more_schema.sql}
+   -schema %{dep:../schema.sql})))
+
+(executable
+ (name schema_dialect)
+ (modules schema_dialect)
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect postgresql
+   -schema %{dep:../unsupported_schema.sql})))
+
+(executable
+ (name params_none)
+ (modules params_none)
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -params none -dialect mysql
    -schema %{dep:../schema.sql})))

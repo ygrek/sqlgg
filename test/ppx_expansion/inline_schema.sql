@@ -16,3 +16,15 @@ CREATE TABLE posts (
   id INT PRIMARY KEY,
   state ENUM('draft', 'published') NOT NULL
 );
+
+CREATE TABLE docs (
+  id INT PRIMARY KEY,
+  body JSON NOT NULL
+);
+
+CREATE TABLE ships (
+  -- [sqlgg] module=Ship_id
+  id INT PRIMARY KEY,
+  -- [sqlgg] module=Ship_id
+  parent_id INT
+);

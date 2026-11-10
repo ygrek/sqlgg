@@ -33,7 +33,9 @@ let check_dialect sql dialect_features =
           "Unknown dialect support for feature %s with dialect %s at %s, use -no-check=all to skip all checks or -no-check=%s to skip this feature check"
           (show_feature ds.feature) (show !selected) (position_info ds) (feature_to_string ds.feature))
 
-let check_params_mode kind = Option.may (Error.log "%s") (Gen.params_mode_error kind)
+let check_params_mode kind =
+  Option.may (Error.log "%s")
+    (Gen.params_mode_error ~params_mode:!Gen.params_mode kind)
 
 let compile ~dynamic_select (stmt : Statements.t) =
   let error_tail_length = 32 in

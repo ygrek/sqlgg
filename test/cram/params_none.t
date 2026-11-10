@@ -38,3 +38,10 @@ Written parameters are fine:
     </schema>
    </table>
   </sqlgg>
+
+An explicit `none` remains selected when a dialect follows it:
+
+  $ sqlgg -no-header -params none -dialect postgresql -gen xml - <<'EOF' | grep '<stmt '
+  > SELECT @id AS id;
+  > EOF
+   <stmt name="select_0" sql="SELECT @id AS id" category="DQL" kind="select" cardinality="1">

@@ -2970,6 +2970,34 @@ let test_join_hole_whitespace =
       [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nWHERE note = '  two  spaces  '"];
   ]
 
+let test_strip_comments_preserves_token_boundaries () =
+  let statement : Statements.t =
+    { text = "a/*x*/b/*yy*/c";
+      props = [];
+      pos = 0, 14;
+      metadata = [ 6, [ "first", "1" ]; 13, [ "second", "2" ] ];
+      comments = [ 1, 6; 7, 13 ];
+      errors = [] }
+  in
+  let stripped = Statements.strip_comments statement in
+  assert_equal ~printer:(sprintf "%S") "a b c" stripped.text;
+  assert_equal
+    [ 2, [ "first", "1" ]; 4, [ "second", "2" ] ]
+    stripped.metadata;
+  assert_equal 6 (Statements.unstripped_offset statement 2);
+  assert_equal 13 (Statements.unstripped_offset statement 4);
+  let separated_statement =
+    { statement with
+      text = "a /*x*/ b";
+      pos = 0, 9;
+      metadata = [ 8, [ "after", "comment" ] ];
+      comments = [ 2, 7 ] }
+  in
+  let separated = Statements.strip_comments separated_statement in
+  assert_equal ~printer:(sprintf "%S") "a  b" separated.text;
+  assert_equal [ 3, [ "after", "comment" ] ] separated.metadata;
+  assert_equal 8 (Statements.unstripped_offset separated_statement 3)
+
 let test_capture_restores_on_exception () =
   let outer =
     Gen.capture (fun () ->
@@ -2993,10 +3021,19 @@ let test_capture_restores_on_exception () =
   assert_equal ~printer:(sprintf "%S") "next\n" (Gen.capture (fun () -> Gen.output "next"))
 
 let test_params_mode_parsing () =
-  assert_equal (Ok (Some Sql_template.Named)) (Gen.params_mode_of_string "NaMeD");
-  assert_equal (Ok None) (Gen.params_mode_of_string "NONE");
+  assert_equal (Ok (Gen.Explicit Sql_template.Named)) (Gen.params_mode_of_string "NaMeD");
+  assert_equal (Ok Gen.Disabled) (Gen.params_mode_of_string "NONE");
   assert_equal (Error "Unknown params mode: positional")
-    (Gen.params_mode_of_string "Positional")
+    (Gen.params_mode_of_string "Positional");
+  assert_equal None
+    (Gen.resolve_params_mode
+       ~dialect:(Some Dialect.PostgreSQL) Gen.Disabled);
+  assert_equal (Some Sql_template.Named)
+    (Gen.resolve_params_mode
+       ~dialect:(Some Dialect.PostgreSQL) (Gen.Explicit Sql_template.Named));
+  assert_equal (Some Sql_template.PostgreSQL)
+    (Gen.resolve_params_mode
+       ~dialect:(Some Dialect.PostgreSQL) Gen.From_dialect)
 
 let test_migration_name =
   let module Name = Migration_id.Name in
@@ -3085,6 +3122,8 @@ let run () =
     "test_nullability_narrowing" >::: test_nullability_narrowing;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
+    "test_strip_comments_preserves_token_boundaries"
+    >:: test_strip_comments_preserves_token_boundaries;
     "test_capture_restores_on_exception" >:: test_capture_restores_on_exception;
     "test_params_mode_parsing" >:: test_params_mode_parsing;
     "migration name" >::: test_migration_name;

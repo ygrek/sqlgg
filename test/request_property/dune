@@ -1,0 +1,122 @@
+(library
+ (name model_driver)
+ (modules model_driver)
+ (libraries sqlgg.traits))
+
+(test
+ (name test_request_property)
+ (modules test_request_property)
+ (libraries oUnit qcheck-core sqlgg.traits model_driver))
+
+(executable
+ (name gen)
+ (modules gen))
+
+(rule
+ (targets generated_schema.sql generated.ml generated.mli generated_run.ml)
+ (action
+  (run ./gen.exe 1)))
+
+(library
+ (name generated)
+ (modules generated)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema generated_schema.sql))
+ (preprocessor_deps generated_schema.sql))
+
+(executable
+ (name generated_run)
+ (modules generated_run)
+ (flags (:standard -w -a))
+ (libraries generated model_driver sqlgg.traits))
+
+(rule
+ (targets generated.actual)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./generated_run.exe))))
+
+(rule
+ (alias runtest)
+ (action
+  (progn
+   (diff generated.expected generated.actual)
+   (diff generated.expected.mli generated.mli))))
+
+(rule
+ (targets seed2_schema.sql seed2.ml seed2.mli seed2_run.ml)
+ (action
+  (run ./gen.exe 2 seed2)))
+
+(library
+ (name seed2)
+ (modules seed2)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema seed2_schema.sql))
+ (preprocessor_deps seed2_schema.sql))
+
+(executable
+ (name seed2_run)
+ (modules seed2_run)
+ (flags (:standard -w -a))
+ (libraries seed2 model_driver sqlgg.traits))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./seed2_run.exe)))
+
+(rule
+ (targets seed3_schema.sql seed3.ml seed3.mli seed3_run.ml)
+ (action
+  (run ./gen.exe 3 seed3)))
+
+(library
+ (name seed3)
+ (modules seed3)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema seed3_schema.sql))
+ (preprocessor_deps seed3_schema.sql))
+
+(executable
+ (name seed3_run)
+ (modules seed3_run)
+ (flags (:standard -w -a))
+ (libraries seed3 model_driver sqlgg.traits))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./seed3_run.exe)))
+
+(rule
+ (targets seed4_schema.sql seed4.ml seed4.mli seed4_run.ml)
+ (action
+  (run ./gen.exe 4 seed4)))
+
+(library
+ (name seed4)
+ (modules seed4)
+ (flags (:standard -w -a))
+ (libraries sqlgg.traits)
+ (preprocess
+  (pps sqlgg.ppx -- -dialect mysql -schema seed4_schema.sql))
+ (preprocessor_deps seed4_schema.sql))
+
+(executable
+ (name seed4_run)
+ (modules seed4_run)
+ (flags (:standard -w -a))
+ (libraries seed4 model_driver sqlgg.traits))
+
+(rule
+ (alias runtest)
+ (action
+  (run ./seed4_run.exe)))
