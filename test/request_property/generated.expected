@@ -1,30 +1,6 @@
-CREATE TABLE t1 (c1 BOOLEAN);
-  insert: INSERT INTO t1 (c1) VALUES (?)
-  select: SELECT c1 FROM t1
-  roundtrip: 1 ok
-  families: 1 ok
-  literals: 2 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t2 (c1 BLOB NOT NULL, c2 BOOLEAN, c3 TEXT, c4 BLOB NOT NULL, c5 FLOAT NOT NULL, c6 DECIMAL(10,2), c7 JSON NOT NULL, c8 BIGINT UNSIGNED, c9 DATETIME, c10 BLOB, c11 DECIMAL(10,2) NOT NULL, c12 BIGINT UNSIGNED NOT NULL);
-  insert: INSERT INTO t2 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 FROM t2
+CREATE TABLE t1 (c1 INT NOT NULL, c2 VARCHAR(40), c3 BLOB, c4 ENUM('red','in progress','on-hold','404','x','a_b'), c5 BOOLEAN, c6 JSON NOT NULL, c7 BOOLEAN NOT NULL, c8 BIGINT, c9 TEXT, c10 JSON, c11 DECIMAL(10,2));
+  insert: INSERT INTO t1 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11 FROM t1
   roundtrip: 5 ok
   families: 5 ok
   literals: 2 ok
@@ -46,40 +22,64 @@ CREATE TABLE t2 (c1 BLOB NOT NULL, c2 BOOLEAN, c3 TEXT, c4 BLOB NOT NULL, c5 FLO
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t3 (c1 INT PRIMARY KEY, c2 DOUBLE NOT NULL, c3 BIGINT UNSIGNED);
-  insert: INSERT INTO t3 (c1, c2, c3) VALUES (?, ?, ?)
-  select: SELECT c1, c2, c3 FROM t3
-  roundtrip: 5 ok
-  families: 5 ok
+CREATE TABLE t2 (c1 DATETIME, c2 DECIMAL(10,2), c3 ENUM('red','on-hold','Done','x','a_b'), c4 BLOB, c5 TIMESTAMP NOT NULL, c6 BOOLEAN NOT NULL, c7 JSON, c8 DECIMAL(10,2) NOT NULL, c9 JSON NOT NULL);
+  insert: INSERT INTO t2 (c1, c2, c3, c4, c5, c6, c7, c8, c9) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t2
+  roundtrip: 4 ok
+  families: 4 ok
+  literals: 2 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t3 (c1 INT PRIMARY KEY, c2 FLOAT, c3 BLOB, c4 BIGINT, c5 ENUM('red','green','in progress','404','Done','x','a_b') NOT NULL, c6 ENUM('red','green','404','Done','x','a_b'), c7 BIGINT, c8 DECIMAL(10,2));
+  insert: INSERT INTO t3 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t3
+  roundtrip: 3 ok
+  families: 3 ok
   literals: 4 ok
-  lookup: 5 ok
-  lookup: SELECT c1, c2, c3 FROM t3 WHERE c1 = ?
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
+  lookup: 3 ok
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t3 WHERE c1 = ?
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
   roundtrip: 0 ok
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t4 (c1 INT PRIMARY KEY, c2 DECIMAL(10,2) NOT NULL, c3 DOUBLE NOT NULL, c4 FLOAT, c5 DATETIME, c6 BLOB NOT NULL, c7 DECIMAL(10,2), c8 TEXT NOT NULL, c9 DATETIME);
-  insert: INSERT INTO t4 (c1, c2, c3, c4, c5, c6, c7, c8, c9) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t4
+CREATE TABLE t4 (c1 INT PRIMARY KEY, c2 TEXT, c3 JSON NOT NULL, c4 JSON NOT NULL, c5 INT NOT NULL, c6 BIGINT UNSIGNED NOT NULL, c7 DECIMAL(10,2) NOT NULL, c8 VARCHAR(40), c9 BOOLEAN NOT NULL, c10 BOOLEAN NOT NULL, c11 ENUM('red','green','on-hold','404','a_b'));
+  insert: INSERT INTO t4 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11 FROM t4
   roundtrip: 4 ok
   families: 4 ok
   literals: 4 ok
   lookup: 4 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t4 WHERE c1 = ?
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11 FROM t4 WHERE c1 = ?
   roundtrip: 4 ok
   roundtrip: 4 ok
   roundtrip: 4 ok
@@ -98,9 +98,87 @@ CREATE TABLE t4 (c1 INT PRIMARY KEY, c2 DECIMAL(10,2) NOT NULL, c3 DOUBLE NOT NU
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t5 (c1 BOOLEAN NOT NULL, c2 BIGINT UNSIGNED, c3 BIGINT UNSIGNED, c4 BLOB, c5 BLOB NOT NULL, c6 BLOB NOT NULL, c7 TEXT NOT NULL, c8 JSON NOT NULL, c9 BIGINT UNSIGNED, c10 BLOB, c11 BOOLEAN NOT NULL, c12 ENUM('red','green','404','x') NOT NULL);
-  insert: INSERT INTO t5 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 FROM t5
+CREATE TABLE t5 (c1 INT PRIMARY KEY, c2 FLOAT NOT NULL, c3 BIGINT NOT NULL, c4 JSON NOT NULL, c5 BIGINT, c6 DOUBLE NOT NULL, c7 DECIMAL(10,2), c8 INT, c9 BLOB NOT NULL);
+  insert: INSERT INTO t5 (c1, c2, c3, c4, c5, c6, c7, c8, c9) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t5
+  roundtrip: 2 ok
+  families: 2 ok
+  literals: 4 ok
+  lookup: 2 ok
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t5 WHERE c1 = ?
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t6 (c1 INT PRIMARY KEY, c2 BIGINT UNSIGNED, c3 BOOLEAN NOT NULL, c4 DECIMAL(10,2) NOT NULL, c5 ENUM('red','green','on-hold','404','a_b') NOT NULL);
+  insert: INSERT INTO t6 (c1, c2, c3, c4, c5) VALUES (?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5 FROM t6
+  roundtrip: 4 ok
+  families: 4 ok
+  literals: 4 ok
+  lookup: 4 ok
+  lookup: SELECT c1, c2, c3, c4, c5 FROM t6 WHERE c1 = ?
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t7 (c1 INT PRIMARY KEY, c2 DOUBLE NOT NULL, c3 BIGINT UNSIGNED NOT NULL, c4 BOOLEAN NOT NULL, c5 BLOB NOT NULL, c6 BLOB, c7 BOOLEAN NOT NULL, c8 TIMESTAMP, c9 JSON, c10 DECIMAL(10,2) NOT NULL, c11 BLOB, c12 ENUM('green','on-hold','a_b'));
+  insert: INSERT INTO t7 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 FROM t7
+  roundtrip: 2 ok
+  families: 2 ok
+  literals: 4 ok
+  lookup: 2 ok
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12 FROM t7 WHERE c1 = ?
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t8 (c1 VARCHAR(40) NOT NULL, c2 JSON NOT NULL, c3 JSON, c4 BIGINT NOT NULL, c5 DOUBLE, c6 BOOLEAN NOT NULL, c7 BOOLEAN, c8 BOOLEAN);
+  insert: INSERT INTO t8 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t8
   roundtrip: 1 ok
   families: 1 ok
   literals: 2 ok
@@ -122,9 +200,9 @@ CREATE TABLE t5 (c1 BOOLEAN NOT NULL, c2 BIGINT UNSIGNED, c3 BIGINT UNSIGNED, c4
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t6 (c1 FLOAT NOT NULL, c2 DECIMAL(10,2) NOT NULL);
-  insert: INSERT INTO t6 (c1, c2) VALUES (?, ?)
-  select: SELECT c1, c2 FROM t6
+CREATE TABLE t9 (c1 FLOAT, c2 JSON NOT NULL, c3 ENUM('red','green','on-hold','404','Done','x','a_b'), c4 BLOB, c5 BLOB, c6 BLOB, c7 FLOAT, c8 BLOB, c9 VARCHAR(40), c10 BIGINT UNSIGNED);
+  insert: INSERT INTO t9 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t9
   roundtrip: 2 ok
   families: 2 ok
   literals: 2 ok
@@ -146,109 +224,9 @@ CREATE TABLE t6 (c1 FLOAT NOT NULL, c2 DECIMAL(10,2) NOT NULL);
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t7 (c1 INT PRIMARY KEY, c2 ENUM('green','in progress','Done') NOT NULL, c3 DATETIME, c4 BIGINT NOT NULL, c5 BOOLEAN, c6 TIMESTAMP NOT NULL);
-  insert: INSERT INTO t7 (c1, c2, c3, c4, c5, c6) VALUES (?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6 FROM t7
-  roundtrip: 5 ok
-  families: 5 ok
-  literals: 4 ok
-  lookup: 5 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6 FROM t7 WHERE c1 = ?
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t8 (c1 BOOLEAN NOT NULL);
-  insert: INSERT INTO t8 (c1) VALUES (?)
-  select: SELECT c1 FROM t8
-  roundtrip: 3 ok
-  families: 3 ok
-  literals: 2 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t9 (c1 BLOB, c2 BIGINT UNSIGNED, c3 FLOAT, c4 BIGINT UNSIGNED, c5 TEXT NOT NULL, c6 BOOLEAN, c7 JSON);
-  insert: INSERT INTO t9 (c1, c2, c3, c4, c5, c6, c7) VALUES (?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7 FROM t9
-  roundtrip: 3 ok
-  families: 3 ok
-  literals: 2 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t10 (c1 INT PRIMARY KEY, c2 TEXT NOT NULL, c3 BOOLEAN NOT NULL, c4 BIGINT UNSIGNED NOT NULL, c5 INT NOT NULL, c6 TEXT NOT NULL, c7 ENUM('green','in progress','404','Done','x','a_b'), c8 INT, c9 DATETIME, c10 INT NOT NULL);
-  insert: INSERT INTO t10 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t10
-  roundtrip: 1 ok
-  families: 1 ok
-  literals: 4 ok
-  lookup: 1 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t10 WHERE c1 = ?
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t11 (c1 DOUBLE NOT NULL, c2 INT, c3 ENUM('red','in progress','404','Done') NOT NULL, c4 BOOLEAN NOT NULL, c5 BIGINT UNSIGNED);
-  insert: INSERT INTO t11 (c1, c2, c3, c4, c5) VALUES (?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5 FROM t11
+CREATE TABLE t10 (c1 JSON, c2 DECIMAL(10,2) NOT NULL, c3 BIGINT UNSIGNED);
+  insert: INSERT INTO t10 (c1, c2, c3) VALUES (?, ?, ?)
+  select: SELECT c1, c2, c3 FROM t10
   roundtrip: 5 ok
   families: 5 ok
   literals: 2 ok
@@ -270,9 +248,33 @@ CREATE TABLE t11 (c1 DOUBLE NOT NULL, c2 INT, c3 ENUM('red','in progress','404',
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t12 (c1 ENUM('red','green','404','Done','x') NOT NULL, c2 TIMESTAMP NOT NULL, c3 DATETIME NOT NULL, c4 JSON NOT NULL, c5 DOUBLE NOT NULL);
-  insert: INSERT INTO t12 (c1, c2, c3, c4, c5) VALUES (?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5 FROM t12
+CREATE TABLE t11 (c1 ENUM('red','on-hold','404','x','a_b') NOT NULL, c2 TEXT NOT NULL, c3 INT, c4 DECIMAL(10,2), c5 DECIMAL(10,2) NOT NULL, c6 ENUM('red','in progress','on-hold','404','a_b'));
+  insert: INSERT INTO t11 (c1, c2, c3, c4, c5, c6) VALUES (?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6 FROM t11
+  roundtrip: 2 ok
+  families: 2 ok
+  literals: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t12 (c1 VARCHAR(40), c2 FLOAT, c3 DOUBLE, c4 BLOB NOT NULL, c5 DECIMAL(10,2), c6 BIGINT UNSIGNED NOT NULL, c7 BLOB NOT NULL, c8 BLOB, c9 BIGINT NOT NULL, c10 DATETIME, c11 BOOLEAN);
+  insert: INSERT INTO t12 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11 FROM t12
   roundtrip: 3 ok
   families: 3 ok
   literals: 2 ok
@@ -294,40 +296,88 @@ CREATE TABLE t12 (c1 ENUM('red','green','404','Done','x') NOT NULL, c2 TIMESTAMP
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t13 (c1 INT PRIMARY KEY, c2 BIGINT UNSIGNED, c3 INT, c4 BLOB NOT NULL, c5 TIMESTAMP, c6 JSON, c7 VARCHAR(40) NOT NULL, c8 BLOB NOT NULL);
-  insert: INSERT INTO t13 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t13
-  roundtrip: 5 ok
-  families: 5 ok
+CREATE TABLE t13 (c1 INT PRIMARY KEY, c2 ENUM('in progress','404','Done','x','a_b') NOT NULL, c3 BOOLEAN, c4 BLOB, c5 BOOLEAN, c6 JSON, c7 VARCHAR(40), c8 ENUM('red','green','in progress','on-hold','404','x','a_b'), c9 TIMESTAMP NOT NULL, c10 BIGINT NOT NULL);
+  insert: INSERT INTO t13 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t13
+  roundtrip: 2 ok
+  families: 2 ok
   literals: 4 ok
-  lookup: 5 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t13 WHERE c1 = ?
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
+  lookup: 2 ok
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t13 WHERE c1 = ?
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
   roundtrip: 0 ok
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t14 (c1 INT PRIMARY KEY, c2 BLOB, c3 BLOB NOT NULL, c4 BIGINT NOT NULL, c5 BIGINT NOT NULL, c6 BIGINT UNSIGNED, c7 INT, c8 BIGINT UNSIGNED);
-  insert: INSERT INTO t14 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t14
+CREATE TABLE t14 (c1 DECIMAL(10,2), c2 INT NOT NULL);
+  insert: INSERT INTO t14 (c1, c2) VALUES (?, ?)
+  select: SELECT c1, c2 FROM t14
+  roundtrip: 2 ok
+  families: 2 ok
+  literals: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 2 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t15 (c1 BIGINT UNSIGNED NOT NULL, c2 DECIMAL(10,2), c3 BLOB NOT NULL);
+  insert: INSERT INTO t15 (c1, c2, c3) VALUES (?, ?, ?)
+  select: SELECT c1, c2, c3 FROM t15
+  roundtrip: 4 ok
+  families: 4 ok
+  literals: 2 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 4 ok
+  roundtrip: 0 ok
+  update: 1 ok
+  delete: 1 ok
+  delete: 1 ok
+CREATE TABLE t16 (c1 INT PRIMARY KEY, c2 INT NOT NULL, c3 ENUM('red','on-hold','Done','x','a_b') NOT NULL, c4 DECIMAL(10,2), c5 BOOLEAN NOT NULL, c6 INT, c7 BOOLEAN NOT NULL, c8 BIGINT NOT NULL);
+  insert: INSERT INTO t16 (c1, c2, c3, c4, c5, c6, c7, c8) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t16
   roundtrip: 3 ok
   families: 3 ok
   literals: 4 ok
   lookup: 3 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t14 WHERE c1 = ?
+  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8 FROM t16 WHERE c1 = ?
   roundtrip: 3 ok
   roundtrip: 3 ok
   roundtrip: 3 ok
@@ -346,76 +396,26 @@ CREATE TABLE t14 (c1 INT PRIMARY KEY, c2 BLOB, c3 BLOB NOT NULL, c4 BIGINT NOT N
   update: 1 ok
   delete: 1 ok
   delete: 1 ok
-CREATE TABLE t15 (c1 TIMESTAMP NOT NULL, c2 BIGINT UNSIGNED, c3 DECIMAL(10,2) NOT NULL, c4 BIGINT, c5 DECIMAL(10,2) NOT NULL, c6 FLOAT, c7 FLOAT, c8 FLOAT NOT NULL, c9 DOUBLE NOT NULL);
-  insert: INSERT INTO t15 (c1, c2, c3, c4, c5, c6, c7, c8, c9) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9 FROM t15
-  roundtrip: 5 ok
-  families: 5 ok
-  literals: 2 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 5 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE t16 (c1 INT PRIMARY KEY, c2 BIGINT UNSIGNED, c3 BIGINT UNSIGNED NOT NULL, c4 TEXT, c5 FLOAT NOT NULL, c6 JSON, c7 VARCHAR(40) NOT NULL, c8 ENUM('red','green','in progress','404','Done','x','a_b'), c9 BLOB NOT NULL, c10 BOOLEAN NOT NULL);
-  insert: INSERT INTO t16 (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t16
-  roundtrip: 3 ok
-  families: 3 ok
-  literals: 4 ok
-  lookup: 3 ok
-  lookup: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10 FROM t16 WHERE c1 = ?
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 3 ok
-  roundtrip: 0 ok
-  update: 1 ok
-  delete: 1 ok
-  delete: 1 ok
-CREATE TABLE kitchen_sink (c1 INT NOT NULL, c2 INT, c3 BIGINT UNSIGNED NOT NULL, c4 BIGINT UNSIGNED, c5 DOUBLE NOT NULL, c6 DOUBLE, c7 DECIMAL(10,2) NOT NULL, c8 DECIMAL(10,2), c9 VARCHAR(40) NOT NULL, c10 VARCHAR(40), c11 BLOB NOT NULL, c12 BLOB, c13 BOOLEAN NOT NULL, c14 BOOLEAN, c15 TIMESTAMP NOT NULL, c16 TIMESTAMP, c17 JSON NOT NULL, c18 JSON, c19 ENUM('red','green','404','Done','x') NOT NULL, c20 ENUM('red','green','404','Done','x'));
+CREATE TABLE kitchen_sink (c1 INT NOT NULL, c2 INT, c3 BIGINT UNSIGNED NOT NULL, c4 BIGINT UNSIGNED, c5 FLOAT NOT NULL, c6 FLOAT, c7 DECIMAL(10,2) NOT NULL, c8 DECIMAL(10,2), c9 VARCHAR(40) NOT NULL, c10 VARCHAR(40), c11 BLOB NOT NULL, c12 BLOB, c13 BOOLEAN NOT NULL, c14 BOOLEAN, c15 DATETIME NOT NULL, c16 DATETIME, c17 JSON NOT NULL, c18 JSON, c19 ENUM('red','green','on-hold','Done') NOT NULL, c20 ENUM('red','green','on-hold','Done'));
   insert: INSERT INTO kitchen_sink (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   select: SELECT c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20 FROM kitchen_sink
-  roundtrip: 1 ok
-  families: 1 ok
+  roundtrip: 3 ok
+  families: 3 ok
   literals: 2 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
-  roundtrip: 1 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
+  roundtrip: 3 ok
   roundtrip: 0 ok
   update: 1 ok
   delete: 1 ok
