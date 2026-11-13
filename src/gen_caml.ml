@@ -1280,7 +1280,11 @@ let generate_direct_body ~io stmts =
   empty_line ();
   List.iteri (generate_stmt_wrapper ~return_expr ~module_kind:`Direct) stmts
 
-let generate ~gen_io ~migration_names name stmts =
+type migration_output =
+  | Legacy
+  | Runtime
+
+let generate ~gen_io ~migrations name stmts =
   let (traits, io) =
     match gen_io with
     | true -> "Sqlgg_traits.M_io", "T.IO"
@@ -1299,16 +1303,52 @@ let generate ~gen_io ~migration_names name stmts =
     emit_module_annotated (module_kind_name module_kind) (fun () ->
       List.iteri (generate_stmt_wrapper ~return_expr:"IO.return" ~module_kind) stmts)
   );
-  Option.may (fun names ->
+  Option.may (fun (migration_output, migrations) ->
     output "let migrations = [";
     inc_indent ();
-    List.iter (fun n ->
+    List.iter (fun (n, _) ->
       output "(%s, apply_%s, revert_%s);" (quote n) n n;
-    ) names;
+    ) migrations;
     dec_indent ();
     output "]";
-    empty_line ()
-  ) migration_names;
+    empty_line ();
+    match migration_output with
+    | Legacy -> ()
+    | Runtime ->
+        output
+          "module Migration = Sqlgg_migrations.Migration.Make (T)";
+        empty_line ();
+        output "let migration_plan =";
+        indented (fun () ->
+          output "[";
+          indented (fun () ->
+            List.iter
+              (fun (migration_name, migration) ->
+                let migration_id =
+                  match Props.id migration.Gen_migrations.props with
+                  | Some raw -> raw
+                  | None ->
+                      failwith
+                        (sprintf
+                           "runtime migration %S has no id"
+                           migration_name)
+                in
+                match migration.Gen_migrations.revert with
+                | [] ->
+                    output "Migration.make_generated_irreversible";
+                    indented (fun () ->
+                      output "~id:%s" (quote migration_id);
+                      output "~apply:apply_%s;" migration_name)
+                | _ :: _ ->
+                    output "Migration.make_generated_reversible";
+                    indented (fun () ->
+                      output "~id:%s" (quote migration_id);
+                      output "~apply:apply_%s" migration_name;
+                      output "~revert:revert_%s;" migration_name))
+              migrations);
+          output "]");
+        empty_line ()
+  ) migrations;
   dec_indent ();
   output "end (* module %s *)" (String.capitalize_ascii name)
 
@@ -1325,21 +1365,20 @@ end
 
 module Generator = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:false ~migration_names:None name stmts
+  let generate () name stmts = generate ~gen_io:false ~migrations:None name stmts
 end
 
 module Generator_io = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:true ~migration_names:None name stmts
+  let generate () name stmts = generate ~gen_io:true ~migrations:None name stmts
 end
 
 module Header = Gen.Make(Generator_io)
 
-let generate_migrations name migrations =
+let generate_migrations migration_output name migrations =
   let named = List.mapi (fun index (m : Gen_migrations.migration) ->
     Query.name m.props m.kind index, m
   ) migrations in
-  let migration_names = List.map fst named in
   let make_stmt ?(props = []) fn_name sql =
     Query.verbatim ~props:(Props.Name fn_name :: props) sql
   in
@@ -1352,4 +1391,8 @@ let generate_migrations name migrations =
     [make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
   ) named in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
-  generate ~gen_io:true ~migration_names:(Some migration_names) name (List.mapi Query.named stmts)
+  generate
+    ~gen_io:true
+    ~migrations:(Some (migration_output, named))
+    name
+    (List.mapi Query.named stmts)

@@ -1,0 +1,11 @@
+(copy_files ../cram/print_impl.ml)
+
+(test
+ (name test_planner)
+ (modules test_planner)
+ (libraries oUnit sqlgg.migrations))
+
+(test
+ (name test_runner)
+ (modules fake_database print_impl production_traits test_runner)
+ (libraries integers oUnit sqlgg.migrations sqlgg.traits))

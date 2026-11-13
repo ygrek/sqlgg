@@ -41,6 +41,15 @@ Prints one JSON document with the parsed AST of every statement, for tooling tha
 
 With `-schema <file>` statements are also checked against that schema and carry the typed result; `-plain-sql` rejects sqlgg extensions; `-json-schema` prints the JSON Schema of the document. `ir` is a separate command with its own options, so the code generation options above do not apply to it.
 
+## `sqlgg migrations`
+
+```text
+sqlgg migrations generate --dialect <dialect> --lang ocaml --schema <file> --migrations <file> --module <name> [--manual <file>] [--now <YYYYMMDDHHMMSS>]
+sqlgg migrations dune     <the same options> --generated <file.ml>
+```
+
+`generate` records the changes of the schema file as new migrations in the migrations file and prints a module for the migration runtime shipped with sqlgg; `dune` prints Dune rules that do this on every build. See [Migrations](./migrations.md#the-complete-workflow-sqlgg-migrations). Like `ir`, it is a separate command with its own options; `--help` lists them. Usage errors exit with 2.
+
 ## `-static-header`
 
 Drops the version and timestamp from the header, so the generated file only changes when the SQL does. Use it with `dune` `promote` rules (see [Getting Started](./getting-started.md)).

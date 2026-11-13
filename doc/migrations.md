@@ -8,8 +8,9 @@ description: Generate schema migrations from schema diffs
 
 You keep the schema as plain [`CREATE TABLE`](./sql/ddl.md) statements and edit it as the project changes. sqlgg compares the old version with the new one and writes the up and down `ALTER TABLE` statements that get you from one to the other, covering columns, types and indices.
 
+- **`sqlgg migrations`** is the complete workflow for OCaml on MySQL, MariaDB and TiDB: one schema file in, with the state table, the runner and the command line provided by sqlgg. Start here.
 - **`-diff`** computes the delta between two schemas and prints it.
-- **`-migrate`** appends new changes to a migrations file and regenerates the migration module from the recorded history.
+- **`-migrate`** appends new changes to a migrations file and regenerates the migration module from the recorded history. Use it when you bring your own runner or generate for another toolchain.
 
 `-gen xml` writes the migrations out for another toolchain to pick up:
 
@@ -22,6 +23,106 @@ sqlgg -diff -gen xml -base initial.sql -target target.sql
  <migration name="20260101000000_alter_users_add_col_age" apply="ALTER TABLE `users` ADD COLUMN `age` INT NOT NULL" revert="ALTER TABLE `users` DROP COLUMN `age`"/>
 </migrations>
 ```
+
+## The complete workflow: `sqlgg migrations`
+
+Keep the whole schema in one file and edit it as the project changes:
+
+```sql title="schema.sql"
+CREATE TABLE users (
+  id INT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL
+);
+```
+
+### Generate
+
+```bash
+sqlgg migrations generate --dialect mysql --lang ocaml \
+  --schema schema.sql --migrations migrations.sql \
+  --module Migrations > migrations.ml
+```
+
+```
+appended 1 migration(s) to migrations.sql (id 20261112093000_create_users)
+```
+
+sqlgg replays `migrations.sql`, compares the result with `schema.sql`, appends the difference to `migrations.sql` and prints the migrations module. The first run starts from an empty database, so every table becomes a `CREATE TABLE` migration; `migrations.sql` is created if it does not exist. Running it again without touching the schema changes nothing. Commit `schema.sql`, `migrations.sql` and, unless a build rule regenerates it, `migrations.ml`.
+
+This needs no build system. `--lang` is required: the generated module is tied to a migration runtime, and only `ocaml` has one so far. `--dialect` accepts `mysql` (also for MariaDB) and `tidb`.
+
+Changes the differ must not guess, such as renames and data backfills, go into a hand-written file passed as `--manual manual.sql`. It uses the [block format described below](#manual-migrations) and is merged into the history by `id`.
+
+### Apply
+
+Add `sqlgg.migrations` and `sqlgg.migrations.cmdliner` to the libraries of your executable. `Db` below is your [traits module](./ocaml/traits.md) with control IO, for example one built with `Sqlgg_mariadb.Make_control_io`:
+
+```ocaml
+module Runner = Sqlgg_migrations.Runner.Make (Db) (Migrations.Migrations (Db))
+
+module Migrate =
+  Sqlgg_migrations_cmdliner.Command.Make (Db) (Runner)
+    (struct
+      (* whatever your command line needs to reach the database *)
+      type options = string
+
+      let options =
+        Cmdliner.Arg.(required & opt (some string) None & info [ "db" ])
+
+      (* run the future against one writable connection, to completion *)
+      let with_connection url run = My_pool.with_connection url run
+    end)
+
+let () = exit (Cmdliner.Cmd.eval' Migrate.command)
+```
+
+`Migrate.command` is a Cmdliner group; mount it next to the other commands of your application. sqlgg never opens a connection itself.
+
+| Command | Does | Exit code |
+|---------|------|-----------|
+| `migrate` | Applies every pending migration as one batch | `0`, or `2` on failure |
+| `rollback` | Reverts the most recent batch, newest migration first | `0`, or `2` on failure |
+| `pending` | Lists the migrations that are not applied yet | `0` if none, `1` if some, `2` on failure |
+
+Without Cmdliner, call `Runner.migrate`, `Runner.rollback` and `Runner.pending` directly; they return the affected ids or a structured error.
+
+### The state table
+
+The runner creates and owns one table, `sqlgg_migrations`:
+
+```sql
+CREATE TABLE IF NOT EXISTS `sqlgg_migrations` (
+  `migration_id` VARCHAR(191) NOT NULL PRIMARY KEY,
+  `batch` BIGINT UNSIGNED NOT NULL,
+  `state` ENUM('applying', 'applied', 'reverting', 'apply_failed', 'revert_failed') NOT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+)
+```
+
+Before doing anything the runner checks that the applied migrations are exactly a prefix of the compiled ones. A stored id the application does not know, a migration missing in the middle, or a row that is not `applied` stops it without touching the database.
+
+DDL commits implicitly on the MySQL family, so a migration cannot be wrapped in a transaction. The runner writes the row as `applying` before the migration runs and marks it `applied` after. If the migration fails, the row becomes `apply_failed` (`revert_failed` for a rollback) and every later run refuses to continue. Nothing is retried, because a failed `ALTER` may have been partly executed. To recover, inspect the database, bring the schema to the state before or after that migration by hand, then either delete the row (the migration will run again) or set its `state` to `applied`.
+
+`rollback` refuses, before reverting anything, if the latest batch contains an irreversible migration.
+
+### Dune (optional)
+
+For a Dune project sqlgg prints the rules itself:
+
+```bash
+sqlgg migrations dune --dialect mysql --lang ocaml \
+  --schema schema.sql --migrations migrations.sql \
+  --generated migrations.ml --module Migrations > sqlgg_migrations.inc
+```
+
+```lisp title="dune"
+(include sqlgg_migrations.inc)
+```
+
+The rules regenerate `migrations.ml` on every build from a copy of `migrations.sql`, which must exist (start with an empty file). After a schema change the copy has migrations the committed log lacks: `dune build @sqlgg-migrations` (also part of `@check`) shows them as a diff and `dune promote` accepts them. `migrations.ml` is a build target here and is not committed.
+
+Until you promote, each build stamps the new migration with a fresh id. Promote before applying it to a database you keep.
 
 ## Generate migrations with `-diff`
 

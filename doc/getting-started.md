@@ -183,3 +183,7 @@ ID: 3, Name: Charlie, Age: 40
 
 Exactly as expected!
 
+## Next: schema migrations
+
+The table above was created by hand. To have sqlgg create and evolve tables from one schema file, with the state table, the runner and the `migrate` / `rollback` commands provided, see [Migrations](./migrations.md#the-complete-workflow-sqlgg-migrations).
+
