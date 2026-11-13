@@ -49,10 +49,20 @@ let process_stmts = function
   | Java -> Java.process
   | CSharp -> CSharp.process
 
-let process_migrations =
+let process_migrations migration_output =
   let unsupported lang = failwith (sprintf "migrations not supported for %s" lang) in
   function
-  | Caml | Caml_io -> Gen_caml.generate_migrations
+  | Caml | Caml_io ->
+    (match migration_output with
+     | Gen_caml.Legacy -> Gen_caml.generate_migrations Gen_caml.Legacy
+     | Gen_caml.Runtime ->
+       fun name migrations ->
+         migrations |> List.iter (fun (migration : Gen_migrations.migration) ->
+           match Option.map Sqlgg_migrations.Migration_id.parse (Props.id migration.props) with
+           | None | Some (Ok _) -> ()
+           | Some (Error error) ->
+             fatal "%s" (Sqlgg_migrations.Migration_id.error_to_string error));
+         Gen_caml.generate_migrations Gen_caml.Runtime name migrations)
   | Xml -> Gen_xml.generate_migrations
   | Json -> unsupported "JSON"
   | Cxx -> unsupported "C++"
@@ -202,6 +212,7 @@ let usage_msg =
     sprintf "SQL Guided (code) Generator ver. %s" Sqlgg_config.version;
     sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]" program;
     sprintf "       %s ir <options> [<file.sql> ...]" program;
+    sprintf "       %s migrations (generate|dune) --help" program;
     "Options are:";
   ]
 
@@ -219,15 +230,15 @@ let print_json_schema schema () =
   print_newline ();
   exit 0
 
-let set_dialect s =
-  let d =
-    match Dialect.of_string s with
-    | Some d -> d
-    | None -> failwith (sprintf "Unknown dialect: %s" s)
-  in
+let select_dialect d =
   Dialect.set_selected d;
   Gen.params_mode :=
     Gen.resolve_params_mode ~dialect:(Some d) !params_selection
+
+let set_dialect s =
+  match Dialect.of_string s with
+  | Some d -> select_dialect d
+  | None -> failwith (sprintf "Unknown dialect: %s" s)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
@@ -521,12 +532,20 @@ let parse_migrations blocks =
   abort_on_errors ();
   migs
 
-let run_migrate ({ delta = { name; target_files; now; max_id_length;
-                             ddl_as_migration; alter_options };
-                   gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
+let run_migrate
+    ~migration_output
+    ({ delta = { name; target_files; now; max_id_length;
+                 ddl_as_migration; alter_options };
+       gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
   let initial = to_file_sources initial_files in
   let ext = Option.map_default read_blocks [] extends_file in
-  let recorded_blocks () = merge_blocks (Option.map_default read_blocks [] migrations_file) ext in
+  let recorded_blocks () =
+    merge_blocks
+      (match migrations_file with
+       | Some f when Sys.file_exists f -> read_blocks f
+       | Some _ | None -> [])
+      ext
+  in
   let before = recorded_blocks () in
   let current =
     schema_of_sources (initial @ List.map (fun block -> From_block block) before)
@@ -535,7 +554,7 @@ let run_migrate ({ delta = { name; target_files; now; max_id_length;
   let regenerate () =
     replay_sources initial;
     let full = parse_migrations (recorded_blocks ()) in
-    process_migrations gen_lang name full
+    process_migrations migration_output gen_lang name full
   in
   let base = next_base now before in
   let naming = Migration_id.naming ~max_length:max_id_length base in
@@ -593,7 +612,8 @@ let run_diff ({ delta = { name; target_files; now; max_id_length;
   | Some Sql_ddl ->
     if migs <> [] then print_endline (entries_to_sql (assign_ids ~naming base migs))
   | Some (Lang l) ->
-    process_migrations l name (assign_ids ~naming base migs |> List.map entry_to_codegen)
+    process_migrations Gen_caml.Legacy l name
+      (assign_ids ~naming base migs |> List.map entry_to_codegen)
 
 let run_generate ({ output; name; inputs } : gen_args) =
   match inputs with
@@ -644,14 +664,53 @@ let run_ir () =
     match statement.resolution with Invalid _ -> true | Parsed _ | Analyzed _ -> false) statements
   then raise Cli_errors_found
 
+let run_migrations () =
+  match
+    Migrations_command.parse
+      (Array.sub Sys.argv 1 (Array.length Sys.argv - 1))
+  with
+  | `Exit code -> exit code
+  | `Request (Migrations_command.Print_dune_rules { generation; generated_file }) ->
+    print_string (Migration_dune_rules.render generation ~generated_file)
+  | `Request
+      (Migrations_command.Generate
+         { dialect; host_language; schema_file; migrations_file;
+           manual_file; module_name; now }) ->
+    select_dialect
+      (match dialect with
+       | `MySQL -> Dialect.MySQL
+       | `TiDB -> Dialect.TiDB);
+    Sqlgg_config.gen_header := Some `Static;
+    run_migrate
+      ~migration_output:Gen_caml.Runtime
+      {
+        delta =
+          {
+            name = module_name;
+            target_files = [ schema_file ];
+            now;
+            max_id_length = Some Sqlgg_migrations.Migration_id.max_length;
+            ddl_as_migration = true;
+            alter_options = [];
+          };
+        gen_lang =
+          (match host_language with
+           | Migrations_command.Ocaml -> Caml_io);
+        initial_files = [];
+        migrations_file = Some migrations_file;
+        extends_file = manual_file;
+      }
+
 let main () =
   match Array.to_list Sys.argv with
   | _ :: "ir" :: _ -> run_ir ()
+  | _ :: "migrations" :: _ -> run_migrations ()
   | _ ->
     match parse_args () with
     | Generate c -> run_generate c
     | Diff c -> run_diff c
-    | Migrate c -> run_migrate c
+    | Migrate c ->
+        run_migrate ~migration_output:Gen_caml.Legacy c
     | Materialize_schema c -> run_materialize_schema c
 
 let () =

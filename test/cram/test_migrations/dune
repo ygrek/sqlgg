@@ -1,2 +1,7 @@
 (cram
  (deps %{bin:sqlgg} (glob_files ../print_impl.ml)))
+
+; compiles the generated module against the installed runtime libraries
+(cram
+ (applies_to opinionated-cli)
+ (deps (package sqlgg)))

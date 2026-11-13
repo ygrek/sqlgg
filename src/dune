@@ -4,11 +4,13 @@
   (name cli)
   (promote (until-clean))
   (libraries
+    cmdliner
     dune-build-info
     extlib
     oUnit
     sqlgg
     sqlgg_ir
+    sqlgg_migrations
     unix
     yojson
   )
