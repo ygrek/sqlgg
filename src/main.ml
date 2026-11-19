@@ -152,25 +152,25 @@ let replay_sql sql = List.iter replay_statement (prepare_statements sql)
 
 let raw_blocks ch = Statements.glue_downs (prepare_statements (In_channel.input_all ch))
 
-let migration_of_block (block : Statements.t) =
-  executable block |> Option.map (fun (stmt : Query.t) ->
+let migration_of_block ~id (block : Statements.t) =
+  Stdlib.Option.bind (executable block) (fun (stmt : Query.t) ->
     let apply = String.trim block.text in
-    let revert =
-      match Props.has Irreversible block.props, Props.down block.props with
-      | true, _ -> []
-      | false, Some d -> [d]
-      | false, None -> Error.log "migration has no `down`:\n%s" apply; [""]
+    let migration revert =
+      let props =
+        match Props.name stmt.props, id with
+        | Some _, (Some _ | None) | None, None -> stmt.props
+        | None, Some id ->
+          (match Sqlgg_migrations.Migration_id.name id with
+           | Some _ ->
+             Props.Name (Sqlgg_migrations.Migration_id.to_string id) :: stmt.props
+           | None -> stmt.props)
+      in
+      Some { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert }
     in
-    let props =
-      match Props.name stmt.props, Props.id block.props with
-      | None, Some raw ->
-        (match Migration_id.parse raw with
-         | Some id when Option.is_some (Migration_id.name id) ->
-           Props.Name (Migration_id.to_string id) :: stmt.props
-         | _ -> stmt.props)
-      | _ -> stmt.props
-    in
-    { Gen_migrations.props; kind = stmt.kind; apply = [apply]; revert })
+    match Props.has Irreversible block.props, Props.down block.props with
+    | true, _ -> migration None
+    | false, Some down -> migration (Some [down])
+    | false, None -> Error.log "migration has no `down`:\n%s" apply; None)
 
 let with_channel filename f =
   match try Some (open_in filename) with _ -> None with

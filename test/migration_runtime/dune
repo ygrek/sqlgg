@@ -1,0 +1,26 @@
+(copy_files ../cram/print_impl.ml)
+
+(test
+ (package sqlgg)
+ (name test_planner)
+ (modules test_planner)
+ (libraries oUnit sqlgg.migrations))
+
+(test
+ (package sqlgg)
+ (name test_properties)
+ (modules test_properties)
+ (libraries oUnit qcheck-core sqlgg.migrations))
+
+(test
+ (package sqlgg)
+ (name test_runner)
+ (modules fake_database fake_runner print_impl production_traits test_runner)
+ (libraries
+  integers
+  cmdliner
+  oUnit
+  sqlgg.migrations
+  sqlgg.migrations.cmdliner
+  sqlgg.migrations.state_table
+  sqlgg.traits))

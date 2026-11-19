@@ -41,6 +41,27 @@ Prints one JSON document with the parsed AST of every statement, for tooling tha
 
 With `-schema <file>` statements are also checked against that schema and carry the typed result; `-plain-sql` rejects sqlgg extensions; `-json-schema` prints the JSON Schema of the document. `ir` is a separate command with its own options, so the code generation options above do not apply to it.
 
+## `sqlgg migrations`
+
+```bash
+sqlgg migrations generate --dialect mysql --lang ocaml \
+  --schema schema.sql --initial initial.sql \
+  --migrations migrations.sql --module Migrations \
+  --output migrations.ml
+```
+
+`generate` updates the migration log and generates a module for the OCaml
+migration runtime. See the [OCaml migration
+workflow](./migrations.md#ocaml-migration-workflow) for the files, runtime and
+deployment model.
+
+```bash
+sqlgg migrations generate --help
+```
+
+The command help is the source of truth for all options. Usage errors exit with
+2.
+
 ## `-static-header`
 
 Drops the version and timestamp from the header, so the generated file only changes when the SQL does. Use it with `dune` `promote` rules (see [Getting Started](./getting-started.md)).

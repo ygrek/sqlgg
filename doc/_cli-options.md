@@ -18,7 +18,7 @@
   -migrations-file <file>                             Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)
   -extends <file>                                     Hand-written migrations SQL, merged with generated ones by `id` (read-only)
   -now <YYYYMMDDHHMMSS>                               Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>
-  -max-migration-id-length <N>                        Limit generated migration ids to N characters (default: no limit)
+  -max-migration-id-length <N>                        Limit generated migration ids to N bytes (default and maximum: 191)
   -ddl-as-migration                                   Write new tables as CREATE TABLE migrations instead of plain schema DDL
   -alter-algorithm default|instant|inplace|copy       Add ALGORITHM policy to generated ALTER TABLE statements (MySQL and TiDB only)
   -alter-lock default|none|shared|exclusive           Add LOCK policy to generated ALTER TABLE statements (MySQL only)

@@ -1,0 +1,6 @@
+(copy_files ../migration_runtime/fake_{database,runner}.ml)
+
+(test
+ (package sqlgg)
+ (name test_command)
+ (libraries cmdliner oUnit sqlgg.migrations sqlgg.migrations.cmdliner))

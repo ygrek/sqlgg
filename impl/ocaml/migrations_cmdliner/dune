@@ -1,0 +1,8 @@
+(library
+ (name sqlgg_migrations_cmdliner)
+ (public_name sqlgg.migrations.cmdliner)
+ (libraries
+  cmdliner
+  sqlgg.migrations
+  sqlgg.migrations.state_table
+  sqlgg.traits))

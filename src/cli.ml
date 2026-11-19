@@ -4,8 +4,6 @@ open Printf
 open ExtLib
 open Sqlgg
 
-module Name = Migration_id.Name
-
 module Cxx = Gen.Make(Gen_cxx)
 module Caml = Gen.Make(Gen_caml.Generator)
 module Caml_io = Gen.Make(Gen_caml.Generator_io)
@@ -49,11 +47,19 @@ let process_stmts = function
   | Java -> Java.process
   | CSharp -> CSharp.process
 
-let process_migrations =
+type recorded_blocks =
+  | Function_list_blocks of
+      (Sqlgg_migrations.Migration_id.t option * Statements.t) list
+  | Typed_plan_blocks of {
+      baseline : Sqlgg_migrations.Migration_id.t option;
+      blocks : (Sqlgg_migrations.Migration_id.t * Statements.t) list;
+    }
+
+let process_migrations lang name migration_output =
   let unsupported lang = failwith (sprintf "migrations not supported for %s" lang) in
-  function
-  | Caml | Caml_io -> Gen_caml.generate_migrations
-  | Xml -> Gen_xml.generate_migrations
+  match lang with
+  | Caml | Caml_io -> Gen_caml.generate_migrations name migration_output
+  | Xml -> Gen_xml.generate_migrations name (Gen_caml.output_migrations migration_output)
   | Json -> unsupported "JSON"
   | Cxx -> unsupported "C++"
   | Java -> unsupported "Java"
@@ -123,69 +129,95 @@ let generate ~output ~name results =
   | Some (Lang l) ->
     process_stmts l name (List.mapi Query.named (List.concat results))
 
-let migration_to_sql ~id ~name (m : Gen_migrations.migration) =
-  let single label = function
-    | [s] -> String.trim s
-    | _ ->
-      fatal
-        "-gen sql: %s of migration %s is multi-statement and cannot be emitted as \
-         a single SQL entry; write this step by hand in the extends file" label name
-  in
-  let up = single "up" m.apply in
-  match m.revert with
-  | [] -> sprintf "-- [sqlgg] generated\n-- [sqlgg] irreversible\n-- [sqlgg] id=%s\n%s;" id up
-  | revert -> sprintf "-- [sqlgg] generated\n-- [sqlgg] id=%s\n%s;\n%s;" id up (single "down" revert)
-
-let block_id (block : Statements.t) =
-  Props.id block.props |> Option.map (fun s ->
-    match Migration_id.parse s with
-    | Some id -> id
-    | None -> fatal "bad migration block id %S (expected integer or <timestamp>_<name>)" s)
-
 let merge_blocks gen ext =
   let numbered, rest =
     List.fold_right
-      (fun b (num, rest) ->
-        Option.map_default (fun id -> ((id, b) :: num, rest)) (num, b :: rest) (block_id b))
+      (fun (block : Statements.t) (numbered, rest) ->
+        match Props.id block.props with
+        | None -> (numbered, block :: rest)
+        | Some raw ->
+          (match Sqlgg_migrations.Migration_id.parse raw with
+           | Ok id -> ((id, block) :: numbered, rest)
+           | Error (`Invalid _) ->
+             fatal "bad migration block id %S (expected integer or <timestamp>_<name>)" raw
+           | Error (`Too_long _ as error) ->
+             fatal "%s" (Sqlgg_migrations.Migration_id.error_to_string error)))
       (gen @ ext) ([], [])
   in
-  List.map snd (List.stable_sort (fun (a, _) (b, _) -> Migration_id.compare a b) numbered) @ rest
+  let seen = Hashtbl.create 16 in
+  numbered |> List.iter (fun (id, _) ->
+    let open Sqlgg_migrations.Migration_id in
+    let text = to_string id in
+    if Hashtbl.mem seen text then
+      fatal "duplicate migration id %S" text;
+    Hashtbl.add seen text ());
+  List.map (fun (id, block) -> Some id, block)
+    (List.stable_sort
+       (fun (a, _) (b, _) ->
+         Sqlgg_migrations.Migration_id.compare_order a b)
+       numbered)
+  @ List.map (fun block -> None, block) rest
 
 let now_stamp () =
   let t = Unix.localtime (Unix.time ()) in
-  List.fold_left (fun acc x -> acc * 100 + x)
-    (t.Unix.tm_year + 1900)
+  List.fold_left
+    (fun acc x -> Int64.add (Int64.mul acc 100L) (Int64.of_int x))
+    (Int64.of_int (t.Unix.tm_year + 1900))
     [t.Unix.tm_mon + 1; t.Unix.tm_mday; t.Unix.tm_hour; t.Unix.tm_min; t.Unix.tm_sec]
 
 let next_base now existing =
   let ts = match now with Some n -> n | None -> now_stamp () in
-  List.filter_map block_id existing
-  |> List.map Migration_id.next_ord
-  |> List.fold_left Int.max 0
-  |> Int.max ts
+  List.fold_left
+    (fun latest id ->
+      match Sqlgg_migrations.Migration_id.next_position id with
+      | Ok next -> if Int64.compare latest next >= 0 then latest else next
+      | Error `Position_overflow ->
+          fatal
+            "migration id %s has no following ordinal"
+            (Sqlgg_migrations.Migration_id.to_string id))
+    ts
+    existing
 
-type entry = { id : string; code_name : string; mig : Gen_migrations.migration }
+let migration_name_limit ~max_id_length ordinal =
+  match Migration_name.limit ~max_id_length ordinal with
+  | Ok limit -> limit
+  | Error `Ordinal_does_not_fit ->
+    fatal
+      "-max-migration-id-length %d cannot hold migration ordinal %Ld"
+      max_id_length
+      ordinal
 
-let assign_ids ~naming base migs =
+let assign_ids base migs =
   let entries =
-    List.mapi (fun i (mig : Gen_migrations.migration) ->
-      let descr = Name.fit naming (Query.name mig.props mig.kind i) in
-      let id = Migration_id.to_string (Migration_id.make ~name:descr base) in
-      { id; code_name = id; mig }) migs
+    List.map (fun (mig : Gen_migrations.migration) ->
+      match Sqlgg_migrations.Migration_id.make ~ordinal:base ~name:(Props.name mig.props) with
+      | Ok id -> id, mig
+      | Error error -> fatal "%s" (Sqlgg_migrations.Migration_id.error_to_string error)) migs
   in
   let seen = Hashtbl.create 16 in
-  entries |> List.iter (fun { id; _ } ->
+  entries |> List.iter (fun (id, _) ->
+    let id = Sqlgg_migrations.Migration_id.to_string id in
     if Hashtbl.mem seen id then
       fatal "two migrations get the same id %S. increase -max-migration-id-length" id;
     Hashtbl.add seen id ());
   entries
 
-let entry_to_sql { id; code_name; mig } = migration_to_sql ~id ~name:code_name mig
-
-let entry_to_codegen { code_name; mig; _ } =
-  { mig with props = Props.Name code_name :: mig.props }
-
-let entries_to_sql entries = entries |> List.map entry_to_sql |> String.concat "\n\n"
+let entries_to_sql entries =
+  entries
+  |> List.map (fun (id, (m : Gen_migrations.migration)) ->
+    let id = Sqlgg_migrations.Migration_id.to_string id in
+    let single label = function
+      | [s] -> String.trim s
+      | _ ->
+        fatal
+          "-gen sql: %s of migration %s is multi-statement and cannot be emitted as \
+           a single SQL entry; write this step by hand in the extends file" label id
+    in
+    let up = single "up" m.apply in
+    match m.revert with
+    | None -> sprintf "-- [sqlgg] generated\n-- [sqlgg] irreversible\n-- [sqlgg] id=%s\n%s;" id up
+    | Some revert -> sprintf "-- [sqlgg] generated\n-- [sqlgg] id=%s\n%s;\n%s;" id up (single "down" revert))
+  |> String.concat "\n\n"
 
 let read_file_opt path =
   if Sys.file_exists path then
@@ -202,6 +234,7 @@ let usage_msg =
     sprintf "SQL Guided (code) Generator ver. %s" Sqlgg_config.version;
     sprintf "Usage: %s <options> <file.sql> [<file2.sql> ...]" program;
     sprintf "       %s ir <options> [<file.sql> ...]" program;
+    sprintf "       %s migrations generate --help" program;
     "Options are:";
   ]
 
@@ -219,15 +252,15 @@ let print_json_schema schema () =
   print_newline ();
   exit 0
 
-let set_dialect s =
-  let d =
-    match Dialect.of_string s with
-    | Some d -> d
-    | None -> failwith (sprintf "Unknown dialect: %s" s)
-  in
+let select_dialect d =
   Dialect.set_selected d;
   Gen.params_mode :=
     Gen.resolve_params_mode ~dialect:(Some d) !params_selection
+
+let set_dialect s =
+  match Dialect.of_string s with
+  | Some d -> select_dialect d
+  | None -> failwith (sprintf "Unknown dialect: %s" s)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
@@ -275,9 +308,17 @@ let read_blocks f = Main.with_channel f (Stdlib.Option.fold ~none:[] ~some:Main.
 
 let replay_sources sources =
   Compile.reset ();
+  let replay origin block =
+    try Main.replay_statement block
+    with Main.With_backtrace (exn, _) -> fatal "%s: %s" origin (Parser_utils.message_of_exn exn)
+  in
   List.iter (function
-    | From_file f -> List.iter Main.replay_statement (read_blocks f)
-    | From_block block -> Main.replay_statement block) sources
+    | From_file f -> List.iter (replay f) (read_blocks f)
+    | From_block block ->
+      replay
+        (Stdlib.Option.fold ~none:"migration without id" ~some:(sprintf "migration %s")
+           (Props.id block.props))
+        block) sources
 
 let schema_of_sources sources =
   replay_sources sources;
@@ -286,11 +327,18 @@ let schema_of_sources sources =
 
 let load_schema files = schema_of_sources (to_file_sources files)
 
-let diff_schema ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
+let diff_schema ~naming ~alter_options ~new_tables ~from_ ~to_ =
   let migs =
-    try Schema_diff.generate ~naming ~alter_options ~ddl_as_migration ~from_ ~to_
-    with Gen_migrations.Migration_error msg ->
+    try Schema_diff.generate ~naming ~alter_options ~new_tables ~from_ ~to_
+    with
+    | Gen_migrations.Migration_error msg ->
       fatal "cannot generate migration (write this step manually):\n%s" msg
+    | Schema_diff.New_tables_not_created (first, rest) ->
+      fatal "the target schema has tables that neither the initial schema nor the migrations create: %s\n\
+             Add them to the initial schema, or pass -ddl-as-migration (--ddl-as-migration for \
+             sqlgg migrations) to generate CREATE TABLE migrations."
+        (String.concat ", "
+           (List.sort (List.map Gen_migrations.quote_table_name (first :: rest))))
   in
   begin
     try Schema_diff.replay_migrations ~replay:Main.replay_sql ~from_ ~to_ migs
@@ -309,9 +357,9 @@ type gen_args = {
 type delta_args = {
   name : string;
   target_files : string list;
-  now : int option;
-  max_id_length : int option;
-  ddl_as_migration : bool;
+  now : int64 option;
+  max_id_length : int;
+  new_tables : Schema_diff.new_tables;
   alter_options : Sql.alter_option list;
 }
 
@@ -349,8 +397,8 @@ let parse_args () =
   let migrations_file = ref None in
   let extends_file = ref None in
   let now = ref None in
-  let max_id_length = ref None in
-  let ddl_as_migration = ref false in
+  let max_id_length = ref Sqlgg_migrations.Migration_id.max_length in
+  let new_tables = ref Schema_diff.Created_by_schema in
   let alter_lock = ref None in
   let alter_algorithm = ref None in
   let files : (string, [ `Open of Query.t list | `Positional ]) Hashtbl.t = Hashtbl.create 4 in
@@ -397,10 +445,15 @@ let parse_args () =
       "-initial", Arg.String (fun f -> initial_files := f :: !initial_files), "<file> Baseline DDL for -migrate (repeatable)";
       "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
       "-extends", Arg.String (fun f -> extends_file := Some f), "<file> Hand-written migrations SQL, merged with generated ones by `id` (read-only)";
-      "-now", Arg.Int (fun n -> now := Some n), "<YYYYMMDDHHMMSS> Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>";
-      "-max-migration-id-length", Arg.Int (fun n -> max_id_length := Some n),
-        "<N> Limit generated migration ids to N characters (default: no limit)";
-      "-ddl-as-migration", Arg.Set ddl_as_migration, " Write new tables as CREATE TABLE migrations instead of plain schema DDL";
+      "-now", Arg.String (fun raw ->
+        match Int64.of_string_opt raw with
+        | Some n when Int64.compare n 0L >= 0 -> now := Some n
+        | Some _ | None -> fatal "bad migration timestamp %S" raw),
+        "<YYYYMMDDHHMMSS> Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>";
+      "-max-migration-id-length", Arg.Int (fun n -> max_id_length := n),
+        sprintf "<N> Limit generated migration ids to N bytes (default and maximum: %d)"
+          Sqlgg_migrations.Migration_id.max_length;
+      "-ddl-as-migration", Arg.Unit (fun () -> new_tables := Schema_diff.Created_by_migrations), " Write new tables as CREATE TABLE migrations instead of plain schema DDL";
       "-alter-algorithm", Arg.String (fun s -> alter_algorithm := Some (parse_alter_algorithm s)),
         sprintf "%s Add ALGORITHM policy to generated ALTER TABLE statements (MySQL and TiDB only)"
           alter_algorithm_values;
@@ -457,6 +510,9 @@ let parse_args () =
   in
   Arg.parse args work usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
+  if !max_id_length > Sqlgg_migrations.Migration_id.max_length then
+    fatal "-max-migration-id-length %d is above %d, the width of the migration id column"
+      !max_id_length Sqlgg_migrations.Migration_id.max_length;
   begin match !alter_lock, !Dialect.selected with
   | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB) ->
     fatal "-alter-lock is only supported for dialect mysql"
@@ -478,7 +534,7 @@ let parse_args () =
       target_files = List.rev !target_files;
       now = !now;
       max_id_length = !max_id_length;
-      ddl_as_migration = !ddl_as_migration;
+      new_tables = !new_tables;
       alter_options }
   in
   (* these modes reset the schema and rebuild it from -base/-target/-initial,
@@ -516,54 +572,88 @@ let parse_args () =
         inputs = List.rev !inputs;
       }
 
-let parse_migrations blocks =
-  let migs = List.filter_map Main.migration_of_block blocks in
-  abort_on_errors ();
-  migs
-
-let run_migrate ({ delta = { name; target_files; now; max_id_length;
-                             ddl_as_migration; alter_options };
-                   gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
+let run_migrate
+    ~recorded_blocks
+    ({ delta = { name; target_files; now; max_id_length;
+                 new_tables; alter_options };
+       gen_lang; initial_files; migrations_file; extends_file } : migrate_args) =
   let initial = to_file_sources initial_files in
   let ext = Option.map_default read_blocks [] extends_file in
-  let recorded_blocks () = merge_blocks (Option.map_default read_blocks [] migrations_file) ext in
-  let before = recorded_blocks () in
+  let read_recorded () =
+    recorded_blocks
+      (merge_blocks
+         (match migrations_file with
+          | Some f when Sys.file_exists f -> read_blocks f
+          | Some _ | None -> [])
+         ext)
+  in
+  let before = read_recorded () in
+  let taken_ids, before_blocks =
+    match before with
+    | Function_list_blocks blocks ->
+        List.filter_map fst blocks, List.map snd blocks
+    | Typed_plan_blocks { baseline; blocks } ->
+        Stdlib.Option.to_list baseline @ List.map fst blocks, List.map snd blocks
+  in
   let current =
-    schema_of_sources (initial @ List.map (fun block -> From_block block) before)
+    schema_of_sources (initial @ List.map (fun block -> From_block block) before_blocks)
   in
   let target = load_schema target_files in
-  let regenerate () =
+  let regenerate recorded =
     replay_sources initial;
-    let full = parse_migrations (recorded_blocks ()) in
-    process_migrations gen_lang name full
+    let migration_output =
+      match recorded with
+      | Function_list_blocks blocks ->
+        Gen_caml.Function_list
+          (List.filter_map
+             (fun (id, block) -> Main.migration_of_block ~id block)
+             blocks)
+      | Typed_plan_blocks { baseline; blocks } ->
+        Gen_caml.Typed_plan
+          {
+            baseline =
+              Option.map Sqlgg_migrations.Migration_id.to_string baseline;
+            migrations =
+              List.filter_map
+                (fun (id, block) ->
+                  Option.map
+                    (fun migration ->
+                      Sqlgg_migrations.Migration_id.to_string id, migration)
+                    (Main.migration_of_block ~id:(Some id) block))
+                blocks;
+          }
+    in
+    abort_on_errors ();
+    process_migrations gen_lang name migration_output
   in
-  let base = next_base now before in
-  let naming = Migration_id.naming ~max_length:max_id_length base in
-  match diff_schema ~naming ~alter_options ~ddl_as_migration ~from_:current ~to_:target with
+  let base = next_base now taken_ids in
+  let naming = migration_name_limit ~max_id_length base in
+  match diff_schema ~naming ~alter_options ~new_tables ~from_:current ~to_:target with
   | [] ->
-    regenerate ();
-    (match before with
+    regenerate before;
+    (match before_blocks with
      | [] -> prerr_endline "nothing to do"
-     | _ ->
+     | _ :: _ ->
        eprintf "nothing new to migrate; regenerated code from %d recorded migration(s)\n"
-         (List.length before))
+         (List.length before_blocks))
   | migs ->
     let migrations_file =
       match migrations_file with
       | Some f -> f
       | None -> fatal "%d new migration(s) to record: pass -migrations-file <file>" (List.length migs)
     in
-    let entries = assign_ids ~naming base migs in
+    let entries = assign_ids base migs in
     let sql = entries_to_sql entries in
     let text =
       Option.map_default (fun existing -> existing ^ "\n\n" ^ sql) sql
         (read_file_opt migrations_file)
     in
     Std.output_file ~filename:migrations_file ~text:(text ^ "\n");
-    regenerate ();
-    let ids = List.map (fun e -> e.id) entries in
+    regenerate (read_recorded ());
     eprintf "appended %d migration(s) to %s (id %s)\n"
-      (List.length migs) migrations_file (String.concat ", " ids)
+      (List.length migs) migrations_file
+      (String.concat ", "
+         (List.map (fun (id, _) -> Sqlgg_migrations.Migration_id.to_string id) entries))
 
 let run_materialize_schema ({ base_files } : materialize_args) =
   let state =
@@ -580,20 +670,31 @@ let run_materialize_schema ({ base_files } : materialize_args) =
   print_endline ddl
 
 let run_diff ({ delta = { name; target_files; now; max_id_length;
-                          ddl_as_migration; alter_options };
+                          new_tables; alter_options };
                 base_files; output } : diff_args) =
   let from_ = load_schema base_files in
   let to_   = load_schema target_files in
   let base = next_base now [] in
-  let naming = Migration_id.naming ~max_length:max_id_length base in
-  let migs = diff_schema ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ in
+  let naming = migration_name_limit ~max_id_length base in
+  let migs = diff_schema ~naming ~alter_options ~new_tables ~from_ ~to_ in
   Tables.restore from_;
   match output with
   | None -> ()
   | Some Sql_ddl ->
-    if migs <> [] then print_endline (entries_to_sql (assign_ids ~naming base migs))
+    if migs <> [] then print_endline (entries_to_sql (assign_ids base migs))
   | Some (Lang l) ->
-    process_migrations l name (assign_ids ~naming base migs |> List.map entry_to_codegen)
+    process_migrations l name
+      (Gen_caml.Function_list
+         (List.map
+            (fun (id, (mig : Gen_migrations.migration)) ->
+              {
+                mig with
+                props =
+                  Props.Name
+                    (Sqlgg_migrations.Migration_id.to_string id)
+                  :: mig.props;
+              })
+            (assign_ids base migs)))
 
 let run_generate ({ output; name; inputs } : gen_args) =
   match inputs with
@@ -644,14 +745,80 @@ let run_ir () =
     match statement.resolution with Invalid _ -> true | Parsed _ | Analyzed _ -> false) statements
   then raise Cli_errors_found
 
+let run_migrations () =
+  match
+    Migrations_command.parse
+      (Array.sub Sys.argv 1 (Array.length Sys.argv - 1))
+  with
+  | `Exit code -> exit code
+  | `Generate
+      { dialect; schema_file; initial_file; baseline;
+        migrations_file; manual_file; module_name; now; new_tables;
+        destination } ->
+    select_dialect
+      (match dialect with
+       | `MySQL -> Dialect.MySQL
+       | `TiDB -> Dialect.TiDB);
+    Sqlgg_config.gen_header := Some `Static;
+    let generate () =
+      run_migrate
+        ~recorded_blocks:(fun blocks ->
+          Typed_plan_blocks
+            {
+              baseline;
+              blocks =
+                List.map
+                  (fun (id, block) ->
+                    match id, baseline with
+                    | None, (Some _ | None) ->
+                      fatal "migration has no id: add -- [sqlgg] id=<timestamp>_<name>"
+                    | Some id, Some cutoff
+                      when Sqlgg_migrations.Migration_id.compare_order
+                             id
+                             cutoff
+                           <= 0 ->
+                      fatal "migration %s is not after --baseline %s"
+                        (Sqlgg_migrations.Migration_id.to_string id)
+                        (Sqlgg_migrations.Migration_id.to_string cutoff)
+                    | Some id, (Some _ | None) -> id, block)
+                  blocks;
+            })
+        {
+          delta =
+            {
+              name = module_name;
+              target_files = [ schema_file ];
+              now;
+              max_id_length = Sqlgg_migrations.Migration_id.max_length;
+              new_tables;
+              alter_options = [];
+            };
+          gen_lang = Caml_io;
+          initial_files = Stdlib.Option.to_list initial_file;
+          migrations_file = Some migrations_file;
+          extends_file = manual_file;
+        }
+    in
+    match destination with
+    | Migrations_command.Stdout -> generate ()
+    | Migrations_command.File filename ->
+      let generated = Gen.capture generate in
+      try Std.output_file ~filename ~text:generated
+      with Sys_error message -> bad_input "cannot write %s: %s" filename message
+
 let main () =
   match Array.to_list Sys.argv with
   | _ :: "ir" :: _ -> run_ir ()
+  | _ :: "migrations" :: _ -> run_migrations ()
   | _ ->
     match parse_args () with
     | Generate c -> run_generate c
     | Diff c -> run_diff c
-    | Migrate c -> run_migrate c
+    | Migrate c ->
+        run_migrate
+          ~recorded_blocks:(fun blocks ->
+            Function_list_blocks blocks)
+          c
     | Materialize_schema c -> run_materialize_schema c
 
 let () =

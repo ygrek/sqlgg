@@ -20,7 +20,7 @@ jobs:
 
       - uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: 4.13.x
+          ocaml-compiler: 4.14.x
 
       - run: opam install . --deps-only --with-test
       - run: opam install dune-release -y

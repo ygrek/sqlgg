@@ -3036,37 +3036,45 @@ let test_params_mode_parsing () =
        ~dialect:(Some Dialect.PostgreSQL) Gen.From_dialect)
 
 let test_migration_name =
-  let module Name = Migration_id.Name in
-  let head = Name.words "alter_blog_sync_jobs" in
+  let head = Migration_name.words "alter_blog_sync_jobs" in
   let actions =
-    [ Name.action (Name.words "add_col") (Name.words "redirects_synced");
-      Name.action (Name.words "add_col") (Name.words "redirects_skipped");
-      Name.action (Name.words "add_pk") [] ]
+    [ Migration_name.action (Migration_name.words "add_col") (Migration_name.words "redirects_synced");
+      Migration_name.action (Migration_name.words "add_col") (Migration_name.words "redirects_skipped");
+      Migration_name.action (Migration_name.words "add_pk") [] ]
   in
-  let render limit expected =
-    assert_equal ~printer:(fun s -> s) expected (Name.render limit (Name.make head actions))
+  let rendered = assert_equal ~printer:(Option.default "<no name>") in
+  let cut n expected =
+    sprintf "cap %d" n >:: (fun () ->
+      rendered expected (Migration_name.render n (Migration_name.make head actions)))
   in
-  let uncapped expected = "uncapped" >:: (fun () -> render None expected) in
-  let cut n expected = sprintf "cap %d" n >:: (fun () -> render (Some n) expected) in
   let flat limit before after =
     sprintf "fit %S" before >:: (fun () ->
-      assert_equal ~printer:(fun s -> s) after (Name.fit limit before))
+      rendered (Some after)
+        (Migration_name.render limit (Migration_name.make (Migration_name.words before) [])))
   in
-  let whole = "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped_add_pk" in
   [
-    uncapped whole;
-    cut 78 whole;
-    cut 77 "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped";
-    cut 60 "alter_blog_sync_jobs_add_col_redirects_synced_add_col";
-    cut 53 "alter_blog_sync_jobs_add_col_redirects_synced_add_col";
-    cut 52 "alter_blog_sync_jobs_add_col_redirects_synced";
-    cut 27 "alter_blog_sync_jobs";
-    cut 19 "alter_blog_sync";
-    cut 6 "alter";
+    cut 78 (Some "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped_add_pk");
+    cut 77 (Some "alter_blog_sync_jobs_add_col_redirects_synced_add_col_redirects_skipped");
+    cut 60 (Some "alter_blog_sync_jobs_add_col_redirects_synced_add_col");
+    cut 53 (Some "alter_blog_sync_jobs_add_col_redirects_synced_add_col");
+    cut 52 (Some "alter_blog_sync_jobs_add_col_redirects_synced");
+    cut 27 (Some "alter_blog_sync_jobs");
+    cut 19 (Some "alter_blog_sync");
+    cut 6 (Some "alter");
+    cut 4 None;
 
-    flat None "whatever_it_is"            "whatever_it_is";
-    flat (Some 15)  "alter_users_add_col_email" "alter_users_add";
-    flat (Some 11)  "alter_users_add_col_email" "alter_users";
+    flat 14 "whatever_it_is"            "whatever_it_is";
+    flat 15 "alter_users_add_col_email" "alter_users_add";
+    flat 11 "alter_users_add_col_email" "alter_users";
+
+    "room for the name" >:: (fun () ->
+      assert_equal
+        (Ok 176)
+        (Migration_name.limit ~max_id_length:191 20260101120000L));
+    "ordinal does not fit" >:: (fun () ->
+      assert_equal
+        (Error `Ordinal_does_not_fit)
+        (Migration_name.limit ~max_id_length:13 20260101120000L));
   ]
 
 let run () =

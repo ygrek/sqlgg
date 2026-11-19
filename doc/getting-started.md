@@ -183,3 +183,9 @@ ID: 3, Name: Charlie, Age: 40
 
 Exactly as expected!
 
+## Schema migrations
+
+The example above creates its table directly. See
+[Migrations](./migrations.md#ocaml-migration-workflow)
+to generate migrations from a schema file and run them from OCaml.
+

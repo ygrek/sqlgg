@@ -3,7 +3,8 @@ the name is all that tells them apart, and it is stored in a finite name column.
 `-max-migration-id-length` caps the id by building the name up to the cap instead
 of letting the database chop it.
 
-Two tables with a shared prefix, four columns added to each. Uncapped:
+Two tables with a shared prefix, four columns added to each. Without the flag
+an id may take the 191 bytes of the state table's id column, enough for these:
 
   $ sqlgg -no-header -dialect mysql -diff -gen sql -now 20260101120000 -base initial.sql -target target.sql | grep -o 'id=.*'
   id=20260101120000_alter_some_extremely_long_table_identifier_add_col_first_additional_column_add_col_second_additional_column_add_col_third_additional_column_add_col_fourth_additional_column
@@ -59,3 +60,41 @@ migrations untouched:
 
   $ sqlgg -no-header -dialect mysql -migrate -gen caml -name migrations -now 20260102120000 -initial initial.sql -migrations-file migrations.sql -target target.sql > /dev/null
   nothing new to migrate; regenerated code from 2 recorded migration(s)
+
+The cap is there without the flag too. A fifth column would make an id of 219
+bytes, so its action is left out:
+
+  $ cat > one.sql <<'EOF'
+  > CREATE TABLE some_extremely_long_table_identifier (id INT NOT NULL PRIMARY KEY);
+  > EOF
+  $ cat > wider.sql <<'EOF'
+  > CREATE TABLE some_extremely_long_table_identifier (
+  >   id INT NOT NULL PRIMARY KEY,
+  >   first_additional_column INT NOT NULL,
+  >   second_additional_column INT NOT NULL,
+  >   third_additional_column INT NOT NULL,
+  >   fourth_additional_column INT NOT NULL,
+  >   fifth_additional_column INT NOT NULL
+  > );
+  > EOF
+  $ sqlgg -no-header -dialect mysql -diff -gen sql -now 20260101120000 -base one.sql -target wider.sql | grep -o 'id=.*'
+  id=20260101120000_alter_some_extremely_long_table_identifier_add_col_first_additional_column_add_col_second_additional_column_add_col_third_additional_column_add_col_fourth_additional_column
+
+The flag can only tighten the cap:
+
+  $ sqlgg -no-header -dialect mysql -diff -gen sql -now 20260101120000 -max-migration-id-length 192 -base initial.sql -target target.sql
+  -max-migration-id-length 192 is above 191, the width of the migration id column
+  [1]
+  $ sqlgg -no-header -dialect mysql -diff -gen sql -now 20260101120000 -max-migration-id-length 13 -base initial.sql -target target.sql
+  -max-migration-id-length 13 cannot hold migration ordinal 20260101120000
+  [1]
+
+A hand-written id is held to the same width, and nothing is recorded when it
+does not fit:
+
+  $ printf -- '-- [sqlgg] id=20251230_%0200d\nALTER TABLE some_extremely_long_table_identifier ADD COLUMN x INT;\nALTER TABLE some_extremely_long_table_identifier DROP COLUMN x;\n' 0 > long.sql
+  $ : > fresh.sql
+  $ sqlgg -no-header -dialect mysql -migrate -gen caml -name migrations -now 20260101120000 -initial initial.sql -migrations-file fresh.sql -extends long.sql -target target.sql > /dev/null
+  migration id is too long: 209 bytes, the limit is 191
+  [1]
+  $ cat fresh.sql

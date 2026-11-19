@@ -14,7 +14,13 @@
   (glob_files print_impl.ml)
   sqlgg_test.sh))
 
+(cram
+ (applies_to :whole_subtree)
+ (deps
+  (package sqlgg)))
+
 (env
  (_
   (env-vars
+   (NO_COLOR 1)
    (OCAMLFIND_LDCONF ignore))))
