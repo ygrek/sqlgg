@@ -1,0 +1,22 @@
+(rule
+ (targets state_table_queries.ml)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run
+    %{bin:sqlgg}
+    -no-header
+    -gen
+    caml_io
+    -name
+    state_table_queries
+    -params
+    unnamed
+    -dialect
+    mysql
+    %{dep:state_table.sql}))))
+
+(library
+ (name sqlgg_migrations_state_table)
+ (public_name sqlgg.migrations.state_table)
+ (libraries extlib sqlgg.migrations sqlgg.traits))

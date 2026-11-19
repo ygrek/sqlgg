@@ -1,9 +1,7 @@
 open Printf
 open Sqlgg
 
-module Name = Migration_id.Name
-
-let mig_name naming head actions = Name.render naming (Name.make head actions)
+let mig_name naming head actions = Migration_name.render naming (Migration_name.make head actions)
 
 let index_by key xs =
   List.fold_left (fun m x -> Prelude.String_map.add (key x) x m) Prelude.String_map.empty xs
@@ -93,6 +91,10 @@ let materialize_inline_unique (t : Tables.stored_table) =
            ~kind:Sql.Unique_idx ~cols)
        t
 
+type new_tables = Created_by_schema | Created_by_migrations
+
+exception New_tables_not_created of Sql.table_name * Sql.table_name list
+
 type change =
   | Create_table of Tables.stored_table
   | Drop_table of Tables.stored_table
@@ -104,13 +106,14 @@ let index_kind_slug = function
   | Sql.Fulltext_idx -> "fulltext"
   | Sql.Spatial_idx -> "spatial"
 
-let verb spelling = Name.words spelling
-let action v = Name.action (verb v) []
-let action_on v target = Name.action (verb v) (Name.words target)
+let action v = Migration_name.action (Migration_name.words v) []
+let action_on v target = Migration_name.action (Migration_name.words v) (Migration_name.words target)
 let rename kind old_ new_ =
-  Name.action (verb "rename" @ verb kind) (Name.words old_ @ Name.words new_)
+  Migration_name.action
+    (Migration_name.words "rename" @ Migration_name.words kind)
+    (Migration_name.words old_ @ Migration_name.words new_)
 
-let action_of : Sql.alter_action -> Name.action = function
+let action_of : Sql.alter_action -> Migration_name.action = function
   | `Add (col, _) -> action_on "add_col" col.name.value
   | `Drop name -> action_on "drop_col" name
   | `Change (old_name, new_col, _) ->
@@ -121,8 +124,8 @@ let action_of : Sql.alter_action -> Name.action = function
   | `RenameColumn (o, n) -> rename "col" o n
   | `RenameIndex (o, n) -> rename "index" o n
   | `AddIndex { add_idx_name; add_idx_kind; _ } ->
-    let v = verb "add" @ verb (index_kind_slug add_idx_kind) in
-    Option.map_default (fun n -> Name.action v (Name.words n)) (Name.action v []) add_idx_name
+    let v = Migration_name.words "add" @ Migration_name.words (index_kind_slug add_idx_kind) in
+    Option.map_default (fun n -> Migration_name.action v (Migration_name.words n)) (Migration_name.action v []) add_idx_name
   | `DropIndex name -> action_on "drop_index" name
   | `AddPrimaryKey _ -> action "add_pk"
   | `DropPrimaryKey -> action "drop_pk"
@@ -226,12 +229,16 @@ let alter_change ~alter_options name target actions =
     (Gen_migrations.alter_table_sql ~default_sql_lookup ~options:alter_options
        name (Gen_migrations.Columns actions))
 
-let diff ~alter_options ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to =
+let diff ~alter_options ~new_tables ~from_ ~to_ ~by_from ~by_to =
   let creates =
-    if not ddl_as_migration then []
-    else
-      to_ |> List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_from))
-          |> List.map (fun t -> Create_table t) in
+    match new_tables,
+          List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_from)) to_
+    with
+    | (Created_by_schema | Created_by_migrations), [] -> []
+    | Created_by_schema, first :: rest ->
+      raise (New_tables_not_created
+               (first.Tables.name, List.map (fun (t : Tables.stored_table) -> t.name) rest))
+    | Created_by_migrations, (_ :: _ as added) -> List.map (fun t -> Create_table t) added in
   let drops =
     from_ |> List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_to))
          |> List.map (fun t -> Drop_table t) in
@@ -268,10 +275,10 @@ let change_table = function
   | Alter_table { table; _ } -> table
 
 let change_name ~naming = function
-  | Create_table t -> mig_name naming (Name.words "create" @ Name.words t.Tables.name.tn) []
-  | Drop_table t -> mig_name naming (Name.words "drop" @ Name.words t.Tables.name.tn) []
+  | Create_table t -> mig_name naming (Migration_name.words "create" @ Migration_name.words t.Tables.name.tn) []
+  | Drop_table t -> mig_name naming (Migration_name.words "drop" @ Migration_name.words t.Tables.name.tn) []
   | Alter_table { table; actions; _ } ->
-    mig_name naming (Name.words "alter" @ Name.words table.tn) (List.map action_of actions)
+    mig_name naming (Migration_name.words "alter" @ Migration_name.words table.tn) (List.map action_of actions)
 
 let kind_of_change = function
   | Create_table t -> Stmt.Create t.Tables.name
@@ -302,16 +309,19 @@ let invert ~alter_options ~by_from ~by_to up =
         | Some down -> down
         | None -> irreversible "reverse diff renders to nothing"
 
-let generate ~naming ~alter_options ~ddl_as_migration ~from_ ~to_ =
+let generate ~naming ~alter_options ~new_tables ~from_ ~to_ =
   let from_ = List.map materialize_inline_unique from_ in
   let to_ = List.map materialize_inline_unique to_ in
   let by_from = table_by_name from_ in
   let by_to = table_by_name to_ in
-  diff ~alter_options ~ddl_as_migration ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
-    { Gen_migrations.props = [ Props.Name (change_name ~naming up) ];
+  diff ~alter_options ~new_tables ~from_ ~to_ ~by_from ~by_to |> List.map (fun up ->
+    { Gen_migrations.props =
+        (match change_name ~naming up with
+         | Some name -> [ Props.Name name ]
+         | None -> []);
       kind = kind_of_change up;
       apply = render_apply up;
-      revert = render_apply (invert ~alter_options ~by_from ~by_to up) })
+      revert = Some (render_apply (invert ~alter_options ~by_from ~by_to up)) })
 
 let canonical ts =
   let index_sig (name, (i : Tables.stored_index)) =
@@ -366,7 +376,7 @@ let replay_migrations ~replay ~from_ ~to_ migs =
   let target = canonical to_ in
   let baseline = canonical from_ in
   let applied  = rebuild from_ (List.concat_map (fun m -> m.Gen_migrations.apply) migs) in
-  let reverted = rebuild to_   (List.concat_map (fun m -> m.Gen_migrations.revert) (List.rev migs)) in
+  let reverted = rebuild to_   (List.concat_map (fun m -> Option.default [] m.Gen_migrations.revert) (List.rev migs)) in
   if applied <> target then
     raise (Verification_failed
       { reason = "applying the migrations did not rebuild the target schema";

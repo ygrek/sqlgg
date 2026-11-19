@@ -25,6 +25,7 @@ depends: [
   "jsonkit" {>= "1.1.0"}
   ("extlib" {>= "1.7.8"} | "extlib-compat" {>= "1.7.8"})
   "base-unix"
+  "cmdliner" {>= "1.1.0"}
   "odoc" {with-doc}
   "ounit"
   "qcheck-core" {with-test & >= "0.25"}
@@ -47,7 +48,9 @@ sqlgg is an SQL query parser and binding code generator for C#, C++, Java, OCaml
 It starts off with SQL schema and queries, and generates code (or XML, allowing
 further code generation for various purposes). Generated code only defines a mapping
 of output columns and query parameters to the host language, trying to be as unobtrusive
-as possible and leaving the choice of SQL database (and API to access it) to the developer."""
+as possible and leaving the choice of SQL database (and API to access it) to the developer.
+For OCaml it also provides schema migrations: generation from a schema file,
+a state table, a runner and a command line to mount in the application."""
 
 conflicts: [
   "mariadb" {< "2.1.0"}

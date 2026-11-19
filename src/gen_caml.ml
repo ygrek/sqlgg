@@ -1280,35 +1280,96 @@ let generate_direct_body ~io stmts =
   empty_line ();
   List.iteri (generate_stmt_wrapper ~return_expr ~module_kind:`Direct) stmts
 
-let generate ~gen_io ~migration_names name stmts =
+type 'migration migration_output =
+  | Function_list of 'migration list
+  | Typed_plan of {
+      baseline : string option;
+      migrations : (string * 'migration) list;
+    }
+
+let output_migrations = function
+  | Function_list migrations -> migrations
+  | Typed_plan { migrations; _ } -> List.map snd migrations
+
+let generate ~gen_io ~migrations name stmts =
   let (traits, io) =
     match gen_io with
     | true -> "Sqlgg_traits.M_io", "T.IO"
     | false -> "Sqlgg_traits.M", "Sqlgg_io.Blocking"
   in
+  let typed_plan =
+    match migrations with
+    | Some (Typed_plan _) -> true
+    | None | Some (Function_list _) -> false
+  in
   output "module %s (T : %s) = struct" (String.capitalize_ascii name) traits;
   empty_line ();
   inc_indent ();
-  output "module IO = %s" io;
-  generate_direct_body ~io:`Generated_module stmts;
+  if not typed_plan then output "module IO = %s" io;
+  generate_direct_body
+    ~io:(if typed_plan then `Traits_module else `Generated_module)
+    stmts;
   [`Single; `Fold; `List]
   |> List.filter (fun module_kind ->
     List.exists (fun (q : Query.named) -> supports_module_kind module_kind q.stmt) stmts)
   |> List.iteri (fun i module_kind ->
     if i > 0 then output "";
     emit_module_annotated (module_kind_name module_kind) (fun () ->
-      List.iteri (generate_stmt_wrapper ~return_expr:"IO.return" ~module_kind) stmts)
+      List.iteri
+        (generate_stmt_wrapper
+           ~return_expr:(if typed_plan then "T.IO.return" else "IO.return")
+           ~module_kind)
+        stmts)
   );
-  Option.may (fun names ->
-    output "let migrations = [";
-    inc_indent ();
-    List.iter (fun n ->
-      output "(%s, apply_%s, revert_%s);" (quote n) n n;
-    ) names;
-    dec_indent ();
-    output "]";
-    empty_line ()
-  ) migration_names;
+  Option.may (fun migration_output ->
+    match migration_output with
+    | Function_list migrations ->
+        output "let migrations = [";
+        inc_indent ();
+        List.iter (fun (n, _) ->
+          output "(%s, apply_%s, revert_%s);" (quote n) n n;
+        ) migrations;
+        dec_indent ();
+        output "]";
+        empty_line ()
+    | Typed_plan { baseline; migrations } ->
+        let parse_generated id =
+          sprintf "(Sqlgg_migrations.Migration_id.parse_generated ~id:%s)" (quote id)
+        in
+        (match baseline with
+         | None -> output "let baseline = None"
+         | Some id ->
+             output "let baseline =";
+             indented (fun () -> output "Some %s" (parse_generated id)));
+        empty_line ();
+        output "let migration_plan :";
+        indented (fun () ->
+          indented (fun () ->
+            output
+              "([ `WR ] T.connection -> T.execute_response T.IO.future)";
+            output "Sqlgg_migrations.Migration.t";
+            output "list ="));
+        indented (fun () ->
+          output "[";
+          indented (fun () ->
+            List.iter
+              (fun (id, (migration_name, migration)) ->
+                match migration.Gen_migrations.revert with
+                | None ->
+                    output "Sqlgg_migrations.Migration.irreversible";
+                    indented (fun () ->
+                      output "%s" (parse_generated id);
+                      output "~apply:apply_%s;" migration_name)
+                | Some _ ->
+                    output "Sqlgg_migrations.Migration.reversible";
+                    indented (fun () ->
+                      output "%s" (parse_generated id);
+                      output "~apply:apply_%s" migration_name;
+                      output "~revert:revert_%s;" migration_name))
+              migrations);
+          output "]");
+        empty_line ()
+  ) migrations;
   dec_indent ();
   output "end (* module %s *)" (String.capitalize_ascii name)
 
@@ -1325,31 +1386,75 @@ end
 
 module Generator = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:false ~migration_names:None name stmts
+  let generate () name stmts = generate ~gen_io:false ~migrations:None name stmts
 end
 
 module Generator_io = struct
   include Generator_base
-  let generate () name stmts = generate ~gen_io:true ~migration_names:None name stmts
+  let generate () name stmts = generate ~gen_io:true ~migrations:None name stmts
 end
 
 module Header = Gen.Make(Generator_io)
 
-let generate_migrations name migrations =
-  let named = List.mapi (fun index (m : Gen_migrations.migration) ->
-    Query.name m.props m.kind index, m
-  ) migrations in
-  let migration_names = List.map fst named in
+let generate_migrations name migration_output =
+  let named migrations =
+    let apply_prefix = "apply_" in
+    let names =
+      List.mapi
+        (fun index (m : Gen_migrations.migration) ->
+          apply_prefix ^ Query.name m.props m.kind index)
+        migrations
+      |> Name.idents ~prefix:apply_prefix
+      |> List.map (fun name ->
+        String.sub
+          name
+          (String.length apply_prefix)
+          (String.length name - String.length apply_prefix))
+    in
+    List.map2
+      (fun name migration -> name, migration)
+      names
+      migrations
+  in
+  let migration_output =
+    match migration_output with
+    | Function_list migrations -> Function_list (named migrations)
+    | Typed_plan { baseline; migrations } ->
+      let ids, migrations = List.split migrations in
+      Typed_plan { baseline; migrations = List.combine ids (named migrations) }
+  in
   let make_stmt ?(props = []) fn_name sql =
     Query.verbatim ~props:(Props.Name fn_name :: props) sql
   in
   let revert_stmt name (m : Gen_migrations.migration) =
     match m.revert with
-    | [] -> make_stmt ~props:[ Props.Noop ] ("revert_" ^ name) ""
-    | revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
+    | None -> make_stmt ~props:[ Props.Noop ] ("revert_" ^ name) ""
+    | Some revert -> make_stmt ("revert_" ^ name) (String.concat ";\n" revert)
   in
-  let stmts = List.concat_map (fun (name, (m : Gen_migrations.migration)) ->
-    [make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply); revert_stmt name m]
-  ) named in
+  let stmts =
+    match migration_output with
+    | Function_list migrations ->
+        List.concat_map
+          (fun (name, (m : Gen_migrations.migration)) ->
+            [
+              make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply);
+              revert_stmt name m;
+            ])
+          migrations
+    | Typed_plan { migrations; _ } ->
+        List.concat_map
+          (fun (_, (name, (m : Gen_migrations.migration))) ->
+            let apply =
+              make_stmt ("apply_" ^ name) (String.concat ";\n" m.apply)
+            in
+            match m.revert with
+            | None -> [ apply ]
+            | Some _ -> [ apply; revert_stmt name m ])
+          migrations
+  in
   Option.may (Header.generate_header ()) !Sqlgg_config.gen_header;
-  generate ~gen_io:true ~migration_names:(Some migration_names) name (List.mapi Query.named stmts)
+  generate
+    ~gen_io:true
+    ~migrations:(Some migration_output)
+    name
+    (List.mapi Query.named stmts)

@@ -1,0 +1,5 @@
+(library
+ (name sqlgg_migrations)
+ (public_name sqlgg.migrations)
+ (preprocess
+  (pps ppx_deriving_variant_string)))
