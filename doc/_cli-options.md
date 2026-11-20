@@ -1,4 +1,8 @@
 ```text
+ Configuration:
+  -config <file>                                      Load defaults from a JSON configuration file. Command-line options override it
+  -config-json-schema                                 Print the JSON Schema of the -config file and exit
+
  Code generation:
   -gen cxx|caml|caml_io|java|xml|json|csharp|sql|none Set output language (default: none)
   -name <identifier>                                  Set output module name (default: sqlgg)
@@ -16,7 +20,7 @@
   -target <file>                                      Target schema (repeatable)
   -initial <file>                                     Baseline DDL for -migrate (repeatable)
   -migrations-file <file>                             Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)
-  -extends <file>                                     Hand-written migrations SQL, merged with generated ones by `id` (read-only)
+  -extends <file>                                     Hand-written migrations SQL, merged with the generated ones by `id` (read-only)
   -now <YYYYMMDDHHMMSS>                               Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>
   -max-migration-id-length <N>                        Limit generated migration ids to N bytes (default and maximum: 191)
   -ddl-as-migration                                   Write new tables as CREATE TABLE migrations instead of plain schema DDL

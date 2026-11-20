@@ -9,7 +9,7 @@ type generation = private {
   baseline : Sqlgg_migrations.Migration_id.t option;
   migrations_file : string;
   manual_file : string option;
-  module_name : string;
+  module_name : Config_file.Migrations.Module_name.t;
   now : int64 option;
   new_tables : Schema_diff.new_tables;
   destination : destination;

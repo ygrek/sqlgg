@@ -11,7 +11,7 @@ type generation = {
   baseline : Sqlgg_migrations.Migration_id.t option;
   migrations_file : string;
   manual_file : string option;
-  module_name : string;
+  module_name : Config_file.Migrations.Module_name.t;
   now : int64 option;
   new_tables : Schema_diff.new_tables;
   destination : destination;
@@ -19,17 +19,20 @@ type generation = {
 
 let parse argv =
   let open Cmdliner in
-  let runtime_language = "ocaml" in
-  let required_string name ~docv ~doc =
-    Arg.(required & opt (some string) None & info [ name ] ~docv ~doc)
-  in
   let optional_file name ~doc =
     Arg.(value & opt (some string) None & info [ name ] ~docv:"FILE" ~doc)
   in
   let generation =
+    let config_file =
+      optional_file "config"
+        ~doc:
+          "A sqlgg configuration file. Its $(b,dialect) and the keys of its \
+           $(b,migrations) object stand in for the options that are not on \
+           the command line."
+    in
     let dialect =
       Arg.(
-        required
+        value
         & opt
             (some
                (enum
@@ -40,29 +43,30 @@ let parse argv =
         & info [ "dialect" ] ~docv:"DIALECT"
             ~doc:
               "SQL dialect of the schema. The migration runtime supports \
-               $(b,mysql) (also for MariaDB) and $(b,tidb).")
+               $(b,mysql) (also for MariaDB) and $(b,tidb). Required.")
     in
     let host_language =
       Arg.(
-        required
+        value
         & opt
             (some
                (enum
-                  [
-                    runtime_language, `Runtime;
-                    "cxx", `No_runtime "cxx";
-                    "csharp", `No_runtime "csharp";
-                    "java", `No_runtime "java";
-                  ]))
+                  (List.map
+                     (fun language ->
+                       ( Config_file.Migrations.host_language_to_string
+                           language,
+                         language ))
+                     Config_file.Migrations.all_of_host_language)))
             None
         & info [ "lang" ] ~docv:"LANG"
             ~doc:
               "Host language of the generated migrations. Only $(b,ocaml) \
-               has a migration runtime so far.")
+               has a migration runtime so far. Required.")
     in
     let schema_file =
-      required_string "schema" ~docv:"FILE"
-        ~doc:"The schema to migrate to: plain $(b,CREATE TABLE) DDL."
+      optional_file "schema"
+        ~doc:
+          "The schema to migrate to: plain $(b,CREATE TABLE) DDL. Required."
     in
     let initial_file =
       optional_file "initial"
@@ -91,10 +95,11 @@ let parse argv =
                history.")
     in
     let migrations_file =
-      required_string "migrations" ~docv:"FILE"
+      optional_file "migrations"
         ~doc:
           "The migration log. Read to learn the current schema; new \
-           migrations are appended to it in place. May not exist yet."
+           migrations are appended to it in place. May not exist yet. \
+           Required."
     in
     let manual_file =
       optional_file "manual"
@@ -103,39 +108,21 @@ let parse argv =
            id. Never written to."
     in
     let module_name =
-      let parse raw =
-        let name = String.capitalize_ascii raw in
-        let valid_tail =
-          String.for_all
-            (function
-              | 'a' .. 'z'
-              | 'A' .. 'Z'
-              | '0' .. '9'
-              | '_'
-              | '\'' ->
-                  true
-              | _ -> false)
-        in
-        if
-          name <> ""
-          &&
-          match name.[0] with
-          | 'A' .. 'Z' -> valid_tail name
-          | _ -> false
-        then
-          Ok name
-        else
-          Error ("invalid OCaml module name " ^ Printf.sprintf "%S" raw)
-      in
       Arg.(
-        required
+        value
         & opt
             (some
                (conv' ~docv:"NAME"
-                  (parse, Format.pp_print_string)))
+                  ( (fun raw ->
+                      Result.map_error
+                        Config_file.Migrations.Module_name.error_to_string
+                        (Config_file.Migrations.Module_name.of_string raw)),
+                    fun fmt name ->
+                      Format.pp_print_string fmt
+                        (Config_file.Migrations.Module_name.to_string name) )))
             None
         & info [ "module" ] ~docv:"NAME"
-            ~doc:"Name of the generated module.")
+            ~doc:"Name of the generated module. Required.")
     in
     let now =
       let parse raw =
@@ -161,9 +148,9 @@ let parse argv =
     let new_tables =
       Arg.(
         value
-        & vflag Schema_diff.Created_by_schema
+        & vflag None
             [
-              ( Schema_diff.Created_by_migrations,
+              ( Some Schema_diff.Created_by_migrations,
                 info [ "ddl-as-migration" ]
                   ~doc:
                     "Record a table that is new in $(b,--schema) as a \
@@ -173,61 +160,118 @@ let parse argv =
             ])
     in
     let destination =
-      Arg.(
-        value
-        & opt (some string) None
-        & info [ "output" ] ~docv:"FILE"
-            ~doc:
-              "Write the generated migrations module to $(docv). The file \
-               is left untouched when generation fails. The default is \
-               standard output.")
+      optional_file "output"
+        ~doc:
+          "Write the generated migrations module to $(docv). The file \
+           is left untouched when generation fails. The default is \
+           standard output."
+    in
+    let resolve
+        config_file
+        dialect
+        host_language
+        schema_file
+        initial_file
+        baseline
+        migrations_file
+        manual_file
+        module_name
+        now
+        new_tables
+        output_file
+      =
+      let ( let* ) = Result.bind in
+      let generation =
+        let* configured_dialect, section =
+          match config_file with
+          | None -> Ok (None, None)
+          | Some file ->
+            Result.map_error
+              (fun (`Config_file error) ->
+                `Rejected (Config_file.error_to_string error))
+              (Config_file.migrations file)
+        in
+        let setting given (read : Config_file.Migrations.t -> _ option) =
+          match given with
+          | Some _ -> given
+          | None -> Stdlib.Option.bind section read
+        in
+        let required option setting =
+          Stdlib.Option.to_result ~none:(`Missing option) setting
+        in
+        let* dialect =
+          required "dialect"
+            (match dialect with Some _ -> dialect | None -> configured_dialect)
+        in
+        let* host_language =
+          required "lang"
+            (setting host_language Config_file.Migrations.lang)
+        in
+        let* schema_file =
+          required "schema"
+            (setting schema_file Config_file.Migrations.schema)
+        in
+        let* migrations_file =
+          required "migrations"
+            (setting migrations_file Config_file.Migrations.migrations)
+        in
+        let* module_name =
+          required "module"
+            (setting module_name Config_file.Migrations.module_name)
+        in
+        let supported dialect =
+          Ok
+            {
+              dialect;
+              schema_file;
+              initial_file =
+                setting initial_file Config_file.Migrations.initial;
+              baseline = setting baseline Config_file.Migrations.baseline;
+              migrations_file;
+              manual_file =
+                setting manual_file Config_file.Migrations.manual;
+              module_name;
+              now;
+              new_tables =
+                Stdlib.Option.value ~default:Schema_diff.Created_by_schema
+                  (setting new_tables Config_file.Migrations.new_tables);
+              destination =
+                (match
+                   setting output_file Config_file.Migrations.output
+                 with
+                 | None -> Stdout
+                 | Some filename -> File filename);
+            }
+        in
+        match dialect, host_language with
+        | (Dialect.PostgreSQL | Dialect.SQLite), _ ->
+            Error
+              (`Rejected
+                 ("the migration runtime does not support --dialect "
+                  ^ Dialect.to_string dialect
+                  ^ " yet (supported: mysql, tidb)"))
+        | ( (Dialect.MySQL | Dialect.TiDB),
+            ((Config_file.Migrations.Cxx | Csharp | Java) as language) ) ->
+            Error
+              (`Rejected
+                 ("there is no migration runtime for --lang "
+                  ^ Config_file.Migrations.host_language_to_string language
+                  ^ " yet (supported: "
+                  ^ Config_file.Migrations.host_language_to_string Ocaml
+                  ^ ")"))
+        | Dialect.MySQL, Ocaml -> supported `MySQL
+        | Dialect.TiDB, Ocaml -> supported `TiDB
+      in
+      match generation with
+      | Ok generation -> `Ok generation
+      | Error (`Missing option) ->
+          `Error (true, "required option --" ^ option ^ " is missing")
+      | Error (`Rejected message) -> `Error (false, message)
     in
     Term.(
-      term_result' ~usage:false
-        (const
-           (fun
-             dialect
-             host_language
-             schema_file
-             initial_file
-             baseline
-             migrations_file
-             manual_file
-             module_name
-             now
-             new_tables
-             output_file
-           ->
-             let supported dialect =
-               Ok
-                 {
-                   dialect;
-                   schema_file;
-                   initial_file;
-                   baseline;
-                   migrations_file;
-                   manual_file;
-                   module_name;
-                   now;
-                   new_tables;
-                   destination =
-                     (match output_file with
-                      | None -> Stdout
-                      | Some filename -> File filename);
-                 }
-             in
-             match dialect, host_language with
-             | (Dialect.PostgreSQL | Dialect.SQLite), _ ->
-                 Error
-                   ("the migration runtime does not support --dialect "
-                    ^ Dialect.to_string dialect
-                    ^ " yet (supported: mysql, tidb)")
-             | (Dialect.MySQL | Dialect.TiDB), `No_runtime name ->
-                 Error
-                   ("there is no migration runtime for --lang " ^ name
-                    ^ " yet (supported: " ^ runtime_language ^ ")")
-             | Dialect.MySQL, `Runtime -> supported `MySQL
-             | Dialect.TiDB, `Runtime -> supported `TiDB)
+      ret
+        (const resolve
+         $ config_file
          $ dialect
          $ host_language
          $ schema_file

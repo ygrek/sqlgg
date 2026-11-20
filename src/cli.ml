@@ -67,46 +67,18 @@ let process_migrations lang name migration_output =
 
 let params_selection = ref Gen.From_dialect
 
-let set_params_mode s =
-  match Gen.params_mode_of_string s with
-  | Ok selection ->
-    params_selection := selection;
-    Gen.params_mode := Gen.resolve_params_mode ~dialect:None selection
-  | Error msg -> failwith msg
+let select_params selection =
+  params_selection := selection;
+  Gen.params_mode := Gen.resolve_params_mode ~dialect:None selection
 
 let all_categories = String.concat " " @@ List.map Stmt.show_category Stmt.all_categories
-let category_of_string s =
-  match List.find (fun cat -> String.equal (String.lowercase_ascii @@ Stmt.show_category cat) s) Stmt.all_categories with
-  | exception _ -> failwith @@ sprintf "bad category %S" s
-  | x -> x
-let set_category s =
-  let s = String.lowercase_ascii s in
-  Sqlgg_config.include_category :=
-    match s with
-    | "all" -> `All
-    | "none" -> `None
-    | "" -> failwith "bad category \"\""
-    | _ when s.[0] = '-' -> `Except (List.map category_of_string @@ String.nsplit (String.slice ~first:1 s) ",")
-    | _ -> `Only (List.map category_of_string @@ String.nsplit s ",")
+
 let filter_category cat =
   match !Sqlgg_config.include_category with
   | `All -> true
   | `None -> false
   | `Only l -> List.mem cat l
   | `Except l -> not (List.mem cat l)
-
-let parse_output s =
-  match (String.lowercase_ascii s) with
-  | "cxx" | "c++" | "cpp" -> Some (Lang Cxx)
-  | "caml" | "ocaml" | "ml" -> Some (Lang Caml)
-  | "caml_io" -> Some (Lang Caml_io)
-  | "xml" -> Some (Lang Xml)
-  | "json" -> Some (Lang Json)
-  | "java" -> Some (Lang Java)
-  | "csharp" | "c#" | "cs" -> Some (Lang CSharp)
-  | "sql" | "ddl" -> Some Sql_ddl
-  | "none" -> None
-  | _ -> failwith (sprintf "Unknown output language: %s" s)
 
 let stamp_source filename stmts =
   List.map (fun (stmt : Query.t) -> { stmt with props = Props.File filename :: stmt.props }) stmts
@@ -257,11 +229,6 @@ let select_dialect d =
   Gen.params_mode :=
     Gen.resolve_params_mode ~dialect:(Some d) !params_selection
 
-let set_dialect s =
-  match Dialect.of_string s with
-  | Some d -> select_dialect d
-  | None -> failwith (sprintf "Unknown dialect: %s" s)
-
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
 
@@ -275,22 +242,6 @@ let parse_alter_option kind values of_string s =
   match of_string s with
   | Some option -> option
   | None -> fatal "unknown ALTER TABLE %s %S (expected %s)" kind s values
-
-let parse_alter_lock =
-  parse_alter_option "lock" alter_lock_values Sql.alter_lock_of_string
-
-let parse_alter_algorithm =
-  parse_alter_option "algorithm" alter_algorithm_values
-    Sql.alter_algorithm_of_string
-
-let set_no_check = function
-  | "all" -> Sqlgg_config.set_no_check_features Dialect.all_of_feature
-  | s ->
-    String.nsplit s "," |> List.map (fun name ->
-      match Dialect.feature_of_string name with
-      | Some f -> f
-      | None -> failwith (sprintf "Unknown feature: %s" name))
-    |> Sqlgg_config.set_no_check_features
 
 let abort_on_errors () = if !Error.errors then raise Cli_errors_found
 
@@ -389,10 +340,10 @@ let parse_args () =
   let output = ref None in
   let name = ref "sqlgg" in
   let inputs = ref [] in
-  let diff_mode = ref false in
+  let input_files = ref [] in
+  let mode = ref None in
   let base_files = ref [] in
   let target_files = ref [] in
-  let migrate_mode = ref false in
   let initial_files = ref [] in
   let migrations_file = ref None in
   let extends_file = ref None in
@@ -420,75 +371,198 @@ let parse_args () =
     Hashtbl.replace files key `Positional;
     inputs := filter_stmts ~output:!output stmts :: !inputs
   in
+  let select_mode requested =
+    match !mode, requested with
+    | None, requested -> mode := Some requested
+    | Some `Diff, `Diff | Some `Migrate, `Migrate -> ()
+    | Some `Diff, `Migrate | Some `Migrate, `Diff ->
+      fatal "-migrate and -diff are mutually exclusive"
+  in
+  let apply_setting (setting : Config_file.setting) =
+    match setting with
+    | Dialect dialect -> select_dialect dialect
+    | No_check features -> Sqlgg_config.set_no_check_features features
+    | Write_notnull_null Allow -> Sqlgg_config.allow_write_notnull_null true
+    | Write_notnull_null Reject -> Sqlgg_config.allow_write_notnull_null false
+    | Header header -> Sqlgg_config.gen_header := header
+    | Gen Cxx -> output := Some (Lang Cxx)
+    | Gen Caml -> output := Some (Lang Caml)
+    | Gen Caml_io -> output := Some (Lang Caml_io)
+    | Gen Java -> output := Some (Lang Java)
+    | Gen Xml -> output := Some (Lang Xml)
+    | Gen Json -> output := Some (Lang Json)
+    | Gen Csharp -> output := Some (Lang CSharp)
+    | Gen Sql -> output := Some Sql_ddl
+    | Gen No_output -> output := None
+    | Name module_name -> name := module_name
+    | Params selection -> select_params selection
+    | Category category -> Sqlgg_config.include_category := category
+    | Dynamic_select Both -> Sqlgg_config.dynamic_select := true
+    | Dynamic_select Off -> Sqlgg_config.dynamic_select := false
+    | Diff_mode -> select_mode `Diff
+    | Migrate_mode -> select_mode `Migrate
+    | Base file -> base_files := file :: !base_files
+    | Target file -> target_files := file :: !target_files
+    | Initial file -> initial_files := file :: !initial_files
+    | Migrations_file file -> migrations_file := Some file
+    | Extends file -> extends_file := Some file
+    | Max_migration_id_length length -> max_id_length := length
+    | New_tables created -> new_tables := created
+    | Alter_algorithm algorithm -> alter_algorithm := Some algorithm
+    | Alter_lock lock -> alter_lock := Some lock
+    | Open file -> open_input file
+    | Input file ->
+      input_files := file :: !input_files;
+      work file
+    | Stdin ->
+      input_files := "-" :: !input_files;
+      work "-"
+  in
+  let apply_config file =
+    match Config_file.settings file with
+    | Error (`Config_file error) -> bad_input "%s" (Config_file.error_to_string error)
+    | Ok settings -> List.iter apply_setting settings
+  in
+  let command_line_actions = ref [] in
+  let defer action = command_line_actions := action :: !command_line_actions in
+  let defer_setting setting = defer (fun () -> apply_setting setting) in
+  let config_file = ref None in
+  let select_config file =
+    match !config_file with
+    | None -> config_file := Some file
+    | Some _ -> bad_input "-config may be given only once"
+  in
+  let parse_gen raw =
+    let canonical =
+      match String.lowercase_ascii raw with
+      | "c++" | "cpp" -> "cxx"
+      | "ocaml" | "ml" -> "caml"
+      | "c#" | "cs" -> "csharp"
+      | "ddl" -> "sql"
+      | canonical -> canonical
+    in
+    match Config_file.gen_of_string canonical with
+    | Some gen -> gen
+    | None -> failwith (sprintf "Unknown output language: %s" raw)
+  in
+  let parse_category raw =
+    let category name =
+      match Stmt.category_of_string name with
+      | Some (DDL | DQL | DML | DCL | TCL as category) -> category
+      | Some OTHER | None -> failwith @@ sprintf "bad category %S" name
+    in
+    let normalized = String.lowercase_ascii raw in
+    match normalized with
+    | "all" -> `All
+    | "none" -> `None
+    | "" -> failwith "bad category \"\""
+    | _ when normalized.[0] = '-' ->
+      `Except
+        (List.map category
+           (String.nsplit (String.slice ~first:1 normalized) ","))
+    | _ -> `Only (List.map category (String.nsplit normalized ","))
+  in
+  let parse_no_check = function
+    | "all" -> Dialect.all_of_feature
+    | raw ->
+      String.nsplit raw ","
+      |> List.map (fun name ->
+        match Dialect.feature_of_string name with
+        | Some feature -> feature
+        | None -> failwith (sprintf "Unknown feature: %s" name))
+  in
   let groups =
   [
+    { title = "Configuration"; opts =
+    [
+      "-config", Arg.String select_config, "<file> Load defaults from a JSON configuration file. Command-line options override it";
+      "-config-json-schema", Arg.Unit (print_json_schema Config_file.document_jsonschema),
+        " Print the JSON Schema of the -config file and exit";
+    ] };
+
     { title = "Code generation"; opts =
     [
-      "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|json|csharp|sql|none Set output language (default: none)";
-      "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
-      "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
-      "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
-      "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
+      "-gen", Arg.String (fun raw -> defer_setting (Gen (parse_gen raw))), "cxx|caml|caml_io|java|xml|json|csharp|sql|none Set output language (default: none)";
+      "-name", Arg.String (fun module_name -> defer_setting (Name module_name)), "<identifier> Set output module name (default: sqlgg)";
+      "-params", Arg.String (fun raw ->
+        match Gen.params_mode_of_string raw with
+        | Ok selection -> defer_setting (Params selection)
+        | Error message -> failwith message),
+        "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
+      "-category", Arg.String (fun raw -> defer_setting (Category (parse_category raw))), sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
+      "-open", Arg.String (fun file -> defer_setting (Open file)), "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
+      "-dynamic-select", Arg.Unit (fun () -> defer_setting (Dynamic_select Both)),
         " Generate static and dynamic version for every SELECT (dynamic allows to pick columns per call)";
-      "-", Arg.Unit (fun () -> work "-"), " Read sql from stdin";
+      "-", Arg.Unit (fun () -> defer_setting Stdin), " Read sql from stdin";
       "-json-schema", Arg.Unit (print_json_schema Query.document_jsonschema),
         " Print the JSON Schema of -gen json output and exit";
     ] };
 
     { title = "Schema and migrations"; opts =
     [
-      "-diff", Arg.Set diff_mode, " Generate up/down migrations from the diff of -base schema against -target schema";
-      "-migrate", Arg.Set migrate_mode, " All-in-one: diff initial+migrations against target, append the up/down delta to the migrations file and (re)generate code";
-      "-base", Arg.String (fun f -> base_files := f :: !base_files), "<file> Baseline schema / prior up migrations (repeatable)";
-      "-target", Arg.String (fun f -> target_files := f :: !target_files), "<file> Target schema (repeatable)";
-      "-initial", Arg.String (fun f -> initial_files := f :: !initial_files), "<file> Baseline DDL for -migrate (repeatable)";
-      "-migrations-file", Arg.String (fun f -> migrations_file := Some f), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
-      "-extends", Arg.String (fun f -> extends_file := Some f), "<file> Hand-written migrations SQL, merged with generated ones by `id` (read-only)";
+      "-diff", Arg.Unit (fun () -> defer_setting Diff_mode), " Generate up/down migrations from the diff of -base schema against -target schema";
+      "-migrate", Arg.Unit (fun () -> defer_setting Migrate_mode), " All-in-one: diff initial+migrations against target, append the up/down delta to the migrations file and (re)generate code";
+      "-base", Arg.String (fun file -> defer_setting (Base file)), "<file> Baseline schema / prior up migrations (repeatable)";
+      "-target", Arg.String (fun file -> defer_setting (Target file)), "<file> Target schema (repeatable)";
+      "-initial", Arg.String (fun file -> defer_setting (Initial file)), "<file> Baseline DDL for -migrate (repeatable)";
+      "-migrations-file", Arg.String (fun file -> defer_setting (Migrations_file file)), "<file> Generated migrations SQL for -migrate (read and appended in place; required only when there is a new delta to record)";
+      "-extends", Arg.String (fun file -> defer_setting (Extends file)), "<file> Hand-written migrations SQL, merged with the generated ones by `id` (read-only)";
       "-now", Arg.String (fun raw ->
         match Int64.of_string_opt raw with
-        | Some n when Int64.compare n 0L >= 0 -> now := Some n
+        | Some n when Int64.compare n 0L >= 0 ->
+          defer (fun () -> now := Some n)
         | Some _ | None -> fatal "bad migration timestamp %S" raw),
         "<YYYYMMDDHHMMSS> Pin the migration id timestamp (default: current clock); ids are <timestamp>_<descriptive_name>";
-      "-max-migration-id-length", Arg.Int (fun n -> max_id_length := n),
+      "-max-migration-id-length", Arg.Int (fun length -> defer_setting (Max_migration_id_length length)),
         sprintf "<N> Limit generated migration ids to N bytes (default and maximum: %d)"
           Sqlgg_migrations.Migration_id.max_length;
-      "-ddl-as-migration", Arg.Unit (fun () -> new_tables := Schema_diff.Created_by_migrations), " Write new tables as CREATE TABLE migrations instead of plain schema DDL";
-      "-alter-algorithm", Arg.String (fun s -> alter_algorithm := Some (parse_alter_algorithm s)),
+      "-ddl-as-migration", Arg.Unit (fun () -> defer_setting (New_tables Schema_diff.Created_by_migrations)), " Write new tables as CREATE TABLE migrations instead of plain schema DDL";
+      "-alter-algorithm", Arg.String (fun raw ->
+        defer_setting
+          (Alter_algorithm
+             (parse_alter_option "algorithm" alter_algorithm_values
+                Sql.alter_algorithm_of_string raw))),
         sprintf "%s Add ALGORITHM policy to generated ALTER TABLE statements (MySQL and TiDB only)"
           alter_algorithm_values;
-      "-alter-lock", Arg.String (fun s -> alter_lock := Some (parse_alter_lock s)),
+      "-alter-lock", Arg.String (fun raw ->
+        defer_setting
+          (Alter_lock
+             (parse_alter_option "lock" alter_lock_values
+                Sql.alter_lock_of_string raw))),
         sprintf "%s Add LOCK policy to generated ALTER TABLE statements (MySQL only)"
           alter_lock_values;
     ] };
 
     { title = "Dialect and checks"; opts =
     [
-      "-dialect", Arg.String set_dialect,
+      "-dialect", Arg.String (fun raw ->
+        match Dialect.of_string raw with
+        | Some dialect -> defer_setting (Dialect dialect)
+        | None -> failwith (sprintf "Unknown dialect: %s" raw)),
         sprintf "%s Set SQL dialect. Queries can only use its features"
           (enum_values Dialect.to_string Dialect.all);
-      "-no-check", Arg.String set_no_check,
+      "-no-check", Arg.String (fun raw -> defer_setting (No_check (parse_no_check raw))),
         sprintf "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: %s)"
           (enum_values Dialect.feature_to_string Dialect.all_of_feature);
-      "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
+      "-allow-write-notnull-null", Arg.Unit (fun () -> defer_setting (Write_notnull_null Allow)), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
     ] };
 
     { title = "Generated header"; opts =
     [
-      "-no-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := None),
+      "-no-header", Arg.Unit (fun () -> defer_setting (Header None)),
         " Do not put version header in generated output";
-      "-no-header-timestamp", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Without_timestamp),
+      "-no-header-timestamp", Arg.Unit (fun () -> defer_setting (Header (Some `Without_timestamp))),
         " Do not put timestamp in version header in generated output";
-      "-static-header", Arg.Unit (fun () -> Sqlgg_config.gen_header := Some `Static), " Only output short static header without version/timestamp";
+      "-static-header", Arg.Unit (fun () -> defer_setting (Header (Some `Static))), " Only output short static header without version/timestamp";
     ] };
 
     { title = "Diagnostics"; opts =
     [
-      "-show-tables", Arg.Unit Tables.print_all, " Show all current tables";
-      "-show-table", Arg.String Tables.print1, "<name> Show specified table";
-      "-debug", Arg.Int Sqlgg_config.set_debug_level, "<N> Set debug level";
-      "-version", Arg.Unit show_version, " Show version";
-      "-test", Arg.Unit Test.run, " Run unit tests";
+      "-show-tables", Arg.Unit (fun () -> defer Tables.print_all), " Show all current tables";
+      "-show-table", Arg.String (fun name -> defer (fun () -> Tables.print1 name)), "<name> Show specified table";
+      "-debug", Arg.Int (fun level -> defer (fun () -> Sqlgg_config.set_debug_level level)), "<N> Set debug level";
+      "-version", Arg.Unit (fun () -> defer show_version), " Show version";
+      "-test", Arg.Unit (fun () -> defer Test.run), " Run unit tests";
     ] };
   ]
   in
@@ -505,11 +579,14 @@ let parse_args () =
   let args = List.concat_map (fun g -> g.opts) groups @ [
     "-help", Arg.Unit show_help, " Display this list of options";
     "--help", Arg.Unit show_help, "";
+    "--", Arg.Rest (fun file -> defer_setting (Input file)), "";
     "-options-md", Arg.Unit (fun () -> printf "```text\n%s\n```\n" (render groups); exit 0), "";
   ]
   in
-  Arg.parse args work usage_msg;
+  Arg.parse args (fun file -> defer_setting (Input file)) usage_msg;
   if Array.length Sys.argv = 1 then show_help ();
+  Stdlib.Option.iter apply_config !config_file;
+  List.iter (fun action -> action ()) (List.rev !command_line_actions);
   if !max_id_length > Sqlgg_migrations.Migration_id.max_length then
     fatal "-max-migration-id-length %d is above %d, the width of the migration id column"
       !max_id_length Sqlgg_migrations.Migration_id.max_length;
@@ -537,16 +614,18 @@ let parse_args () =
       new_tables = !new_tables;
       alter_options }
   in
-  (* these modes reset the schema and rebuild it from -base/-target/-initial,
-     silently discarding whatever -open loaded *)
   let has_open =
-    Hashtbl.fold (fun _ v acc -> acc || (match v with `Open _ -> true | `Positional -> false)) files false
+    Hashtbl.fold
+      (fun _ state found ->
+        found || match state with `Open _ -> true | `Positional -> false)
+      files false
   in
-  if has_open && (!migrate_mode || !diff_mode) then
+  if has_open && Stdlib.Option.is_some !mode then
     fatal "-open is not supported with -diff/-migrate";
-  match !migrate_mode, !diff_mode with
-  | true, true -> fatal "-migrate and -diff are mutually exclusive"
-  | true, false ->
+  if !input_files <> [] && Stdlib.Option.is_some !mode then
+    fatal "input files are not supported with -diff/-migrate";
+  match !mode with
+  | Some `Migrate ->
     let gen_lang =
       match !output with
       | Some (Lang l) -> l
@@ -560,9 +639,9 @@ let parse_args () =
       migrations_file = !migrations_file;
       extends_file = !extends_file;
     }
-  | false, true ->
+  | Some `Diff ->
     Diff { delta; base_files = List.rev !base_files; output = !output }
-  | false, false ->
+  | None ->
     if !output = Some Sql_ddl then
       Materialize_schema { base_files = List.rev !base_files }
     else
@@ -786,7 +865,7 @@ let run_migrations () =
         {
           delta =
             {
-              name = module_name;
+              name = Config_file.Migrations.Module_name.to_string module_name;
               target_files = [ schema_file ];
               now;
               max_id_length = Sqlgg_migrations.Migration_id.max_length;

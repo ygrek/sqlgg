@@ -31,27 +31,14 @@ let load config_path =
       { schema = []; dialect = default.dialect }
   in
   let root = Filename.dirname config_path in
+  let globs = File_glob.create () in
   let expand schema =
     let path =
       if Filename.is_relative schema then Filename.concat root schema
       else schema
     in
-    let directory = Filename.dirname path in
-    let pattern =
-      Re.compile
-        (Re.Glob.glob ~anchored:true ~pathname:false ~period:false
-          (Filename.basename path))
-    in
-    let files =
-      match Sys.readdir directory with
-      | exception Sys_error _ -> []
-      | entries ->
-        Array.to_list entries
-        |> List.filter (Re.execp pattern)
-        |> List.sort String.compare
-        |> List.map (Filename.concat directory)
-    in
-    files, directory
+    (match File_glob.expand globs path with Ok files -> files | Error _ -> []),
+    Filename.dirname path
   in
   let file_groups, watched_directories =
     List.split (List.map expand config.schema)

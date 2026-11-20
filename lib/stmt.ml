@@ -27,9 +27,19 @@ type kind = | Select of cardinality
             | Other
             [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
-type category = DDL | DQL | DML | DCL | TCL | OTHER [@@deriving show {with_path=false}, enum]
+type category =
+  | DDL [@as "ddl"]
+  | DQL [@as "dql"]
+  | DML [@as "dml"]
+  | DCL [@as "dcl"]
+  | TCL [@as "tcl"]
+  | OTHER [@as "other"]
+[@@deriving show {with_path=false}, enumerate, to_string, of_string]
 
-let all_categories = List.init (max_category - min_category) (fun i -> Option.get @@ category_of_enum @@ min_category + i)
+let all_categories =
+  List.filter
+    (function DDL | DQL | DML | DCL | TCL -> true | OTHER -> false)
+    all_of_category
 
 let category_of_stmt_kind = function
 | Select _ -> DQL
