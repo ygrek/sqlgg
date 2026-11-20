@@ -177,6 +177,20 @@ let keywords =
    "where",WHERE;
    "with", WITH;
    "year_month", YEAR_MONTH;
+   "truncate", TRUNCATE "truncate";
+   "database", DATABASE "database";
+   "recover", RECOVER "recover";
+   "exchange", EXCHANGE "exchange";
+   "reorganize", REORGANIZE "reorganize";
+   "maxvalue", MAXVALUE "maxvalue";
+   "force", FORCE "force";
+   "auto_random_base", AUTO_RANDOM_BASE "auto_random_base";
+   "auto_id_cache", AUTO_ID_CACHE "auto_id_cache";
+   "shard_row_id_bits", SHARD_ROW_ID_BITS "shard_row_id_bits";
+   "visible", VISIBLE "visible";
+   "invisible", INVISIBLE "invisible";
+   "less", LESS "less";
+   "than", THAN "than";
    "generated", GENERATED;
    "always", ALWAYS;
    "virtual", VIRTUAL;
@@ -196,6 +210,27 @@ let keywords =
    "ttl_job_interval", TTL_JOB_INTERVAL;
    "remove", REMOVE;
    "type", TYPE "type";
+   "partitioning", PARTITIONING "partitioning";
+   "partitions", PARTITIONS "partitions";
+   "linear", LINEAR "linear";
+   "hash", HASH "hash";
+   "list", LIST "list";
+   "columns", COLUMNS "columns";
+   "tiflash", TIFLASH "tiflash";
+   "replica", REPLICA "replica";
+   "location", LOCATION "location";
+   "labels", LABELS "labels";
+   "hypo", HYPO "hypo";
+   "sequence", SEQUENCE "sequence";
+   "increment", INCREMENT "increment";
+   "start", START "start";
+   "minvalue", MINVALUE "minvalue";
+   "nominvalue", NOMINVALUE "nominvalue";
+   "nomaxvalue", NOMAXVALUE "nomaxvalue";
+   "cycle", CYCLE "cycle";
+   "nocycle", NOCYCLE "nocycle";
+   "restart", RESTART "restart";
+   "enforced", ENFORCED "enforced";
   ] in (* more *)
   k := !k @ List.map (fun s -> s, INTERVAL_UNIT s) [ "microsecond"; "second"; "minute"; "hour"; "day"; "week"; "month"; "quarter"; "year" ];
   let all token l = k := !k @ List.map (fun x -> x,token) l in

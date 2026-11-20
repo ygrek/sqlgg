@@ -1752,48 +1752,26 @@ let with_constraints attrs constraints : Schema.t =
           in
           Hashtbl.replace inherited col (Meta.common (Hashtbl.find_default inherited col meta) meta)
         ) cols refs
-    | `Primary _ | `Unique _ | `Ignore -> ()
+    | `Primary _ | `Unique _ | `Check _ -> ()
   end;
   List.iter (fun attr ->
     Hashtbl.replace constraints_table attr.name attr.extra
   ) attrs;
-  List.iter (fun constr ->
-    match constr with
-    | `Primary [] -> fail "Schema Error: PRIMARY KEY must have at least one column"
-    | `Unique (_, []) -> fail "Schema Error: UNIQUE constraint must have at least one column"
-    | `Primary [ col_name ] -> begin
-      match Hashtbl.find_opt constraints_table col_name with
-      | None -> fail "Schema Error: no such column: %s" col_name
-      | Some constraints ->
-        let new_constraints = Constraints.add PrimaryKey constraints in
-        Hashtbl.replace constraints_table col_name new_constraints
-      end
-    | `Unique (_, [ col_name ]) -> begin
-      match Hashtbl.find_opt constraints_table col_name with
-      | None -> fail "Schema Error: no such column: %s" col_name
-      | Some constraints ->
-        let new_constraints = Constraints.add Unique constraints in
-        Hashtbl.replace constraints_table col_name new_constraints
-      end
-    | `Primary cols -> begin
-      List.iter (fun col ->
-        match Hashtbl.find_opt constraints_table col with
-        | None -> fail "Schema Error: no such column: %s" col
-        | Some constraints ->
-          let new_constraints = Constraints.add (Constraint.make_composite_primary cols) constraints in
-          Hashtbl.replace constraints_table col new_constraints
-      ) cols
-    end
-    | `Unique (_, cols) -> begin
-      List.iter (fun col ->
-        match Hashtbl.find_opt constraints_table col with
-        | None -> fail "Schema Error: no such column: %s" col
-        | Some constraints ->
-          let new_constraints = Constraints.add (Constraint.make_composite_unique cols) constraints in
-          Hashtbl.replace constraints_table col new_constraints
-      ) cols
-    end
-    | `Foreign _ | `Ignore -> ()
+  let add_constraint cols cst =
+    List.iter (fun col ->
+      match Hashtbl.find_opt constraints_table col with
+      | None -> fail "Schema Error: no such column: %s" col
+      | Some existing -> Hashtbl.replace constraints_table col (Constraints.add cst existing)
+    ) cols
+  in
+  List.iter (function
+    | `Primary ([], _) -> fail "Schema Error: PRIMARY KEY must have at least one column"
+    | `Unique (_, [], _) -> fail "Schema Error: UNIQUE constraint must have at least one column"
+    | `Primary (cols, _) ->
+      add_constraint cols (Tables.grouped_constraint ~single:Constraint.PrimaryKey ~composite:Constraint.make_composite_primary cols)
+    | `Unique (_, cols, _) ->
+      add_constraint cols (Tables.grouped_constraint ~single:Constraint.Unique ~composite:Constraint.make_composite_unique cols)
+    | `Foreign _ | `Check _ -> ()
   ) constraints;
   List.map (fun attr ->
     { attr with
@@ -1821,6 +1799,9 @@ let rec eval (stmt:Sql.stmt) =
       [], [], Create name,
       { no_stmt_annotations with
         table_defs = [ located_name, List.map (fun (c : Alter_action_attr.t) -> c.name) schema ] }
+  | Create (located_name, Like source) ->
+      let schema = List.map Alter_action_attr.from_attr (Tables.get_schema source) in
+      eval (Create (located_name, Schema { schema; constraints = []; indexes = [] }))
   | Create ({ value = name; _ } as located_name, Select { value=select; _ }) ->
       let (schema, params, _, annotations) = eval_select_full empty_env select in
       let schema = attrs_only "CREATE TABLE AS SELECT cannot have dynamic columns" schema in
@@ -1845,19 +1826,23 @@ let rec eval (stmt:Sql.stmt) =
         Tables.rename name new_name
       | `DropPrimaryKey ->
         Tables.drop_primary_key name
-      | `AddPrimaryKey cols ->
+      | `AddPrimaryKey (cols, _) ->
         Tables.add_primary_key name ~cols
       | `AlterColumnPG (col_name, change) ->
         Tables.alter_column_pg name ~col_name change.value
-      | `AddIndex { add_idx_name = Some index_name; add_idx_kind = kind; add_idx_cols = cols } ->
+      | `AddIndex { add_idx_name = Some index_name; add_idx_kind = kind; add_idx_cols = cols; add_idx_options = _ } ->
         Tables.index_add name ~index_name ~kind ~cols
-      | `AddIndex { add_idx_name = None; add_idx_kind = kind; add_idx_cols = cols } ->
+      | `AddIndex { add_idx_name = None; add_idx_kind = kind; add_idx_cols = cols; add_idx_options = _ } ->
         Tables.index_add_auto name ~kind ~cols
       | `DropIndex index_name ->
         Tables.index_drop name ~index_name
       | `RenameIndex (old_name, new_name) ->
         Tables.index_rename name ~old_name ~new_name
-      | `AddConstraint _ | `DropConstraint _ | `Cache _ | `NoCache _ -> ()
+      | `AddConstraint _ | `DropConstraint _ | `AlterCheck _ | `Cache _ | `NoCache _
+      | `DropPartition _ | `TruncatePartition _ | `TruncateAllPartitions | `ExchangePartition _ | `ReorganizePartition _
+      | `AddPartition _ | `PartitionBy _ | `RemovePartitioning | `SetTiflashReplica _
+      | `AutoIncrement _ | `AutoRandomBase _ | `AutoIdCache _ | `ShardRowIdBits _
+      | `AlterIndexVisibility _ | `TableComment _ -> ()
       | `TtlOptions (opts, _) ->
         let expr, enabled, job_interval =
           List.fold_left (fun (expr, enabled, job_interval) -> function
@@ -1888,15 +1873,19 @@ let rec eval (stmt:Sql.stmt) =
           | Some _ as c -> c
           | None -> Stdlib.Option.bind old (fun o -> o.Tables.collation)
         in
-        Tables.set_charset name { charset = cs; collation }) actions;
+        Tables.set_charset name { charset = cs; collation }
+      | `TableCollation collation ->
+        Option.may
+          (fun (old : Tables.table_charset) -> Tables.set_charset name { old with collation = Some collation.value })
+          (Tables.get_charset name)) actions;
       [], [], Alter [name], no_stmt_annotations
   | Rename l ->
     List.iter (fun (o,n) -> Tables.rename o n) l;
     [], [], Alter (List.map fst l), no_stmt_annotations (* to have sensible target for gen_xml *)
-  | Drop name ->
+  | Drop name | DropView name ->
       Tables.drop name;
       [], [], Drop name, no_stmt_annotations
-  | CreateIndex { ci_name; ci_table; ci_cols; ci_kind } ->
+  | CreateIndex { ci_name; ci_table; ci_cols; ci_kind; ci_options = _ } ->
       let cols = List.map (fun x -> x.collated) ci_cols in
       Schema.project cols (Tables.get_schema ci_table) |> ignore;
       Tables.index_add ci_table ~index_name:ci_name ~kind:ci_kind ~cols;
@@ -2085,8 +2074,9 @@ let rec eval (stmt:Sql.stmt) =
   | DropType (name, if_exists) ->
      User_types.drop ~if_exists name;
      [], [], DropType name, no_stmt_annotations
-  | CreateExtension _ | DropExtension _ ->
-     (* sqlgg keeps no extension state: accepted, and invisible to codegen *)
+  | CreateExtension _ | DropExtension _
+  | CreateDatabase _ | DropDatabase _ | AlterDatabase _ | Truncate _ | RecoverTable _
+  | CreateSequence _ | AlterSequence _ | DropSequence _ ->
      [], [], Other, no_stmt_annotations
 
 type var_shape =

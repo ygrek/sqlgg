@@ -23,7 +23,15 @@ let make_lexeme lexbuf token = { token; pos = Sql_lexer.pos lexbuf }
 let position offset = { Lexing.dummy_pos with pos_cnum = offset }
 
 let ident_name : Sql_tokens.token -> string option = function
-  | IDENT name | TYPE name | EXTENSION name | SCHEMA name | VERSION name ->
+  | IDENT name | TYPE name | EXTENSION name | SCHEMA name | VERSION name
+  | TRUNCATE name | RECOVER name
+  | DATABASE name | EXCHANGE name | REORGANIZE name | MAXVALUE name
+  | LESS name | THAN name | FORCE name | AUTO_RANDOM_BASE name | AUTO_ID_CACHE name
+  | SHARD_ROW_ID_BITS name | VISIBLE name | INVISIBLE name
+  | PARTITIONING name | PARTITIONS name | LINEAR name | HASH name | LIST name | COLUMNS name
+  | TIFLASH name | REPLICA name | LOCATION name | LABELS name | HYPO name
+  | SEQUENCE name | INCREMENT name | START name | MINVALUE name | NOMINVALUE name | NOMAXVALUE name
+  | CYCLE name | NOCYCLE name | RESTART name | ENFORCED name ->
     Some name
   | _ -> None
 

@@ -22,6 +22,7 @@ type t =
   | Id of string
   | Down of string
   | Irreversible
+  | Bdr_non_replicable
   | Auto
   | Manual
   | File of string

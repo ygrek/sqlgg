@@ -79,6 +79,7 @@ let split text =
     | "id" -> Ok (Props.Id value)
     | "down" -> Ok (Props.Down value)
     | "irreversible" -> flag Props.Irreversible
+    | "bdr_non_replicable" -> flag Props.Bdr_non_replicable
     | "generated" -> flag Props.Auto
     | "manual" -> flag Props.Manual
     | _ -> Error (Printf.sprintf "unknown property %s" key)
