@@ -86,7 +86,10 @@ let materialize_inline_unique (t : Tables.stored_table) =
            ~kind:Sql.Unique_idx ~cols)
        t
 
-type new_tables = Created_by_schema | Created_by_migrations
+type new_tables =
+  | Created_by_schema [@name "schema"]
+  | Created_by_migrations [@name "migrations"]
+  [@@deriving of_json, to_json, jsonschema] [@@compact_variants]
 
 exception New_tables_not_created of Sql.table_name * Sql.table_name list
 

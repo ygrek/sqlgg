@@ -20,7 +20,7 @@ type placeholder =
   | Unnamed [@as "unnamed"]
   | Oracle [@as "oracle"]
   | PostgreSQL [@as "postgresql"]
-[@@deriving of_string, json, jsonschema] [@@compact_variants]
+[@@deriving enumerate, of_string, to_string, json, jsonschema] [@@compact_variants]
 
 type 'a fragment = [
   | `Text of string

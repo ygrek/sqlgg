@@ -67,6 +67,10 @@ output.
 `--lang ocaml` selects the OCaml migration runtime. `--dialect mysql` covers
 MySQL and MariaDB; use `--dialect tidb` for TiDB.
 
+You can also put these options in a [configuration
+file](./cli.md#sqlgg-migrations) and run `sqlgg migrations generate --config
+sqlgg.json`.
+
 The generated module is a functor over the database traits. The runner and the
 command take it as is:
 

@@ -34,7 +34,6 @@ depends: [
   "ppx_deriving_variant_string" {>= "1.0.1"}
   "linol" {>= "0.11"}
   "linol-lwt" {>= "0.11"}
-  "re" {>= "1.7.2"}
   "base-unix"
   "extlib" {with-test & >= "1.7.8"}
   "ounit" {with-test}
