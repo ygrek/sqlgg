@@ -49,6 +49,13 @@
        TTL TTL_ENABLE TTL_JOB_INTERVAL REMOVE CACHE NOCACHE
 %token FUNCTION PROCEDURE LANGUAGE RETURNS OUT INOUT BEGIN COMMENT
 %token <string> EXTENSION SCHEMA VERSION
+                TRUNCATE RECOVER
+                DATABASE EXCHANGE REORGANIZE MAXVALUE LESS THAN
+                FORCE AUTO_RANDOM_BASE AUTO_ID_CACHE SHARD_ROW_ID_BITS VISIBLE INVISIBLE
+                PARTITIONING PARTITIONS LINEAR HASH LIST COLUMNS
+                TIFLASH REPLICA LOCATION LABELS HYPO
+                SEQUENCE INCREMENT START MINVALUE NOMINVALUE NOMAXVALUE CYCLE NOCYCLE RESTART
+                ENFORCED
 %token SECOND_MICROSECOND MINUTE_MICROSECOND MINUTE_SECOND
        HOUR_MICROSECOND HOUR_SECOND HOUR_MINUTE
        DAY_MICROSECOND DAY_SECOND DAY_MINUTE DAY_HOUR EXTRACT
@@ -102,15 +109,23 @@
 
 input: top_statement EOF { $1 }
 
-(* CREATE/DROP EXTENSION are database-global PostgreSQL DDL, so they are only
-   accepted as a whole statement and not inside a routine body. Keeping them out
-   of [statement] also keeps CREATE EXTENSION's trailing [ WITH ] ... clause from
-   being ambiguous with a following statement that starts with a WITH (CTE). *)
 top_statement: s=statement { s }
              | CREATE EXTENSION if_not_exists? name=ident create_extension_opts
                   { CreateExtension name }
              | DROP EXTENSION if_exists? names=commas(ident) drop_behavior?
                   { DropExtension names }
+             | CREATE DATABASE if_not_exists? name=ident db_option=database_option?
+                  { CreateDatabase (name, db_option) }
+             | DROP DATABASE if_exists? name=ident { DropDatabase name }
+             | ALTER DATABASE name=ident spec=alter_database_spec { AlterDatabase (name, spec) }
+             | CREATE SEQUENCE if_not_exists? name=table_name opts=sequence_option*
+                  { CreateSequence (name, opts) }
+             | ALTER SEQUENCE if_exists? name=table_name opts=alter_sequence_option+
+                  { AlterSequence (name, opts) }
+             | DROP SEQUENCE if_exists? names=commas(table_name) drop_behavior?
+                  { DropSequence names }
+             | TRUNCATE TABLE? name=table_name { Truncate name }
+             | RECOVER TABLE name=table_name { RecoverTable name }
 
 param: 
   | QSTN { { value=None; pos = ($startofs, $endofs) } }
@@ -134,13 +149,18 @@ cte_item: | cte_name=located(ident) names=maybe_parenth(sequence(ident))? AS LPA
             }
 cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive }}
 
-statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(table_name) schema=table_definition
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(table_name) target=table_definition
               {
-                Create (name, Schema schema)
+                Create (name, target)
               }
-         | CREATE either(TABLE,VIEW) name=located(table_name) AS select=maybe_parenth(located(select_stmt))
+         | CREATE TABLE name=located(table_name) AS select=maybe_parenth(located(select_stmt))
+         | CREATE or_replace? VIEW name=located(table_name) AS select=maybe_parenth(located(select_stmt))
               {
                 Create (name, Select select)
+              }
+         | ALTER TABLE name=table_name SET mode=tiflash_replica_mode spec=tiflash_replica_spec
+              {
+                Alter { alter_table = name; alter_actions = [ `SetTiflashReplica (mode, spec) ]; alter_options = [] }
               }
          | ALTER TABLE name=table_name actions=commas(alter_action_or_ignored)
               {
@@ -156,14 +176,19 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
                 Alter { alter_table = name; alter_actions = actions; alter_options = options }
               }
          | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(table_name,TO,table_name)) { Rename l }
-         | DROP either(TABLE,VIEW) if_exists? name=table_name
+         | DROP TABLE if_exists? name=table_name
               {
                 Drop name
               }
-         | CREATE u=boption(UNIQUE) INDEX if_not_exists? name=ident ON table=table_name cols=sequence(index_column)
+         | DROP VIEW if_exists? name=table_name { DropView name }
+         | DROP INDEX if_exists? name=ident ON table=table_name
+              {
+                Alter { alter_table = table; alter_actions = [ `DropIndex name ]; alter_options = [] }
+              }
+         | CREATE u=boption(UNIQUE) INDEX if_not_exists? name=ident ON table=table_name cols=sequence(index_column) opts=index_options
               {
                 let ci_kind = if u then Sql.Unique_idx else Sql.Plain_idx in
-                CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind }
+                CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind; ci_options = opts }
               }
          | select_stmt { Select $1 }
          | insert_action_kind=insert_cmd target=table_name names=insert_columns VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
@@ -249,7 +274,14 @@ routine_extra: LANGUAGE ident { }
 
 (* cf. ColId / unreserved_keyword in PostgreSQL's gram.y (TYPE_P is unreserved there too):
    https://github.com/postgres/postgres/blob/REL_18_0/src/backend/parser/gram.y#L17632 *)
-ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION { x }
+ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION
+     | x=TRUNCATE | x=RECOVER
+     | x=DATABASE | x=EXCHANGE | x=REORGANIZE | x=MAXVALUE | x=LESS | x=THAN
+     | x=FORCE | x=AUTO_RANDOM_BASE | x=AUTO_ID_CACHE | x=SHARD_ROW_ID_BITS | x=VISIBLE | x=INVISIBLE
+     | x=PARTITIONING | x=PARTITIONS | x=LINEAR | x=HASH | x=LIST | x=COLUMNS
+     | x=TIFLASH | x=REPLICA | x=LOCATION | x=LABELS | x=HYPO
+     | x=SEQUENCE | x=INCREMENT | x=START | x=MINVALUE | x=NOMINVALUE | x=NOMAXVALUE
+     | x=CYCLE | x=NOCYCLE | x=RESTART | x=ENFORCED { x }
 
 table_ident: x=ident { x }
 qual_ident: x=ident { x }
@@ -266,14 +298,14 @@ index_column: name=ident index_prefix? c=collate? order_type? { make_collated ?c
 
 table_definition: t=sequence_(column_def1) ignore_after(RPAREN) 
                       { 
-                        List.fold_right
+                        Schema (List.fold_right
                           (fun x { schema; constraints; indexes } -> match x with
                           | `Attr a -> { schema = a::schema; constraints; indexes }
                           | `Constraint c -> { schema; constraints = c::constraints; indexes }
                           | `Index i -> { schema; constraints; indexes = i::indexes })
-                          t { schema = []; constraints = []; indexes = [] }
+                          t { schema = []; constraints = []; indexes = [] })
                       }
-                | LIKE name=maybe_parenth(table_name) { Tables.get name |> snd |> fun attrs -> { schema = List.map Alter_action_attr.from_attr attrs; constraints = []; indexes = [] } } (* mysql *)
+                | LIKE name=maybe_parenth(table_name) { Like name } (* mysql *)
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -411,25 +443,88 @@ alter_column_pg_spec:
   | DROP DEFAULT { Alter_column_pg.Drop_default }
 
 alter_action: ADD COLUMN? col=maybe_parenth(column_def) pos=alter_pos { `Add (col,pos) }
-            | ADD PRIMARY KEY cols=sequence(ident) { `AddPrimaryKey cols }
-            | ADD k=index_type name=ident? cols=sequence(ident) { `AddIndex { add_idx_name = name; add_idx_kind = k; add_idx_cols = cols } }
-            | ADD CONSTRAINT name=ident? table_constraint_1 index_options { `AddConstraint name }
+            | ADD PRIMARY KEY cols=sequence(ident) opts=index_options { `AddPrimaryKey (cols, opts) }
+            | ADD k=index_type name=ident? cols=sequence(ident) opts=index_options
+                { `AddIndex { add_idx_name = name; add_idx_kind = k; add_idx_cols = cols; add_idx_options = opts } }
+            | ADD PARTITION defs=sequence(partition_definition) { `AddPartition defs }
+            | ADD CONSTRAINT name=ident? c=table_constraint_1 { `AddConstraint (name, c) }
+            | ADD c=foreign_or_check_constraint { `AddConstraint (None, c) }
             | RENAME either(TO,AS)? new_name=table_name { `RenameTable new_name }
             | RENAME COLUMN old_name=ident TO new_name=ident { `RenameColumn (old_name, new_name) }
             | RENAME index_or_key old_name=ident TO new_name=ident { `RenameIndex (old_name, new_name) }
-            | DROP INDEX name=ident { `DropIndex name }
+            | DROP index_or_key name=ident { `DropIndex name }
             | DROP PRIMARY KEY { `DropPrimaryKey }
             | DROP COLUMN? col=ident drop_behavior? { `Drop col } (* FIXME behavior? *)
-            | DROP FOREIGN KEY name=ident { `DropConstraint name }
-            | DROP CHECK name=ident { `DropConstraint name }
+            | DROP FOREIGN KEY name=ident
+            | DROP either(CHECK,CONSTRAINT) name=ident { `DropConstraint name }
+            | ALTER either(CHECK,CONSTRAINT) name=ident enforcement=check_enforcement { `AlterCheck (name, enforcement) }
             | CHANGE COLUMN? old_name=ident column=column_def pos=alter_pos { `Change (old_name,column,pos) }
             | MODIFY COLUMN? column=column_def pos=alter_pos { `Change (column.Alter_action_attr.name.value,column,pos) }
             | ALTER COLUMN? col=ident spec=located(alter_column_pg_spec) { `AlterColumnPG (col, spec) }
             | opts=ttl_option+ { `TtlOptions (opts, ($startofs, $endofs)) }
             | REMOVE TTL { `RemoveTtl ($startofs, $endofs) }
+            | REMOVE PARTITIONING { `RemovePartitioning }
             | CACHE { `Cache ($startofs, $endofs) }
             | NOCACHE { `NoCache ($startofs, $endofs) }
-            | either(DEFAULT,pair(CONVERT,TO))? cs=charset c=collate? { `Default_or_convert_to (cs, c) }
+            | DROP PARTITION name=ident { `DropPartition name }
+            | TRUNCATE PARTITION name=ident { `TruncatePartition name }
+            | TRUNCATE PARTITION ALL { `TruncateAllPartitions }
+            | EXCHANGE PARTITION name=ident WITH TABLE table=table_name { `ExchangePartition (name, table) }
+            | REORGANIZE PARTITION name=ident INTO defs=sequence(partition_definition)
+                { `ReorganizePartition (name, defs) }
+            | PARTITION BY partition_method=partition_by_method
+              partition_count=ioption(preceded(PARTITIONS, INTEGER))
+              partitions=loption(sequence(partition_definition))
+                { `PartitionBy { partition_method; partition_count; partitions } }
+            | rebase=auto_id_rebase AUTOINCREMENT EQUAL? n=INTEGER { `AutoIncrement (rebase, n) }
+            | rebase=auto_id_rebase AUTO_RANDOM_BASE EQUAL? n=INTEGER { `AutoRandomBase (rebase, n) }
+            | AUTO_ID_CACHE EQUAL? n=INTEGER { `AutoIdCache n }
+            | SHARD_ROW_ID_BITS EQUAL? n=INTEGER { `ShardRowIdBits n }
+            | ALTER INDEX name=ident visibility=index_visibility { `AlterIndexVisibility (name, visibility) }
+            | comment=comment_clause { `TableComment comment }
+            | opt=database_option
+                {
+                  match opt with
+                  | Database_charset cs -> `Default_or_convert_to (cs, None)
+                  | Database_charset_and_collation (cs, c) -> `Default_or_convert_to (cs, Some c)
+                  | Database_collation c -> `TableCollation c
+                }
+            | CONVERT TO cs=table_charset c=table_collate? { `Default_or_convert_to (cs, c) }
+
+auto_id_rebase: { Rebase }
+              | FORCE { Force_rebase }
+
+index_visibility: VISIBLE { Visible }
+                | INVISIBLE { Invisible }
+
+check_enforcement: ENFORCED { Enforced }
+                 | NOT ENFORCED { Not_enforced }
+
+tiflash_replica_mode: TIFLASH REPLICA { Tiflash_replica }
+                    | HYPO TIFLASH REPLICA { Hypo_tiflash_replica }
+
+tiflash_replica_spec: replica_count=INTEGER location_labels=loption(preceded(pair(LOCATION, LABELS), commas(TEXT)))
+                        { { replica_count; location_labels } }
+
+partition_key_algorithm: ALGORITHM EQUAL n=INTEGER { n }
+
+partition_by_method: HASH LPAREN e=expr RPAREN { Partition_hash e }
+                   | LINEAR HASH LPAREN e=expr RPAREN { Partition_linear_hash e }
+                   | KEY alg=partition_key_algorithm? LPAREN cols=separated_list(COMMA, ident) RPAREN
+                       { Partition_key (alg, cols) }
+                   | LINEAR KEY alg=partition_key_algorithm? LPAREN cols=separated_list(COMMA, ident) RPAREN
+                       { Partition_linear_key (alg, cols) }
+                   | RANGE LPAREN e=expr RPAREN { Partition_range_expr e }
+                   | RANGE COLUMNS cols=sequence(ident) { Partition_range_columns cols }
+                   | LIST LPAREN e=expr RPAREN { Partition_list_expr e }
+                   | LIST COLUMNS cols=sequence(ident) { Partition_list_columns cols }
+
+partition_definition: PARTITION name=ident bound=ioption(preceded(VALUES, partition_bound)) comment_clause?
+                        { { partition_name = name; partition_bound = bound } }
+
+partition_bound: LESS THAN values=sequence(expr) { Less_than values }
+               | LESS THAN MAXVALUE { Less_than_maxvalue }
+               | IN values=sequence(expr) { In_values values }
 
 alter_action_or_ignored: a=alter_action { `Action a }
             | SET IDENT IDENT { `Ignored }
@@ -454,12 +549,11 @@ alter_pos: AFTER col=ident { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=located(ident) sql_kind=located_sql_type? extra=located(column_def_extra)*
+column_def: name=located(ident) sql_kind=located_sql_type? extra=column_def_extras
   {
     let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
     let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
-    let extra = List.filter_map (fun { value; pos } -> Option.map (fun v -> { value = v; pos }) value) extra in
-    { Alter_action_attr.name = name; meta; kind = sql_kind; extra; }
+    { Alter_action_attr.name = name; meta; kind = sql_kind; extra }
   }
 
 inline_idx_kind:
@@ -468,21 +562,32 @@ inline_idx_kind:
   | SPATIAL index_or_key?  { Sql.Spatial }
 
 column_def1: c=column_def { `Attr c }
-           | pair(CONSTRAINT,ident?)? l=table_constraint_1 index_options { `Constraint l }
-           | kind=inline_idx_kind t=table_index { let (idx_name, idx_cols) = t in `Index (make_located ~value:{ idx_kind = kind; idx_name; idx_cols; idx_unique = false } ~pos:($startofs, $endofs)) }
+           | pair(CONSTRAINT,ident?)? l=table_constraint_1 { `Constraint l }
+           | kind=inline_idx_kind t=table_index
+               {
+                 let (idx_name, idx_cols, idx_options) = t in
+                 `Index (make_located ~value:{ idx_kind = kind; idx_name; idx_cols; idx_unique = false; idx_options } ~pos:($startofs, $endofs))
+               }
 
 int_arg: LPAREN n=INTEGER RPAREN { n }
 
 key_part: n=ident int_arg? either(ASC,DESC)? { n }
 
-index_options: IDENT* { }
+index_options: opts=located(index_option)*
+                 { List.filter_map (fun { value; pos } -> Option.map (fun value -> { value; pos }) value) opts }
+index_option: IDENT { None }
+            | visibility=index_visibility { Some (Index_visibility visibility) }
+            | COMMENT comment=TEXT { Some (Index_comment comment) }
 
-table_index: name=ident? l=sequence(key_part) index_options { (name, l) }
+table_index: name=ident? l=sequence(key_part) opts=index_options { (name, l, opts) }
 
 (* FIXME check columns *)
 table_constraint_1:
-      | PRIMARY KEY l=sequence(key_part) { `Primary l }
-      | UNIQUE index_or_key? name=ident? l=sequence(key_part) { `Unique (name, l) }
+      | PRIMARY KEY l=sequence(key_part) opts=index_options { `Primary (l, opts) }
+      | UNIQUE index_or_key? t=table_index { let (name, l, opts) = t in `Unique (name, l, opts) }
+      | c=foreign_or_check_constraint { c }
+
+foreign_or_check_constraint:
       | FOREIGN KEY ident? cols=sequence(ident) REFERENCES t=table_name refs=sequence(ident)?
         reference_action_clause*
           { `Foreign {
@@ -490,7 +595,7 @@ table_constraint_1:
               fk_ref_table = t;
               fk_ref_cols = Stdlib.Option.value ~default:[] refs;
             } }
-      | CHECK LPAREN expr RPAREN { `Ignore }
+      | CHECK LPAREN expr RPAREN enforcement=located(check_enforcement)? { `Check enforcement }
 
 reference_action_clause:
   ON either(DELETE, UPDATE) reference_action { }
@@ -499,8 +604,45 @@ reference_action:
   RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT { }
 
 on_conflict: ON CONFLICT algo=conflict_algo { algo }
+enforced_only: ENFORCED { Enforced }
+column_def_extras:
+  | { [] }
+  | e=located(column_def_extra) rest=column_def_extras
+    { match e.value with None -> rest | Some value -> { e with value } :: rest }
+  | not_null=located(pair(NOT, NULL)) rest=column_def_extras
+    { { value = Alter_action_attr.Syntax_constraint NotNull; pos = not_null.pos } :: rest }
+  | c=column_check_extras { c }
+
+column_def_extras_no_not:
+  | { [] }
+  | e=located(column_def_extra) rest=column_def_extras
+    { match e.value with None -> rest | Some value -> { e with value } :: rest }
+  | c=column_check_extras { c }
+
+column_check_extras:
+  | CHECK LPAREN expr r=RPAREN enf=located(enforced_only) rest=column_def_extras
+    { let _ = r in
+      { value = Alter_action_attr.Check (Some enf); pos = ($startofs, $endofs(enf)) } :: rest }
+  | CHECK LPAREN expr r=RPAREN n=NOT tail=column_after_check_not
+    { let _ = r, n in
+      let not_start = $startofs(n) in
+      match tail with
+      | `Not_enforced enf_end, rest ->
+        let enf = { value = Not_enforced; pos = (not_start, enf_end) } in
+        { value = Alter_action_attr.Check (Some enf); pos = ($startofs, enf_end) } :: rest
+      | `Not_null null_end, rest ->
+        let check = { value = Alter_action_attr.Check None; pos = ($startofs, $endofs(r)) } in
+        let not_null = { value = Alter_action_attr.Syntax_constraint NotNull; pos = (not_start, null_end) } in
+        check :: not_null :: rest }
+  | CHECK LPAREN expr r=RPAREN rest=column_def_extras_no_not
+    { let _ = r in
+      { value = Alter_action_attr.Check None; pos = ($startofs, $endofs(r)) } :: rest }
+
+column_after_check_not:
+  | e=ENFORCED rest=column_def_extras { let _ = e in `Not_enforced $endofs(e), rest }
+  | u=NULL rest=column_def_extras { let _ = u in `Not_null $endofs(u), rest }
+
 column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint PrimaryKey) }
-                | NOT NULL { Some (Alter_action_attr.Syntax_constraint NotNull) }
                 | NULL { Some (Alter_action_attr.Syntax_constraint Null) }
                 | UNIQUE %prec LOWEST
                 | UNIQUE KEY { Some (Alter_action_attr.Syntax_constraint Unique) }
@@ -514,9 +656,9 @@ column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint Prima
                   }
                 | on_conflict { None }
                 | ON UPDATE datetime_value { Some Alter_action_attr.On_update }
-                | CHECK LPAREN expr RPAREN { None }
-                | COLLATE ident { None }
-                | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { None } (* FIXME params and typing ignored *)
+                | COLLATE c=ident { Some (Alter_action_attr.Collate c) }
+                | COMMENT comment=TEXT { Some (Alter_action_attr.Comment comment) }
+                | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { Some Alter_action_attr.Generated } (* FIXME params and typing ignored *)
 
 default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
@@ -696,7 +838,7 @@ case_branch: WHEN w=expr THEN t=expr
 like: LIKE | LIKE_OP { }
 
 choice_body: c1=LCURLY e=expr c2=RCURLY { (c1,Some e,c2) }
-choice: parser_state_normal value=IDENT? e=choice_body?
+choice: parser_state_normal value=ident? e=choice_body?
   {
     let (c1, body, c2) = Stdlib.Option.value ~default:(0, None, 0) e in
     { ctor = { value; pos = (c1 + 1, c2) }; ctor_pos = ($startofs(value), $endofs(value)); body }
@@ -817,11 +959,50 @@ cast_as:
 %inline sequence_(X): LPAREN l=commas(X) { l }
 %inline sequence(X): l=sequence_(X) RPAREN { l }
 
+database_option: DEFAULT? cs=table_charset c=table_collate?
+                   {
+                     match c with
+                     | Some c -> Database_charset_and_collation (cs, c)
+                     | None -> Database_charset cs
+                   }
+               | DEFAULT? c=table_collate { Database_collation c }
+
+alter_database_spec: opt=database_option { Alter_db_option opt }
+                   | SET TIFLASH REPLICA spec=tiflash_replica_spec { Alter_db_tiflash_replica spec }
+
+signed_int: n=INTEGER { n }
+          | PLUS n=INTEGER { n }
+          | MINUS n=INTEGER { -n }
+
+sequence_option: INCREMENT either(BY, EQUAL)? n=signed_int { Seq_increment n }
+               | START either(WITH, EQUAL)? n=signed_int { Seq_start n }
+               | MINVALUE EQUAL? n=signed_int { Seq_minvalue n }
+               | NOMINVALUE | NO MINVALUE { Seq_no_minvalue }
+               | MAXVALUE EQUAL? n=signed_int { Seq_maxvalue n }
+               | NOMAXVALUE | NO MAXVALUE { Seq_no_maxvalue }
+               | CACHE EQUAL? n=signed_int { Seq_cache n }
+               | NOCACHE | NO CACHE { Seq_no_cache }
+               | CYCLE { Seq_cycle }
+               | NOCYCLE | NO CYCLE { Seq_no_cycle }
+               | AS t=int_type { Seq_as_type t }
+               | comment=comment_clause { Seq_comment comment }
+
+alter_sequence_option: opt=sequence_option { Alter_seq_option opt }
+                     | RESTART n=ioption(preceded(either(WITH, EQUAL)?, signed_int)) { Alter_seq_restart n }
+
+comment_clause: COMMENT EQUAL? comment=TEXT { comment }
+
+charset_name: c=ident { Named c }
+            | BINARY { Binary }
+            | ASCII { Ascii }
+            | UNICODE { Unicode }
+table_charset: charset_kw EQUAL? cs=charset_name { cs }
+table_collate: COLLATE EQUAL? c=ident { make_located ~value:c ~pos:($startofs, $endofs) }
+
 %inline charset_kw: CHARSET {} | CHARACTER SET {}
-charset: charset_kw c=ident { Named c }
-       | charset_kw BINARY { Binary }
-       | charset_kw? ASCII { Ascii }
-       | charset_kw? UNICODE { Unicode }
+charset: charset_kw cs=charset_name { cs }
+       | ASCII { Ascii }
+       | UNICODE { Unicode }
 collate: COLLATE c=ident { make_located ~value:c ~pos:($startofs, $endofs) }
 collate_opt: %prec LOWEST { None } | c=collate { Some c }
 

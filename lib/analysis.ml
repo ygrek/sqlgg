@@ -141,7 +141,7 @@ module Extensions = struct
       (fun (c : Alter_action_attr.constraint_ located) ->
         match c.value with
         | Alter_action_attr.Default { expr = default; _ } -> expr default.value
-        | Syntax_constraint _ | On_update -> [])
+        | Syntax_constraint _ | On_update | Comment _ | Collate _ | Check _ | Generated -> [])
       attr.extra
 
   let update assigns where order_by limit =
@@ -173,19 +173,29 @@ module Extensions = struct
     | Set (assigns, rest) -> List.concat_map (fun (_, e) -> expr e) assigns @ opt stmt rest
     | Create (_, Schema { schema; _ }) -> List.concat_map alter_attr schema
     | Create (_, Select { value = sf; _ }) -> select_full sf
+    | Create (_, Like _) -> []
     | Alter { alter_actions; _ } ->
       List.concat_map
         (function
           | `Add (attr, _) | `Change (_, attr, _) -> alter_attr attr
+          | `AddPartition defs | `ReorganizePartition (_, defs) ->
+            List.concat_map expr (partition_exprs defs)
+          | `PartitionBy pb ->
+            List.concat_map expr (partition_by_exprs pb)
           | `AlterColumnPG _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `Drop _
           | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey
-          | `AddConstraint _ | `DropConstraint _ | `Default_or_convert_to _
-          | `TtlOptions _ | `RemoveTtl _ | `Cache _ | `NoCache _ -> [])
+          | `AddConstraint _ | `DropConstraint _ | `AlterCheck _ | `Default_or_convert_to _
+          | `TableCollation _ | `TableComment _ | `TtlOptions _ | `RemoveTtl _ | `Cache _ | `NoCache _
+          | `DropPartition _ | `TruncatePartition _ | `TruncateAllPartitions | `ExchangePartition _
+          | `RemovePartitioning | `SetTiflashReplica _
+          | `AutoIncrement _ | `AutoRandomBase _ | `AutoIdCache _ | `ShardRowIdBits _ | `AlterIndexVisibility _ -> [])
         alter_actions
     | CreateRoutine (_, _, params) ->
       List.concat_map (fun (_, _, default) -> opt expr default) params
-    | Drop _ | Rename _ | CreateIndex _ | CreateType _ | DropType _
-    | CreateExtension _ | DropExtension _ -> []
+    | Drop _ | DropView _ | Rename _ | CreateIndex _ | CreateType _ | DropType _
+    | CreateExtension _ | DropExtension _
+    | CreateDatabase _ | DropDatabase _ | AlterDatabase _ | Truncate _ | RecoverTable _
+    | CreateSequence _ | AlterSequence _ | DropSequence _ -> []
 end
 
 let catch_diagnostics f =

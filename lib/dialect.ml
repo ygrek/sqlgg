@@ -38,6 +38,23 @@ type feature =
   | UserDefinedType [@as "user_defined_type"]
   | Extension [@as "extension"]
   | OnUpdateTimestamp [@as "on_update_timestamp"]
+  | ColumnComment [@as "column_comment"]
+  | PartitionOperations [@as "partition_operations"]
+  | RecoverTable [@as "recover_table"]
+  | RebaseAutoId [@as "rebase_auto_id"]
+  | AutoIdCache [@as "auto_id_cache"]
+  | ShardRowIdBits [@as "shard_row_id_bits"]
+  | IndexVisibility [@as "index_visibility"]
+  | IndexComment [@as "index_comment"]
+  | TableComment [@as "table_comment"]
+  | DatabaseDdl [@as "database_ddl"]
+  | DatabaseCharsetAndCollation [@as "database_charset_and_collation"]
+  | TruncateTable [@as "truncate_table"]
+  | CreateTableLike [@as "create_table_like"]
+  | RenameTable [@as "rename_table"]
+  | TiflashReplica [@as "tiflash_replica"]
+  | SequenceDdl [@as "sequence_ddl"]
+  | EnforcedCheck [@as "enforced_check"]
 [@@deriving show { with_path = false }, enumerate, to_string, of_string, json, jsonschema] [@@compact_variants]
 
 let show_feature x =
@@ -166,8 +183,6 @@ let get_alter_option ({ Sql.value; pos } : Sql.alter_option Sql.located) =
 let get_user_defined_type pos = only UserDefinedType [PostgreSQL] pos
 
 let get_extension pos = only Extension [PostgreSQL] pos
-
-let get_on_update_timestamp pos = only OnUpdateTimestamp [MySQL; TiDB] pos
 
 let get_default_expr ~kind ~expr pos =
   let open Sql in
@@ -358,24 +373,29 @@ and analyze_assignment_expr acc aes k = match aes with
 and analyze_column_def_internal acc cds k = match cds with
   | [] -> k acc
   | ({ kind; extra; _ }: Alter_action_attr.t) :: rest ->
-    let acc = List.fold_left (fun acc (c : Alter_action_attr.constraint_ located) ->
-      match c.value with
-      | Syntax_constraint Autoincrement -> get_autoincrement c.pos :: acc
-      | On_update -> get_on_update_timestamp c.pos :: acc
-      | Syntax_constraint _ | Default _ -> acc
-    ) acc extra in
-    let acc = extra
-      |> List.find_map (fun c ->
+    let acc, default_feature =
+      List.fold_left
+        (fun (acc, default_feature) (c : Alter_action_attr.constraint_ located) ->
           match c.value with
-          | Alter_action_attr.Default { expr = { value = expr; _ }; _ } ->
-              let col_kind = Option.map (fun k -> k.value.collated) kind in
-              Some (get_default_expr ~kind:col_kind ~expr c.pos)
-          | _ -> None)
-      |> Option.map_default (fun f -> f :: acc) acc
+          | Syntax_constraint Autoincrement -> get_autoincrement c.pos :: acc, default_feature
+          | On_update -> only OnUpdateTimestamp [MySQL; TiDB] c.pos :: acc, default_feature
+          | Comment _ -> only ColumnComment [MySQL; TiDB] c.pos :: acc, default_feature
+          | Collate col -> get_collation col c.pos :: acc, default_feature
+          | Check (Some enforcement) -> only EnforcedCheck [MySQL; TiDB] enforcement.pos :: acc, default_feature
+          | Default { expr = { value = expr; _ }; _ } ->
+              let default_feature = match default_feature with
+                | Some _ -> default_feature
+                | None ->
+                    let col_kind = Option.map (fun k -> k.value.collated) kind in
+                    Some (get_default_expr ~kind:col_kind ~expr c.pos)
+              in
+              acc, default_feature
+          | Syntax_constraint _ | Check None | Generated -> acc, default_feature)
+        (acc, None) extra
     in
-    let acc = kind |> Option.map (fun k -> k.value) |> Option.map_default (fun c -> check_collated c @ acc) acc in
+    let acc = Option.map_default (fun f -> f :: acc) acc default_feature in
     let acc = match kind with
-      | Some { pos; value = { collated; _ } } -> check_unsigned_type pos collated @ acc
+      | Some { pos; value } -> check_unsigned_type pos value.collated @ check_collated value @ acc
       | None -> acc
     in
     analyze_column_def_internal acc rest k
@@ -384,22 +404,67 @@ and analyze_alter_action acc actions k = match actions with
   | [] -> k acc
   | action :: rest ->
     match action with
-    | `Add (col, _) -> analyze_column_def_internal acc [col] (fun acc -> analyze_alter_action acc rest k)
-    | `Change (_, col, _) -> analyze_column_def_internal acc [col] (fun acc -> analyze_alter_action acc rest k)
-    | `Default_or_convert_to (_, collation) ->
-        let acc = check_collation_opt collation @ acc in
-        analyze_alter_action acc rest k
+    | `Add (col, _) | `Change (_, col, _) ->
+        analyze_column_def_internal acc [col] (fun acc -> analyze_alter_action acc rest k)
+    | `Default_or_convert_to (_, Some c) | `TableCollation c ->
+        analyze_alter_action (get_collation c.value c.pos :: acc) rest k
+    | `TableComment _ ->
+        analyze_alter_action (only TableComment [MySQL; TiDB] dummy_pos :: acc) rest k
+    | `AlterIndexVisibility _ ->
+        analyze_alter_action (only IndexVisibility [MySQL; TiDB] dummy_pos :: acc) rest k
     | `TtlOptions (_, pos) | `RemoveTtl pos ->
-        let acc = get_ttl pos :: acc in
-        analyze_alter_action acc rest k
+        analyze_alter_action (get_ttl pos :: acc) rest k
     | `Cache pos | `NoCache pos ->
-        let acc = get_cached_table pos :: acc in
-        analyze_alter_action acc rest k
+        analyze_alter_action (get_cached_table pos :: acc) rest k
     | `AlterColumnPG (_, { value; pos }) ->
-        let acc = get_alter_column value pos :: acc in
+        analyze_alter_action (get_alter_column value pos :: acc) rest k
+    | `AddIndex { add_idx_kind; add_idx_options; _ } ->
+        let acc = match add_idx_kind with
+          | Fulltext_idx -> get_fulltext_index dummy_pos :: acc
+          | Plain_idx | Unique_idx | Spatial_idx -> acc
+        in
+        analyze_alter_action (analyze_index_options acc add_idx_options) rest k
+    | `AddPrimaryKey (_, opts) ->
+        analyze_alter_action (analyze_index_options acc opts) rest k
+    | `AddConstraint (_, c) ->
+        analyze_alter_action (analyze_table_constraint acc c) rest k
+    | `AlterCheck _ ->
+        analyze_alter_action (only EnforcedCheck [MySQL; TiDB] dummy_pos :: acc) rest k
+    | `Default_or_convert_to (_, None)
+    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `DropIndex _ | `DropPrimaryKey | `DropConstraint _ ->
         analyze_alter_action acc rest k
-    | `Drop _ | `RenameTable _ | `RenameColumn _ | `RenameIndex _ | `AddIndex _ | `DropIndex _ | `AddPrimaryKey _ | `DropPrimaryKey | `AddConstraint _ | `DropConstraint _ ->
-        analyze_alter_action acc rest k
+    | `SetTiflashReplica _ ->
+        analyze_alter_action (only TiflashReplica [TiDB] dummy_pos :: acc) rest k
+    | `AutoIncrement (Rebase, _) ->
+        analyze_alter_action (only RebaseAutoId [MySQL; TiDB] dummy_pos :: acc) rest k
+    | `AutoIncrement (Force_rebase, _) | `AutoRandomBase _ ->
+        analyze_alter_action (only RebaseAutoId [TiDB] dummy_pos :: acc) rest k
+    | `AutoIdCache _ ->
+        analyze_alter_action (only AutoIdCache [TiDB] dummy_pos :: acc) rest k
+    | `ShardRowIdBits _ ->
+        analyze_alter_action (only ShardRowIdBits [TiDB] dummy_pos :: acc) rest k
+    | `DropPartition _ | `TruncatePartition _ | `TruncateAllPartitions | `ExchangePartition _ | `RemovePartitioning
+    | `AddPartition _ | `ReorganizePartition _ | `PartitionBy _ ->
+        let exprs = match action with
+          | `AddPartition defs | `ReorganizePartition (_, defs) -> Sql.partition_exprs defs
+          | `PartitionBy pb -> Sql.partition_by_exprs pb
+          | _ -> []
+        in
+        let acc = only PartitionOperations [MySQL; TiDB] dummy_pos :: acc in
+        analyze_expr acc exprs (fun acc -> analyze_alter_action acc rest k)
+
+and analyze_index_options acc (opts : Sql.index_option Sql.located list) =
+  List.fold_left
+    (fun acc ({ Sql.value; pos } : Sql.index_option Sql.located) ->
+      match value with
+      | Index_visibility _ -> only IndexVisibility [MySQL; TiDB] pos :: acc
+      | Index_comment _ -> only IndexComment [MySQL; TiDB] pos :: acc)
+    acc opts
+
+and analyze_table_constraint acc = function
+  | `Primary (_, opts) | `Unique (_, _, opts) -> analyze_index_options acc opts
+  | `Check (Some enforcement) -> only EnforcedCheck [MySQL; TiDB] enforcement.pos :: acc
+  | `Check None | `Foreign _ -> acc
 
 and analyze_insert_action acc ias k = match ias with
   | [] -> k acc
@@ -432,26 +497,33 @@ and analyze_insert_action acc ias k = match ias with
       analyze_assignment_expr acc conflict_aes (fun acc ->
         analyze_insert_action acc rest k))
 
-let analyze_schema_index idx = match idx.value.Sql.idx_kind with
-  | Regular_idx -> None
-  | Fulltext -> Some (get_fulltext_index idx.pos)
-  | Spatial -> None
-
 let rec analyze stmt =
   let acc = [] in
   match stmt with
-  | Sql.Create (_, Schema { schema; indexes; _ }) ->
-      let acc = List.rev_append (List.filter_map analyze_schema_index indexes) acc in
+  | Sql.Create (_, Schema { schema; constraints; indexes }) ->
+      let acc =
+        List.fold_left
+          (fun acc (idx : Sql.table_inline_index Sql.located) ->
+            let acc = match idx.value.idx_kind with
+              | Regular_idx | Spatial -> acc
+              | Fulltext -> get_fulltext_index idx.pos :: acc
+            in
+            analyze_index_options acc idx.value.idx_options)
+          acc indexes
+      in
+      let acc = List.fold_left analyze_table_constraint acc constraints in
       analyze_column_def_internal acc schema List.rev
   | Create (_, Select { value = select; pos }) ->
       let acc = get_create_table_as_select pos :: acc in
       analyze_select_full acc [select] List.rev
-  | Drop _ -> []
+  | Create (_, Like _) -> [only CreateTableLike [MySQL; TiDB] dummy_pos]
+  | Drop _ | DropView _ -> []
   | Alter { alter_actions = actions; alter_options = options; _ } ->
       let acc = List.rev_append (List.map get_alter_option options) acc in
       analyze_alter_action acc actions List.rev
-  | Rename _ -> []
-  | CreateIndex { ci_cols; _ } -> List.concat_map check_collated ci_cols
+  | Rename _ -> [only RenameTable [MySQL; TiDB] dummy_pos]
+  | CreateIndex { ci_cols; ci_options; _ } ->
+      List.concat_map check_collated ci_cols @ List.rev (analyze_index_options [] ci_options)
   | Insert insert_action ->
       analyze_insert_action acc [insert_action] List.rev
   | Delete (_, where_opt) ->
@@ -495,3 +567,19 @@ let rec analyze stmt =
   | DropType _ -> [get_user_defined_type (0, 0)]
   | CreateExtension _ -> [get_extension (0, 0)]
   | DropExtension _ -> [get_extension (0, 0)]
+  | CreateDatabase (_, None) | DropDatabase _ -> [only DatabaseDdl [MySQL; TiDB; PostgreSQL] dummy_pos]
+  | CreateDatabase (_, Some opt)
+  | AlterDatabase (_, Alter_db_option opt) ->
+      let collation_features =
+        match opt with
+        | Database_charset _ -> []
+        | Database_collation c | Database_charset_and_collation (_, c) -> [ get_collation c.value c.pos ]
+      in
+      only DatabaseDdl [MySQL; TiDB; PostgreSQL] dummy_pos
+      :: only DatabaseCharsetAndCollation [MySQL; TiDB] dummy_pos
+      :: collation_features
+  | AlterDatabase (_, Alter_db_tiflash_replica _) ->
+      [only DatabaseDdl [MySQL; TiDB; PostgreSQL] dummy_pos; only TiflashReplica [TiDB] dummy_pos]
+  | Truncate _ -> [only TruncateTable [MySQL; TiDB; PostgreSQL] dummy_pos]
+  | RecoverTable _ -> [only RecoverTable [TiDB] dummy_pos]
+  | CreateSequence _ | AlterSequence _ | DropSequence _ -> [only SequenceDdl [PostgreSQL; TiDB] dummy_pos]

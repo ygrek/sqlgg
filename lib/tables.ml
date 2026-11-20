@@ -153,7 +153,7 @@ let get_foreign_keys name =
 let create name ~columns ~indexes ~constraints =
   add_columns (name, columns);
   List.iter (fun (idx : Sql.table_inline_index Sql.located) ->
-    let { Sql.idx_name; idx_kind; idx_cols = cols; idx_unique } = idx.value in
+    let { Sql.idx_name; idx_kind; idx_cols = cols; idx_unique; idx_options = _ } = idx.value in
     let kind = match idx_kind with
       | Sql.Regular_idx -> if idx_unique then Sql.Unique_idx else Sql.Plain_idx
       | Sql.Fulltext -> Sql.Fulltext_idx
@@ -164,13 +164,13 @@ let create name ~columns ~indexes ~constraints =
     | None -> index_add_auto name ~kind ~cols
   ) indexes;
   List.iter (function
-    | `Unique (Some index_name, (_ :: _ as cols)) ->
+    | `Unique (Some index_name, (_ :: _ as cols), _) ->
       index_add name ~index_name ~kind:Sql.Unique_idx ~cols
-    | `Unique (None, (_ :: _ as cols)) ->
+    | `Unique (None, (_ :: _ as cols), _) ->
       index_add_auto name ~kind:Sql.Unique_idx ~cols
     | `Foreign foreign_key ->
       alter name (fun t -> { t with tbl_foreign_keys = t.tbl_foreign_keys @ [ foreign_key ] })
-    | `Unique (_, []) | `Primary _ | `Ignore -> ()
+    | `Unique (_, [], _) | `Primary _ | `Check _ -> ()
   ) constraints
 
 let singleton_unique_col (i : stored_index) =

@@ -953,7 +953,21 @@ type foreign_key = {
   fk_ref_cols : string list;
 } [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-type table_constraints = [ `Ignore | `Primary of string list | `Unique of string option * string list
+type check_enforcement = Enforced | Not_enforced
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
+
+type index_visibility = Visible | Invisible
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
+
+type index_option =
+  | Index_visibility of index_visibility
+  | Index_comment of string
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type table_constraints = [
+  | `Check of check_enforcement located option
+  | `Primary of string list * index_option located list
+  | `Unique of string option * string list * index_option located list
   | `Foreign of foreign_key ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type index_kind  =
@@ -967,7 +981,14 @@ module Alter_action_attr = struct
   type default = { expr : expr located; sql : string option }
     [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-  type constraint_ = Syntax_constraint of Constraint.t | Default of default | On_update
+  type constraint_ =
+    | Syntax_constraint of Constraint.t
+    | Default of default
+    | On_update
+    | Comment of string
+    | Collate of string
+    | Check of check_enforcement located option
+    | Generated
     [@@deriving show {with_path=false}, eq, json, jsonschema]
 
   type t = {
@@ -978,21 +999,31 @@ module Alter_action_attr = struct
   }
   [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-  let constraint_to_syntax_constraint = function
-    | Syntax_constraint c -> Some c
-    | Default _ -> Some WithDefault
-    | On_update -> None
-
   let default_sql (col : t) =
     List.find_map (fun (c : constraint_ located) ->
       match c.value with
       | Default { sql; _ } -> sql
-      | Syntax_constraint _ | On_update -> None
+      | Syntax_constraint _ | On_update | Comment _ | Collate _ | Check _ | Generated -> None
     ) col.extra
+
+  let collation (col : t) =
+    match col.kind with
+    | Some { value = { collation = Some _ as c; _ }; _ } -> c
+    | Some { value = { collation = None; _ }; _ } | None ->
+      List.find_map (fun (c : constraint_ located) ->
+        match c.value with
+        | Collate value -> Some { value; pos = c.pos }
+        | Syntax_constraint _ | Default _ | On_update | Comment _ | Check _ | Generated -> None
+      ) col.extra
 
   let to_attr (x: t): attr = make_attribute x.name.value
     (Option.map (fun k -> Source_type.kind_to_type_kind k.value.collated) x.kind)
-    (Constraints.of_list (List.filter_map (fun c -> constraint_to_syntax_constraint c.value) x.extra))
+    (Constraints.of_list (List.filter_map (fun (c : constraint_ located) ->
+      match c.value with
+      | Syntax_constraint constraint_ -> Some constraint_
+      | Default _ -> Some WithDefault
+      | On_update | Comment _ | Collate _ | Check _ | Generated -> None
+    ) x.extra))
     ~meta:x.meta
 
   (* All attributes were already checked for dialect and default expression when writing to Tables,
@@ -1026,17 +1057,24 @@ type table_inline_index = {
   idx_name : string option;
   idx_cols : string list;
   idx_unique : bool;
+  idx_options : index_option located list;
 }
 [@@deriving show {with_path=false}, eq, json, jsonschema]
 
-type add_index = { add_idx_name : string option; add_idx_kind : index_op_kind; add_idx_cols : string list }
-  [@@deriving show {with_path=false}, eq, json, jsonschema]
+type add_index = {
+  add_idx_name : string option;
+  add_idx_kind : index_op_kind;
+  add_idx_cols : string list;
+  add_idx_options : index_option located list;
+}
+[@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type create_index_def = {
   ci_name : string;
   ci_table : table_name;
   ci_cols : string collated list;
   ci_kind : index_op_kind;
+  ci_options : index_option located list;
 }
 [@@deriving show {with_path=false}, eq, json, jsonschema]
 
@@ -1050,6 +1088,7 @@ type create_target_schema = {
 type create_target =
   | Schema of create_target_schema
   | Select of select_full located
+  | Like of table_name
 [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 type charset_name = Named of string | Binary | Ascii | Unicode
@@ -1070,6 +1109,101 @@ module Alter_column_pg = struct
   [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 end
 
+type partition_bound =
+  | Less_than of expr list
+  | Less_than_maxvalue
+  | In_values of expr list
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type partition_definition = {
+  partition_name : string;
+  partition_bound : partition_bound option;
+}
+[@@deriving show {with_path=false}, eq, json, jsonschema]
+
+let partition_exprs definitions =
+  List.concat_map
+    (fun { partition_bound; _ } ->
+      match partition_bound with
+      | Some (Less_than values | In_values values) -> values
+      | Some Less_than_maxvalue | None -> [])
+    definitions
+
+type partition_by_method =
+  | Partition_hash of expr
+  | Partition_linear_hash of expr
+  | Partition_key of int option * string list
+  | Partition_linear_key of int option * string list
+  | Partition_range_expr of expr
+  | Partition_range_columns of string list
+  | Partition_list_expr of expr
+  | Partition_list_columns of string list
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type partition_by = {
+  partition_method : partition_by_method;
+  partition_count : int option;
+  partitions : partition_definition list;
+}
+[@@deriving show {with_path=false}, eq, json, jsonschema]
+
+let partition_by_exprs { partition_method; partitions; _ } =
+  let method_exprs =
+    match partition_method with
+    | Partition_hash expr
+    | Partition_linear_hash expr
+    | Partition_range_expr expr
+    | Partition_list_expr expr -> [ expr ]
+    | Partition_key _
+    | Partition_linear_key _
+    | Partition_range_columns _
+    | Partition_list_columns _ -> []
+  in
+  method_exprs @ partition_exprs partitions
+
+type auto_id_rebase = Rebase | Force_rebase
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
+
+type tiflash_replica_mode = Tiflash_replica | Hypo_tiflash_replica
+  [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
+
+type tiflash_replica = {
+  replica_count : int;
+  location_labels : string list;
+}
+[@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type database_option =
+  | Database_charset of charset_name
+  | Database_collation of string located
+  | Database_charset_and_collation of charset_name * string located
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type alter_database_spec =
+  | Alter_db_option of database_option
+  | Alter_db_tiflash_replica of tiflash_replica
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type sequence_option =
+  | Seq_increment of int
+  | Seq_start of int
+  | Seq_minvalue of int
+  | Seq_no_minvalue
+  | Seq_maxvalue of int
+  | Seq_no_maxvalue
+  | Seq_cache of int
+  | Seq_no_cache
+  | Seq_cycle
+  | Seq_no_cycle
+  | Seq_as_type of Source_type.kind
+  | Seq_comment of string
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
+type alter_sequence_option =
+  | Alter_seq_option of sequence_option
+  | Alter_seq_restart of int option
+  [@@deriving show {with_path=false}, eq, json, jsonschema]
+
 type alter_action = [
     | `Add of Alter_action_attr.t * alter_pos
     | `RenameTable of table_name
@@ -1079,15 +1213,32 @@ type alter_action = [
     | `Change of string * Alter_action_attr.t * alter_pos
     | `AddIndex of add_index
     | `DropIndex of string
-    | `AddPrimaryKey of string list
+    | `AddPrimaryKey of string list * index_option located list
     | `DropPrimaryKey
-    | `AddConstraint of string option
+    | `AddConstraint of string option * table_constraints
     | `DropConstraint of string
+    | `AlterCheck of string * check_enforcement
     | `Default_or_convert_to of (charset_name * string located option)
+    | `TableCollation of string located
+    | `TableComment of string
     | `TtlOptions of ttl_option list * Pos.t
     | `RemoveTtl of Pos.t
     | `Cache of Pos.t
     | `NoCache of Pos.t
+    | `DropPartition of string
+    | `TruncatePartition of string
+    | `TruncateAllPartitions
+    | `ExchangePartition of string * table_name
+    | `ReorganizePartition of string * partition_definition list
+    | `AddPartition of partition_definition list
+    | `PartitionBy of partition_by
+    | `RemovePartitioning
+    | `SetTiflashReplica of tiflash_replica_mode * tiflash_replica
+    | `AutoIncrement of auto_id_rebase * int
+    | `AutoRandomBase of auto_id_rebase * int
+    | `AutoIdCache of int
+    | `ShardRowIdBits of int
+    | `AlterIndexVisibility of string * index_visibility
     | `AlterColumnPG of string * Alter_column_pg.t located ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type alter_algorithm =
@@ -1123,6 +1274,7 @@ type create_type_target =
 type stmt =
   | Create of table_name located * create_target
   | Drop of table_name
+  | DropView of table_name
   | Alter of alter
   | Rename of (table_name * table_name) list
   | CreateIndex of create_index_def
@@ -1138,6 +1290,14 @@ type stmt =
   | DropType of string * bool
   | CreateExtension of string
   | DropExtension of string list
+  | CreateDatabase of string * database_option option
+  | DropDatabase of string
+  | AlterDatabase of string * alter_database_spec
+  | Truncate of table_name
+  | RecoverTable of table_name
+  | CreateSequence of table_name * sequence_option list
+  | AlterSequence of table_name * alter_sequence_option list
+  | DropSequence of table_name list
   [@@deriving show {with_path=false}, eq, json, jsonschema]
 
 (*

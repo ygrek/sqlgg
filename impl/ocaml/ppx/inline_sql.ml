@@ -151,6 +151,7 @@ let () =
         | Id _ -> reject_migration_property "id"
         | Down _ -> reject_migration_property "down"
         | Irreversible -> reject_migration_property "irreversible"
+        | Bdr_non_replicable -> reject_migration_property "bdr_non_replicable"
         | Auto -> reject_migration_property "generated"
         | Manual -> reject_migration_property "manual"
         | Name _ | File _ | Noop -> ())

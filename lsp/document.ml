@@ -140,9 +140,11 @@ let check ~file (stmt : Statements.t) =
       | Sql.UpdateMulti (from, _, _, _, _) -> scope (Some from)
       | Sql.DeleteMulti (_, tables, _) -> scope (Some tables)
       | Sql.Insert { action = (`Set _ | `Values _ | `Param _); _ }
-      | Sql.Create _ | Sql.Drop _ | Sql.Alter _ | Sql.Rename _ | Sql.CreateIndex _ | Sql.Set _
+      | Sql.Create _ | Sql.Drop _ | Sql.DropView _ | Sql.Alter _ | Sql.Rename _ | Sql.CreateIndex _ | Sql.Set _
       | Sql.CreateRoutine _ | Sql.CreateType _ | Sql.DropType _
-      | Sql.CreateExtension _ | Sql.DropExtension _ -> [], [], []
+      | Sql.CreateExtension _ | Sql.DropExtension _
+      | Sql.CreateDatabase _ | Sql.DropDatabase _ | Sql.AlterDatabase _ | Sql.Truncate _ | Sql.RecoverTable _
+      | Sql.CreateSequence _ | Sql.AlterSequence _ | Sql.DropSequence _ -> [], [], []
     in
     match exn with
     | Parser_utils.Error _ -> recovery_scope stmt.text
