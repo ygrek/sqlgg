@@ -2970,11 +2970,37 @@ let test_join_hole_whitespace =
       [`Text "FROM a"; join " LEFT JOIN b ON b.a = a.id"; `Text "\nWHERE note = '  two  spaces  '"];
   ]
 
+let test_split_locates_statements () =
+  let located sql =
+    List.map (fun (stmt : Statements.t) -> stmt.src.file, stmt.src.line) (Statements.split sql)
+  in
+  let printer located =
+    String.concat "; "
+      (List.map (fun (file, line) -> sprintf "%s:%d" (Stdlib.Option.value file ~default:"-") line) located)
+  in
+  assert_equal ~printer [ None, 1; None, 4 ] (located "a;\n\n-- note\nb");
+  assert_equal ~printer ~msg:"a directive holds until the next one"
+    [ Some "x.sql", 7; Some "x.sql", 9; Some "y.sql", 1 ]
+    (located "# 7 \"x.sql\"\na;\n\nb;\n# 1 \"y.sql\"\nc");
+  assert_equal ~printer ~msg:"only at the start of a line"
+    [ None, 1; None, 2 ]
+    (located "a; # 7 \"x.sql\"\nb");
+  assert_equal ~printer ~msg:"the file is written as an OCaml string literal"
+    [ Some "d\"q/\xd1\x8f.sql", 1 ]
+    (located (sprintf "# 1 %S\na" "d\"q/\xd1\x8f.sql"));
+  assert_equal ~printer ~msg:"a malformed directive is an ordinary comment"
+    [ None, 2; None, 4 ]
+    (located "# 7 \"bad\\qescape.sql\"\na;\n# 99999999999999999999 \"x.sql\"\nb");
+  assert_equal ~printer ~msg:"a statement is located by its first line"
+    [ None, 1; Some "x.sql", 8 ]
+    (located "a\n# 7 \"x.sql\"\nb;\nc")
+
 let test_strip_comments_preserves_token_boundaries () =
   let statement : Statements.t =
     { text = "a/*x*/b/*yy*/c";
       props = [];
       pos = 0, 14;
+      src = { file = None; line = 1 };
       metadata = [ 6, [ "first", "1" ]; 13, [ "second", "2" ] ];
       comments = [ 1, 6; 7, 13 ];
       errors = [] }
@@ -3130,6 +3156,7 @@ let run () =
     "test_nullability_narrowing" >::: test_nullability_narrowing;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
+    "test_split_locates_statements" >:: test_split_locates_statements;
     "test_strip_comments_preserves_token_boundaries"
     >:: test_strip_comments_preserves_token_boundaries;
     "test_capture_restores_on_exception" >:: test_capture_restores_on_exception;

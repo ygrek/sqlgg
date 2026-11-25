@@ -336,6 +336,12 @@ rule ruleStatement = parse
   | cmnt wsp* "@" (ident+ as name) [^'|' '\n']* '\n' { `Props [("name", name)] }
   | '"' dq '"' | "'" sq "'" | '`' bq '`' | '[' sb ']' { `Literal }
   | "$" (ident? as tag) "$" { if Option.is_some (ruleInDollarQuotes tag lexbuf) then `Literal else `Open_literal }
+  | '#' wsp* (digit+ as line) wsp* '"' (([^'"' '\\' '\n'] | '\\' [^'\n'])+ as file) '"' wsp* '\n'?
+    { try
+        match int_of_string_opt line with
+        | Some line -> `Line_directive (line, Scanf.unescaped file)
+        | None -> `Comment
+      with Scanf.Scan_failure _ -> `Comment }
   | line_comment | block_comment { `Comment }
   | open_string | open_comment { `Open_literal }
   | ';' { `Semicolon }

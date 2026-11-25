@@ -182,7 +182,7 @@ let generate out _ stmts =
 let generate_migrations _name migrations =
   let nodes = List.mapi (fun index (m : Gen_migrations.migration) ->
     let name = Query.name m.props m.kind index in
-    Node ("migration", ["name", name; "apply", String.concat ";\n" m.apply; "revert", Option.map_default (String.concat ";\n") "" m.revert], [])
+    Node ("migration", ["name", name; "apply", String.concat ";\n" m.apply.sql; "revert", Option.map_default (fun (s : Gen_migrations.step) -> String.concat ";\n" s.sql) "" m.revert], [])
   ) migrations in
   let root = Node ("migrations", [], nodes) in
   print_endline xml_declaration;

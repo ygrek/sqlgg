@@ -68,7 +68,7 @@ let make (document : Document.t) offset =
     |> Seq.take_while (fun ((start, _), _) -> start <= offset)
     |> Seq.exists (fun (pos, lexeme) ->
       match lexeme with
-      | `Literal | `Open_literal | `Comment | `Props _ | `Bad_props ->
+      | `Literal | `Open_literal | `Comment | `Line_directive _ | `Props _ | `Bad_props ->
         Sql.Pos.contains pos offset
       | `Text | `Blank | `Semicolon -> false)
   in
@@ -79,6 +79,7 @@ let make (document : Document.t) offset =
       | None ->
         { text = hole;
           pos = (start, start + String.length hole);
+          src = { file = None; line = Line_index.line (Line_index.make text) start + 1 };
           props = [];
           metadata = [];
           comments = [];

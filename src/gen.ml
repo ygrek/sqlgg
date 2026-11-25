@@ -122,7 +122,28 @@ let make_indent () = String.make !indentation ' '
 
 let sink = ref (fun s -> print_string s; if String.equal s "\n" then flush stdout)
 
-let emit s = !sink s
+let line_directives : string option ref = ref None
+let query_directive : string option ref = ref None
+let output_line : int ref = ref 1
+
+let emit s =
+  !sink s;
+  if Option.is_some !line_directives then
+    String.iter (fun c -> if c = '\n' then incr output_line) s
+
+let emit_line str =
+  Option.may emit !query_directive;
+  emit str;
+  emit "\n"
+
+let with_src (src : Query.src option) f =
+  match !line_directives, src with
+  | None, _ | Some _, None -> f ()
+  | Some generated_file, Some { file; line } ->
+    let directive line file = sprintf "# %d %S\n" line file in
+    query_directive := Some (directive line file);
+    Fun.protect f ~finally:(fun () -> query_directive := None);
+    emit (directive (!output_line + 1) generated_file)
 
 let capture f =
   let buffer = Buffer.create 4096 in
@@ -137,7 +158,7 @@ let capture f =
 
 let print_indent () = emit (make_indent ())
 let indent s = print_indent (); emit s
-let indent_endline s = print_indent (); emit (String.trim s); emit "\n"
+let indent_endline s = emit_line (make_indent () ^ String.trim s)
 let output fmt = ksprintf indent_endline fmt
 let output_l = List.iter indent_endline
 let print fmt = ksprintf (fun s -> emit s; emit "\n") fmt

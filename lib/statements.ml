@@ -2,10 +2,13 @@ open Stdlib
 
 type metadata = (string * string) list
 
+type src = { file : string option; line : int }
+
 type t = {
   text : string;
   props : Props.t list;
   pos : Sql.Pos.t;
+  src : src;
   metadata : (int * metadata) list;
   comments : Sql.Pos.t list;
   errors : (Sql.Pos.t * string) list;
@@ -17,6 +20,7 @@ type stmt_acc = {
   metadata : (int * metadata) list;
   comments : Sql.Pos.t list;
   errors : (Sql.Pos.t * string) list;
+  src : src;
   start : int;
   end_ : int;
 }
@@ -32,6 +36,7 @@ type lexeme = [
   | `Blank
   | `Semicolon
   | `Comment
+  | `Line_directive of int * string
   | `Props of (string * string) list
   | `Bad_props
 ]
@@ -45,8 +50,9 @@ let lexemes text : (Sql.Pos.t * lexeme) Seq.t =
     | #lexeme as lexeme -> Some ((start, lexbuf.Lexing.lex_curr_pos), lexeme))
 
 let split text =
+  let index = Line_index.make text in
   let initial = Prefix ([], []) in
-  let take state (start, end_) =
+  let take origin state (start, end_) =
     match state with
     | Statement ({ next_props = []; _ } as stmt) ->
       Statement { stmt with end_ }
@@ -58,7 +64,11 @@ let split text =
         end_;
       }
     | Prefix (props, errors) ->
-      Statement { props; next_props = []; metadata = []; comments = []; errors; start; end_ }
+      Statement {
+        props; next_props = []; metadata = []; comments = []; errors;
+        src = { origin with line = origin.line + Line_index.line index start };
+        start; end_;
+      }
   in
   let parse key value =
     let flag prop =
@@ -99,6 +109,7 @@ let split text =
     { text = String.sub text stmt.start (stmt.end_ - stmt.start);
       props = stmt.props;
       pos = (stmt.start, stmt.end_);
+      src = stmt.src;
       metadata = List.rev stmt.metadata;
       comments = List.rev_map rebase (List.filter (fun (_, stop) -> stop <= stmt.end_) stmt.comments);
       errors = List.rev stmt.errors }
@@ -107,12 +118,12 @@ let split text =
     | Prefix _ -> acc
     | Statement stmt -> block_of_acc stmt :: acc
   in
-  let step (acc, state) (pos, lexeme) =
+  let step origin (acc, state) (pos, lexeme) =
     match lexeme, state with
-    | `Blank, _ | `Comment, Prefix _ -> acc, state
-    | (`Text | `Literal), _ -> acc, take state pos
-    | `Open_literal, _ -> finish_all acc (take state pos), initial
-    | `Comment, Statement stmt -> acc, Statement (comment stmt pos)
+    | `Blank, _ | (`Comment | `Line_directive _), Prefix _ -> acc, state
+    | (`Text | `Literal), _ -> acc, take origin state pos
+    | `Open_literal, _ -> finish_all acc (take origin state pos), initial
+    | (`Comment | `Line_directive _), Statement stmt -> acc, Statement (comment stmt pos)
     | `Props pairs, Prefix (props, errors) ->
       let (props, errors) = properties pos pairs (props, errors) in
       acc, Prefix (props, errors)
@@ -123,7 +134,24 @@ let split text =
       acc, Statement { (comment stmt pos) with errors = (pos, "malformed property list") :: stmt.errors }
     | `Semicolon, _ -> finish_all acc state, initial
   in
-  let (acc, state) = Seq.fold_left step ([], initial) (lexemes text) in
+  let follow origin ((start, _), lexeme) =
+    match lexeme with
+    | `Line_directive (line, file) ->
+      (match Line_index.position index start with
+       | { Line_index.line = directive_line; character = 0 } ->
+         { file = Some file; line = line - directive_line - 1 }
+       | { character = _; _ } -> origin)
+    | `Text | `Literal | `Open_literal | `Blank | `Semicolon | `Comment | `Props _ | `Bad_props ->
+      origin
+  in
+  let (acc, state, _) =
+    Seq.fold_left
+      (fun (acc, state, origin) item ->
+        let (acc, state) = step origin (acc, state) item in
+        acc, state, follow origin item)
+      ([], initial, { file = None; line = 1 })
+      (lexemes text)
+  in
   List.rev (finish_all acc state)
 
 let comment_separator text (start, stop) =
@@ -189,14 +217,14 @@ let unstripped_offset (stmt : t) offset =
         offset)
     offset stmt.comments
 
-let glue_downs blocks =
+let pair_downs blocks =
   let has_id (block : t) = Option.is_some (Props.id block.props) in
   let rec loop = function
     | up :: down :: rest
       when has_id up && Option.is_none (Props.down up.props) && not (Props.has Irreversible up.props)
            && not (has_id down) ->
-      { up with props = Props.Down down.text :: up.props } :: loop rest
-    | block :: rest -> block :: loop rest
+      (up, Some down) :: loop rest
+    | block :: rest -> (block, None) :: loop rest
     | [] -> []
   in
   loop blocks

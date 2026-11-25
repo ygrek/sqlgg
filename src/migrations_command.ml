@@ -1,15 +1,24 @@
 open Sqlgg
 
+type line_directives =
+  | Omit_line_directives
+  | Emit_line_directives
+
 type destination =
   | Stdout
-  | File of string
+  | File of { filename : string; line_directives : line_directives }
+
+type migration_log = {
+  source : string;
+  output : string option;
+}
 
 type generation = {
   dialect : [ `MySQL | `TiDB ];
   schema_file : string;
   initial_file : string option;
   baseline : Sqlgg_migrations.Migration_id.t option;
-  migrations_file : string;
+  migration_log : migration_log;
   manual_file : string option;
   module_name : string;
   now : int64 option;
@@ -93,8 +102,15 @@ let parse argv =
     let migrations_file =
       required_string "migrations" ~docv:"FILE"
         ~doc:
-          "The migration log. Read to learn the current schema; new \
-           migrations are appended to it in place. May not exist yet."
+          "The migration log to read. New migrations are appended to it \
+           unless $(b,--migrations-output) is given. May not exist yet."
+    in
+    let migrations_output =
+      optional_file "migrations-output"
+        ~doc:
+          "Write the complete migration log to $(docv), leaving \
+           $(b,--migrations) untouched. The file is written even when \
+           there is no new migration."
     in
     let manual_file =
       optional_file "manual"
@@ -182,6 +198,20 @@ let parse argv =
                is left untouched when generation fails. The default is \
                standard output.")
     in
+    let line_directives =
+      Arg.(
+        value
+        & vflag Omit_line_directives
+            [
+              ( Emit_line_directives,
+                info [ "line-directives" ]
+                  ~doc:
+                    "Emit $(b,# <line> \"<file.sql>\") directives in the \
+                     generated OCaml module. Requires $(b,--output), whose \
+                     path is used to hand line numbering back outside \
+                     migration functions." );
+            ])
+    in
     Term.(
       term_result' ~usage:false
         (const
@@ -192,29 +222,42 @@ let parse argv =
              initial_file
              baseline
              migrations_file
+             migrations_output
              manual_file
              module_name
              now
              new_tables
              output_file
+             line_directives
            ->
+             let destination =
+               match output_file, line_directives with
+               | None, Omit_line_directives -> Ok Stdout
+               | None, Emit_line_directives ->
+                   Error "--line-directives requires --output"
+               | Some filename, line_directives ->
+                   Ok (File { filename; line_directives })
+             in
              let supported dialect =
-               Ok
-                 {
-                   dialect;
-                   schema_file;
-                   initial_file;
-                   baseline;
-                   migrations_file;
-                   manual_file;
-                   module_name;
-                   now;
-                   new_tables;
-                   destination =
-                     (match output_file with
-                      | None -> Stdout
-                      | Some filename -> File filename);
-                 }
+               Result.map
+                 (fun destination ->
+                   {
+                     dialect;
+                     schema_file;
+                     initial_file;
+                     baseline;
+                     migration_log =
+                       {
+                         source = migrations_file;
+                         output = migrations_output;
+                       };
+                     manual_file;
+                     module_name;
+                     now;
+                     new_tables;
+                     destination;
+                   })
+                 destination
              in
              match dialect, host_language with
              | (Dialect.PostgreSQL | Dialect.SQLite), _ ->
@@ -234,11 +277,13 @@ let parse argv =
          $ initial_file
          $ baseline
          $ migrations_file
+         $ migrations_output
          $ manual_file
          $ module_name
          $ now
          $ new_tables
-         $ destination))
+         $ destination
+         $ line_directives))
   in
   let generate =
     Cmd.v

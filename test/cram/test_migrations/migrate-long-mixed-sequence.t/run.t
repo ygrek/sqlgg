@@ -2,7 +2,7 @@ Long sequence with manual and generated migrations interleaved by `id`, in the
 declarative -migrate / block format - the single migrations tool. Every
 migration is anchored with `-- [sqlgg] id=N`; the statement that follows an
 id-anchored up (and carries no id of its own) is taken as that migration's down
-(see glue_downs). The `id` does all the disambiguation, so up and down are just
+(see pair_downs). The `id` does all the disambiguation, so up and down are just
 two plain statements - no special flag is involved.
 All inputs are hand-written: initial.sql (baseline), extends.sql (MANUAL blocks,
 with a hand-written up and down, read-only), seed.sql (the GENERATED blocks from
