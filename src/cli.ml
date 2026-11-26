@@ -34,7 +34,7 @@ let process_json module_name queries =
     | Some `Static | None -> None
   in
   Query.document_to_json
-    { sqlgg_version; module_name; dialect = !Dialect.selected; params = !Gen.params_mode;
+    { sqlgg_version; module_name; dialect = Dialect.dialect_of_configuration !Sqlgg_config.dialect; params = !Gen.params_mode;
       queries; tables = Tables.snapshot () }
   |> Yojson.Basic.to_channel ~suf:"\n" stdout
 
@@ -241,15 +241,31 @@ let print_json_schema schema () =
   print_newline ();
   exit 0
 
-let select_dialect d =
-  Dialect.set_selected d;
+let select_dialect configuration =
+  Sqlgg_config.configure_dialect configuration;
   Gen.params_mode :=
-    Gen.resolve_params_mode ~dialect:(Some d) !params_selection
+    Gen.resolve_params_mode
+      ~dialect:(Some (Dialect.dialect_of_configuration !Sqlgg_config.dialect))
+      !params_selection
 
-let set_dialect s =
-  match Dialect.of_string s with
-  | Some d -> select_dialect d
-  | None -> failwith (sprintf "Unknown dialect: %s" s)
+let set_dialect specification =
+  match Dialect.parse_configuration specification with
+  | Ok configuration -> select_dialect configuration
+  | Error (Dialect.Unknown_dialect dialect_name) ->
+    failwith (sprintf "Unknown dialect: %s" dialect_name)
+  | Error (Dialect.Settings_not_supported row_store) ->
+    fatal "dialect %s does not accept settings"
+      (Dialect.to_string (Dialect.row_store_dialect row_store))
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Malformed_setting raw_setting)) ->
+    fatal "malformed ClickHouse setting %S (expected name=value)" raw_setting
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Unknown_setting setting)) ->
+    fatal "unknown ClickHouse setting %S" setting
+  | Error (Dialect.Invalid_clickhouse_setting
+      (Sql_semantics.ClickHouse.Setting.Invalid_setting_value { setting; value })) ->
+    fatal "invalid value %S for ClickHouse setting %s (expected 0 or 1)"
+      value (Sql_semantics.ClickHouse.Setting.name_to_string setting)
 
 let enum_values to_string values =
   String.concat "|" (List.map to_string values)
@@ -424,7 +440,7 @@ let parse_args () =
     [
       "-gen", Arg.String (fun s -> output := parse_output s), "cxx|caml|caml_io|java|xml|json|csharp|sql|none Set output language (default: none)";
       "-name", Arg.String (fun x -> name := x), "<identifier> Set output module name (default: sqlgg)";
-      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
+      "-params", Arg.String set_params_mode, "named|unnamed|oracle|postgresql|clickhouse|none Output query parameters substitution (default: auto-detected from dialect, can be overridden)";
       "-category", Arg.String set_category, sprintf "{all|none|[-]<category>{,<category>}+} Only generate code for these specific query categories (possible values: %s)" all_categories;
       "-open", Arg.String open_input, "<file> Make definitions (schema, reusable queries) from <file> available without generating code for it (unless the file is also given as an input)";
       "-dynamic-select", Arg.Set Sqlgg_config.dynamic_select,
@@ -468,12 +484,13 @@ let parse_args () =
     { title = "Dialect and checks"; opts =
     [
       "-dialect", Arg.String set_dialect,
-        sprintf "%s Set SQL dialect. Queries can only use its features"
+        sprintf "%s Set SQL dialect. Queries can only use its features. ClickHouse session settings follow the name: clickhouse,join_use_nulls=1,..."
           (enum_values Dialect.to_string Dialect.all);
       "-no-check", Arg.String set_no_check,
         sprintf "{all|<feature>{,<feature>}+} Disable dialect feature checks (possible features: %s)"
           (enum_values Dialect.feature_to_string Dialect.all_of_feature);
-      "-allow-write-notnull-null", Arg.Unit (fun () -> Sqlgg_config.allow_write_notnull_null true), " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only)";
+      "-allow-write-notnull-null", Arg.Unit Sqlgg_config.allow_write_notnull_null,
+        " Accept writing a nullable value into a NOT NULL column, instead of failing (MySQL, TiDB and SQLite only; for ClickHouse use -dialect clickhouse,insert_null_as_default=1)";
     ] };
 
     { title = "Generated header"; opts =
@@ -528,13 +545,13 @@ let parse_args () =
   if !max_id_length > Sqlgg_migrations.Migration_id.max_length then
     fatal "-max-migration-id-length %d is above %d, the width of the migration id column"
       !max_id_length Sqlgg_migrations.Migration_id.max_length;
-  begin match !alter_lock, !Dialect.selected with
-  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB) ->
+  begin match !alter_lock, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.TiDB | Dialect.ClickHouse) ->
     fatal "-alter-lock is only supported for dialect mysql"
   | None, _ | Some _, Dialect.MySQL -> ()
   end;
-  begin match !alter_algorithm, !Dialect.selected with
-  | Some _, (Dialect.PostgreSQL | Dialect.SQLite) ->
+  begin match !alter_algorithm, Dialect.dialect_of_configuration !Sqlgg_config.dialect with
+  | Some _, (Dialect.PostgreSQL | Dialect.SQLite | Dialect.ClickHouse) ->
     fatal "-alter-algorithm is only supported for dialects mysql and tidb"
   | None, _ | Some _, (Dialect.MySQL | Dialect.TiDB) -> ()
   end;
@@ -773,6 +790,7 @@ let run_ir () =
   Arg.current := 1;
   Arg.parse
     (Arg.align [
+      "-dialect",     Arg.String set_dialect,                              "<dialect> Parse under this dialect (see the main -dialect option)";
       "-schema",      Arg.String (fun f -> schema := Some f),              "<file> Also check statements against this schema";
       "-plain-sql",   Arg.Set plain_sql,                                   " Reject sqlgg extensions";
       "-json-schema", Arg.Unit (print_json_schema Ir.document_jsonschema), " Print the JSON Schema of the document and exit";
@@ -785,12 +803,16 @@ let run_ir () =
       "Options are:";
     ]);
   let files = match List.rev !files with [] -> [ "-" ] | files -> files in
+  let semantics = Sqlgg_config.semantics () in
   let statements_of_sql =
     match !schema with
-    | None -> Ir.parse ~allow_extensions:(not !plain_sql)
+    | None -> Ir.parse ~allow_extensions:(not !plain_sql) ~semantics
     | Some path ->
-      match Analysis.context_of_schema_sql (read_path path) with
-      | Ok context -> Ir.analyze ~allow_extensions:(not !plain_sql) ~context
+      match
+        Analysis.context_of_schema_sql ~dialect:(Analysis.Unchecked !Sqlgg_config.dialect)
+          (read_path path)
+      with
+      | Ok context -> Ir.analyze ~allow_extensions:(not !plain_sql) ~semantics ~context
       | Error (_, first, rest) ->
         bad_input "schema %s: %s" path
           (String.concat "; " (List.map (fun d -> d.Analysis.message) (first :: rest)))
@@ -812,9 +834,10 @@ let run_migrations () =
         migration_log; manual_file; module_name; now; new_tables;
         destination } ->
     select_dialect
-      (match dialect with
-       | `MySQL -> Dialect.MySQL
-       | `TiDB -> Dialect.TiDB);
+      (Dialect.default_configuration
+         (match dialect with
+          | `MySQL -> Dialect.MySQL
+          | `TiDB -> Dialect.TiDB));
     Sqlgg_config.gen_header := Some `Static;
     let generate () =
       run_migrate

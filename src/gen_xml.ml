@@ -79,8 +79,22 @@ let tuplelist_value_of_param = function
     Some (Node ("value", attrs, []))
   | _ -> None
 
-(* open Gen_caml.L *)
-open Gen_caml.T
+open Gen.Translate (struct
+  let rec as_lang_type (t : Sql.Type.t) =
+    let element (element : Sql.Type.t) =
+      match element.nullability with
+      | Nullable -> as_lang_type element ^ "?"
+      | Strict | Depends -> as_lang_type element
+    in
+    match t.t with
+    | Array e -> sprintf "Array(%s)" (element e)
+    | Map (key, value) -> sprintf "Map(%s, %s)" (element key) (element value)
+    | Tuple elements -> sprintf "Tuple(%s)" (String.concat ", " (List.map element elements))
+    | Fun (arguments, result) ->
+      sprintf "(%s) -> %s" (String.concat ", " (List.map element arguments)) (element result)
+    | Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _ | Union _ | StringLiteral _
+    | FloatingLiteral _ | Json_path | One_or_all | Json | Any -> Gen_caml.L.as_lang_type t
+end)
 
 let params_to_values = List.map value $ all_params_to_values
 let inparams_to_values = List.map (value ~inparam:true) $ all_params_to_values

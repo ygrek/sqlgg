@@ -14,10 +14,10 @@ type trace = {
   sources : Sql.source list;
 }
 
-type run = private { trace : trace; stop : stop }
+type run = private { trace : trace; stop : stop; parse : Parser_state.parse }
 
-val run : string -> int -> run
-val tokens : string -> lexeme list
+val run : Dialect.Semantic.t -> string -> int -> run
+val tokens : Dialect.Semantic.t -> string -> lexeme list
 val accepts : run -> Sql_tokens.token -> bool
 
 type role =

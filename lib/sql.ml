@@ -56,6 +56,13 @@ struct
 
   type decimal = { precision: int option; scale: int option } [@@deriving eq, show{with_path=false}, json, jsonschema]
 
+  type nullability =
+  | Nullable (** can be NULL *)
+  | Strict (** cannot be NULL *)
+  | Depends (** unknown, to be determined *)
+  [@@deriving eq, show{with_path=false}, json, jsonschema] [@@compact_variants]
+
+  (* Ground types carry nullability independently at every recursive node. *)
   type kind =
     | Int
     | UInt64
@@ -72,25 +79,38 @@ struct
     | One_or_all
     | Json
     | Any (* FIXME - Top and Bottom ? *)
-    [@@deriving eq, show{with_path=false}, json, jsonschema] [@@compact_variants]
+    | Array of t
+    | Map of t * t
+    | Tuple of t list
+    | Fun of t list * t
+    [@@compact_variants]
     (* TODO NULL is currently typed as Any? which actually is a misnormer *)
+  and t = { t : kind; nullability : nullability; }
+  [@@deriving eq, show{with_path=false}, json, jsonschema]
 
-    let show_kind = function
-      | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
-      | StringLiteral l -> sprintf "StringLiteral (%s)" l
-      | FloatingLiteral f -> sprintf "FloatingLiteral (%g)" f
-      | Decimal { precision = Some p; scale = Some s } -> sprintf "Decimal(%d,%d)" p s
-      | Decimal { precision = Some p; scale = None } -> sprintf "Decimal(%d)" p
-      | Decimal _ -> "Decimal"
-      | k -> show_kind k
-
-  type nullability =
-  | Nullable (** can be NULL *)
-  | Strict (** cannot be NULL *)
-  | Depends (** unknown, to be determined *)
-  [@@deriving eq, show{with_path=false}, json, jsonschema] [@@compact_variants]
-
-  type t = { t : kind; nullability : nullability; }[@@deriving eq, show{with_path=false}, json, jsonschema]
+  let rec show_kind = function
+    | Union { ctors; _ } -> sprintf "Union (%s)" (String.concat "| " (Enum_kind.Ctors.elements ctors))
+    | StringLiteral l -> sprintf "StringLiteral (%s)" l
+    | FloatingLiteral f -> sprintf "FloatingLiteral (%g)" f
+    | Decimal { precision = Some p; scale = Some s } -> sprintf "Decimal(%d,%d)" p s
+    | Decimal { precision = Some p; scale = None } -> sprintf "Decimal(%d)" p
+    | Decimal _ -> "Decimal"
+    | Array t -> sprintf "Array(%s)" (show t)
+    | Map (k, v) -> sprintf "Map(%s, %s)" (show k) (show v)
+    | Tuple ts -> sprintf "Tuple(%s)" (String.concat ", " (List.map show ts))
+    | Fun (args, ret) -> sprintf "(%s) -> %s" (String.concat ", " (List.map show args)) (show ret)
+    | Int -> "Int"
+    | UInt64 -> "UInt64"
+    | Text -> "Text"
+    | Blob -> "Blob"
+    | Float -> "Float"
+    | Bool -> "Bool"
+    | Datetime -> "Datetime"
+    | Json_path -> "Json_path"
+    | One_or_all -> "One_or_all"
+    | Json -> "Json"
+    | Any -> "Any"
+  and show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
 
   let nullability nullability = fun t -> { t; nullability }
   let strict = nullability Strict
@@ -108,7 +128,6 @@ struct
 
   let (=) : t -> t -> bool = equal
 
-  let show { t; nullability; } = show_kind t ^ (match nullability with Nullable -> "?" | Depends -> "??" | Strict -> "")
   let _ = pp
   let pp pf t = Format.pp_print_string pf (show t)
 
@@ -127,10 +146,77 @@ struct
       value >= -.max && value <= max
   | _ -> true
 
+  let order_nullability x y =
+    match x,y with
+    | Depends, Depends -> `Equal Depends
+    | Nullable, Nullable -> `Equal Nullable
+    | Strict, Strict -> `Equal Strict
+    | Depends, n
+    | n, Depends -> `Equal n (* Order ? *)
+    | Strict, Nullable -> `Strict_Nullable
+    | Nullable, Strict -> `Nullable_Strict
+
+  let common_nullability types =
+    match List.fold_left (fun acc typ ->
+      match acc, typ.nullability with
+      | _, Nullable
+      | Nullable, _ -> Nullable
+      | _, Strict
+      | Strict, _ -> Strict
+      | Depends, Depends -> Depends
+    ) Depends types with
+    | Depends -> Strict
+    | nullability -> nullability
+  let undepend t nullability = if equal_nullability t.nullability Depends then { t with nullability } else t
+
+  let scoped_nullability scope typ nullability =
+    match scope, typ.t with
+    | Sql_semantics.Nullable_scope.Scalar_types, (Array _ | Map _ | Tuple _ | Fun _) -> Strict
+    | Sql_semantics.Nullable_scope.Any_type, _
+    | Sql_semantics.Nullable_scope.Scalar_types,
+      (Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _ | Union _
+      | StringLiteral _ | FloatingLiteral _ | Json_path | One_or_all | Json | Any) ->
+      nullability
+
   (** @return (subtype, supertype) *)
-  let order_kind x y =
+  let rec order_kind x y =
+    let rec components left right =
+      match left, right with
+      | [], [] -> Some ([], [])
+      | a :: left, b :: right ->
+        begin match order_type a b, components left right with
+        | Some (subtype, supertype), Some (subtypes, supertypes) ->
+          Some (subtype :: subtypes, supertype :: supertypes)
+        | None, _ | _, None -> None
+        end
+      | [], _ :: _ | _ :: _, [] -> None
+    in
     match x, y with
     | x, y when equal_kind x y -> `Equal
+    | Array a, Array b ->
+      begin match order_type a b with
+      | Some (subtype, supertype) -> `Order (Array subtype, Array supertype)
+      | None -> `No
+      end
+    | Map (ka, va), Map (kb, vb) ->
+      begin match order_type ka kb, order_type va vb with
+      | Some (key_subtype, key_supertype), Some (value_subtype, value_supertype) ->
+        `Order (Map (key_subtype, value_subtype), Map (key_supertype, value_supertype))
+      | None, _ | _, None -> `No
+      end
+    | Tuple a, Tuple b ->
+      begin match components a b with
+      | Some (subtypes, supertypes) -> `Order (Tuple subtypes, Tuple supertypes)
+      | None -> `No
+      end
+    | Fun (args_a, ret_a), Fun (args_b, ret_b) ->
+      begin match components args_a args_b, order_type ret_a ret_b with
+      | Some (argument_subtypes, argument_supertypes), Some (result_subtype, result_supertype) ->
+        `Order (
+          Fun (argument_subtypes, result_subtype),
+          Fun (argument_supertypes, result_supertype))
+      | None, _ | _, None -> `No
+      end
     | StringLiteral a, StringLiteral b ->
       `StringLiteralUnion (Union { ctors = (Enum_kind.make [a; b]); is_closed = false })
 
@@ -216,61 +302,47 @@ struct
 
     | _ -> `No
 
+  and order_type x y =
+    match order_kind x.t y.t with
+    | `No -> None
+    | (`Equal | `Order _ | `StringLiteralUnion _) as order ->
+      let subtype, supertype =
+        match order with
+        | `Equal -> x.t, x.t
+        | `Order pair -> pair
+        | `StringLiteralUnion typ -> typ, typ
+      in
+      let nullability_order = order_nullability x.nullability y.nullability in
+      let apply_nullability typ =
+        match nullability_order with
+        | `Equal nullability -> { t = typ; nullability }
+        | `Nullable_Strict | `Strict_Nullable -> nullable typ
+      in
+      Some (apply_nullability subtype, apply_nullability supertype)
 
-  let order_nullability x y =
-    match x,y with
-    | Depends, Depends -> `Equal Depends
-    | Nullable, Nullable -> `Equal Nullable
-    | Strict, Strict -> `Equal Strict
-    | Depends, n
-    | n, Depends -> `Equal n (* Order ? *)
-    | Strict, Nullable -> `Strict_Nullable
-    | Nullable, Strict -> `Nullable_Strict
+  and subtype x y = Option.map fst (order_type x y)
+  and supertype x y = Option.map snd (order_type x y)
 
-  let common_nullability = List.fold_left (fun acc t ->
-    match acc, t.nullability with
-    | _, Nullable
-    | Nullable, _ -> Nullable
-    | _, Strict
-    | Strict, _ -> Strict
-    | Depends, Depends -> Depends
-    ) Depends
-
-  let common_nullability l = match common_nullability l with Depends -> Strict | n -> n
-  let undepend t nullability = if equal_nullability t.nullability Depends then { t with nullability } else t
-
-  let common_type_ order x y =
-    match order_nullability x.nullability y.nullability, order_kind x.t y.t with
-    | _, `No -> None
-    | `Equal nullability, `Order pair -> `CommonType pair |> order |> Option.map (fun t -> { t = t; nullability })
-    | `Equal nullability, `Equal -> Some { x with nullability }
-    | (`Nullable_Strict|`Strict_Nullable), `Equal -> Some (nullable x.t) (* FIXME need nullability order? *)
-    | (`Nullable_Strict|`Strict_Nullable), `Order pair -> `CommonType pair |> order |> Option.map nullable
-    | `Equal nullability, `StringLiteralUnion t -> `StringLiteralUnion t |> order |> Option.map (fun t -> { t = t; nullability })
-    | (`Nullable_Strict | `Strict_Nullable), `StringLiteralUnion t -> `StringLiteralUnion t |> order |> Option.map nullable
-
-  let common_type_l_ order = function
-  | [] -> None
-  | t::ts -> List.fold_left (fun acc t -> match acc with None -> None | Some prev -> common_type_ order prev t) (Some t) ts
-
-  let get_subtype = function
-  | `CommonType t -> Some (fst t)
-  | `StringLiteralUnion t -> Some t
-
-  let get_supertype = function
-  | `CommonType t -> Some (snd t)
-  | `StringLiteralUnion t -> Some t
-
-  let subtype = common_type_ get_subtype
-  let supertype = common_type_ get_supertype
+  let common_type_l_ common_type = function
+    | [] -> None
+    | typ :: types ->
+      let rec fold previous = function
+        | [] -> Some previous
+        | typ :: types ->
+          begin match common_type previous typ with
+          | None -> None
+          | Some common -> fold common types
+          end
+      in
+      fold typ types
 
   let common_subtype types =
-    match common_type_l_ get_subtype types with
+    match common_type_l_ subtype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
 
   let common_supertype types =
-    match common_type_l_ get_supertype types with
+    match common_type_l_ supertype types with
     | Some { t = FloatingLiteral _; nullability } -> Some { t = Float; nullability }
     | result -> result
 
@@ -278,8 +350,209 @@ struct
 
   let has_common_type x y = Option.is_some @@ subtype x y
 
-  type tyvar = Typ of t | Var of int [@@deriving show{with_path=false}, eq, json, jsonschema]
-  let string_of_tyvar = function Typ t -> show t | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+  (* Signature templates add variables to the ground type language. *)
+  type tyvar =
+    | Typ of t
+    | Var of int
+    | Array_of of tyvar
+    | Map_of of tyvar * tyvar
+    | Tuple_of of tyvar list
+    | Fun_of of tyvar list * tyvar
+    [@@deriving show{with_path=false}, eq, json, jsonschema] [@@compact_variants]
+
+  let rec string_of_tyvar = function
+    | Typ t -> show t
+    | Var i -> sprintf "'%c" (Char.chr @@ Char.code 'a' + i)
+    | Array_of v -> sprintf "Array(%s)" (string_of_tyvar v)
+    | Map_of (k, v) -> sprintf "Map(%s, %s)" (string_of_tyvar k) (string_of_tyvar v)
+    | Tuple_of vs -> sprintf "Tuple(%s)" (String.concat ", " (List.map string_of_tyvar vs))
+    | Fun_of (args, ret) -> sprintf "(%s) -> %s" (String.concat ", " (List.map string_of_tyvar args)) (string_of_tyvar ret)
+
+  module Template : sig
+    type substitution
+    type mismatch =
+      | Constructor_mismatch of { template : tyvar; actual : t }
+      | Variable_mismatch of { variable : int; previous : t; actual : t }
+      | Unbound_variable of int
+
+    val empty : substitution
+    val bind_all : substitution -> (tyvar * t) list -> (substitution, mismatch) result
+    val instantiate : substitution -> tyvar -> (t, mismatch) result
+    val refine : substitution -> tyvar -> t -> (t, mismatch) result
+  end = struct
+    type substitution = (int * t) list
+
+    type mismatch =
+      | Constructor_mismatch of { template : tyvar; actual : t }
+      | Variable_mismatch of { variable : int; previous : t; actual : t }
+      | Unbound_variable of int
+
+    let empty = []
+
+    let rec bind substitution template actual =
+      let rec bind_children substitution templates actuals =
+        match templates, actuals with
+        | [], [] -> Ok substitution
+        | child_template :: templates, child_actual :: actuals ->
+          begin match bind substitution child_template child_actual with
+          | Error _ as error -> error
+          | Ok substitution -> bind_children substitution templates actuals
+          end
+        | [], _ :: _ | _ :: _, [] ->
+          Error (Constructor_mismatch { template; actual })
+      in
+      match template, actual.t with
+      | Typ expected, _ ->
+        if has_common_type expected actual then Ok substitution
+        else Error (Constructor_mismatch { template; actual })
+      | Var variable, _ ->
+        begin match List.assoc_opt variable substitution with
+        | None -> Ok ((variable, actual) :: substitution)
+        | Some previous ->
+          begin match common_type previous actual with
+          | Some common ->
+            Ok ((variable, common) :: List.remove_assoc variable substitution)
+          | None -> Error (Variable_mismatch { variable; previous; actual })
+          end
+        end
+      | Array_of element, Array actual_element ->
+        bind substitution element actual_element
+      | Map_of (key, value), Map (actual_key, actual_value) ->
+        begin match bind substitution key actual_key with
+        | Error _ as error -> error
+        | Ok substitution -> bind substitution value actual_value
+        end
+      | Tuple_of elements, Tuple actual_elements ->
+        bind_children substitution elements actual_elements
+      | Fun_of (parameters, result), Fun (actual_parameters, actual_result) ->
+        begin match bind_children substitution parameters actual_parameters with
+        | Error _ as error -> error
+        | Ok substitution -> bind substitution result actual_result
+        end
+      | (Array_of _ | Map_of _ | Tuple_of _ | Fun_of _), Any ->
+        bind_unknown substitution template
+      | (Array_of _ | Map_of _ | Tuple_of _ | Fun_of _),
+        (Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _ | Union _
+        | StringLiteral _ | FloatingLiteral _ | Json_path | One_or_all | Json
+        | Array _ | Map _ | Tuple _ | Fun _) ->
+        Error (Constructor_mismatch { template; actual })
+
+    and bind_unknown substitution = function
+      | Typ _ -> Ok substitution
+      | Var variable -> bind substitution (Var variable) (depends Any)
+      | Array_of element -> bind_unknown substitution element
+      | Map_of (key, value) ->
+        begin match bind_unknown substitution key with
+        | Error _ as error -> error
+        | Ok substitution -> bind_unknown substitution value
+        end
+      | Tuple_of elements -> bind_unknown_all substitution elements
+      | Fun_of (parameters, result) ->
+        begin match bind_unknown_all substitution parameters with
+        | Error _ as error -> error
+        | Ok substitution -> bind_unknown substitution result
+        end
+
+    and bind_unknown_all substitution = function
+      | [] -> Ok substitution
+      | template :: templates ->
+        begin match bind_unknown substitution template with
+        | Error _ as error -> error
+        | Ok substitution -> bind_unknown_all substitution templates
+        end
+
+    let rec bind_all substitution = function
+      | [] -> Ok substitution
+      | (template, actual) :: pairs ->
+        begin match bind substitution template actual with
+        | Error _ as error -> error
+        | Ok substitution -> bind_all substitution pairs
+        end
+
+    let rec instantiate substitution = function
+      | Typ typ -> Ok typ
+      | Var variable ->
+        begin match List.assoc_opt variable substitution with
+        | Some typ -> Ok typ
+        | None -> Error (Unbound_variable variable)
+        end
+      | Array_of element ->
+        Result.map (fun element -> depends (Array element))
+          (instantiate substitution element)
+      | Map_of (key, value) ->
+        begin match instantiate substitution key, instantiate substitution value with
+        | Ok key, Ok value -> Ok (depends (Map (key, value)))
+        | Error _ as error, _ | _, (Error _ as error) -> error
+        end
+      | Tuple_of elements ->
+        Result.map (fun elements -> depends (Tuple elements))
+          (instantiate_all substitution elements)
+      | Fun_of (parameters, result) ->
+        begin match instantiate_all substitution parameters,
+                    instantiate substitution result with
+        | Ok parameters, Ok result -> Ok (depends (Fun (parameters, result)))
+        | Error _ as error, _ | _, (Error _ as error) -> error
+        end
+
+    and instantiate_all substitution = function
+      | [] -> Ok []
+      | template :: templates ->
+        begin match instantiate substitution template with
+        | Error _ as error -> error
+        | Ok typ ->
+          Result.map (fun types -> typ :: types)
+            (instantiate_all substitution templates)
+        end
+
+    let rec refine substitution template actual =
+      let rec refine_children templates actuals =
+        match templates, actuals with
+        | [], [] -> Ok []
+        | child_template :: templates, child_actual :: actuals ->
+          begin match refine substitution child_template child_actual with
+          | Error _ as error -> error
+          | Ok child ->
+            Result.map (fun children -> child :: children)
+              (refine_children templates actuals)
+          end
+        | [], _ :: _ | _ :: _, [] ->
+          Error (Constructor_mismatch { template; actual })
+      in
+      match template, actual.t with
+      | Typ expected, _ ->
+        begin match common_type expected actual with
+        | Some unified -> Ok unified
+        | None -> Error (Constructor_mismatch { template; actual })
+        end
+      | Var _, _ -> instantiate substitution template
+      | Array_of element, Array actual_element ->
+        Result.map (fun refined -> { actual with t = Array refined })
+          (refine substitution element actual_element)
+      | Map_of (key, value), Map (actual_key, actual_value) ->
+        begin match refine substitution key actual_key, refine substitution value actual_value with
+        | Ok refined_key, Ok refined_value ->
+          Ok { actual with t = Map (refined_key, refined_value) }
+        | Error _ as error, _ | _, (Error _ as error) -> error
+        end
+      | Tuple_of elements, Tuple actual_elements ->
+        Result.map (fun refined -> { actual with t = Tuple refined })
+          (refine_children elements actual_elements)
+      | Fun_of (parameters, result), Fun (actual_parameters, actual_result) ->
+        begin match refine_children parameters actual_parameters,
+                    refine substitution result actual_result with
+        | Ok refined_parameters, Ok refined_result ->
+          Ok { actual with t = Fun (refined_parameters, refined_result) }
+        | Error _ as error, _ | _, (Error _ as error) -> error
+        end
+      | (Array_of _ | Map_of _ | Tuple_of _ | Fun_of _), Any ->
+        instantiate substitution template
+      | (Array_of _ | Map_of _ | Tuple_of _ | Fun_of _),
+        (Int | UInt64 | Text | Blob | Float | Bool | Datetime | Decimal _ | Union _
+        | StringLiteral _ | FloatingLiteral _ | Json_path | One_or_all | Json
+        | Array _ | Map _ | Tuple _ | Fun _) ->
+        Error (Constructor_mismatch { template; actual })
+
+  end
 end
 
 module Constraint =
@@ -362,15 +635,19 @@ let unique_keys schema =
   in
   List.concat_map keys_of schema |> List.sort_uniq Constraint.StringSet.compare
 
+let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain =
+  { name; domain; extra; meta = Meta.of_list meta }
+
 let make_attribute name kind extra ~meta =
   if Constraints.mem Null extra && Constraints.mem NotNull extra then fail "Column %s can be either NULL or NOT NULL, but not both" name;
-  let domain = Type.{ t = Option.default Int kind; nullability = if List.exists (fun cstrt -> Constraints.mem cstrt extra) [NotNull; PrimaryKey]
-    then Strict else Nullable } in
-  {name;domain;extra;meta=Meta.of_list meta;}
+  let nullability : Type.nullability =
+    if List.exists (fun constraint_ -> Constraints.mem constraint_ extra) [NotNull; PrimaryKey] then Strict
+    else Nullable
+  in
+  let domain = { Type.t = Option.default Type.Int kind; nullability } in
+  make_attribute' ~extra ~meta name domain
 
 let unnamed_attribute ?(meta = Meta.empty()) domain = {name="";domain;extra=Constraints.empty;meta;}
-
-let make_attribute' ?(extra = Constraints.empty) ?(meta = []) name domain = { name; domain; extra; meta = Meta.of_list meta; }
 
 module Schema =
 struct
@@ -480,15 +757,25 @@ struct
       let common = List.map fst (common_columns (Using l) t1 t2) in
       common @ Source.sub_by_name t1 common @ Source.sub_by_name t2 common
 
-    let join typ cond a b =
-      let nullable = List.map (fun data ->
-        Source.Attr.{data with attr={data.attr with domain = Type.make_nullable data.attr.domain}}) in
+    let join ~outer_join_padding ~nullable_scope typ cond a b =
+      let pad (attr : attr) =
+        match outer_join_padding with
+        | Sql_semantics.Outer_join_padding.Type_default -> attr
+        | Sql_semantics.Outer_join_padding.Null ->
+          match Type.scoped_nullability nullable_scope attr.domain Nullable with
+          | Strict -> attr
+          | Nullable | Depends ->
+            { attr with
+              domain = Type.make_nullable attr.domain;
+              extra = Constraints.remove Constraint.NotNull attr.extra }
+      in
+      let padded schema = List.map (fun data -> Source.Attr.{ data with attr = pad data.attr }) schema in
       let action = match cond with Default | On _ -> cross | Natural -> natural | Using l -> using l in
       match typ with
       | Inner | Straight -> action a b
-      | Left -> action a (nullable b)
-      | Right -> action (nullable a) b
-      | Full -> action (nullable a) (nullable b)
+      | Left -> action a (padded b)
+      | Right -> action (padded a) b
+      | Full -> action (padded a) (padded b)
 
   end
 
@@ -718,19 +1005,27 @@ and select = {
   source_pos : Pos.t option;
   columns : column list;
   from : nested option;
+  array_join : array_join list;
+  prewhere : expr option;
   where : expr option;
   group : expr list;
   having : expr option;
 }
+(* LEFT ARRAY JOIN keeps rows whose array is empty, with the element type's default value. *)
+and array_join_kind = Inner_array_join | Left_array_join
+and array_join = { array_join_kind : array_join_kind; array_join_items : array_join_item list; }
+and array_join_item = { joined_array : expr; element_alias : string located option; }
 and cte_item = { cte_name: string located; cols: schema option; stmt: cte_stmt; }
 and cte_stmt = CteInline of select_complete | CteSharedQuery of shared_query_ref_id
 and cte = { cte_items: cte_item list; is_recursive: bool; }
 and select_complete = {
   select : select * (compound_op * select) list;
   order : order;
+  limit_by : limit_by option;
   limit : limit option;
   select_row_locking: select_row_locking_kind located option;
 }
+and limit_by = { per_group : limit; by : expr list; }
 and select_full = { select_complete: select_complete; cte: cte option; }
 and row_constructor_list = RowExprList of expr list list | RowParam of { id : param_id; types : Source_type.t list; values_start_pos: int; }
 and row_values = {
@@ -748,7 +1043,9 @@ and agg_fun = Self (* self means that it returns the same type what aggregated c
     | With_order of {
         with_order_kind: agg_with_order_kind;
         order: order;
-      } [@@compact_variants]
+      }
+    | Typed of Type.tyvar * Type.tyvar list (* aggregate whose result follows a signature, ie: uniq, argMax *)
+    [@@compact_variants]
 and 't func =
   | Agg of agg_fun (* 'a -> 'a | 'a -> t *)
   | Null_handling of null_handling_fn_kind
@@ -761,6 +1058,7 @@ and 't func =
   | Range  (* 'a -> 'a -> 'a -> bool *)
   | Like (* text -> text -> bool *)
   | Like_escape (* bool -> text -> bool *)
+  | Element_access (* Array('a) -> int -> 'a | Map('k, 'v) -> 'k -> 'v *)
   | Ret of 't (* _ -> t *) (* TODO eliminate *)
   | F of Type.tyvar * Type.tyvar list
   | Col_assign of { ret_t: Type.tyvar; col_t: Type.tyvar; arg_t: Type.tyvar; }
@@ -800,6 +1098,8 @@ and expr =
   | OptionActions of { choice: expr; pos: (Pos.t * Pos.t); kind: option_actions_kind }
   | Case of case located
   | Of_values of string (** VALUES(col_name) *)
+  | Lambda of lambda (** [x -> e] / [(x, y) -> e], only meaningful as an argument of a higher-order function *)
+and lambda = { lambda_params : string list; lambda_body : expr }
 and column = column_kind located
 and column_kind =
   | All
@@ -808,6 +1108,10 @@ and column_kind =
 [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
 
 type columns = column list [@@deriving show]
+
+let array_join_exprs array_joins =
+  List.concat_map (fun { array_join_items; _ } ->
+    List.map (fun item -> item.joined_array) array_join_items) array_joins
 
 let fn ?over fn_name kind parameters = Fun { fn_name; kind; parameters; over; fn_pos = dummy_pos }
 
@@ -850,13 +1154,14 @@ let signature kind arity =
     | Comparison op | Quantified_comparison { op; _ } -> Some (comparison_signature op)
     | Null_handling nulls -> Some (null_handling_signature nulls arity)
     | Agg Self -> Some agg_same_type
+    | Agg (Typed (ret, args)) -> Some (ret, args)
     | Col_assign { ret_t; col_t; arg_t } -> Some (ret_t, [col_t; arg_t])
     | Multi { ret; fixed_args; repeating_pattern } ->
       Option.map (fun args -> ret, args) (multi_args ~fixed_args ~repeating_pattern arity)
     | Membership | Range -> Some Type.(Typ (depends Bool), List.make arity (Var 0))
     | Like -> Some Type.(Typ (depends Bool), [Typ (depends Text); Typ (depends Text)])
     | Like_escape -> Some Type.(Typ (depends Bool), [Typ (depends Bool); Typ (depends Text)])
-    | Agg _ | Logical _ | Negation | Ret _ | Arith _ -> None
+    | Agg _ | Logical _ | Negation | Ret _ | Arith _ | Element_access -> None
   in
   match sign with
   | Some (_, args) when not (Int.equal (List.length args) arity) -> None
@@ -865,10 +1170,10 @@ let signature kind arity =
 let source_fun_kind_to_infer = function
   | Ret t -> Ret (Source_type.to_infer_type t)
   | Arith t -> Arith (Source_type.to_infer_type t)
-  | Agg (Self | Count | Avg | With_order _)
+  | Agg (Self | Count | Avg | With_order _ | Typed _)
   | Null_handling _ | Comparison _ | Quantified_comparison _
   | Logical _ | Negation | F _
-  | Membership | Range | Like | Like_escape
+  | Membership | Range | Like | Like_escape | Element_access
   | Col_assign _ | Multi _ as fn -> fn
 
 let expr_to_string = show_expr
@@ -876,12 +1181,13 @@ let expr_to_string = show_expr
 let map_kind_exprs f = function
   | Agg (With_order ({ order; _ } as wo)) ->
     Agg (With_order { wo with order = List.map (fun (e, dir) -> f e, dir) order })
-  | Agg (Self | Count | Avg) | Null_handling _ | Comparison _ | Quantified_comparison _
+  | Agg (Self | Count | Avg | Typed _) | Null_handling _ | Comparison _ | Quantified_comparison _
   | Logical _ | Negation | Ret _ | F _ | Col_assign _ | Multi _
-  | Arith _ | Membership | Range | Like | Like_escape as kind -> kind
+  | Arith _ | Membership | Range | Like | Like_escape | Element_access as kind -> kind
 
 let sub_exprs = function
   | Value _ | Param _ | Inparam _ | Column _ | Of_values _ | SelectExpr _ -> []
+  | Lambda { lambda_body; _ } -> [lambda_body]
   | Choices (_, l) -> List.filter_map (fun c -> c.body) l
   | InChoice (_, _, e) -> [e]
   | OptionActions { choice; _ } -> [choice]
@@ -898,6 +1204,7 @@ let map_sub_exprs f = function
   | Choices (n, l) -> Choices (n, List.map (fun c -> { c with body = Option.map f c.body }) l)
   | InChoice (n, k, e) -> InChoice (n, k, f e)
   | OptionActions ({ choice; _ } as o) -> OptionActions { o with choice = f choice }
+  | Lambda ({ lambda_body; _ } as l) -> Lambda { l with lambda_body = f lambda_body }
   | Fun ({ kind; parameters; _ } as fn) ->
     Fun { fn with kind = map_kind_exprs f kind; parameters = List.map f parameters }
   | InTupleList ({ value = { exprs; _ } as tl; _ } as loc) ->
@@ -1352,6 +1659,7 @@ let pp_func pp f =
   | Agg Count -> fprintf pp "|'a| -> int"
   | Agg (With_order { with_order_kind = Group_concat; _ }) -> fprintf pp "|'a| -> text"
   | Agg (With_order { with_order_kind = Json_arrayagg; _ }) -> fprintf pp "|'a| -> json"
+  | Agg (Typed (ret, args)) -> aux (F (ret, args))
   | Ret ret -> fprintf pp "_ -> %s" (Type.show ret)
   | Arith ret -> fprintf pp "'a -> 'a -> %s" (Type.show ret)
   | Membership -> fprintf pp "'a -> { 'a }+ -> %s" (Type.show_kind Bool)
@@ -1370,6 +1678,7 @@ let pp_func pp f =
       (Type.string_of_tyvar ret)
   | Logical _ -> fprintf pp "'a -> 'a -> %s" (Type.show_kind Bool)
   | Negation -> fprintf pp "'a -> %s" (Type.show_kind Bool)
+  | Element_access -> fprintf pp "Array('a) | Map('k, 'a) -> _ -> 'a"
   | Multi { ret; fixed_args; repeating_pattern } ->
       let fixed_str = match fixed_args with
         | [] -> ""
@@ -1385,12 +1694,11 @@ let string_of_func = Format.asprintf "%a" pp_func
 let is_grouping = function
   | Agg _ -> true
   | Col_assign _ | Ret _ | F _ | Multi _ | Null_handling _  | Comparison _ | Negation | Logical _
-  | Quantified_comparison _ | Arith _ | Membership | Range | Like | Like_escape -> false
+  | Quantified_comparison _ | Arith _ | Membership | Range | Like | Like_escape | Element_access -> false
 
 module Function : sig
 
 val lookup : string -> int -> Source_type.t func
-val lookup_agg : string -> int -> Source_type.t func
 val names : unit -> string list
 
 val add : int -> Source_type.t func -> string -> unit
@@ -1446,10 +1754,6 @@ let lookup name narg =
   | exception _ ->
     eprintfn "W: unknown function %S of %d arguments, treating as untyped" name narg;
     sponge
-
-let lookup_agg name narg = match lookup name narg with
-  | Agg _ as a -> a
-  | _ -> fail "Function %s is not an aggregate function" name
 
 let names () =
   Hashtbl.fold (fun (name, _) typ acc -> match typ with Some _ -> name :: acc | None -> acc) h []

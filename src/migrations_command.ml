@@ -260,7 +260,7 @@ let parse argv =
                  destination
              in
              match dialect, host_language with
-             | (Dialect.PostgreSQL | Dialect.SQLite), _ ->
+             | (Dialect.PostgreSQL | Dialect.SQLite | Dialect.ClickHouse), _ ->
                  Error
                    ("the migration runtime does not support --dialect "
                     ^ Dialect.to_string dialect

@@ -295,11 +295,62 @@ let is_keyword =
 
 (* FIXME case sensitivity??! *)
 
-let get_ident str =
+let get_ident (semantics : Dialect.Semantic.t) str =
   let str = String.lowercase_ascii str in
-  match Prelude.String_map.find_opt str keywords with
-  | Some token -> token
-  | None -> IDENT str
+  match semantics.query_syntax, str with
+  | ClickHouse_queries, "prewhere" -> PREWHERE
+  | ClickHouse_queries, "final" -> FINAL
+  | ClickHouse_queries, "sample" -> SAMPLE
+  | ClickHouse_queries, "settings" -> SETTINGS
+  | ClickHouse_queries, "format" -> FORMAT
+  | ClickHouse_queries, "semi" -> SEMI
+  | ClickHouse_queries, "anti" -> ANTI
+  | ClickHouse_queries, "asof" -> ASOF
+  | ClickHouse_queries, "materialized" -> MATERIALIZED str
+  | ClickHouse_queries, "alias" -> ALIAS str
+  | ClickHouse_queries, "ephemeral" -> EPHEMERAL str
+  | ClickHouse_queries, "codec" -> CODEC str
+  | ClickHouse_queries, "cluster" -> CLUSTER str
+  | ClickHouse_queries, "populate" -> POPULATE str
+  | ClickHouse_queries, "engine" -> ENGINE str
+  | ClickHouse_queries, "granularity" -> GRANULARITY str
+  | ClickHouse_queries, "projection" -> PROJECTION str
+  | ClickHouse_queries, "sync" -> SYNC str
+  | ClickHouse_queries, "optimize" -> OPTIMIZE str
+  | ClickHouse_queries, "deduplicate" -> DEDUPLICATE str
+  | (Standard_queries | ClickHouse_queries), _ ->
+  match semantics.column_type_syntax, str with
+  | ClickHouse_types, ("int8" | "int16" | "int32" | "int64") -> CLICKHOUSE_SCALAR (str, T.Int)
+  | ClickHouse_types, ("uint8" | "uint16" | "uint32" | "uint64") -> CLICKHOUSE_SCALAR (str, T.UInt64)
+  | ClickHouse_types, ("float32" | "float64" | "bfloat16") -> CLICKHOUSE_SCALAR (str, T.Float)
+  | ClickHouse_types, "string" -> CLICKHOUSE_SCALAR (str, T.Text)
+  | ClickHouse_types, ("bool" | "boolean") -> CLICKHOUSE_SCALAR (str, T.Bool)
+  | ClickHouse_types, "json" -> CLICKHOUSE_SCALAR (str, T.Json)
+  | ClickHouse_types, ("date" | "date32") -> CLICKHOUSE_SCALAR (str, T.Datetime)
+  | ClickHouse_types, "datetime" -> CLICKHOUSE_DATETIME str
+  | ClickHouse_types, ("uuid" | "ipv4" | "ipv6") -> CLICKHOUSE_SCALAR (str, T.Blob)
+  | ClickHouse_types, "array" -> CLICKHOUSE_ARRAY str
+  | ClickHouse_types, "map" -> CLICKHOUSE_MAP str
+  | ClickHouse_types, "tuple" -> CLICKHOUSE_TUPLE str
+  | ClickHouse_types, "nullable" -> CLICKHOUSE_NULLABLE str
+  | ClickHouse_types, "lowcardinality" -> CLICKHOUSE_LOWCARDINALITY str
+  | ClickHouse_types, "fixedstring" -> CLICKHOUSE_FIXED_STRING str
+  | ClickHouse_types, "datetime64" -> CLICKHOUSE_DATETIME64 str
+  | ClickHouse_types, "decimal" -> CLICKHOUSE_DECIMAL (str, None)
+  | ClickHouse_types, "decimal32" -> CLICKHOUSE_DECIMAL (str, Some 9)
+  | ClickHouse_types, "decimal64" -> CLICKHOUSE_DECIMAL (str, Some 18)
+  | ClickHouse_types, "decimal128" -> CLICKHOUSE_DECIMAL (str, Some 38)
+  | ClickHouse_types, "decimal256" -> CLICKHOUSE_DECIMAL (str, Some 76)
+  | ClickHouse_types, ("enum" | "enum8" | "enum16") -> CLICKHOUSE_ENUM str
+  | ClickHouse_types, "aggregatefunction" -> CLICKHOUSE_AGGREGATE_FUNCTION str
+  | ClickHouse_types, "simpleaggregatefunction" -> CLICKHOUSE_SIMPLE_AGGREGATE_FUNCTION str
+  | ClickHouse_types,
+    ("int128" | "int256" | "uint128" | "uint256" | "nested" | "variant" | "dynamic" | "object") ->
+    CLICKHOUSE_UNSUPPORTED str
+  | (Standard_types | ClickHouse_types), _ ->
+    match Prelude.String_map.find_opt str keywords with
+    | Some token -> token
+    | None -> IDENT str
 
 let ident str = IDENT (String.lowercase_ascii str)
 
@@ -321,7 +372,7 @@ let dq = ([^'"' '\n'] | "\"\"")*
 let sq = ([^'\'' '\n'] | "''")*
 let bq = ([^'`' '\n'] | "``")*
 let sb = [^']' '\n']*
-let open_string = '"' dq | "'" sq | '`' bq | '[' sb
+let open_string = '"' dq | "'" sq | '`' bq
 
 let plain = [^ ';' '"' '\'' '`' '[' '$' '-' '/' '#' ' ' '\n' '\r' '\t']
 
@@ -363,8 +414,8 @@ and
 ruleTail = parse
   | _* as tail { tail }
 and
-ruleMain = parse
-  | blank { ruleMain lexbuf }
+ruleMain semantics = parse
+  | blank { ruleMain semantics lexbuf }
 
   | '('                { LPAREN }
   | ')'                { RPAREN }
@@ -373,7 +424,7 @@ ruleMain = parse
   | '{'   { LCURLY (lexeme_start lexbuf) }
   | '}'   { RCURLY (lexeme_start lexbuf) }
 
-  | line_comment | block_comment { ruleMain lexbuf }
+  | line_comment | block_comment { ruleMain semantics lexbuf }
 
   | "*" { ASTERISK }
   | "=" { EQUAL }
@@ -393,7 +444,11 @@ ruleMain = parse
   | "<%" | "%>" | "<<%" | "%>>" { TEXT_CMP_OP }
   | "<->" | "<<->" | "<->>" | "<<<->" | "<->>>" { TEXT_DIST_OP }
 
-  | "->"  { JSON_EXTRACT_OP }
+  | "->"  {
+      match semantics.Dialect.Semantic.arrow_operator with
+      | Sql_semantics.Arrow_operator.Lambda -> LAMBDA_ARROW
+      | Sql_semantics.Arrow_operator.Json_extract -> JSON_EXTRACT_OP
+    }
   | "->>" { JSON_UNQUOTE_EXTRACT_OP }
 
   | "?"   { QSTN }
@@ -404,7 +459,16 @@ ruleMain = parse
 
   | '"' (dq as s) '"' { ident (unescape '"' s) }
   | '`' (bq as s) '`' { ident (unescape '`' s) }
-  | '[' (sb as s) ']' { ident s }
+  | '[' {
+      match semantics.Dialect.Semantic.query_syntax with
+      | Sql_semantics.Query_syntax.Standard_queries ->
+        let start_p = lexbuf.lex_start_p in
+        let token = ruleBracketIdent lexbuf in
+        lexbuf.lex_start_p <- start_p;
+        token
+      | Sql_semantics.Query_syntax.ClickHouse_queries -> LBRACKET
+    }
+  | ']' { RBRACKET }
   | "'" (sq as s) "'" { TEXT (unescape '\'' s) }
   | ['x' 'X'] "'" (sq as s) "'" { BLOB (unescape '\'' s) }
   (* http://www.postgresql.org/docs/current/interactive/sql-syntax-lexical.html#SQL-SYNTAX-DOLLAR-QUOTING *)
@@ -418,11 +482,15 @@ ruleMain = parse
   | open_string { error lexbuf "unterminated string literal" }
   | open_comment { error lexbuf "unterminated comment" }
 
-  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident str }
+  | ident as str { if !Parser_state.mode = Ident then IDENT str (* no keywords, preserve case *) else get_ident semantics str }
   | digit+ as str { INTEGER (int_of_string str) }
   | digit+ '.' digit+ as str { FLOAT (float_of_string str) }
   | eof		{ EOF }
   | _	{ error lexbuf "unexpected character" }
+and
+ruleBracketIdent = parse
+  | (sb as s) ']' { ident s }
+  | sb { error lexbuf "unterminated string literal" }
 and
 ruleInDollarQuotes tag = parse
   | "$" (ident? as tag_) "$" { if String.equal tag_ tag then Some lexbuf.lex_start_pos else ruleInDollarQuotes tag lexbuf }
@@ -431,8 +499,8 @@ ruleInDollarQuotes tag = parse
 
 {
 
-  let parse_rule lexbuf =
-    let token = ruleMain lexbuf in
+  let parse_rule semantics lexbuf =
+    let token = ruleMain semantics lexbuf in
     match !Parser_state.mode with
     | Normal -> token
     | Ignore ->

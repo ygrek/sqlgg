@@ -2,7 +2,6 @@ open Sql
 
 module Config: sig
   val debug : bool ref
-  val allow_write_notnull_null : bool ref
   val dynamic_select : bool ref
 end
 
@@ -39,7 +38,7 @@ type result = {
 
 val no_stmt_annotations : stmt_annotations
 
-val scope_of : ?cte:cte -> nested option -> stmt_annotations
+val scope_of : Dialect.Semantic.t -> ?cte:cte -> nested option -> stmt_annotations
 
-val parse : string -> result
+val parse : Dialect.Semantic.t -> string -> result
 val eval_parsed : string -> Parser.parse_result -> result

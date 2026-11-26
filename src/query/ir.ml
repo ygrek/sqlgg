@@ -33,16 +33,16 @@ let statements resolve sql =
       { sql = statement.text; props = statement.props; resolution })
     (Statements.split sql)
 
-let parse ?allow_extensions sql =
+let parse ?allow_extensions ~semantics sql =
   statements
     (fun statement ->
-      Result.map (fun parsed -> Parsed parsed) (Analysis.parse ?allow_extensions statement))
+      Result.map (fun parsed -> Parsed parsed) (Analysis.parse ?allow_extensions ~semantics statement))
     sql
 
-let analyze ?allow_extensions ~context sql =
+let analyze ?allow_extensions ~semantics ~context sql =
   statements
     (fun statement ->
       Result.map
         (fun (parsed, (result : Syntax.result)) -> Analyzed { parsed; typed = result.typed })
-        (Analysis.analyze ?allow_extensions ~context statement))
+        (Analysis.analyze ?allow_extensions ~semantics ~context statement))
     sql

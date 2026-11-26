@@ -52,7 +52,7 @@ module Extensions = struct
       | InTupleList { pos; _ } -> report pos "tuple IN @list"
       | OptionActions { pos = (p1, p2); _ } -> report (Pos.span p1 p2) "optional fragment { ... }?"
       | SelectExpr (sf, _) -> select_full sf
-      | Value _ | Column _ | Of_values _ | Fun _ | Case _ -> []
+      | Value _ | Column _ | Of_values _ | Fun _ | Case _ | Lambda _ -> []
     in
     own @ List.concat_map expr (sub_exprs e)
 
@@ -105,6 +105,8 @@ module Extensions = struct
         | Expr (e, _) -> expr e.value)
       s.columns
     @ opt nested s.from
+    @ List.concat_map expr (array_join_exprs s.array_join)
+    @ opt expr s.prewhere
     @ opt expr s.where
     @ List.concat_map expr s.group
     @ opt expr s.having
@@ -114,6 +116,7 @@ module Extensions = struct
     select first
     @ List.concat_map (fun (_, s) -> select s) rest
     @ order sc.order
+    @ opt (fun { per_group; by } -> limit (Some per_group) @ List.concat_map expr by) sc.limit_by
     @ limit sc.limit
 
   and select_full { select_complete = sc; cte } =
@@ -214,10 +217,10 @@ let with_valid_properties (statement : Statements.t) f =
   | [] -> f ()
   | first :: rest -> Error (diagnostic first, List.map diagnostic rest)
 
-let parse ?(allow_extensions = true) (statement : Statements.t) =
+let parse ?(allow_extensions = true) ~semantics (statement : Statements.t) =
   with_valid_properties statement @@ fun () ->
   Parser_state.Stmt_metadata.load statement.metadata;
-  Result.bind (catch_diagnostics (fun () -> Parser.parse_stmt statement.text)) @@ fun parsed ->
+  Result.bind (catch_diagnostics (fun () -> Parser.parse_stmt semantics statement.text)) @@ fun parsed ->
   if allow_extensions then Ok parsed
   else
     Result.bind (catch_diagnostics (fun () -> Extensions.stmt parsed.stmt)) @@ function
@@ -232,23 +235,32 @@ let dialect_diagnostics ~dialect dialect_features =
     | `Unknown -> diagnostic (Dialect.unknown_message ds dialect)
     | `Unsupported -> diagnostic (Dialect.unsupported_message ds dialect))
 
-let context_of_schema_sql ?context ?dialect sql =
+type schema_dialect =
+  | Checked of Dialect.configuration
+  | Unchecked of Dialect.configuration
+
+let context_of_schema_sql ?context ~dialect sql =
   with_context ?context @@ fun () ->
-  let check_dialect dialect_features =
+  let configuration, check_dialect =
     match dialect with
-    | None -> Ok ()
-    | Some dialect ->
-      match dialect_diagnostics ~dialect dialect_features with
-      | [] -> Ok ()
-      | first :: rest -> Error (first, rest)
+    | Unchecked configuration -> configuration, fun _ -> Ok ()
+    | Checked configuration ->
+      configuration, fun dialect_features ->
+        match
+          dialect_diagnostics ~dialect:(Dialect.dialect_of_configuration configuration)
+            dialect_features
+        with
+        | [] -> Ok ()
+        | first :: rest -> Error (first, rest)
   in
+  let semantics = Dialect.Semantic.of_configuration configuration in
   List.fold_left
     (fun compiled (statement : Statements.t) ->
       Result.bind compiled @@ fun () ->
       with_valid_properties statement (fun () ->
         Result.bind
           (catch_diagnostics (fun () ->
-             Compile.statement ~dynamic_select:Props.Off statement))
+             Compile.statement ~semantics ~dynamic_select:Props.Off statement))
           (function
             | Compile.Executable result ->
               check_dialect result.dialect_features
@@ -259,8 +271,8 @@ let context_of_schema_sql ?context ?dialect sql =
     (Ok ()) (Statements.split sql)
   |> Result.map Compile.snapshot
 
-let analyze ?allow_extensions ~context (statement : Statements.t) =
+let analyze ?allow_extensions ~semantics ~context (statement : Statements.t) =
   with_context ~context @@ fun () ->
   Syntax.Config.dynamic_select := false;
-  Result.bind (parse ?allow_extensions statement) @@ fun parsed ->
+  Result.bind (parse ?allow_extensions ~semantics statement) @@ fun parsed ->
   catch_diagnostics (fun () -> parsed, Syntax.eval_parsed statement.text parsed)

@@ -6,15 +6,72 @@ type t =
   | PostgreSQL [@as "postgresql"]
   | SQLite [@as "sqlite"]
   | TiDB [@as "tidb"]
+  | ClickHouse [@as "clickhouse"]
 [@@deriving eq, hash, show { with_path = false }, enumerate, to_string, of_string, json, jsonschema] [@@compact_variants]
 
 let of_yojson = function
   | `String name -> Stdlib.Option.to_result ~none:("unknown dialect " ^ name) (of_string name)
   | _ -> Error "dialect"
 
-let selected = ref MySQL
+type row_store =
+  | MySQL_configuration of Sql_semantics.Nonnullable_write.t
+  | PostgreSQL_configuration
+  | SQLite_configuration of Sql_semantics.Nonnullable_write.t
+  | TiDB_configuration of Sql_semantics.Nonnullable_write.t
 
-let set_selected d = selected := d
+type configuration =
+  | Row_store of row_store
+  | ClickHouse_configuration of Sql_semantics.ClickHouse.t
+
+let default_configuration = function
+  | MySQL -> Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Reject)
+  | PostgreSQL -> Row_store PostgreSQL_configuration
+  | SQLite -> Row_store (SQLite_configuration Sql_semantics.Nonnullable_write.Reject)
+  | TiDB -> Row_store (TiDB_configuration Sql_semantics.Nonnullable_write.Reject)
+  | ClickHouse -> ClickHouse_configuration (Sql_semantics.ClickHouse.default)
+
+let row_store_dialect = function
+  | MySQL_configuration _ -> MySQL
+  | PostgreSQL_configuration -> PostgreSQL
+  | SQLite_configuration _ -> SQLite
+  | TiDB_configuration _ -> TiDB
+
+let dialect_of_configuration = function
+  | Row_store row_store -> row_store_dialect row_store
+  | ClickHouse_configuration _ -> ClickHouse
+
+let with_non_strict_writes = function
+  | Row_store (MySQL_configuration _) ->
+    Row_store (MySQL_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | Row_store (SQLite_configuration _) ->
+    Row_store (SQLite_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | Row_store (TiDB_configuration _) ->
+    Row_store (TiDB_configuration Sql_semantics.Nonnullable_write.Replace_with_default)
+  | (Row_store PostgreSQL_configuration | ClickHouse_configuration _) as configuration -> configuration
+
+type configuration_error =
+  | Unknown_dialect of string
+  | Settings_not_supported of row_store
+  | Invalid_clickhouse_setting of Sql_semantics.ClickHouse.Setting.error
+
+let parse_configuration specification =
+  match String.split_on_char ',' specification with
+  | [] -> Error (Unknown_dialect specification)
+  | dialect_name :: raw_settings ->
+    match of_string dialect_name with
+    | None -> Error (Unknown_dialect dialect_name)
+    | Some dialect ->
+      match default_configuration dialect, raw_settings with
+      | configuration, [] -> Ok configuration
+      | Row_store row_store, _ :: _ -> Error (Settings_not_supported row_store)
+      | ClickHouse_configuration configuration, raw_settings ->
+        List.fold_left (fun configuration raw_setting ->
+          Result.bind configuration (fun configuration ->
+            match Sql_semantics.ClickHouse.Setting.parse raw_setting with
+            | Ok setting -> Ok (Sql_semantics.ClickHouse.apply_setting configuration setting)
+            | Error error -> Error (Invalid_clickhouse_setting error)))
+          (Ok configuration) raw_settings
+        |> Result.map (fun configuration -> ClickHouse_configuration configuration)
 
 type feature =
   | Collation [@as "collation"]
@@ -106,11 +163,6 @@ let supported feature l pos = {
   state = { supported = l; unsupported = []; unknown = List.filter (fun x -> not (List.mem x l)) all }
 }
 
-let unsupported feature l pos = {
-  feature; pos;
-  state = { supported = []; unsupported = l; unknown = List.filter (fun x -> not (List.mem x l)) all }
-}
-
 let only feature l pos = {
   feature; pos;
   state = make_only_state l
@@ -200,7 +252,7 @@ let get_default_expr ~kind ~expr pos =
     | Case _ as e -> fold_parts (sub_exprs e)
     | Fun { parameters; _ } -> fold_parts parameters
     | Param _ | Inparam _ | Choices _ | InChoice _
-    | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ ->
+    | SelectExpr _ | InTupleList _ | OptionActions _ | Of_values _ | Lambda _ ->
         (false, false, false)
   and fold_parts parts =
     List.fold_left
@@ -237,15 +289,96 @@ let get_default_expr ~kind ~expr pos =
 
 
 module Semantic = struct
-  let is_where_aliases_dialect () = !selected = SQLite
+  type t = {
+    outer_join_padding : Sql_semantics.Outer_join_padding.t;
+    membership_null_semantics : Sql_semantics.Membership_null_semantics.t;
+    nonnullable_write : Sql_semantics.Nonnullable_write.t;
+    implicit_column_nullability : Sql_semantics.Implicit_column_nullability.t;
+    nullable_scope : Sql_semantics.Nullable_scope.t;
+    key_uniqueness : Sql_semantics.Key_uniqueness.t;
+    omitted_insert_column : Sql_semantics.Omitted_insert_column.t;
+    empty_aggregate : Sql_semantics.Empty_aggregate.t;
+    where_alias_visibility : Sql_semantics.Where_alias_visibility.t;
+    arrow_operator : Sql_semantics.Arrow_operator.t;
+    column_type_syntax : Sql_semantics.Column_type_syntax.t;
+    query_syntax : Sql_semantics.Query_syntax.t;
+    subquery_value : Sql_semantics.Subquery_value.t;
+    function_catalog : Sql_semantics.Function_catalog.t;
+  }
+  [@@deriving json, jsonschema]
 
-  let is_non_strict_mode_is_exists () = List.mem !selected [MySQL; TiDB; SQLite]
+  type function_resolution =
+    | Standard_function
+    | Dialect_function of Sql.Source_type.t Sql.func
+    | Invalid_arity
+
+  let of_configuration = function
+    | Row_store row_store -> {
+        outer_join_padding = Sql_semantics.Outer_join_padding.Null;
+        membership_null_semantics = Sql_semantics.Membership_null_semantics.Three_valued;
+        nonnullable_write =
+          begin match row_store with
+          | MySQL_configuration nonnullable_write
+          | SQLite_configuration nonnullable_write
+          | TiDB_configuration nonnullable_write -> nonnullable_write
+          | PostgreSQL_configuration -> Sql_semantics.Nonnullable_write.Reject
+          end;
+        implicit_column_nullability = Sql_semantics.Implicit_column_nullability.Nullable;
+        nullable_scope = Sql_semantics.Nullable_scope.Any_type;
+        key_uniqueness = Sql_semantics.Key_uniqueness.Enforced;
+        omitted_insert_column = Sql_semantics.Omitted_insert_column.Requires_declared_default;
+        empty_aggregate = Sql_semantics.Empty_aggregate.Null;
+        where_alias_visibility =
+          begin match row_store with
+          | SQLite_configuration _ -> Sql_semantics.Where_alias_visibility.Select_aliases_visible
+          | MySQL_configuration _ | PostgreSQL_configuration | TiDB_configuration _ ->
+            Sql_semantics.Where_alias_visibility.Source_columns_only
+          end;
+        arrow_operator = Sql_semantics.Arrow_operator.Json_extract;
+        column_type_syntax = Sql_semantics.Column_type_syntax.Standard_types;
+        query_syntax = Sql_semantics.Query_syntax.Standard_queries;
+        subquery_value = Sql_semantics.Subquery_value.Single_column;
+        function_catalog = Sql_semantics.Function_catalog.Standard_functions;
+      }
+    | ClickHouse_configuration configuration -> {
+        outer_join_padding = configuration.outer_join_padding;
+        membership_null_semantics =
+          Sql_semantics.Membership_null_semantics.Two_valued configuration.null_membership;
+        nonnullable_write = configuration.nonnullable_write;
+        implicit_column_nullability = configuration.implicit_column_nullability;
+        nullable_scope = Sql_semantics.Nullable_scope.Scalar_types;
+        key_uniqueness = Sql_semantics.Key_uniqueness.Not_enforced;
+        omitted_insert_column = Sql_semantics.Omitted_insert_column.Filled_with_type_default;
+        empty_aggregate = configuration.empty_aggregate;
+        where_alias_visibility = Sql_semantics.Where_alias_visibility.Select_aliases_visible;
+        arrow_operator = Sql_semantics.Arrow_operator.Lambda;
+        column_type_syntax = Sql_semantics.Column_type_syntax.ClickHouse_types;
+        query_syntax = Sql_semantics.Query_syntax.ClickHouse_queries;
+        subquery_value = Sql_semantics.Subquery_value.Row_tuple;
+        function_catalog = Sql_semantics.Function_catalog.ClickHouse_functions;
+      }
+
+  let function_names { function_catalog; _ } =
+    match function_catalog with
+    | Sql_semantics.Function_catalog.Standard_functions -> Sql.Function.names ()
+    | Sql_semantics.Function_catalog.ClickHouse_functions ->
+      List.rev_append (Sql.Function.names ()) Clickhouse_function.names
+      |> List.sort_uniq String.compare
+
+  let resolve_function { function_catalog; _ } name argument_count =
+    match function_catalog with
+    | Sql_semantics.Function_catalog.Standard_functions -> Standard_function
+    | Sql_semantics.Function_catalog.ClickHouse_functions ->
+      match Clickhouse_function.resolve name argument_count with
+      | Ok function_ -> Dialect_function function_
+      | Error Clickhouse_function.Unknown_name -> Standard_function
+      | Error Clickhouse_function.Invalid_arity -> Invalid_arity
 end
 
 open Sql
 
 let check_unsigned_type pos = function
-  | Source_type.Infer Type.UInt64 -> [get_unsigned_types pos]
+  (* Only the MySQL/TiDB UNSIGNED modifier is gated; ClickHouse UInt64 infers the same type natively. *)
   | Source_type.Int { sign = Unsigned; _ } -> [get_unsigned_types pos]
   | _ -> []
 
@@ -322,19 +455,19 @@ and analyze_nested acc nesteds k = match nesteds with
 
 and analyze_select acc sels k = match sels with
   | [] -> k acc
-  | { columns; from; where; group; having; _ } :: rest ->
+  | { columns; from; array_join; prewhere; where; group; having; _ } :: rest ->
     analyze_column acc columns (fun acc ->
       let nested_opt = option_list from in
       analyze_nested acc nested_opt (fun acc ->
-        let where_exprs = option_list where in
-        analyze_expr acc (where_exprs @ group) (fun acc ->
+        let filter_exprs = array_join_exprs array_join @ option_list prewhere @ option_list where in
+        analyze_expr acc (filter_exprs @ group) (fun acc ->
           let having_exprs = option_list having in
           analyze_expr acc having_exprs (fun acc ->
             analyze_select acc rest k))))
 
 and analyze_select_complete acc scs k = match scs with
   | [] -> k acc
-  | { select = (core, others); order; limit = _; select_row_locking } :: rest ->
+  | { select = (core, others); order; limit_by; limit = _; select_row_locking } :: rest ->
     let acc = match select_row_locking with
       | Some { value = For_share; pos } -> get_lock_in_share_mode pos :: acc
       | Some { value = For_update; pos } -> get_row_locking pos :: acc
@@ -342,7 +475,7 @@ and analyze_select_complete acc scs k = match scs with
     in
     let all_selects = core :: List.map snd others in
     analyze_select acc all_selects (fun acc ->
-      let order_exprs = List.map fst order in
+      let order_exprs = List.map fst order @ Option.map_default (fun { by; _ } -> by) [] limit_by in
       analyze_expr acc order_exprs (fun acc ->
         analyze_select_complete acc rest k))
 
@@ -379,7 +512,7 @@ and analyze_column_def_internal acc cds k = match cds with
           match c.value with
           | Syntax_constraint Autoincrement -> get_autoincrement c.pos :: acc, default_feature
           | On_update -> only OnUpdateTimestamp [MySQL; TiDB] c.pos :: acc, default_feature
-          | Comment _ -> only ColumnComment [MySQL; TiDB] c.pos :: acc, default_feature
+          | Comment _ -> only ColumnComment [MySQL; TiDB; ClickHouse] c.pos :: acc, default_feature
           | Collate col -> get_collation col c.pos :: acc, default_feature
           | Check (Some enforcement) -> only EnforcedCheck [MySQL; TiDB] enforcement.pos :: acc, default_feature
           | Default { expr = { value = expr; _ }; _ } ->
@@ -516,7 +649,7 @@ let rec analyze stmt =
   | Create (_, Select { value = select; pos }) ->
       let acc = get_create_table_as_select pos :: acc in
       analyze_select_full acc [select] List.rev
-  | Create (_, Like _) -> [only CreateTableLike [MySQL; TiDB] dummy_pos]
+  | Create (_, Like _) -> [only CreateTableLike [MySQL; TiDB; ClickHouse] dummy_pos]
   | Drop _ | DropView _ -> []
   | Alter { alter_actions = actions; alter_options = options; _ } ->
       let acc = List.rev_append (List.map get_alter_option options) acc in
@@ -580,6 +713,6 @@ let rec analyze stmt =
       :: collation_features
   | AlterDatabase (_, Alter_db_tiflash_replica _) ->
       [only DatabaseDdl [MySQL; TiDB; PostgreSQL] dummy_pos; only TiflashReplica [TiDB] dummy_pos]
-  | Truncate _ -> [only TruncateTable [MySQL; TiDB; PostgreSQL] dummy_pos]
+  | Truncate _ -> [only TruncateTable [MySQL; TiDB; PostgreSQL; ClickHouse] dummy_pos]
   | RecoverTable _ -> [only RecoverTable [TiDB] dummy_pos]
   | CreateSequence _ | AlterSequence _ | DropSequence _ -> [only SequenceDdl [PostgreSQL; TiDB] dummy_pos]

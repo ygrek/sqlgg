@@ -20,6 +20,7 @@ type placeholder =
   | Unnamed [@as "unnamed"]
   | Oracle [@as "oracle"]
   | PostgreSQL [@as "postgresql"]
+  | ClickHouse [@as "clickhouse"]
 [@@deriving of_string, json, jsonschema] [@@compact_variants]
 
 type 'a fragment = [

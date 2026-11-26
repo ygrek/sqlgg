@@ -45,7 +45,7 @@ let test_schema_accepts_multiple_ddl _ =
   ignore (get_ok (analyze ~context:schema "SELECT id FROM posts"))
 
 let assert_schema_error_at expected sql =
-  match Analysis.context_of_schema_sql sql with
+  match Analysis.context_of_schema_sql ~dialect:(Analysis.Unchecked configuration) sql with
   | Error (statement, { location = Span pos; _ }, []) ->
     assert_equal ~cmp:Sql.Pos.equal ~printer:Sql.Pos.show expected
       (Sql.Pos.shift (fst statement.pos) pos)
@@ -60,7 +60,7 @@ let test_schema_locates_second_semantic_diagnostic _ =
 
 let test_schema_property_diagnostic _ =
   match
-    Analysis.context_of_schema_sql
+    Analysis.context_of_schema_sql ~dialect:(Analysis.Unchecked configuration)
       "CREATE TABLE users (id INT);\n-- @foo | broken\nCREATE TABLE posts (id INT)"
   with
   | Error ({ text = "CREATE TABLE posts (id INT)"; _ }, { location = Properties; _ }, []) -> ()
@@ -68,7 +68,7 @@ let test_schema_property_diagnostic _ =
   | Ok _ -> assert_failure "expected the schema to be rejected"
 
 let test_schema_returns_expected_sql_diagnostic _ =
-  match Analysis.context_of_schema_sql "CREATE TABLE users (id INT); CREATE TABLE users (id INT)" with
+  match Analysis.context_of_schema_sql ~dialect:(Analysis.Unchecked configuration) "CREATE TABLE users (id INT); CREATE TABLE users (id INT)" with
   | Error (_, { message = "table users already exists"; location = Statement }, []) -> ()
   | Error (_, { message; _ }, _) ->
     assert_failure ("unexpected schema diagnostic: " ^ message)
@@ -123,7 +123,7 @@ let test_calls_restore_ambient_schema _ =
 let test_expected_schema_error_restores_ambient_state _ =
   Analysis.with_context (fun () ->
       compile_all "CREATE TABLE ambient (id INT NOT NULL)";
-      begin match Analysis.context_of_schema_sql "CREATE TABLE broken (" with
+      begin match Analysis.context_of_schema_sql ~dialect:(Analysis.Unchecked configuration) "CREATE TABLE broken (" with
       | Error _ -> ()
       | Ok _ -> assert_failure "expected invalid schema SQL to fail"
       end;
