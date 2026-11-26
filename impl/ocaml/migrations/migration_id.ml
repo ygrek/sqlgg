@@ -74,10 +74,6 @@ let name { name; _ } = name
 
 let compare_position left right = Int64.compare left.position right.position
 
-let compare_order left right =
-  let order = compare_position left right in
-  if order = 0 then String.compare left.raw right.raw else order
-
 let next_position id =
   if id.position = Int64.max_int then
     Error `Position_overflow

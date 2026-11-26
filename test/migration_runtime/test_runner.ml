@@ -529,6 +529,56 @@ let () =
       ]
       (Fake_database.rows connection)
   in
+  let test_same_timestamp_migrations_run_in_plan_order _ =
+    let module Parent_then_child_migrations = struct
+      let baseline = None
+
+      let migration_plan =
+        [
+          Fake_database.reversible "20260710000000_create_jobs";
+          Fake_database.reversible "20260710000000_create_job_items";
+        ]
+    end
+    in
+    let module Parent_then_child_runner =
+      Fake_runner.Linear (Parent_then_child_migrations)
+    in
+    let connection = Fake_database.create [] in
+    let printer = String.concat ", " in
+    assert_equal
+      ~printer
+      [ "20260710000000_create_jobs"; "20260710000000_create_job_items" ]
+      (expect_ok
+         (Fake_database.completed
+            (Parent_then_child_runner.migrate connection)));
+    assert_equal
+      ~printer
+      [ "20260710000000_create_job_items"; "20260710000000_create_jobs" ]
+      (expect_ok
+         (Fake_database.completed
+            (Parent_then_child_runner.rollback connection)));
+    assert_equal
+      ~printer
+      [
+        "apply 20260710000000_create_jobs";
+        "apply 20260710000000_create_job_items";
+        "revert 20260710000000_create_job_items";
+        "revert 20260710000000_create_jobs";
+      ]
+      (List.filter_map
+         (function
+           | Fake_database.Apply id -> Some ("apply " ^ id)
+           | Fake_database.Revert id -> Some ("revert " ^ id)
+           | Fake_database.Create_state_table
+           | Fake_database.List_rows
+           | Fake_database.Insert_applying _
+           | Fake_database.Mark_applied _
+           | Fake_database.Mark_reverting _
+           | Fake_database.Mark_apply_failed _
+           | Fake_database.Mark_revert_failed _
+           | Fake_database.Delete_reverting _ -> None)
+         (Fake_database.operations connection))
+  in
   let test_baseline_runner_skips_squashed_rows_and_advances_batch _ =
     let module Squashed_migrations = struct
       let baseline =
@@ -637,6 +687,8 @@ let () =
             >:: test_configured_state_table_name_reaches_every_query;
             "parallel branches runner applies late migration"
             >:: test_parallel_branches_runner_applies_late_migration;
+            "same timestamp runs in plan order"
+            >:: test_same_timestamp_migrations_run_in_plan_order;
             "baseline runner"
             >:: test_baseline_runner_skips_squashed_rows_and_advances_batch;
             "production action catch"

@@ -230,6 +230,18 @@ let alter_change ~alter_options name target actions =
        name (Gen_migrations.Columns actions))
 
 let diff ~alter_options ~new_tables ~from_ ~to_ ~by_from ~by_to =
+  let referenced_first tables =
+    let pending = Hashtbl.create 16 in
+    List.iter (fun (t : Tables.stored_table) -> Hashtbl.replace pending t.name t) tables;
+    let rec visit ordered name =
+      match Hashtbl.find_opt pending name with
+      | None -> ordered
+      | Some (t : Tables.stored_table) ->
+        Hashtbl.remove pending name;
+        t :: List.fold_left (fun ordered (fk : Sql.foreign_key) -> visit ordered fk.fk_ref_table) ordered t.tbl_foreign_keys
+    in
+    List.rev (List.fold_left (fun ordered (t : Tables.stored_table) -> visit ordered t.name) [] tables)
+  in
   let creates =
     match new_tables,
           List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_from)) to_
@@ -238,9 +250,10 @@ let diff ~alter_options ~new_tables ~from_ ~to_ ~by_from ~by_to =
     | Created_by_schema, first :: rest ->
       raise (New_tables_not_created
                (first.Tables.name, List.map (fun (t : Tables.stored_table) -> t.name) rest))
-    | Created_by_migrations, (_ :: _ as added) -> List.map (fun t -> Create_table t) added in
+    | Created_by_migrations, (_ :: _ as added) -> List.map (fun t -> Create_table t) (referenced_first added) in
   let drops =
     from_ |> List.filter (fun (t : Tables.stored_table) -> not (Prelude.String_map.mem t.name.tn by_to))
+         |> List.rev |> referenced_first |> List.rev
          |> List.map (fun t -> Drop_table t) in
   let alters =
     to_ |> List.filter_map (fun (t : Tables.stored_table) ->

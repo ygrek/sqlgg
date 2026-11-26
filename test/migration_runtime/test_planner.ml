@@ -106,11 +106,7 @@ let () =
     assert_equal
       ~printer:string_of_int
       0
-      (Sqlgg_migrations.Migration_id.compare_position (id "01_a") (id "1_a"));
-    assert_bool
-      "exact ids have a total order"
-      (Sqlgg_migrations.Migration_id.compare_order (id "01_a") (id "1_a")
-       <> 0)
+      (Sqlgg_migrations.Migration_id.compare_position (id "01_a") (id "1_a"))
   in
   let made ~ordinal ~name =
     match Sqlgg_migrations.Migration_id.make ~ordinal ~name with
@@ -268,16 +264,6 @@ let () =
            migration "202611110002_add_email" `Reversible;
            migration "202611110001_create_users" `Reversible;
          ]
-         []);
-    expect_planner_error
-      (`Out_of_order
-        (id "202611110001_create_users_b", id "202611110001_create_users_a"))
-      (Sqlgg_migrations.Planner.migrate
-         Sqlgg_migrations.Planner.Linear
-         [
-           migration "202611110001_create_users_b" `Reversible;
-           migration "202611110001_create_users_a" `Reversible;
-         ]
          [])
   in
   let test_rejects_unknown_stored_id history _ =
@@ -396,18 +382,38 @@ let () =
     | [ { batch = 3; run = `Run_revert; _ } ] -> ()
     | [] | _ :: _ -> assert_failure "expected one revert step for batch 3"
   in
-  let test_accepts_ids_sharing_a_timestamp _ =
+  let test_ids_sharing_a_timestamp_keep_plan_order history _ =
+    let parent_then_child =
+      [ "20260710000000_create_jobs"; "20260710000000_create_job_items" ]
+    in
+    let plan =
+      List.map (fun raw_id -> migration raw_id `Reversible) parent_then_child
+    in
+    let printer = String.concat ", " in
     assert_equal
-      [ "20261111000000_create_users" ]
+      ~printer
+      parent_then_child
+      (step_ids (planned (Sqlgg_migrations.Planner.migrate history plan [])));
+    assert_equal
+      ~printer
+      [ "20260710000000_create_job_items" ]
       (step_ids
          (planned
             (Sqlgg_migrations.Planner.migrate
-               Sqlgg_migrations.Planner.Linear
-               [
-                 migration "20261111000000_create_posts" `Reversible;
-                 migration "20261111000000_create_users" `Reversible;
-               ]
-               [ row "20261111000000_create_posts" 1 "applied" ])))
+               history
+               plan
+               [ row "20260710000000_create_jobs" 1 "applied" ])));
+    assert_equal
+      ~printer
+      (List.rev parent_then_child)
+      (step_ids
+         (planned
+            (Sqlgg_migrations.Planner.rollback
+               history
+               plan
+               (List.map
+                  (fun raw_id -> row raw_id 1 "applied")
+                  parent_then_child))))
   in
   let test_stored_row_order_is_irrelevant _ =
     expect_planner_error
@@ -511,6 +517,27 @@ let () =
          (migrations ())
          [])
   in
+  let test_baseline_archives_its_whole_timestamp _ =
+    let cutoff = id "20260710000000_create_job_items" in
+    assert_equal
+      []
+      (planned
+         (Sqlgg_migrations.Planner.pending
+            ~baseline:cutoff
+            Sqlgg_migrations.Planner.Linear
+            []
+            [
+              row "20260710000000_create_jobs" 1 "applied";
+              row "20260710000000_create_job_items" 1 "applied";
+            ]));
+    expect_planner_error
+      (`Before_baseline (id "20260710000000_create_jobs"))
+      (Sqlgg_migrations.Planner.migrate
+         ~baseline:cutoff
+         Sqlgg_migrations.Planner.Linear
+         [ migration "20260710000000_create_jobs" `Reversible ]
+         [])
+  in
   let test_migration_keeps_id_and_actions _ =
     (match migration "202611110001_create_users" `Reversible with
      | Sqlgg_migrations.Migration.Reversible
@@ -599,8 +626,12 @@ let () =
                   [ "202611110003_create_index"; "202611110002_add_email" ];
             "steps carry direction and batch"
             >:: test_steps_carry_direction_and_batch;
-            "ids sharing a timestamp"
-            >:: test_accepts_ids_sharing_a_timestamp;
+            "ids sharing a timestamp keep plan order"
+            >:: test_ids_sharing_a_timestamp_keep_plan_order
+                  Sqlgg_migrations.Planner.Linear;
+            "interleaved ids sharing a timestamp keep plan order"
+            >:: test_ids_sharing_a_timestamp_keep_plan_order
+                  Sqlgg_migrations.Planner.Interleaved;
             "stored row order"
             >:: test_stored_row_order_is_irrelevant;
             "interleaved applies skipped migrations"
@@ -624,6 +655,8 @@ let () =
                   "apply_failed";
             "baseline archives squashed rows"
             >:: test_baseline_archives_squashed_rows;
+            "baseline archives its whole timestamp"
+            >:: test_baseline_archives_its_whole_timestamp;
             "migration keeps id and actions"
             >:: test_migration_keeps_id_and_actions;
             "generated id invalid literal"
