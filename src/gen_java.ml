@@ -49,6 +49,8 @@ let as_lang_type t =
   | One_or_all 
   | UInt64
   | Json_path -> assert false
+  | (Array _ | Map _ | Tuple _ | Fun _) as k ->
+    failwith (sprintf "type %s is not supported by the Java generator" (Type.show_kind k))
 
 let as_api_type = String.capitalize_ascii $ as_lang_type
 

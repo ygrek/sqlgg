@@ -593,7 +593,7 @@ let shared_vars_fixture () =
     make_param ~id:(located (sq, sq + 1)) ~typ:(Type.strict Int)
   in
   let select_full =
-    match Parser.parse_stmt shared_sql with
+    match Parser.parse_stmt Test_helpers.semantics shared_sql with
     | { Parser.stmt = Sql.Select s; _ } -> s
     | _ -> assert_failure "expected SELECT for shared fixture"
   in
@@ -625,7 +625,10 @@ let test_shared_vars_group =
       ])
 
 let compile_one ~dynamic_select sql =
-  match Compile.statement ~dynamic_select (Test_helpers.statement sql) with
+  match
+    Compile.statement ~semantics:Test_helpers.semantics ~dynamic_select
+      (Test_helpers.statement sql)
+  with
   | Executable r -> r
   | Verbatim | Reusable _ | Not_reusable ->
       assert_failure "expected an executable statement"

@@ -150,6 +150,9 @@ type scoped_field = {
 module L = struct
   open Type
 
+  let unsupported_container t =
+    failwith (sprintf "type %s is not supported by the OCaml generator yet (no codec for containers)" (show t))
+
   let as_lang_type = function
   | { t = Blob; nullability } -> type_name { t = Text; nullability }
   | { t = StringLiteral _; nullability } -> type_name { t = Text; nullability }
@@ -166,6 +169,7 @@ module L = struct
   | { t = One_or_all; _ }
   | { t = UInt64; _ }
   | { t = Any; _ } as t -> type_name t
+  | { t = (Array _ | Map _ | Tuple _ | Fun _); _ } as t -> unsupported_container t
 
   let as_runtime_repr_name = function
   | { t = Blob; _ }
@@ -183,9 +187,7 @@ module L = struct
   | { t = Json; _ } -> "json"
   | { t = UInt64; _ } -> "uint64"
   | { t = One_or_all; _ } -> "text"
-
-
-  let as_api_type = as_lang_type
+  | { t = (Array _ | Map _ | Tuple _ | Fun _); _ } as t -> unsupported_container t
 end
 
 let codec_get_column, codec_set_param =
@@ -223,11 +225,6 @@ let format_get_column ~row ~idx attr =
 
 let get_column index attr =
   sprintf "(%s)" (format_get_column ~row:"stmt" ~idx:(string_of_int index) attr)
-
-module T = Translate(L)
-
-(* open L *)
-open T
 
 let schema_to_attrs schema =
   List.filter_map (function
@@ -463,7 +460,7 @@ let set_param ~meta index param =
       if nullable then set_param_nullable ~bound:"v" ~body:(m ^ ".set_param p v")
       else output "%s.set_param p %s;" m pname
   | Builtin_codec t ->
-      let ptype = show_param_type { param with typ = t } in
+      let ptype = L.as_lang_type t in
       if nullable then set_param_nullable ~bound:"v" ~body:(sprintf "T.set_param_%s p v" ptype)
       else output "T.set_param_%s p %s;" ptype pname
 
@@ -1085,7 +1082,8 @@ let generate_enum_modules stmts =
   let get_enum typ = match typ.Sql.Type.t with 
     | Union { ctors; _ } -> Some ctors
     | Int | Text | Blob | Float | Bool | Json | UInt64
-    | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all -> None
+    | Datetime | Decimal _ | FloatingLiteral _ | Any | StringLiteral  _ | Json_path | One_or_all
+    | Array _ | Map _ | Tuple _ | Fun _ -> None
   in
 
   let enum_unless_codec codec typ meta =

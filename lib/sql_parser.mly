@@ -18,9 +18,71 @@
     in
     List.filter_map param l, List.mem (`Limit,`Const 1) l
 
-  let call name parameters = fn name (Function.lookup name (List.length parameters)) parameters
+  let resolve_signature name parameters =
+    let argument_count = List.length parameters in
+    match Dialect.Semantic.resolve_function (Parser_state.semantics ()) name argument_count with
+    | Dialect.Semantic.Dialect_function signature -> signature
+    | Dialect.Semantic.Standard_function -> Function.lookup name argument_count
+    | Dialect.Semantic.Invalid_arity ->
+      Prelude.fail "wrong number of arguments for ClickHouse function %S: %d" name argument_count
+
+  let call name parameters = fn name (resolve_signature name parameters) parameters
+
+  let column_definition ~start name sql_kind extra =
+    let meta = List.concat @@ Parser_state.Stmt_metadata.find_all start in
+    let sql_kind, implied_extra = match sql_kind with
+      | Some (kind, constraints) -> Some kind, constraints
+      | None -> None, []
+    in
+    let extra = implied_extra @ extra in
+    let has_explicit_nullability = List.exists (function
+      | { value = Alter_action_attr.Syntax_constraint Null; _ }
+      | { value = Alter_action_attr.Syntax_constraint NotNull; _ } -> true
+      | { value = Alter_action_attr.Syntax_constraint PrimaryKey; _ }
+      | { value = Alter_action_attr.Syntax_constraint Unique; _ }
+      | { value = Alter_action_attr.Syntax_constraint Autoincrement; _ }
+      | { value = Alter_action_attr.Syntax_constraint (OnConflict _); _ }
+      | { value = Alter_action_attr.Syntax_constraint WithDefault; _ }
+      | { value = Alter_action_attr.Syntax_constraint (Composite _); _ }
+      | { value = Alter_action_attr.Default _; _ }
+      | { value = Alter_action_attr.Check _; _ }
+      | { value = Alter_action_attr.On_update; _ }
+      | { value = Alter_action_attr.Generated; _ }
+      | { value = Alter_action_attr.Comment _; _ }
+      | { value = Alter_action_attr.Collate _; _ } -> false
+    ) extra in
+    let extra =
+      match (Parser_state.semantics ()).implicit_column_nullability,
+            has_explicit_nullability with
+      | Sql_semantics.Implicit_column_nullability.Strict, false ->
+        make_located ~value:(Alter_action_attr.Syntax_constraint NotNull) ~pos:name.pos
+        :: extra
+      | Sql_semantics.Implicit_column_nullability.Nullable, false
+      | (Sql_semantics.Implicit_column_nullability.Strict
+        | Sql_semantics.Implicit_column_nullability.Nullable), true -> extra
+    in
+    { Alter_action_attr.name = name; meta; kind = sql_kind; extra; }
+
+  let clickhouse_only construct =
+    match (Parser_state.semantics ()).Dialect.Semantic.query_syntax with
+    | Sql_semantics.Query_syntax.ClickHouse_queries -> ()
+    | Sql_semantics.Query_syntax.Standard_queries -> Prelude.fail "%s is ClickHouse syntax" construct
+
+  let lambda_parameter = function
+    | Column { collated = { cname; tname = None; _ }; collation = None } -> cname
+    | parameter -> Prelude.fail "lambda parameter must be an unqualified identifier, got %s" (expr_to_string parameter)
 
   let arith name ret e1 e2 = fn name (Arith (Source_type.depends ret)) [e1; e2]
+
+  let clickhouse_value_type = function
+    | `Strict kind -> Type.strict kind
+    | `Nullable kind -> Type.nullable kind
+
+  let typed_param p pos typ = Param (make_param ~id:{ p with pos } ~typ, Meta.empty ())
+
+  (* A ClickHouse cast yields exactly the target type, nullability included. *)
+  let clickhouse_cast target e = fn "cast" (F (Typ (clickhouse_value_type target), [Typ (depends Any)])) [e]
+
 %}
 
 %token <int> INTEGER
@@ -64,11 +126,20 @@
 %token JSON_ARRAYAGG
 %token NUM_DIV_OP NUM_EQ_OP NUM_CMP_OP PLUS MINUS NOT_DISTINCT_OP NUM_BIT_SHIFT NUM_BIT_OR NUM_BIT_AND
 %token TEXT_CMP_OP TEXT_DIST_OP
-%token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
+%token JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP LAMBDA_ARROW
 %token <Sql.int_size option> T_INTEGER
 %token T_TEXT T_TINYTEXT T_MEDIUMTEXT T_LONGTEXT T_CHAR T_VARCHAR T_VARCHAR2
 %token T_BLOB T_TINYBLOB T_MEDIUMBLOB T_LONGBLOB T_VARBINARY
 %token T_FLOAT T_DOUBLE T_BOOLEAN T_DATETIME T_UUID T_DECIMAL T_JSON
+(* ClickHouse type names keep their lexeme: outside a column type they are ordinary identifiers. *)
+%token <string * Sql.Type.kind> CLICKHOUSE_SCALAR
+%token <string> CLICKHOUSE_ARRAY CLICKHOUSE_MAP CLICKHOUSE_TUPLE CLICKHOUSE_NULLABLE CLICKHOUSE_LOWCARDINALITY
+%token <string> CLICKHOUSE_FIXED_STRING CLICKHOUSE_DATETIME CLICKHOUSE_DATETIME64 CLICKHOUSE_ENUM
+%token <string> CLICKHOUSE_AGGREGATE_FUNCTION CLICKHOUSE_SIMPLE_AGGREGATE_FUNCTION CLICKHOUSE_UNSUPPORTED
+%token <string * int option> CLICKHOUSE_DECIMAL
+%token PREWHERE FINAL LBRACKET RBRACKET SAMPLE SETTINGS FORMAT SEMI ANTI ASOF
+%token <string> MATERIALIZED ALIAS EPHEMERAL CODEC CLUSTER POPULATE ENGINE GRANULARITY PROJECTION SYNC
+%token <string> OPTIMIZE DEDUPLICATE
 
 (*
 %left COMMA_JOIN
@@ -77,7 +148,9 @@
 (* FIXME precedence of COMMA and JOIN *)
 
 %nonassoc LOWEST
-%nonassoc COLLATE KEY ON WITH NULL
+%nonassoc COMMA
+%right LAMBDA_ARROW
+%nonassoc COLLATE KEY ON WITH NULL ANY
 
 (* https://dev.mysql.com/doc/refman/8.0/en/operator-precedence.html *)
 
@@ -86,6 +159,7 @@
 %left AND
 %nonassoc NOT
 %nonassoc BETWEEN
+%nonassoc GLOBAL
 %nonassoc EQUAL NUM_EQ_OP NOT_DISTINCT_OP IS LIKE LIKE_OP IN
 %nonassoc NUM_CMP_OP TEXT_CMP_OP TEXT_DIST_OP
 %left NUM_BIT_OR
@@ -100,8 +174,11 @@
 (* Warning: the precedence level assigned to BINARY is never useful. *)
 (* %nonassoc BINARY COLLATE *)
 %nonassoc ESCAPE
+%nonassoc DOUBLECOLON LBRACKET
+%nonassoc JOIN_CONDITION_END
 
 %type <Sql.expr> expr
+%type <[ `Strict of Sql.Type.kind | `Nullable of Sql.Type.kind ]> clickhouse_type
 
 %start <Sql.stmt> input
 
@@ -127,6 +204,21 @@ top_statement: s=statement { s }
              | TRUNCATE TABLE? name=table_name { Truncate name }
              | RECOVER TABLE name=table_name { RecoverTable name }
 
+on_cluster: ON CLUSTER either(ident, TEXT) { }
+
+materialized_view_storage: TO table_name | engine_clause | { }
+
+(* The storage engine decides how ClickHouse keeps rows, not what a query returns. *)
+engine_clause: ENGINE EQUAL? engine_spec table_storage_clause* { }
+engine_spec: engine_name | engine_name LPAREN separated_list(COMMA, engine_argument) RPAREN { }
+engine_name: ident | SET { }
+engine_argument: expr | DEFAULT { }
+table_storage_clause:
+  | ORDER BY expr | PARTITION BY expr | PRIMARY KEY expr | SAMPLE BY expr | TTL expr
+  | SETTINGS commas(assign) { }
+
+optimize_option: FINAL | DEDUPLICATE | PARTITION expr { }
+
 param: 
   | QSTN { { value=None; pos = ($startofs, $endofs) } }
   | PARAM  { $1 }
@@ -149,12 +241,14 @@ cte_item: | cte_name=located(ident) names=maybe_parenth(sequence(ident))? AS LPA
             }
 cte: is_recursive=cte_with cte_items=commas(cte_item) {{ cte_items; is_recursive }}
 
-statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(table_name) target=table_definition
+statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(table_name) ioption(on_cluster) target=table_definition
               {
                 Create (name, target)
               }
          | CREATE TABLE name=located(table_name) AS select=maybe_parenth(located(select_stmt))
          | CREATE or_replace? VIEW name=located(table_name) AS select=maybe_parenth(located(select_stmt))
+         | CREATE MATERIALIZED VIEW ioption(if_not_exists) name=located(table_name) ioption(on_cluster)
+           materialized_view_storage POPULATE? AS select=maybe_parenth(located(select_stmt))
               {
                 Create (name, Select select)
               }
@@ -162,7 +256,13 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
               {
                 Alter { alter_table = name; alter_actions = [ `SetTiflashReplica (mode, spec) ]; alter_options = [] }
               }
-         | ALTER TABLE name=table_name actions=commas(alter_action_or_ignored)
+         | ALTER TABLE name=table_name ioption(on_cluster) UPDATE ss=commas(set_column) w=where
+              { clickhouse_only "ALTER TABLE UPDATE"; Update (name, ss, Some w, [], []) }
+         | ALTER TABLE name=table_name ioption(on_cluster) DELETE w=where
+              { clickhouse_only "ALTER TABLE DELETE"; Delete (name, Some w) }
+         | OPTIMIZE TABLE name=table_name ioption(on_cluster) optimize_option*
+              { Alter { alter_table = name; alter_actions = []; alter_options = [] } }
+         | ALTER TABLE name=table_name ioption(on_cluster) actions=commas(alter_action_or_ignored)
               {
                 let actions, options =
                   List.fold_right
@@ -176,7 +276,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
                 Alter { alter_table = name; alter_actions = actions; alter_options = options }
               }
          | RENAME TABLE l=separated_nonempty_list(COMMA, separated_pair(table_name,TO,table_name)) { Rename l }
-         | DROP TABLE if_exists? name=table_name
+         | DROP TABLE if_exists? name=table_name ioption(on_cluster) ioption(SYNC)
               {
                 Drop name
               }
@@ -190,7 +290,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
                 let ci_kind = if u then Sql.Unique_idx else Sql.Plain_idx in
                 CreateIndex { ci_name = name; ci_table = table; ci_cols = cols; ci_kind; ci_options = opts }
               }
-         | select_stmt { Select $1 }
+         | s=select_stmt query_tail { Select s }
          | insert_action_kind=insert_cmd target=table_name names=insert_columns VALUES values=commas(sequence(set_column_expr))? ss=located(conflict_clause)?
               {
                 Insert { insert_action_kind; target; action=`Values (names, values); on_conflict_clause=ss; }
@@ -274,7 +374,7 @@ routine_extra: LANGUAGE ident { }
 
 (* cf. ColId / unreserved_keyword in PostgreSQL's gram.y (TYPE_P is unreserved there too):
    https://github.com/postgres/postgres/blob/REL_18_0/src/backend/parser/gram.y#L17632 *)
-ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION
+common_ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION
      | x=TRUNCATE | x=RECOVER
      | x=DATABASE | x=EXCHANGE | x=REORGANIZE | x=MAXVALUE | x=LESS | x=THAN
      | x=FORCE | x=AUTO_RANDOM_BASE | x=AUTO_ID_CACHE | x=SHARD_ROW_ID_BITS | x=VISIBLE | x=INVISIBLE
@@ -282,6 +382,19 @@ ident: x=IDENT | x=TYPE | x=EXTENSION | x=SCHEMA | x=VERSION
      | x=TIFLASH | x=REPLICA | x=LOCATION | x=LABELS | x=HYPO
      | x=SEQUENCE | x=INCREMENT | x=START | x=MINVALUE | x=NOMINVALUE | x=NOMAXVALUE
      | x=CYCLE | x=NOCYCLE | x=RESTART | x=ENFORCED { x }
+
+ident: x=alias_ident | x=CLICKHOUSE_ARRAY { x }
+
+(* Without AS, the word after a source starts ARRAY JOIN rather than naming the source "array". *)
+alias_ident: x=common_ident
+     | x=CLICKHOUSE_MAP | x=CLICKHOUSE_TUPLE | x=CLICKHOUSE_NULLABLE
+     | x=CLICKHOUSE_LOWCARDINALITY | x=CLICKHOUSE_FIXED_STRING | x=CLICKHOUSE_DATETIME
+     | x=CLICKHOUSE_DATETIME64 | x=CLICKHOUSE_ENUM | x=CLICKHOUSE_AGGREGATE_FUNCTION
+     | x=CLICKHOUSE_SIMPLE_AGGREGATE_FUNCTION | x=CLICKHOUSE_UNSUPPORTED
+     | x=MATERIALIZED | x=ALIAS | x=EPHEMERAL | x=CODEC | x=CLUSTER | x=POPULATE | x=ENGINE
+     | x=GRANULARITY | x=SYNC | x=DEDUPLICATE { x }
+     | scalar=CLICKHOUSE_SCALAR { fst scalar }
+     | decimal=CLICKHOUSE_DECIMAL { fst decimal }
 
 table_ident: x=ident { x }
 qual_ident: x=ident { x }
@@ -302,10 +415,12 @@ table_definition: t=sequence_(column_def1) ignore_after(RPAREN)
                           (fun x { schema; constraints; indexes } -> match x with
                           | `Attr a -> { schema = a::schema; constraints; indexes }
                           | `Constraint c -> { schema; constraints = c::constraints; indexes }
-                          | `Index i -> { schema; constraints; indexes = i::indexes })
+                          | `Index i -> { schema; constraints; indexes = i::indexes }
+                          | `Storage_only -> { schema; constraints; indexes })
                           t { schema = []; constraints = []; indexes = [] })
                       }
                 | LIKE name=maybe_parenth(table_name) { Like name } (* mysql *)
+                | AS name=table_name engine_clause? { clickhouse_only "CREATE TABLE AS table"; Like name }
 
 (* ignoring everything after given token with a "lexer hack" (NB one look-ahead token) *)
 ignore_after(X): parser_state_ignore X IGNORED* parser_state_normal { }
@@ -321,16 +436,32 @@ select_stmt: cte=cte? select_complete=select_stmt_plain
                 { select_complete; cte; }
               }
 
-select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) lim=limit_t? select_row_locking=located(select_row_locking)?
+select_stmt_plain: core=select_core other=list(pair(compound_op,select_core)) o=loption(order) limits=limits select_row_locking=located(select_row_locking)?
               {
                 let core = { core with source_pos = Some ($startofs, $endofs) } in
-                { select = (core, other); order=o; limit=lim; select_row_locking; }
+                let limit_by, lim = limits in
+                { select = (core, other); order=o; limit_by; limit=lim; select_row_locking; }
               }
 
-select_core: SELECT select_type? r=commas(column1) f=from?  w=where?  g=loption(group) h=having?
+limits: { None, None }
+      | l=limit_t { None, Some l }
+      | lb=limit_by l=limit_t? { Some lb, l }
+
+limit_by: per_group=limit_t BY by=expr_list { clickhouse_only "LIMIT BY"; { per_group; by } }
+
+(* SETTINGS and FORMAT end a ClickHouse query and do not change its result type. *)
+query_tail: { } | ignore_after(either(SETTINGS, FORMAT)) { }
+
+select_core: SELECT select_type? r=commas(column1) f=from? pw=preceded(PREWHERE, expr)? w=where?
+             g=loption(group) h=having?
               {
+                let from, array_join =
+                  match f with
+                  | Some (from, array_join) -> Some from, array_join
+                  | None -> None, []
+                in
                 { source_pos = Some ($startofs, $endofs);
-                  columns=r; from=f; where=w; group=g; having=h; }
+                  columns=r; from; array_join; prewhere=pw; where=w; group=g; having=h; }
               }
 
 table_list: src=source joins=located(join_source)* { (src,joins) }
@@ -352,7 +483,22 @@ join_source: COMMA src=source c=join_cond { src, make_located ~value:Schema.Join
            | j=cond(located(outer_join))
            | j=cond(located(inner_join)) { j }
            | j=straight_cond(located(straight_join)) { j }
-join_cond: ON e=expr { On e }
+           | j=cond(located(clickhouse_join)) { j }
+           | GLOBAL j=cond(located(global_join)) { clickhouse_only "GLOBAL JOIN"; j }
+
+global_join: k=outer_join | k=inner_join | k=clickhouse_join { k }
+
+join_strictness: ANY | ALL | ASOF { }
+join_side: LEFT { Schema.Join.Left } | RIGHT { Schema.Join.Right }
+         | FULL { Schema.Join.Full } | INNER { Schema.Join.Inner }
+(* Strictness picks which matches are kept; only SEMI changes nullability, since a semi-joined row always has a match. *)
+clickhouse_join:
+  | join_strictness { clickhouse_only "ANY/ALL/ASOF JOIN"; Schema.Join.Inner }
+  | k=join_side join_strictness | join_strictness k=join_side { clickhouse_only "ANY/ALL/ASOF JOIN"; k }
+  | join_side SEMI | SEMI join_side { Schema.Join.Inner }
+  | k=join_side ANTI | ANTI k=join_side { k }
+(* GLOBAL after an ON condition starts the next GLOBAL JOIN rather than a GLOBAL IN. *)
+join_cond: ON e=expr %prec JOIN_CONDITION_END { On e }
          | USING l=sequence(ident) { Using l }
          | %prec LOWEST { Default }
 
@@ -361,7 +507,8 @@ source1: table_name { `Table $1 }
        | LPAREN s=table_list RPAREN { `Nested s }
        | LPAREN s=values_stmt RPAREN { `ValueRows s }
 
-source: src=source1 alias=source_alias? {
+(* FINAL and SAMPLE change which rows ClickHouse reads, not the result type. *)
+source: src=source1 alias=source_alias? FINAL? sample? {
   ( src, 
     Option.map (fun (tbl, cols) -> 
       let column_aliases = Option.map (List.map (fun name -> make_attribute' name (depends Any) )) cols in
@@ -369,6 +516,9 @@ source: src=source1 alias=source_alias? {
     ) alias
   )
 }
+
+sample: SAMPLE sample_ratio preceded(OFFSET, sample_ratio)? { }
+sample_ratio: INTEGER | FLOAT | INTEGER NUM_DIV_OP INTEGER { }
 
 insert_cmd:  INSERT DELAYED? OR? conflict_algo INTO { Insert_into }
            | INSERT INTO { Insert_into }
@@ -415,7 +565,32 @@ order_type:
           | DESC | ASC { `Fixed }
           | param { `Param $1 }
 
-from: FROM t=table_list { t }
+from: FROM src=source items=located(from_item)*
+  {
+    let rec joins_then_array_joins joins = function
+      | { value = `Join join; pos } :: rest -> joins_then_array_joins ({ value = join; pos } :: joins) rest
+      | rest ->
+        List.rev joins,
+        List.map (function
+          | { value = `Array_join array_join; _ } -> array_join
+          | { value = `Join _; _ } -> failwith "JOIN after ARRAY JOIN is not supported") rest
+    in
+    let joins, array_join = joins_then_array_joins [] items in
+    (src, joins), array_join
+  }
+from_item: j=join_source { `Join j } | a=array_join { `Array_join a }
+array_join:
+  | CLICKHOUSE_ARRAY JOIN items=array_join_items
+    { { array_join_kind = Inner_array_join; array_join_items = items } }
+  | LEFT CLICKHOUSE_ARRAY JOIN items=array_join_items
+    { { array_join_kind = Left_array_join; array_join_items = items } }
+(* A comma after an ARRAY JOIN item adds another array rather than a comma join. *)
+array_join_items: i=array_join_item %prec LOWEST { [i] }
+                | i=array_join_item COMMA rest=array_join_items { i :: rest }
+array_join_item: joined_array=expr element_alias=array_join_alias { { joined_array; element_alias } }
+array_join_alias: AS a=located(ident) { Some a }
+                | a=located(alias_ident) { Some a }
+                | %prec JOIN_CONDITION_END { None }
 where: WHERE e=expr { e }
 group: GROUP BY l=expr_list { l }
 having: HAVING e=expr { e }
@@ -431,7 +606,8 @@ column1_kind:
 maybe_as: AS? name=located(ident) { Some name }
         | { None }
 
-source_alias: AS? name=located(ident) names=sequence(ident)? { name, names }
+source_alias: AS name=located(ident) names=sequence(ident)? { name, names }
+            | name=located(alias_ident) names=sequence(ident)? { name, names }
 
 maybe_parenth(X): x=X | LPAREN x=X RPAREN { x }
 
@@ -538,7 +714,7 @@ ttl_option: TTL EQUAL col=ident PLUS INTERVAL n=INTEGER unit=INTERVAL_UNIT
               { `TtlSet (col, n, unit) }
           | TTL_ENABLE EQUAL v=TEXT { `TtlEnable v }
           | TTL_JOB_INTERVAL EQUAL v=TEXT { `TtlJobInterval v }
-index_or_key: INDEX | KEY { }
+%inline index_or_key: INDEX | KEY { }
 index_type:
   | index_or_key { Sql.Plain_idx }
   | UNIQUE index_or_key? { Sql.Unique_idx }
@@ -549,19 +725,48 @@ alter_pos: AFTER col=ident { `After col }
          | { `Default }
 drop_behavior: CASCADE | RESTRICT { }
 
-column_def: name=located(ident) sql_kind=located_sql_type? extra=column_def_extras
+column_def: name=located(ident) sql_kind=column_sql_type? extra=column_def_extras
+  { column_definition ~start:$startpos.Lexing.pos_cnum name sql_kind extra }
+  | name=located(ident) t=located(clickhouse_type) extra=clickhouse_column_extras
   {
-    let rule_start_pos_cnum = $startpos.Lexing.pos_cnum in
-    let meta = List.concat @@ Parser_state.Stmt_metadata.find_all rule_start_pos_cnum in
-    { Alter_action_attr.name = name; meta; kind = sql_kind; extra }
+    let kind, constraints =
+      match t.value with
+      | `Strict kind -> kind, []
+      | `Nullable kind ->
+        kind, [make_located ~pos:t.pos ~value:(Alter_action_attr.Syntax_constraint Constraint.Null)]
+    in
+    let sql_kind = make_located ~pos:t.pos ~value:(make_collated ~collated:(Source_type.Infer kind) ()) in
+    column_definition ~start:$startpos.Lexing.pos_cnum name (Some (sql_kind, constraints)) extra
   }
 
-inline_idx_kind:
+(* ClickHouse fixes the order of column modifiers, so an expression can never be followed by NULL or NOT. *)
+clickhouse_column_extras:
+  nullability=located(clickhouse_column_nullability)? value=located(clickhouse_column_value)?
+  comment=located(preceded(COMMENT, TEXT))? preceded(CODEC, sequence(codec))? preceded(TTL, expr)?
+  {
+    Prelude.option_list nullability
+    @ Prelude.option_list value
+    @ Prelude.option_list (Option.map (fun { value; pos } -> { value = Alter_action_attr.Comment value; pos }) comment)
+  }
+
+clickhouse_column_nullability:
+  | NULL { Alter_action_attr.Syntax_constraint Null }
+  | NOT NULL { Alter_action_attr.Syntax_constraint NotNull }
+
+clickhouse_column_value:
+  | DEFAULT def=located(expr)
+    { Alter_action_attr.Default { expr = def; sql = Parser_state.extract_source def.pos } }
+  | either(MATERIALIZED, ALIAS) expr { Alter_action_attr.Generated }
+  | EPHEMERAL default_value? { Alter_action_attr.Syntax_constraint WithDefault }
+
+%inline inline_idx_kind:
   | index_or_key           { Sql.Regular_idx }
   | FULLTEXT index_or_key? { Sql.Fulltext }
   | SPATIAL index_or_key?  { Sql.Spatial }
 
 column_def1: c=column_def { `Attr c }
+           | INDEX ident clickhouse_index_expr TYPE engine_spec GRANULARITY INTEGER { `Storage_only }
+           | PROJECTION ident LPAREN select_stmt RPAREN { `Storage_only }
            | pair(CONSTRAINT,ident?)? l=table_constraint_1 { `Constraint l }
            | kind=inline_idx_kind t=table_index
                {
@@ -579,7 +784,7 @@ index_option: IDENT { None }
             | visibility=index_visibility { Some (Index_visibility visibility) }
             | COMMENT comment=TEXT { Some (Index_comment comment) }
 
-table_index: name=ident? l=sequence(key_part) opts=index_options { (name, l, opts) }
+table_index: name=ioption(ident) l=sequence(key_part) opts=index_options { (name, l, opts) }
 
 (* FIXME check columns *)
 table_constraint_1:
@@ -660,6 +865,10 @@ column_def_extra: PRIMARY? KEY { Some (Alter_action_attr.Syntax_constraint Prima
                 | COMMENT comment=TEXT { Some (Alter_action_attr.Comment comment) }
                 | pair(GENERATED,ALWAYS)? AS LPAREN expr RPAREN either(VIRTUAL,STORED)? { Some Alter_action_attr.Generated } (* FIXME params and typing ignored *)
 
+codec: ident loption(sequence(INTEGER)) | NONE { }
+
+clickhouse_index_expr: attr_name | func_name LPAREN func_params RPAREN | sequence(key_part) { }
+
 default_value: e=single_literal_value
              | e=datetime_value { e } (* sub expr ? *)
              | LPAREN e=expr RPAREN { e }
@@ -675,7 +884,10 @@ set_column_expr:
 anyall: ANY | SOME { `Any }
       | ALL { `All }
 
-mnot(X): NOT x = X | x = X { x }
+(* After a comparison, ANY is the quantifier rather than the ClickHouse any() aggregate. *)
+quantifier: %prec LOWEST { None } | q=anyall { Some q }
+
+mnot(X): NOT X { fun e -> fn "not" Negation [e] } | X { fun e -> e }
 
 attr_name: cname=ident { { cname; tname=None; cpos = ($startofs, $endofs) } }
          | table=qualifier DOT cname=ident { {cname; tname=Some table; cpos = ($startofs, $endofs) } } (* FIXME database identifier *)
@@ -691,7 +903,7 @@ operators(E):
     | e1=E NUM_DIV_OP e2=E %prec PLUS { arith "num_div" Float e1 e2 }
     | e1=E TEXT_DIST_OP e2=E { arith "text_dist" Float e1 e2 }
     | e1=E DIV e2=E %prec PLUS { arith "div" Int e1 e2 }
-    | e1=E op=comparison_op q=anyall? e2=E %prec EQUAL
+    | e1=E op=comparison_op q=quantifier e2=E %prec EQUAL
       { let kind = Stdlib.Option.fold
           ~none:(Comparison op)
           ~some:(fun quantifier -> Quantified_comparison { op; quantifier })
@@ -719,15 +931,18 @@ b_expr_:
       e=c_expr | e=operators(b_expr) { e }
 
 expr_:
-      e=c_expr | e=operators(expr) { e }
+      e=c_expr %prec LOWEST { e }
+    | e=operators(expr) { e }
+    | parameters=tuple_expr LAMBDA_ARROW body=expr
+      { Lambda { lambda_params = List.map lambda_parameter parameters; lambda_body = body } }
     | e1=expr AND e2=expr { fn "boolean_bin_op" (Logical And) [e1;e2] }
     | e1=expr XOR e2=expr { fn "boolean_bin_op" (Logical Xor) [e1;e2] }
     | e1=expr OR e2=expr { fn "boolean_bin_op" (Logical Or) [e1;e2] }
     | NOT e=expr %prec NOT { fn "not" Negation [e] }
-    | e1=expr mnot(like) e2=expr %prec LIKE { fn "like" Like [e1;e2] }
-    | e1=expr mnot(like) e2=expr ESCAPE esc=expr { fn "like_escape" Like_escape [fn "like" Like [e1;e2]; esc] }
-    | e1=expr mnot(IN) l=sequence(expr) { fn "in" Membership (e1::l) }
-    | e1=expr mnot(IN) LPAREN select=select_stmt RPAREN { fn "in_select" Membership [e1; SelectExpr (select, `AsValue)] }
+    | e1=expr negate=mnot(like) e2=expr %prec LIKE { negate (fn "like" Like [e1;e2]) }
+    | e1=expr negate=mnot(like) e2=expr ESCAPE esc=expr { negate (fn "like_escape" Like_escape [fn "like" Like [e1;e2]; esc]) }
+    | e1=expr negate=membership l=sequence(expr) { negate (fn "in" Membership (e1::l)) }
+    | e1=expr negate=membership LPAREN select=select_stmt RPAREN { negate (fn "in_select" Membership [e1; SelectExpr (select, `AsValue)]) }
     | e1=expr IN table=table_name { Tables.check table; e1 }
     | e1=expr k=in_or_not_in p=param
       {
@@ -735,24 +950,39 @@ expr_:
         let e = fn "in_param" Membership [e1; arg] in
         InChoice (make_located ~value:p.value ~pos:($startofs, $endofs), k, e )
       }
-    | LPAREN e=expr COMMA es=commas(expr) RPAREN k=in_or_not_in p=param
+    | exprs=tuple_expr k=in_or_not_in p=param
       {
-        InTupleList(make_located ~value:{ exprs = e :: es; param_id = p; kind_in_tuple_list = k; } ~pos:($startofs, $endofs))
+        InTupleList(make_located ~value:{ exprs; param_id = p; kind_in_tuple_list = k; } ~pos:($startofs, $endofs))
       }
+    | t=tuple_expr negate=membership l=sequence(expr) { negate (fn "in" Membership (call "tuple" t :: l)) }
+    | t=tuple_expr negate=membership LPAREN select=select_stmt RPAREN
+      { negate (fn "in_select" Membership [call "tuple" t; SelectExpr (select, `AsValue)]) }
     | e=expr IS NOT NULL { fn "is_not_null" (Comparison Is_not_null) [e] }
     | e=expr IS NULL { fn "is_null" (Comparison Is_null) [e] }
     | e1=expr IS is_not distinct_from e2=expr %prec IS { fn "is_distinct" (Comparison Not_distinct_op) [e1;e2] }
-    | e=expr mnot(BETWEEN) a=b_expr AND b=expr { fn "between" Range [e;a;b] }
+    | e=expr negate=mnot(BETWEEN) a=b_expr AND b=expr { negate (fn "between" Range [e;a;b]) }
 
 c_expr_:
       MOD LPAREN e1=expr COMMA e2=expr RPAREN { arith "mod" Any e1 e2 } (* mysql special *)
     | LPAREN e=expr RPAREN { e }
+    | a=attr_name LAMBDA_ARROW body=expr
+      { Lambda { lambda_params = [lambda_parameter (column a)]; lambda_body = body } }
     | a=attr_name c=collate? { column ?collation:c a }
     | VALUES LPAREN n=ident RPAREN { Of_values n }
     | v=literal_value | v=datetime_value { v }
     | INTERVAL_UNIT { Value (make_collated ~collated:(strict Datetime) ()) }
     | LPAREN select=select_stmt RPAREN { SelectExpr (select, `AsValue) }
-    | p=param t=preceded(DOUBLECOLON, manual_type)? { Param (make_param ~id:{ p with pos=($startofs, $endofs) } ~typ:(Stdlib.Option.value ~default:(Source_type.depends Any) t), Meta.empty())  }
+    | p=param %prec LOWEST { typed_param p ($startofs, $endofs) (Source_type.depends Any) }
+    | p=param DOUBLECOLON t=manual_type { typed_param p ($startofs, $endofs) t }
+    | p=param DOUBLECOLON t=clickhouse_type
+      {
+        let typ = match t with
+          | `Strict kind -> Source_type.strict kind
+          | `Nullable kind -> Source_type.nullable kind
+        in
+        typed_param p ($startofs, $endofs) typ
+      }
+    | e=c_expr DOUBLECOLON t=clickhouse_type { clickhouse_cast t e }
     | LCURLY e=expr RCURLY QSTN { OptionActions ({ choice=e; pos=(($startofs, $endofs), ($startofs + 1, $endofs - 2)); kind = BoolChoices}) }
     | p=param parser_state_ident LCURLY l=choices c2=RCURLY { let { value; pos=(p1,_p2) } = p in Choices ({ value; pos = (p1,c2+1)},l) }
     | SUBSTRING LPAREN s=expr FROM p=expr FOR n=expr RPAREN
@@ -772,6 +1002,12 @@ c_expr_:
       { fn "json_arrayagg" (Agg (With_order { with_order_kind = Json_arrayagg; order })) p }
     | CAST LPAREN e=expr AS f=cast_as RPAREN { f e }
     | f=func_name LPAREN p=func_params RPAREN { call f.tn p }
+    | f=func_name LPAREN func_params RPAREN LPAREN p=func_params RPAREN
+      { clickhouse_only "parametric aggregate"; call f.tn p }
+    | ANY LPAREN p=func_params RPAREN { call "any" p }
+    | LBRACKET p=separated_list(COMMA, expr) RBRACKET { call "array" p }
+    | t=tuple_expr %prec LOWEST { call "tuple" t }
+    | e=c_expr LBRACKET index=expr RBRACKET { fn "element" Element_access [e; index] }
     | EXISTS LPAREN select=select_stmt RPAREN { fn "exists" (F (Typ (strict Bool), [Typ (depends Any)])) [SelectExpr (select,`Exists)] }
     | CASE initial_expr=expr? branches_list=nonempty_list(case_branch) else_expr=preceded(ELSE,expr)? END
       {
@@ -786,7 +1022,10 @@ c_expr_:
     | IF LPAREN e1=expr COMMA e2=expr COMMA e3=expr RPAREN { fn "if" (F (Var 0, [Typ (depends Bool); Var 0; Var 0])) [e1;e2;e3] }
     | w=window_function OVER spec=window_spec { w spec }
     | f=func_name LPAREN p=func_params RPAREN OVER w=window_spec
-        { fn ~over:w f.tn (Function.lookup_agg f.tn (List.length p)) p }
+        { let signature = resolve_signature f.tn p in
+          match is_grouping signature with
+          | true -> fn ~over:w f.tn signature p
+          | false -> Prelude.fail "Function %s is not an aggregate function" f.tn }
 values_stmt1: 
   | VALUES expr_list=commas(preceded(ROW, delimited(LPAREN, expr_list, RPAREN))) { RowExprList expr_list }
   | VALUES id=PARAM DOUBLECOLON types=sequence(manual_type) { RowParam { id={ id with pos=($startofs, $endofs) } ; types; values_start_pos = $startofs  } }
@@ -833,6 +1072,14 @@ window_spec: LPAREN partition? o=order? f=frame? RPAREN (* TODO order parameters
 partition: PARTITION BY e=expr_list { make_partition_by e} (* TODO check no params *)
 
 in_or_not_in: IN { `In } | NOT IN { `NotIn }
+            | GLOBAL IN { clickhouse_only "GLOBAL IN"; `In } | GLOBAL NOT IN { clickhouse_only "GLOBAL IN"; `NotIn }
+
+membership: k=in_or_not_in
+  { match k with
+    | `In -> fun e -> e
+    | `NotIn -> fun e -> fn "not" Negation [e] }
+
+tuple_expr: LPAREN e=expr COMMA l=commas(expr) RPAREN { e :: l }
 case_branch: WHEN w=expr THEN t=expr
              { { Sql.when_ = w; Sql.then_ = t } }
 like: LIKE | LIKE_OP { }
@@ -941,7 +1188,51 @@ sql_type_flavor_plain:
   | NATIONAL? f=text_plain charset?                     { Source_type.Text f }
   | t=expr_sql_type_flavor { Source_type.Infer t }
   | ENUM ctors=sequence(TEXT) charset? { Source_type.Infer (make_enum_kind ctors) }
-  | name=ident { Source_type.Infer (User_types.get name) }
+  | name=common_ident { Source_type.Infer (User_types.get name) }
+
+(* Nullable and LowCardinality wrap only scalar types; containers carry nullability in their elements. *)
+clickhouse_type:
+  | kind=clickhouse_scalar_type { `Strict kind }
+  | CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN { `Nullable kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN kind=clickhouse_scalar_type RPAREN { `Strict kind }
+  | CLICKHOUSE_LOWCARDINALITY LPAREN CLICKHOUSE_NULLABLE LPAREN kind=clickhouse_scalar_type RPAREN RPAREN
+    { `Nullable kind }
+  | CLICKHOUSE_ARRAY LPAREN element=clickhouse_type RPAREN
+    { `Strict (Type.Array (clickhouse_value_type element)) }
+  | CLICKHOUSE_MAP LPAREN key=clickhouse_type COMMA value=clickhouse_type RPAREN
+    { `Strict (Type.Map (clickhouse_value_type key, clickhouse_value_type value)) }
+  | CLICKHOUSE_TUPLE elements=sequence(clickhouse_type)
+    { `Strict (Type.Tuple (List.map clickhouse_value_type elements)) }
+  | CLICKHOUSE_SIMPLE_AGGREGATE_FUNCTION LPAREN clickhouse_aggregate_name COMMA t=clickhouse_type RPAREN { t }
+  | CLICKHOUSE_AGGREGATE_FUNCTION LPAREN clickhouse_aggregate_name
+    option(sequence(either(INTEGER, FLOAT))) loption(preceded(COMMA, commas(clickhouse_type))) RPAREN
+    { `Strict Type.Blob }
+
+clickhouse_aggregate_name: ident | ANY { }
+
+clickhouse_scalar_type:
+  | scalar=CLICKHOUSE_SCALAR { snd scalar }
+  | CLICKHOUSE_FIXED_STRING LPAREN INTEGER RPAREN { Type.Text }
+  | CLICKHOUSE_DATETIME option(delimited(LPAREN, TEXT, RPAREN)) { Type.Datetime }
+  | name=CLICKHOUSE_UNSUPPORTED LPAREN? { Prelude.fail "ClickHouse type %s is not supported" name }
+  | CLICKHOUSE_DATETIME64
+    option(delimited(LPAREN, pair(INTEGER, option(preceded(COMMA, TEXT))), RPAREN))
+    { Type.Datetime }
+  | decimal=CLICKHOUSE_DECIMAL parameters=sequence(INTEGER)
+    {
+      match snd decimal, parameters with
+      | None, [precision; scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
+      | Some precision, [scale] -> Type.Decimal { precision = Some precision; scale = Some scale }
+      | None, _ -> failwith "ClickHouse Decimal requires precision and scale"
+      | Some _, _ -> failwith "ClickHouse Decimal32/64/128/256 requires a scale"
+    }
+  | CLICKHOUSE_ENUM ctors=sequence(clickhouse_enum_ctor) { Type.make_enum_kind ctors }
+
+clickhouse_enum_ctor:
+  | name=TEXT EQUAL option(MINUS) INTEGER { name }
+
+column_sql_type:
+  | t=located_sql_type { t, [] }
 
 type_args: LPAREN INTEGER RPAREN UNSIGNED? | LPAREN INTEGER COMMA INTEGER RPAREN { }
 
@@ -950,6 +1241,7 @@ text: CHARACTER { }
 
 cast_as:
     | t=cast_sql_type { (fun e -> fn "cast" (Ret (Source_type.depends t)) [e]) }
+    | t=clickhouse_type { clickhouse_cast t }
     | UNSIGNED { (fun e -> fn "cast_unsigned" (Ret (Source_type.depends UInt64)) [e]) }
     | SIGNED { (fun e -> fn "cast_signed" (Ret (Source_type.depends Int)) [e]) }
 

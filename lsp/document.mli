@@ -46,6 +46,7 @@ type t = private {
   statements : checked_statement array;
   index : Symbol.t Symbol.Index.t;
   snapshot : Compile.state;
+  configuration : Dialect.configuration;
 }
 
 val find_statement : t -> int -> checked_statement option

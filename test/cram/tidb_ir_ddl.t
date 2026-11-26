@@ -215,7 +215,7 @@ IR parsing of CREATE TABLE ... LIKE does not resolve the source table
   $ sqlgg ir - <<'EOF'
   > CREATE TABLE t2 LIKE t;
   > EOF
-  {"statements":[{"sql":"CREATE TABLE t2 LIKE t","props":[],"resolution":["Parsed",{"stmt":["Create",{"value":{"db":null,"tn":"t2"},"pos":[13,15]},["Like",{"db":null,"tn":"t"}]],"dialect_features":[{"feature":"CreateTableLike","pos":[0,0],"state":{"supported":["MySQL","TiDB"],"unsupported":["PostgreSQL","SQLite"],"unknown":[]}}]}]}]}
+  {"statements":[{"sql":"CREATE TABLE t2 LIKE t","props":[],"resolution":["Parsed",{"stmt":["Create",{"value":{"db":null,"tn":"t2"},"pos":[13,15]},["Like",{"db":null,"tn":"t"}]],"dialect_features":[{"feature":"CreateTableLike","pos":[0,0],"state":{"supported":["MySQL","TiDB","ClickHouse"],"unsupported":["PostgreSQL","SQLite"],"unknown":[]}}],"semantics":{"outer_join_padding":"Null","membership_null_semantics":"Three_valued","nonnullable_write":"Reject","implicit_column_nullability":"Nullable","nullable_scope":"Any_type","key_uniqueness":"Enforced","omitted_insert_column":"Requires_declared_default","empty_aggregate":"Null","where_alias_visibility":"Source_columns_only","arrow_operator":"Json_extract","column_type_syntax":"Standard_types","query_syntax":"Standard_queries","subquery_value":"Single_column","function_catalog":"Standard_functions"}}]}]}
 
   $ sqlgg -gen none - <<'EOF' 2>&1
   > CREATE TABLE t (id INT);
@@ -234,7 +234,7 @@ FOREIGN KEY and CHECK can be added without CONSTRAINT
 
 Partitioning, TiFlash, sequence and check enforcement actions in the IR
 
-  $ sqlgg ir - <<'EOF' | grep -oE '"(PartitionBy|Partition_[a-z_]+|RemovePartitioning|SetTiflashReplica|Tiflash_replica|Hypo_tiflash_replica|AlterCheck|Enforced|Not_enforced|CreateSequence|AlterSequence|DropSequence|Alter_db_tiflash_replica)"'
+  $ sqlgg ir - <<'EOF' | sed 's/"semantics":{[^}]*}//g' | grep -oE '"(PartitionBy|Partition_[a-z_]+|RemovePartitioning|SetTiflashReplica|Tiflash_replica|Hypo_tiflash_replica|AlterCheck|Enforced|Not_enforced|CreateSequence|AlterSequence|DropSequence|Alter_db_tiflash_replica)"'
   > ALTER TABLE t PARTITION BY HASH (a) PARTITIONS 4;
   > ALTER TABLE t PARTITION BY RANGE COLUMNS (a) (PARTITION p0 VALUES LESS THAN (10));
   > ALTER TABLE t REMOVE PARTITIONING;
@@ -290,7 +290,7 @@ TiDB-only statements are rejected under other dialects
   > CREATE TABLE t (id INT);
   > CREATE TABLE t2 LIKE t;
   > EOF
-  Feature CreateTableLike is not supported for dialect PostgreSQL (supported by: MySQL, TiDB) at 
+  Feature CreateTableLike is not supported for dialect PostgreSQL (supported by: MySQL, TiDB, ClickHouse) at 
   Errors encountered, no code generated
   [1]
   $ sqlgg -gen none -dialect=postgresql - <<'EOF' 2>&1
@@ -377,4 +377,4 @@ TRUNCATE and RECOVER TABLE are IR statements
   > TRUNCATE TABLE t;
   > RECOVER TABLE t;
   > EOF
-  {"statements":[{"sql":"TRUNCATE TABLE t","props":[],"resolution":["Parsed",{"stmt":["Truncate",{"db":null,"tn":"t"}],"dialect_features":[{"feature":"TruncateTable","pos":[0,0],"state":{"supported":["MySQL","TiDB","PostgreSQL"],"unsupported":["SQLite"],"unknown":[]}}]}]},{"sql":"RECOVER TABLE t","props":[],"resolution":["Parsed",{"stmt":["RecoverTable",{"db":null,"tn":"t"}],"dialect_features":[{"feature":"RecoverTable","pos":[0,0],"state":{"supported":["TiDB"],"unsupported":["MySQL","PostgreSQL","SQLite"],"unknown":[]}}]}]}]}
+  {"statements":[{"sql":"TRUNCATE TABLE t","props":[],"resolution":["Parsed",{"stmt":["Truncate",{"db":null,"tn":"t"}],"dialect_features":[{"feature":"TruncateTable","pos":[0,0],"state":{"supported":["MySQL","TiDB","PostgreSQL","ClickHouse"],"unsupported":["SQLite"],"unknown":[]}}],"semantics":{"outer_join_padding":"Null","membership_null_semantics":"Three_valued","nonnullable_write":"Reject","implicit_column_nullability":"Nullable","nullable_scope":"Any_type","key_uniqueness":"Enforced","omitted_insert_column":"Requires_declared_default","empty_aggregate":"Null","where_alias_visibility":"Source_columns_only","arrow_operator":"Json_extract","column_type_syntax":"Standard_types","query_syntax":"Standard_queries","subquery_value":"Single_column","function_catalog":"Standard_functions"}}]},{"sql":"RECOVER TABLE t","props":[],"resolution":["Parsed",{"stmt":["RecoverTable",{"db":null,"tn":"t"}],"dialect_features":[{"feature":"RecoverTable","pos":[0,0],"state":{"supported":["TiDB"],"unsupported":["MySQL","PostgreSQL","SQLite","ClickHouse"],"unknown":[]}}],"semantics":{"outer_join_padding":"Null","membership_null_semantics":"Three_valued","nonnullable_write":"Reject","implicit_column_nullability":"Nullable","nullable_scope":"Any_type","key_uniqueness":"Enforced","omitted_insert_column":"Requires_declared_default","empty_aggregate":"Null","where_alias_visibility":"Source_columns_only","arrow_operator":"Json_extract","column_type_syntax":"Standard_types","query_syntax":"Standard_queries","subquery_value":"Single_column","function_catalog":"Standard_functions"}}]}]}

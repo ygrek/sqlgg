@@ -53,7 +53,7 @@ let () =
     ~doc:"<mode> Parameter substitution for [%sql], as sqlgg -params (default: from -dialect)";
   let schema_state =
     let loaded = ref None in
-    fun ~loc ~dialect schema_files ->
+    fun ~loc ~configuration schema_files ->
       match !loaded with
       | Some state -> state
       | None ->
@@ -65,7 +65,10 @@ let () =
                 | text -> text
                 | exception Sys_error msg -> fail ~loc "cannot read -schema file: %s" msg
               in
-              match Sqlgg.Analysis.context_of_schema_sql ~context ~dialect text with
+              match
+                Sqlgg.Analysis.context_of_schema_sql ~context
+                  ~dialect:(Sqlgg.Analysis.Checked configuration) text
+              with
               | Ok state -> state
               | Error (block, diagnostic, _) ->
                 let at_text =
@@ -111,10 +114,10 @@ let () =
     let selected_dialect =
       Stdlib.Option.value !dialect ~default:Sqlgg.Dialect.MySQL
     in
-    Sqlgg.Dialect.set_selected selected_dialect;
+    let configuration = Sqlgg.Dialect.default_configuration selected_dialect in
     let params_mode = Gen.resolve_params_mode ~dialect:!dialect !params in
     Gen.params_mode := params_mode;
-    let context = schema_state ~loc ~dialect:selected_dialect schema_files in
+    let context = schema_state ~loc ~configuration schema_files in
     let block =
       match Sqlgg.Statements.split text with
       | [ block ] -> block
@@ -164,7 +167,11 @@ let () =
              ( Sqlgg.Statements.unstripped_offset block first,
                Sqlgg.Statements.unstripped_offset block last ))
       in
-      match Sqlgg.Analysis.analyze ~context (Sqlgg.Statements.strip_comments block) with
+      match
+        Sqlgg.Analysis.analyze
+          ~semantics:(Sqlgg.Dialect.Semantic.of_configuration configuration)
+          ~context (Sqlgg.Statements.strip_comments block)
+      with
       | Error (diagnostic, _) -> fail_diagnostic ~at_span ~statement diagnostic
       | Ok (_, syntax) ->
         match

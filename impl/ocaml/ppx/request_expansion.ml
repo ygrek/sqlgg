@@ -24,6 +24,9 @@ let expand ~loc ~statement (query : Query.named) =
     | One_or_all -> [%expr Sqlgg_request.One_or_all]
     | Union { ctors; _ } -> union ctors
     | Any -> [%expr Sqlgg_request.Any]
+    | Array _ | Map _ | Tuple _ | Fun _ ->
+      fail "type %s is not supported by [%%sql.Request] yet (no codec for containers)"
+        (Sqlgg.Sql.Type.show typ)
   in
   let native =
     scalar ~union:(fun ctors ->

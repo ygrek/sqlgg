@@ -27,7 +27,6 @@ let is_attr_nullable (attr : Sql.attr) = Sql.Type.is_nullable attr.domain
 type value = { vname : string; vtyp : string; nullable : bool }
 
 module type LangTypes = sig
-  val as_api_type : Sql.Type.t -> string
   val as_lang_type : Sql.Type.t -> string
 end
 
@@ -65,8 +64,6 @@ let rec inparams_only l =
     l
 
 module Translate (T : LangTypes) = struct
-  let show_param_type p = T.as_api_type p.Sql.typ
-
   let schema_to_values list =
     List.mapi
       (fun i attr ->
@@ -104,6 +101,7 @@ let params_mode_of_string s =
 let dialect_params_mode = function
   | Dialect.MySQL | Dialect.TiDB | Dialect.SQLite -> Sql_template.Unnamed
   | Dialect.PostgreSQL -> Sql_template.PostgreSQL
+  | Dialect.ClickHouse -> Sql_template.ClickHouse
 
 let resolve_params_mode ~dialect = function
   | Disabled -> None
@@ -171,6 +169,30 @@ let spell index ({ param; original } : Sql_template.bind) =
   | Some Unnamed -> "?"
   | Some Oracle -> ":" ^ show_param_name param index
   | Some PostgreSQL -> "$" ^ string_of_int (index + 1)
+  | Some ClickHouse ->
+    let rec clickhouse_type { Sql.Type.t; nullability } =
+      let base =
+        match t with
+        | Int -> "Int64"
+        | UInt64 -> "UInt64"
+        | Float | FloatingLiteral _ -> "Float64"
+        | Bool -> "Bool"
+        | Datetime -> "DateTime"
+        | Decimal { precision; scale } ->
+          sprintf "Decimal(%d, %d)" (Option.default 10 precision) (Option.default 0 scale)
+        | Text | Blob | Json | Union _ | StringLiteral _ | Json_path | One_or_all | Any ->
+          "String"
+        | Array elt -> sprintf "Array(%s)" (clickhouse_type elt)
+        | Map (k, v) -> sprintf "Map(%s, %s)" (clickhouse_type k) (clickhouse_type v)
+        | Tuple ts -> sprintf "Tuple(%s)" (String.concat ", " (List.map clickhouse_type ts))
+        | Fun _ as kind ->
+          failwith (sprintf "a parameter cannot have type %s" (Sql.Type.show_kind kind))
+      in
+      match nullability with
+      | Nullable -> sprintf "Nullable(%s)" base
+      | Strict | Depends -> base
+    in
+    sprintf "{%s:%s}" (show_param_name param index) (clickhouse_type param.typ)
 
 let get_sql (q : Query.named) = Sql_template.fill ~spell q.template
 

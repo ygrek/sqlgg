@@ -55,6 +55,8 @@ let as_api_type t =
   | One_or_all
   | UInt64
   | Json -> assert false
+  | (Array _ | Map _ | Tuple _ | Fun _) as k ->
+    failwith (sprintf "type %s is not supported by the C# generator" (Type.show_kind k))
 
 let as_lang_type = as_api_type
 

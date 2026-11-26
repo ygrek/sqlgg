@@ -17,7 +17,10 @@ let drop ~if_exists name =
 
 let get_opt = Hashtbl.find_opt registry
 
-let get = Hashtbl.find registry
+let get name =
+  match Hashtbl.find_opt registry name with
+  | Some kind -> kind
+  | None -> Prelude.fail "unknown type %S" name
 
 let snapshot () = Hashtbl.copy registry
 let restore = Prelude.hashtbl_restore registry
