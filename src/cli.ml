@@ -151,7 +151,7 @@ let merge_blocks gen ext =
   List.map (fun (id, block) -> Some id, block)
     (List.stable_sort
        (fun (a, _) (b, _) ->
-         Sqlgg_migrations.Migration_id.compare_order a b)
+         Sqlgg_migrations.Migration_id.compare_position a b)
        numbered)
   @ List.map (fun block -> None, block) rest
 
@@ -828,15 +828,19 @@ let run_migrations () =
                     match id, baseline with
                     | None, (Some _ | None) ->
                       fatal "migration has no id: add -- [sqlgg] id=<timestamp>_<name>"
-                    | Some id, Some cutoff
-                      when Sqlgg_migrations.Migration_id.compare_order
-                             id
-                             cutoff
-                           <= 0 ->
-                      fatal "migration %s is not after --baseline %s"
-                        (Sqlgg_migrations.Migration_id.to_string id)
-                        (Sqlgg_migrations.Migration_id.to_string cutoff)
-                    | Some id, (Some _ | None) -> id, block)
+                    | Some id, None -> id, block
+                    | Some id, Some cutoff ->
+                      let open Sqlgg_migrations.Migration_id in
+                      let order = compare_position id cutoff in
+                      if order > 0 then id, block
+                      else if order < 0 || String.equal (to_string id) (to_string cutoff) then
+                        fatal "migration %s is not after --baseline %s"
+                          (to_string id) (to_string cutoff)
+                      else
+                        fatal
+                          "migration %s shares its timestamp with --baseline %s, \
+                           which archives every migration of that timestamp"
+                          (to_string id) (to_string cutoff))
                   blocks;
             })
         {

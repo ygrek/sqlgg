@@ -50,7 +50,7 @@ let validate ?baseline history migrations (rows : Migration_state.row list) =
   let compiled_ids = List.map Migration.id migrations in
   let rec first_unordered = function
     | previous :: (current :: _ as rest) ->
-        if Migration_id.compare_order previous current > 0 then
+        if Migration_id.compare_position previous current > 0 then
           Some (previous, current)
         else
           first_unordered rest
@@ -62,7 +62,7 @@ let validate ?baseline history migrations (rows : Migration_state.row list) =
     compiled_ids;
   let archived (id : Migration_id.t) =
     match baseline with
-    | Some cutoff -> Migration_id.compare_order id cutoff <= 0
+    | Some cutoff -> Migration_id.compare_position id cutoff <= 0
     | None -> false
   in
   let archived_rows, unknown_rows =

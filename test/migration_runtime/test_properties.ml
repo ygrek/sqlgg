@@ -478,8 +478,24 @@ let () =
                    (int_range 0 5)
                    (oneof [ return ""; return "_a"; return "_b" ])
                in
-               let in_id_order left right =
-                 Migration_id.compare_order left right
+               let in_position_order id_of entries =
+                 List.stable_sort
+                   (fun left right ->
+                     Migration_id.compare_position (id_of left) (id_of right))
+                   (List.fold_left
+                      (fun distinct entry ->
+                        if
+                          List.exists
+                            (fun earlier ->
+                              Migration_id.to_string (id_of earlier)
+                              = Migration_id.to_string (id_of entry))
+                            distinct
+                        then
+                          distinct
+                        else
+                          distinct @ [ entry ])
+                      []
+                      entries)
                in
                let* history =
                  oneof [ return Planner.Linear; return Planner.Interleaved ]
@@ -501,11 +517,7 @@ let () =
                              return `Irreversible;
                            ]))
                  in
-                 let ordered =
-                   List.sort_uniq
-                     (fun (left, _) (right, _) -> in_id_order left right)
-                     unordered
-                 in
+                 let ordered = in_position_order fst unordered in
                  oneof
                    [
                      return unordered;
@@ -540,20 +552,10 @@ let () =
                                   Revert_failed;
                                 ])))
                  in
-                 oneof
-                   [
-                     return repeating;
-                     return
-                       (List.sort_uniq
-                          (fun (left, _, _) (right, _, _) ->
-                            in_id_order left right)
-                          repeating);
-                     return
-                       (List.sort_uniq
-                          (fun (left, _, _) (right, _, _) ->
-                            in_id_order left right)
-                          repeating);
-                   ]
+                 let distinct =
+                   in_position_order (fun (id, _, _) -> id) repeating
+                 in
+                 oneof [ return repeating; return distinct; return distinct ]
                in
                { history; baseline; compiled; stored })
               (fun { history; baseline; compiled; stored } ->
@@ -612,7 +614,7 @@ let () =
                           (fun id ->
                             match baseline with
                             | Some cutoff ->
-                                Migration_id.compare_order id cutoff > 0
+                                Migration_id.compare_position id cutoff > 0
                             | None -> true)
                           ids
                      && planned steps

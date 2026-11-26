@@ -83,7 +83,7 @@ are:
 - `--manual manual.sql` reads renames, data backfills and other
   [manual migrations](#manual-migrations).
 - `--baseline <id>` records a squash cutoff in the generated module. Stored
-  migrations through that id remain valid as archived rows.
+  migrations through that id's timestamp remain valid as archived rows.
 - `--ddl-as-migration` records new tables as `CREATE TABLE` migrations.
 
 The command creates `migrations.sql` on the first run. See
@@ -240,7 +240,8 @@ ALTER TABLE users RENAME COLUMN full_name TO name;
 Pass this file as `--manual manual.sql` to `sqlgg migrations generate`, or as
 `-extends manual.sql` to the lower-level `-migrate` command. The statement with
 the id is the up migration; the following untagged statement is its down.
-Generated and manual blocks are merged in id order.
+Blocks are merged by timestamp; within one timestamp they keep the written
+order, generated before manual.
 
 For a migration with no safe down statement, mark it as irreversible:
 

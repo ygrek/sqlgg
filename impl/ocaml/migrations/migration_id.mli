@@ -14,6 +14,5 @@ val to_string : t -> string
 val ordinal : t -> int64
 val name : t -> string option
 val compare_position : t -> t -> int
-val compare_order : t -> t -> int
 val next_position : t -> (int64, [ `Position_overflow ]) result
 val error_to_string : error -> string
