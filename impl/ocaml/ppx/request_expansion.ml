@@ -87,7 +87,7 @@ let expand ~loc ~statement (query : Query.named) =
       let outcome =
         Gen_caml.guard_empty_insertion pieces ~empty:"Sqlgg_request.Nothing_to_run"
           (Printf.sprintf "Sqlgg_request.Sql %s"
-             (Gen_caml.make_sql ~to_literal ~join_ctors:[] pieces))
+             (Gen_caml.make_sql ~target:String_expr ~to_literal ~join_ctors:[] pieces))
       in
       [%expr fun _sqlgg__literals -> [%e parsed outcome]]
   in

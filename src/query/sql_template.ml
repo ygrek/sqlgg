@@ -31,6 +31,7 @@ type 'a fragment = [
   | `DynamicIn of Sql.param_id * Sql.in_or_not_in * 'a list
   | `SubstTuple of Sql.param_id * Sql.tuple_list_kind
   | `Cond of cond * 'a list
+  | `Relation of Sql.param_id (** relation chosen at runtime for a relation slot *)
 ]
 
 and 'a arm = {
@@ -126,7 +127,8 @@ let rec of_sql sql vars =
           [ `Optional (name, { vars; some = `Text " ( " :: body ~start ~stop vars @ [ `Text " ) " ]; none }) ] )
     | SharedVarsGroup (shared_vars, id) ->
         ( span ~cursor id.pos,
-          `Text "(" :: of_sql (fst (Shared_queries.get id.value)) shared_vars @ [ `Text ")" ] )
+          `Text "(" :: of_sql (Shared_queries.get id.value).sql shared_vars @ [ `Text ")" ] )
+    | RelationSlot { id; alias = _ } -> span ~cursor id.pos, [ `Relation id ]
     | DynamicSelect (name, ctors) ->
         ( span ~cursor name.pos,
           [ `DynamicSelect
@@ -150,8 +152,8 @@ let rec of_sql sql vars =
 let fill ~spell template =
   let rec fragments index template = List.fold_left_map fragment index template
   and fragment index = function
-    | (`Text _ | `SubstIn _ | `SubstTuple _) as fragment -> index, fragment
-    | `Bind bind -> index + 1, `Text (spell index bind)
+    | (`Text _ | `SubstIn _ | `SubstTuple _ | `Relation _) as fragment -> index, fragment
+    | `Bind bind -> index + 1, spell index bind
     | `Choice (pid, arms) ->
         index, `Choice (pid, List.map (fun arm -> { arm with sql = merge_texts (filled arm.sql) }) arms)
     | `Optional (pid, optional) -> index, `Optional (pid, { optional with some = filled optional.some })

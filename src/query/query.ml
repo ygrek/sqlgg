@@ -17,13 +17,15 @@ type t = {
   kind : kind;
   props : Props.t list;
   src : src option;
+  relation_slots : Relation_slot.t list; [@default []] [@drop_default_if_json_equal]
 }
 [@@deriving json, jsonschema]
 
-let of_result props ({ typed = { sql; schema; vars; kind }; _ } : Syntax.result) =
-  { sql; schema; vars; kind; props; src = None }
+let of_result props ({ typed = { sql; schema; vars; kind }; relation_slots; _ } : Syntax.result) =
+  { sql; schema; vars; kind; props; src = None; relation_slots }
 
-let verbatim ~props sql = { sql; schema = []; vars = []; kind = Other; props; src = None }
+let verbatim ~props sql =
+  { sql; schema = []; vars = []; kind = Other; props; src = None; relation_slots = [] }
 
 let name props kind index =
   let sanitize_chars =

@@ -184,6 +184,12 @@ let () =
     Stdlib.Option.iter
       (fail ~loc:statement "%s")
       (Gen.params_mode_error ~params_mode syntax.typed.kind);
+    let () =
+      match syntax.relation_slots with
+      | [] -> ()
+      | slot :: _ ->
+        fail ~loc:statement "relation slot @%s is not supported in [%%sql] yet" (slot.name :> string)
+    in
     let query =
       Query.of_result
         (Sqlgg.Props.File (Filename.basename input_name) :: block.props)

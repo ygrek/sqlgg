@@ -96,6 +96,8 @@ let output_params_binder name _ params = List.iteri (set_param name) params
 
 type t = unit
 
+let relation_slots = Gen.Relation_slots_unsupported "java"
+
 let start () = ()
 
 let generate_code index ({ name; stmt; _ } as q : Query.named) =

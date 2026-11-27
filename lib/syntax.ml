@@ -19,6 +19,10 @@ type query_scope =
   | Subquery
   | From_passthrough
 
+type cte_recursion =
+  | Not_recursive
+  | Recursive_cte
+
 
 type env = {
   tables : Tables.table list;
@@ -38,6 +42,11 @@ type env = {
   insert_resolved_types: (string, Type.t) Hashtbl.t; (* for INSERT .. VALUES *)
   scope: query_scope;
   attr_refinement: Attr_refinement.t;
+  (* aliases of relation slots visible in scope, outer ones included *)
+  relation_slots: (table_name * Relation_slot.Name.t) list;
+  (* the slot this evaluation binds to a relation, the others are open *)
+  relation_bound: (Relation_slot.Name.t * Sql.schema) option;
+  cte_recursion: cte_recursion;
 }
 
 (* Merge global tables with ctes during resolving sources in SELECT .. FROM sources, JOIN *)
@@ -69,11 +78,12 @@ type stmt_annotations = {
   expr_types : Type.t located list;
   result_aliases : Sql.attr located list;
   select_scopes : select_scope list;
+  relation_uses : (Relation_slot.use list [@opaque]);
 } [@@deriving show]
 
 let no_stmt_annotations =
   { src_tbls = []; cte_defs = []; table_aliases = []; table_defs = [];
-    expr_types = []; result_aliases = []; select_scopes = [] }
+    expr_types = []; result_aliases = []; select_scopes = []; relation_uses = [] }
 
 let merge_stmt_annotations a b = {
   src_tbls = a.src_tbls @ b.src_tbls;
@@ -83,6 +93,7 @@ let merge_stmt_annotations a b = {
   expr_types = a.expr_types @ b.expr_types;
   result_aliases = a.result_aliases @ b.result_aliases;
   select_scopes = a.select_scopes @ b.select_scopes;
+  relation_uses = a.relation_uses @ b.relation_uses;
 }
 
 (* expr with all name references resolved to values or "functions" *)
@@ -97,6 +108,7 @@ type res_expr =
   | ResFun of res_fun (** function kind (return type and flavor), arguments *)
   | ResOptionActions of { choice_id: param_id; res_choice: res_expr; pos: (Pos.t * Pos.t); kind: Sql.option_actions_kind }
   | ResCase of res_case located
+  | ResRelationColumn of (Relation_slot.use [@opaque]) (** column of an open relation slot *)
   [@@deriving show]
 
 and res_case = {
@@ -112,7 +124,7 @@ and res_fun = { kind: Type.t func [@printer pp_func] ; parameters: res_expr list
   ret: Type.t option } [@@deriving show]
 
 and res_in_tuple_list =
-  ResTyped of (Type.t * Meta.t) list | Res of (res_expr * Meta.t) list [@@deriving show]
+  ResTyped of (res_expr * Type.t * Meta.t) list | Res of (res_expr * Meta.t) list [@@deriving show]
 
 let merge_params l =
   List.fold_right
@@ -134,7 +146,21 @@ let empty_env = { query_has_grouping = false;
   insert_resolved_types = Hashtbl.create 16;
   scope = Top_level;
   attr_refinement = Attr_refinement.empty;
+  relation_slots = [];
+  relation_bound = None;
+  cte_recursion = Not_recursive;
 }
+
+let relation_slot_of_alias ~env (alias : table_name) =
+  List.find_map (fun ((a : table_name), name) -> if String.equal a.tn alias.tn then Some name else None) env.relation_slots
+
+(* qualified reference to a column of an open relation slot *)
+let open_relation_column ~env { tname; _ } =
+  Stdlib.Option.bind tname (fun alias ->
+    Stdlib.Option.bind (relation_slot_of_alias ~env alias) (fun name ->
+      match Relation_slot.binding env.relation_bound name with
+      | Relation_slot.Open -> Some (name, alias)
+      | Bound _ -> None))
 
 let schema_of ~env name =
   let result = Tables_with_derived.get_from ~env name in
@@ -163,11 +189,6 @@ let values_or_all table names =
     Schema.project names schema
   | None -> schema
 
-
-let list_same l =
-  match l with
-  | [] -> None
-  | x::xs -> if List.for_all (fun y -> x = y) xs then Some x else None
 
 let rec is_grouping = function
 | Choices (p,l) ->
@@ -205,28 +226,37 @@ let make_unique =
 
 let all_columns = make_unique $ Schema.cross_all
 
-let resolve_column ~env {cname;tname;cpos} =
+let resolve_column ~env ({cname;tname;cpos} as col) =
   let open Schema.Source in
   let open Attr in
+  match open_relation_column ~env col with
+  | Some (_, alias) -> { attr = make_attribute' cname (Type.depends Any); sources = [alias] }
+  | None ->
   let from_source =
     Stdlib.Option.bind tname (fun { tn; _ } ->
       let matches a = String.equal a.attr.name cname && List.exists (fun i -> String.equal i.tn tn) a.sources in
       List.fold_left (fun found a -> if matches a then Some a else found)
         None env.schema)
   in
-  match from_source with
-  | Some a -> a
-  | None ->
-    let t = Stdlib.Option.fold ~none:env.schema ~some:(schema_of ~env) tname in
-    let error msg = raise (At (cpos, Schema.Error (to_schema t, msg ^ " : " ^ cname))) in
-    let matches =
-      List.to_seq t
-      |> Seq.filter (fun a -> String.equal a.attr.name cname)
-    in
-    match Seq.uncons matches with
-    | None -> error "missing attribute"
-    | Some (a, rest) when Seq.is_empty rest -> a
-    | Some _ -> error "duplicate attribute"
+  let known =
+    match from_source with
+    | Some a -> a
+    | None ->
+      let t = Stdlib.Option.fold ~none:env.schema ~some:(schema_of ~env) tname in
+      let error msg = raise (At (cpos, Schema.Error (to_schema t, msg ^ " : " ^ cname))) in
+      let matches =
+        List.to_seq t
+        |> Seq.filter (fun a -> String.equal a.attr.name cname)
+      in
+      match Seq.uncons matches with
+      | None -> error "missing attribute"
+      | Some (a, rest) when Seq.is_empty rest -> a
+      | Some _ -> error "duplicate attribute"
+  in
+  match tname with
+  | None when List.exists (fun s -> Option.is_some (relation_slot_of_alias ~env s)) known.sources ->
+    Relation_slot.unsupported ~at:cpos "column %s of a relation slot must be qualified with the slot alias" cname
+  | None | Some _ -> known
 
 let resolve_column_opt ~env col =
   match resolve_column ~env col with
@@ -340,6 +370,7 @@ type resolved_source = {
   rsrc_dynamic : schema_column_with_sources list;
   rsrc_physical_table : Sql.join_source option;
   rsrc_annotations : stmt_annotations;
+  rsrc_relation_slots : (table_name * Relation_slot.Name.t) list;
 }
 
 module From = struct
@@ -359,6 +390,9 @@ module From = struct
 
   let dynamic_columns from =
     List.concat_map (fun src -> src.rsrc_dynamic) (Option.map_default sources [] from)
+
+  let relation_slots from =
+    List.concat_map (fun src -> src.rsrc_relation_slots) (Option.map_default sources [] from)
 
   let annotations from =
     List.fold_left
@@ -651,6 +685,11 @@ let rec resolve_columns env expr =
     match e with
     | Value x -> ResValue x.collated
     | Column col ->
+      begin match open_relation_column ~env col.collated with
+      | Some (slot, _) ->
+        ResRelationColumn
+          { column = { slot; column = col.collated.cname }; pos = col.collated.cpos; expected = [] }
+      | None ->
       let attr = (Attr_refinement.refine_nullability env.attr_refinement (resolve_column ~env col.collated)).attr in
       let json_null_kind = Meta.find_opt attr.meta "json_null_kind" in
       let text_as_json = Meta.find_opt attr.meta "text_as_json" in
@@ -694,6 +733,7 @@ let rec resolve_columns env expr =
           attr.domain
       in
       ResValue domain
+      end
     | OptionActions { choice; pos; kind } ->
       let choice_id = match bool_choice_id choice with
       | Some choice_id -> choice_id
@@ -710,6 +750,7 @@ let rec resolve_columns env expr =
         | ResValue _
         | ResParam _
         | ResSelect _
+        | ResRelationColumn _
         | ResFun _ -> res_expr
         | ResInparam _
         | ResChoices _
@@ -789,28 +830,117 @@ and assign_types env expr =
     | ResInparam ({ id; typ; }, m) when Type.is_any typ -> ResInparam (make_param ~id ~typ:inferred, m)
     | x -> x
   in
+  let rec apply_expected_type expected expr =
+    match expr with
+    | ResParam _
+    | ResInparam _ -> assign_params expected expr
+    | ResRelationColumn use ->
+      Option.map_default (fun kind -> ResRelationColumn { use with expected = kind :: use.expected }) expr
+        (Relation_slot.kind_class expected)
+    | ResValue _
+    | ResSelect _
+    | ResInTupleList _ -> expr
+    | ResInChoice (param_id, kind, choice) ->
+      ResInChoice (param_id, kind, apply_expected_type expected choice)
+    | ResChoices (param_id, choices) ->
+      if env.is_order_by then expr
+      else
+        ResChoices (param_id, List.map (fun choice ->
+          { choice with body = Option.map (apply_expected_type expected) choice.body }
+        ) choices)
+    | ResOptionActions choice ->
+      ResOptionActions {
+        choice with
+        res_choice = apply_expected_type expected choice.res_choice
+      }
+    | ResCase ({ value = case; _ } as located) ->
+      let branches = List.map (fun branch ->
+        { branch with then_ = apply_expected_type expected branch.then_ }
+      ) case.branches in
+      let result_type =
+        match case.result_type with
+        | Some typ when Type.is_any typ -> Some expected
+        | Some _
+        | None as result_type -> result_type
+      in
+      ResCase {
+        located with
+        value = {
+          case with
+          branches;
+          else_ = Option.map (apply_expected_type expected) case.else_;
+          result_type;
+        }
+      }
+    | ResFun ({ kind; parameters; ret; _ } as fn) ->
+      let parameters =
+        match kind with
+        | Arith typ when Type.is_any typ ->
+          List.map (apply_expected_type expected) parameters
+        | Arith _ -> parameters
+        | Agg _
+        | Null_handling _
+        | Comparison _
+        | Quantified_comparison _
+        | Logical _
+        | Negation
+        | Membership
+        | Range
+        | Like
+        | Like_escape
+        | Ret _
+        | F _
+        | Col_assign _
+        | Multi _ ->
+          begin match Sql.signature kind (List.length parameters) with
+          | Some (Type.Var result_var, args) ->
+            List.map2 (fun arg parameter ->
+              match arg with
+              | Type.Var arg_var when Int.equal result_var arg_var ->
+                apply_expected_type expected parameter
+              | Type.Var _
+              | Type.Typ _ -> parameter
+            ) args parameters
+          | Some (Type.Typ _, _)
+          | None -> parameters
+          end
+      in
+      let ret =
+        match ret with
+        | Some typ when Type.is_any typ -> Some expected
+        | Some _
+        | None as ret -> ret
+      in
+      ResFun { fn with parameters; ret }
+  in
   let rec typeof_ (e:res_expr) = (* FIXME simplify *)
     match e with
     | ResValue t -> e, `Ok t
+    | ResRelationColumn _ -> e, `Ok (Type.depends Any)
     | ResParam (p, _) -> e, `Ok p.typ
     | ResInparam (p, _) -> e, `Ok p.typ
     | ResSelect (t, _, _) -> e, `Ok t
     | ResOptionActions choice ->
       let (res_choice, t) = typeof choice.res_choice in
-      let t =
-        match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
-        | None -> `Error "no common subtype for ResOptionActions"
-        | Some t -> `Ok t
-      in
-      ResOptionActions { choice with res_choice }, t
+      begin match choice.kind with
+      | BoolChoices ->
+        let t =
+          match Type.common_subtype [Type.depends Bool; get_or_failwith t] with
+          | None -> `Error "no common subtype for ResOptionActions"
+          | Some t -> `Ok t
+        in
+        ResOptionActions { choice with res_choice = apply_expected_type (get_or_failwith t) res_choice }, t
+      | SetDefault -> ResOptionActions { choice with res_choice }, t
+      end
     | ResInTupleList { param_id; res_in_tuple_list; kind; pos } ->
       (match res_in_tuple_list with
       | Res res_exprs -> ResInTupleList { param_id;
         res_in_tuple_list = ResTyped (List.map (fun (expr, meta) ->
-          let typ = expr |> typeof |> snd |> get_or_failwith in
+          let (expr, typ) = typeof expr in
+          let typ = get_or_failwith typ in
           if Type.is_any typ then
               fail "If you need to have a field as parameter in the left part you should specify a type"
-          else typ, meta
+          else expr, typ, meta
         ) res_exprs); kind; pos }, `Ok (Type.strict Bool)
       | ResTyped _ -> assert false
       )
@@ -823,7 +953,7 @@ and assign_types env expr =
         | Some t -> `Ok t
       in
       (* We can order by different columns with the different types *)
-      let assign_any e = if env.is_order_by then e else assign_params (get_or_failwith t) e in
+      let assign_any e = if env.is_order_by then e else apply_expected_type (get_or_failwith t) e in
       ResChoices (n, List.map2 (fun c e -> { c with body = Option.map assign_any e }) l e), t
     | ResCase {
         value = { case; branches; else_; result_type = _ };
@@ -853,10 +983,10 @@ and assign_types env expr =
         | None -> fail "no common supertype for all case then branches"
         | Some t -> t
       in
-      let thens_e = List.map (assign_params thens_t) thens_e in
-      let whens_e = List.map (assign_params whens_t) whens_e in
-      let else_ = Option.map (assign_params thens_t) else_ in
-      let case = Option.map (assign_params whens_t) case_e in
+      let thens_e = List.map (apply_expected_type thens_t) thens_e in
+      let whens_e = List.map (apply_expected_type whens_t) whens_e in
+      let else_ = Option.map (apply_expected_type thens_t) else_ in
+      let case = Option.map (apply_expected_type whens_t) case_e in
       let branches = List.map2 (fun when_ then_ -> { when_; then_ }) whens_e thens_e in
       ResCase {
         value = { case; branches; else_; result_type = Some thens_t };
@@ -1014,7 +1144,7 @@ and assign_types env expr =
         | Col_assign _, _ -> fail "SET operation requires two arguments"
         in
         let (ret,inferred_params) = infer_fn kind types in
-        ResFun { kind; parameters = (List.map2 assign_params inferred_params params); over; fn_pos; ret = Some ret }, `Ok ret
+        ResFun { kind; parameters = (List.map2 apply_expected_type inferred_params params); over; fn_pos; ret = Some ret }, `Ok ret
   and typeof expr =
     let r = typeof_ expr in
     if !Config.debug then eprintfn "%s is typeof %s" (Type.show @@ get_or_failwith @@ snd r) (show_res_expr @@ fst r);
@@ -1039,7 +1169,7 @@ and meta_of ~env = function
     Stdlib.Option.bind (resolve_column_opt ~env col)
       (fun a -> Meta.declared (Attr_refinement.apply env.attr_refinement a).attr.meta)
   | `Select { select_complete = { select = ({columns = [{ value = Expr ({ value; _ }, _); _ }]; from; _}, _); _ }; cte } ->
-    let ctes = match cte with Some cte -> let (ctes, _, _) = eval_cte cte in ctes | None -> [] in
+    let ctes = match cte with Some cte -> let (ctes, _, _) = eval_cte ~relation_bound:env.relation_bound cte in ctes | None -> [] in
     let env, _, _, _ = eval_nested { env with ctes = ctes @ env.ctes; scope = Subquery } from in
     Some (carried_meta ~env value)
   | `Select _ -> Some (Meta.empty ())
@@ -1217,10 +1347,21 @@ and do_join (env, params, annotations) { From.src; kind; cond; _ } =
     let (p, cond_annotations) = get_params { env with set_tyvar_strict = true } e in
     env, params @ p, merge_stmt_annotations annotations cond_annotations
 
-and join env { From.base; joins } =
+and join env ({ From.base; joins } as from) =
   assert (env.schema = []);
+  let slots = From.relation_slots (Some from) in
+  if slots <> [] then
+    List.iter (fun { From.cond; pos; _ } ->
+      match cond with
+      | Schema.Join.Natural | Using _ ->
+        Relation_slot.unsupported ~at:pos "NATURAL JOIN and JOIN ... USING are not supported with relation slots, use ON"
+      | On _ | Default -> ()) joins;
   let all_tables = base.rsrc_tables @ List.concat_map (fun j -> j.From.src.rsrc_tables) joins in
-  let env = { env with tables = env.tables @ all_tables; schema = base.rsrc_schema } in
+  let env = { env with tables = env.tables @ all_tables; schema = base.rsrc_schema;
+    (* a name introduced here hides the alias of an outer relation slot *)
+    relation_slots =
+      slots @ List.filter (fun ((alias : table_name), _) ->
+        not (List.exists (fun ((t : table_name), _) -> String.equal t.tn alias.tn) all_tables)) env.relation_slots } in
   List.fold_left do_join (env, base.rsrc_params, no_stmt_annotations) joins
 
 
@@ -1249,8 +1390,11 @@ and get_params_of_res_expr env e =
     | ResOptionActions { choice_id; res_choice; pos; kind } ->
       let (vars, annotations) = vars_of annotations res_choice in
       OptionActionChoice (choice_id, vars, pos, kind) :: acc, annotations
-    | ResInTupleList { param_id; res_in_tuple_list = ResTyped types; kind; pos } ->
-      TupleList (param_id, Where_in { value = (types, kind); pos }) :: acc, annotations
+    | ResInTupleList { param_id; res_in_tuple_list = ResTyped typed; kind; pos } ->
+      (* of the left part only the annotations are kept, its parameters never were *)
+      let annotations = List.fold_left (fun annotations (e, _, _) -> snd (loop ([], annotations) e)) annotations typed in
+      TupleList (param_id, Where_in { value = (List.map (fun (_, typ, meta) -> typ, meta) typed, kind); pos }) :: acc,
+      annotations
     | ResInparam (p, m) -> SingleIn (p, m) :: acc, annotations
     | ResFun { parameters; kind; fn_pos; ret; over = _ } ->
       let (p1, annotations) =
@@ -1269,7 +1413,8 @@ and get_params_of_res_expr env e =
       in
       let (acc, annotations) = List.fold_left loop (acc, annotations) parameters in
       p1 @ acc, annotations
-    | ResInTupleList _
+    | ResRelationColumn use -> acc, { annotations with relation_uses = use :: annotations.relation_uses }
+    | ResInTupleList { res_in_tuple_list = Res _; _ }
     | ResValue _ -> acc, annotations
     | ResInChoice (param, kind, e) ->
       let (vars, annotations) = vars_of annotations e in
@@ -1360,6 +1505,14 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
   let (from_env, p2, resolved_from, from_annotations) =
     eval_nested { env with scope = child_scope } from
   in
+  let level_slots = From.relation_slots resolved_from in
+  if level_slots <> [] then
+    List.iter (fun c ->
+      match c.value with
+      | All -> Relation_slot.unsupported ~at:c.pos "SELECT * cannot expand a relation slot, list the columns explicitly"
+      | AllOf t when List.exists (fun ((a : table_name), _) -> String.equal a.tn t.tn) level_slots ->
+        Relation_slot.unsupported ~at:c.pos "%s.* cannot expand a relation slot, list the columns explicitly" t.tn
+      | AllOf _ | Expr _ -> ()) columns;
   let env = { from_env with scope = env.scope } in
   let env = { env with query_has_grouping = List.length group > 0 } in
   let narrow = Option.map_default (narrow_columns ~resolve:(resolve_column_opt ~env) ~constrains:(const true)) Attr_refinement.empty in
@@ -1425,7 +1578,7 @@ and eval_select ~order env { source_pos; columns; from; where; group; having; } 
     | Some _, _ when group = [] && exists_grouping projection && not (exists_windowing projection) ->
       `One
       (* TODO: analyse join types to determine if cardinality optimization can be done *)
-    | Some ((`Table t, _), []), Some w when matches_at_most_one_row ~env { Sql.table = t; alias = None } w ->
+    | Some ((`Relation (`Table t), _), []), Some w when matches_at_most_one_row ~env { Sql.table = t; alias = None } w ->
       `Zero_one
     | Some _, _ ->
       `Nat
@@ -1470,7 +1623,11 @@ and resolve_source env ((kind, alias) as source) =
     match alias with
     | None -> []
     | Some { Sql.table_name; _ } ->
-      let table = match kind with `Table t -> Some t | `Select _ | `Nested _ | `ValueRows _ -> None in
+      let table =
+        match kind with
+        | `Relation (`Table t) -> Some t
+        | `Relation (`Select _ | `Nested _ | `ValueRows _) | `RelationSlot _ -> None
+      in
       [ { alias = table_name; target = table } ]
   in
   { r with rsrc_aliases = aliases; rsrc_annotations = {
@@ -1479,7 +1636,42 @@ and resolve_source env ((kind, alias) as source) =
       table_aliases = aliases @ r.rsrc_annotations.table_aliases;
     } }
 
-and eval_source env (x, alias) =
+and eval_source env (kind, alias) =
+  match kind with
+  | `Relation relation -> eval_relation env relation alias
+  | `RelationSlot id -> eval_relation_slot env id alias
+
+and eval_relation_slot env id alias =
+  let name =
+    match Relation_slot.Name.of_param_id id with
+    | Some name -> name
+    | None -> failed ~at:id.pos "relation slot must be named"
+  in
+  let alias =
+    match alias with
+    | Some { table_name; column_aliases = None } -> table_name.value
+    | Some { table_name; column_aliases = Some _ } ->
+      Relation_slot.unsupported ~at:table_name.pos "column aliases are not supported for relation slots"
+    | None -> Relation_slot.unsupported ~at:id.pos "relation slot @%s requires an alias: FROM @%s AS alias"
+                (name : Relation_slot.Name.t :> string) (name : Relation_slot.Name.t :> string)
+  in
+  begin match env.cte_recursion with
+  | Recursive_cte -> Relation_slot.unsupported ~at:id.pos "relation slots are not supported inside recursive CTEs"
+  | Not_recursive -> ()
+  end;
+  let schema =
+    match Relation_slot.binding env.relation_bound name with
+    | Relation_slot.Open -> []
+    | Bound schema -> schema
+  in
+  { rsrc_schema = List.map (fun attr -> { Schema.Source.Attr.attr; sources = [alias] }) schema;
+    rsrc_params = [RelationSlot { id; alias }];
+    rsrc_tables = [alias, schema]; rsrc_aliases = [];
+    rsrc_dynamic = []; rsrc_physical_table = None;
+    rsrc_annotations = no_stmt_annotations;
+    rsrc_relation_slots = [alias, name] }
+
+and eval_relation env relation alias =
   let resolve_schema_with_alias schema = begin match alias with
     | Some { table_name = { value = table_name; _ }; column_aliases = Some col_schema } ->
       let schema = Schema.compound (Schema.Source.of_schema col_schema) schema in
@@ -1489,7 +1681,7 @@ and eval_source env (x, alias) =
       schema, [table_name, Schema.Source.to_schema schema]
     | None -> schema, []
   end in
-  match x with
+  match relation with
   | `Select select ->
     let (s, p, _, annotations) = eval_select_full env select in
     let alias_tn = Option.map (fun { table_name; _ } -> table_name.value) alias in
@@ -1506,7 +1698,7 @@ and eval_source env (x, alias) =
     let s, tables = resolve_schema_with_alias s in
     { rsrc_schema = s; rsrc_params = p; rsrc_tables = tables; rsrc_aliases = [];
       rsrc_dynamic = dyn; rsrc_physical_table = None;
-      rsrc_annotations = annotations }
+      rsrc_annotations = annotations; rsrc_relation_slots = [] }
   | `Nested from ->
     let (env, p, from_, annotations) = eval_nested env (Some from) in
     let s, _ = infer_schema env [dummy_loc All] in
@@ -1514,7 +1706,8 @@ and eval_source env (x, alias) =
     let s = attrs_only "Nested source cannot have dynamic columns" s in
     { rsrc_schema = s; rsrc_params = p; rsrc_tables = env.tables; rsrc_aliases = [];
       rsrc_dynamic = From.dynamic_columns from_; rsrc_physical_table = None;
-      rsrc_annotations = annotations }
+      rsrc_annotations = annotations;
+      rsrc_relation_slots = From.relation_slots from_ }
   | `Table s ->
     let (name,s) = Tables_with_derived.get ~env s in
     let is_cte = List.exists (fun (n, _) -> n = name) env.ctes in
@@ -1525,7 +1718,7 @@ and eval_source env (x, alias) =
       rsrc_tables = List.map (fun name -> name, s) sources; rsrc_aliases = [];
       rsrc_dynamic = [];
       rsrc_physical_table = if is_cte then None else Some { Sql.table = name; alias = alias_tn };
-      rsrc_annotations = no_stmt_annotations }
+      rsrc_annotations = no_stmt_annotations; rsrc_relation_slots = [] }
   | `ValueRows { row_constructor_list; row_order; row_limit; } ->
     (*
       The columns of the table output from VALUES have the implicitly
@@ -1559,12 +1752,12 @@ and eval_source env (x, alias) =
     let s, tables = resolve_schema_with_alias s in
     { rsrc_schema = s; rsrc_params = p; rsrc_tables = tables; rsrc_aliases = [];
       rsrc_dynamic = []; rsrc_physical_table = None;
-      rsrc_annotations = annotations }
+      rsrc_annotations = annotations; rsrc_relation_slots = [] }
 
 
 and eval_select_full env { select_complete; cte } =
   let (ctes, p1, cte_annotations) =
-    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:eval_cte cte in
+    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:(eval_cte ~relation_bound:env.relation_bound) cte in
   let env = { env with ctes = ctes @ env.ctes } in
   let (s, p2, kind, annotations) =
     eval_select_complete ~order:select_complete.order env select_complete
@@ -1577,10 +1770,11 @@ and eval_select_complete ?(order = []) ?(compound_env = fun env _ -> env) env st
     eval_compound ~env:(compound_env env s1) (p1, s1, cardinality, stmt) in
   s, p, kind, merge_stmt_annotations annotations other_annotations
 
-and eval_cte { cte_items; is_recursive } =
+and eval_cte ~relation_bound { cte_items; is_recursive } =
   let open Schema.Source in
   List.fold_left begin fun (acc_ctes, acc_vars, acc_annotations) cte ->
-    let env = { empty_env with ctes = acc_ctes; scope = Subquery } in
+    let cte_recursion = if is_recursive then Recursive_cte else Not_recursive in
+    let env = { empty_env with ctes = acc_ctes; scope = Subquery; cte_recursion; relation_bound } in
     let table_name = make_table_name cte.cte_name.value in
     let a1 = Schema.Source.of_schema in
     let s1, p1, _kind, annotations =
@@ -1608,8 +1802,15 @@ and eval_cte { cte_items; is_recursive } =
         match cte.stmt with
         | CteInline stmt -> eval_select_complete env stmt
         | CteSharedQuery shared_query_name ->
-          let (_, stmt) = Shared_queries.get shared_query_name.value in
+          let stmt = (Shared_queries.get shared_query_name.value).select in
           let s1, p1, kind, _ = eval_select_full env stmt in
+          List.iter (function
+            | RelationSlot _ ->
+              Relation_slot.unsupported ~at:shared_query_name.pos
+                "relation slots of a reusable query used as a CTE are not supported"
+            | Single _ | SingleIn _ | ChoiceIn _ | Choice _ | DynamicSelect _ | DynamicSelectJoin _ | TupleList _
+            | OptionActionChoice _ | SharedVarsGroup _ -> ())
+            (all_vars p1);
           s1, [SharedVarsGroup (p1, shared_query_name)], kind, no_stmt_annotations
       )
     in
@@ -1780,7 +1981,7 @@ let with_constraints attrs constraints : Schema.t =
   ) attrs
 
 
-let rec eval (stmt:Sql.stmt) =
+let rec eval ~relation_bound (stmt:Sql.stmt) =
   let open Stmt in
   let open Schema.Source in
   let open Attr in
@@ -1801,7 +2002,7 @@ let rec eval (stmt:Sql.stmt) =
         table_defs = [ located_name, List.map (fun (c : Alter_action_attr.t) -> c.name) schema ] }
   | Create (located_name, Like source) ->
       let schema = List.map Alter_action_attr.from_attr (Tables.get_schema source) in
-      eval (Create (located_name, Schema { schema; constraints = []; indexes = [] }))
+      eval ~relation_bound (Create (located_name, Schema { schema; constraints = []; indexes = [] }))
   | Create ({ value = name; _ } as located_name, Select { value=select; _ }) ->
       let (schema, params, _, annotations) = eval_select_full empty_env select in
       let schema = attrs_only "CREATE TABLE AS SELECT cannot have dynamic columns" schema in
@@ -2035,7 +2236,7 @@ let rec eval (stmt:Sql.stmt) =
     begin match stmt with
     | None -> [], p, Other, no_stmt_annotations
     | Some stmt ->
-      let (schema, p2, kind, annotations) = eval stmt in
+      let (schema, p2, kind, annotations) = eval ~relation_bound stmt in
       schema, p @ p2, kind, annotations
     end
   | Update (table,ss,w,o,lim) ->
@@ -2046,7 +2247,8 @@ let rec eval (stmt:Sql.stmt) =
       update_tables ~env [{ rsrc_schema = r; rsrc_params = [];
         rsrc_tables = [(f, s)]; rsrc_aliases = []; rsrc_dynamic = [];
         rsrc_physical_table = Some { Sql.table = f; alias = None };
-        rsrc_annotations = { no_stmt_annotations with src_tbls = [ f, s ] } }] ss w
+        rsrc_annotations = { no_stmt_annotations with src_tbls = [ f, s ] };
+        rsrc_relation_slots = [] }] ss w
     in
     let env = { env with schema = update_schema_with_aliases [] r; is_update = true } in
     let (p3, order_annotations) = params_of_order o [] { env with tables = [(f, s)] } in
@@ -2055,7 +2257,7 @@ let rec eval (stmt:Sql.stmt) =
     merge_stmt_annotations annotations order_annotations
   | UpdateMulti (from,ss,w,o,lim) ->
     let env = { empty_env with is_update = true } in
-    let src = resolve_source { env with scope = Subquery } ((`Nested from), None) in
+    let src = resolve_source { env with scope = Subquery } (`Relation (`Nested from), None) in
     let (params, annotations) = update_tables ~env [src] ss w in
     let (p3, order_annotations) =
       params_of_order o [] { env with schema = src.rsrc_schema; tables = src.rsrc_tables } in
@@ -2063,7 +2265,7 @@ let rec eval (stmt:Sql.stmt) =
     [], params @ p3 @ List.map (fun p -> Single (p, Meta.empty())) lim, Update None,
     merge_stmt_annotations annotations order_annotations
   | Select select ->
-    let (schema, params, kind, annotations) = eval_select_full empty_env select in
+    let (schema, params, kind, annotations) = eval_select_full { empty_env with relation_bound } select in
     List.map drop_sources schema, params, kind, annotations
   | CreateRoutine (name,_,_) ->
     [], [], CreateRoutine name, no_stmt_annotations
@@ -2089,6 +2291,7 @@ type var_shape =
   | Shape_choice of string option * ctor_shape list
   | Shape_dyn_select of string option * ctor_shape list
   | Shape_dyn_join of string option
+  | Shape_relation of string option
 and ctor_shape =
   | Shape_simple of string option * var_shape list
   | Shape_verbatim of string
@@ -2103,6 +2306,7 @@ let rec var_shape = function
   | Choice (id, cs) -> Shape_choice (id.value, List.map ctor_shape cs)
   | DynamicSelect (id, cs) -> Shape_dyn_select (id.value, List.map ctor_shape cs)
   | DynamicSelectJoin { pid; _ } -> Shape_dyn_join pid.value
+  | RelationSlot { id; _ } -> Shape_relation id.value
 and ctor_shape = function
   | Simple { ctor = p; body = args; _ } -> Shape_simple (p.value, List.map var_shape (Stdlib.Option.value ~default:[] args))
   | Verbatim (n, _) -> Shape_verbatim n
@@ -2161,6 +2365,7 @@ let unify_params l =
   if !Config.debug then l |> List.iter (fun p -> eprintfn "var %s" (show_var p));
   let unifier = Var_unifier.create () in
   let choices = Hashtbl.create 10 in
+  let scalars = ref [] in
   let rec bound_names vars =
     vars |> List.concat_map (function
       | Single (p, _) | SingleIn (p, _) -> [p.id.value]
@@ -2176,6 +2381,9 @@ let unify_params l =
       List.iter2 (fun n1 n2 -> match n1, n2 with Some n1, Some n2 -> Var_unifier.alias unifier n1 n2 | _ -> ()) names1 names2
     | Some (`Branches _), `Branches _ -> failed ~at:p.pos "choice %s is used several times with different branches" n
     | Some `Dynamic, `Dynamic -> failed ~at:p.pos "dynamic select %s occurs several times in one statement (not supported)" n
+    | Some `Relation, `Relation -> ()
+    | Some `Relation, (`Branches _ | `Dynamic) | Some (`Branches _ | `Dynamic), `Relation ->
+      Relation_slot.unsupported ~at:p.pos "parameter %s is used both as a relation slot and as a choice" n
     | Some `Dynamic, `Branches _ | Some (`Branches _), `Dynamic ->
       if n = dynamic_col_param_name then
         failed ~at:p.pos "dynamic_select reserves the name %s for the column picker, rename choice %s" n n
@@ -2185,7 +2393,8 @@ let unify_params l =
   let rec collect var =
     begin match var with
     | Single ({ id; typ; _ }, _) | SingleIn ({ id; typ; _ }, _) ->
-      Option.may (fun name -> Var_unifier.note unifier name typ) id.value
+      Option.may (fun name -> Var_unifier.note unifier name typ; scalars := (name, id.pos) :: !scalars) id.value
+    | RelationSlot { id; _ } -> register id `Relation
     | Choice (p, ctors) ->
       register p (`Branches (List.map ctor_shape ctors, bound_names (List.concat_map ctor_vars ctors)))
     | DynamicSelect (p, _) -> register p `Dynamic
@@ -2198,13 +2407,12 @@ let unify_params l =
     let typ = Option.map_default (Var_unifier.typ unifier ~default:typ) typ id.value in
     make_param ~id ~typ:(Type.undepend typ Strict)
   in
-  let rec rewrite = function
-    | Single (p, m) -> Single (final p, m)
-    | SingleIn (p, m) -> SingleIn (final p, m)
-    | v -> map_sub_vars (List.map rewrite) v
-  in
   List.iter collect l;
-  List.map rewrite l
+  List.iter (fun (name, pos) ->
+    match Hashtbl.find_opt choices name with
+    | Some `Relation -> Relation_slot.unsupported ~at:pos "parameter %s is used both as a relation slot and as a value" name
+    | Some (`Branches _ | `Dynamic) | None -> ()) !scalars;
+  map_params (fun (p, m) -> final p, m) l
 
 let is_alpha = function
 | 'a'..'z' -> true
@@ -2271,19 +2479,58 @@ type result = {
   typed : signature;
   dialect_features : Dialect.dialect_support list;
   annotations : stmt_annotations;
+  relation_slots : Relation_slot.t list;
 }
 
 let scope_of ?cte from =
   let (ctes, _, cte_annotations) =
-    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:eval_cte cte in
+    Stdlib.Option.fold ~none:([], [], no_stmt_annotations) ~some:(eval_cte ~relation_bound:None) cte in
   let (_, _, _, from_annotations) =
     eval_nested { empty_env with ctes; scope = Subquery } from
   in
   merge_stmt_annotations cte_annotations from_annotations
 
-let eval_parsed sql { Parser.stmt; dialect_features } =
-  let (schema, p1, kind, annotations) = eval stmt in
-  let (sql, p2) = complete_sql kind sql in
-  { typed = { sql; schema; vars = unify_params (p1 @ p2); kind }; dialect_features; annotations }
+let eval_parsed sql { Parser.stmt; dialect_features; relation_slots } =
+  (* the statement with the slot of [bound] bound to its relation, or the error of its SQL *)
+  let evaluate ~bound stmt =
+    match
+      let (schema, p1, kind, annotations) = eval ~relation_bound:bound stmt in
+      let (sql, p2) = complete_sql kind sql in
+      let vars = unify_params (p1 @ p2) in
+      { typed = { sql; schema; vars; kind }; dialect_features; annotations; relation_slots = [] }
+    with
+    | result ->
+      Ok { Relation_analysis.statement = result; schema = result.typed.schema; vars = result.typed.vars;
+           kind = result.typed.kind; uses = result.annotations.relation_uses }
+    | exception (Schema.Error _ | Failure _ | At (_, (Schema.Error _ | Failure _)) as exn) -> Error exn
+  in
+  match relation_slots, stmt with
+  | [], _ ->
+    begin match evaluate ~bound:None stmt with
+    | Ok evaluation -> evaluation.statement
+    | Error exn -> raise exn
+    end
+  | first :: _, (Create _ | Drop _ | DropView _ | Alter _ | Rename _ | CreateIndex _ | Insert _ | Delete _
+    | DeleteMulti _ | Set _ | Update _ | UpdateMulti _ | CreateRoutine _ | CreateType _ | DropType _
+    | CreateExtension _ | DropExtension _ | CreateDatabase _ | DropDatabase _ | AlterDatabase _ | Truncate _
+    | RecoverTable _ | CreateSequence _ | AlterSequence _ | DropSequence _) ->
+    Relation_slot.unsupported ~at:first.pos "relation slots are supported only in SELECT statements"
+  | first :: rest, Select select ->
+    if !Config.dynamic_select then
+      Relation_slot.unsupported ~at:first.pos "relation slots cannot be combined with dynamic_select yet";
+    let analysed =
+      Relation_analysis.run select (first, rest)
+        ~evaluate:(fun ~bound select -> evaluate ~bound (Select select))
+    in
+    let { Relation_analysis.statement; schema; vars; kind; uses = _ } = analysed.evaluation in
+    { statement with
+      typed = { statement.typed with schema; vars; kind };
+      relation_slots = analysed.relation_slots;
+      annotations =
+        { statement.annotations with
+          src_tbls = analysed.scope statement.annotations.src_tbls;
+          select_scopes =
+            List.map (fun (scope : select_scope) -> { scope with src_tbls = analysed.scope scope.src_tbls })
+              statement.annotations.select_scopes } }
 
 let parse sql = eval_parsed sql (Parser.parse_stmt sql)

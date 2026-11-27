@@ -429,6 +429,91 @@ let test_coalesce = [
   tt "SELECT COALESCE(x, coalesce(null, null, 75, null), null) as x FROM test8" [attr' ~nullability:Strict "x" Int;] [];
 ]
 
+let test_recursive_bidirectional_inference =
+  let check_nested_params name sql expected =
+    name >:: (fun () ->
+      let stmt = parse sql in
+      let rec collect_params acc = function
+        | [] -> List.rev acc
+        | Single (p, _) :: vars
+        | SingleIn (p, _) :: vars -> collect_params (p :: acc) vars
+        | ChoiceIn { vars = nested; _ } :: vars
+        | OptionActionChoice (_, nested, _, _) :: vars
+        | SharedVarsGroup (nested, _) :: vars ->
+          collect_params acc (nested @ vars)
+        | Choice (_, ctors) :: vars
+        | DynamicSelect (_, ctors) :: vars ->
+          collect_params acc (List.concat_map ctor_vars ctors @ vars)
+        | DynamicSelectJoin _ :: vars
+        | RelationSlot _ :: vars
+        | TupleList _ :: vars -> collect_params acc vars
+      in
+      assert_equal
+        ~msg:"nested params"
+        ~cmp:cmp_params
+        ~printer:show_params
+        expected
+        (collect_params [] stmt.vars))
+  in
+  Type.[
+  tt "CREATE TABLE infer_nested (i INT NOT NULL, n INT NULL)" [] [];
+  tt "SELECT i FROM infer_nested WHERE i = @a + @b"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "a" Int; named "b" Int];
+  tt "SELECT i FROM infer_nested WHERE i = COALESCE(@a, @b)"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "a" Int; named "b" Int];
+  tt "UPDATE infer_nested SET i = @a + @b"
+    []
+    [named "a" Int; named "b" Int];
+  tt "INSERT INTO infer_nested(i) SELECT COALESCE(@a, @b)"
+    []
+    [named "a" Int; named "b" Int];
+  tt {|
+    SELECT i FROM infer_nested
+    WHERE i = CASE WHEN i > 0 THEN @positive ELSE @negative END
+  |}
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "positive" Int; named "negative" Int];
+  tt "SELECT CASE WHEN i > 0 THEN @positive ELSE @negative END FROM infer_nested"
+    [attr' "" Any ~nullability:(Depends)]
+    [named "positive" Any; named "negative" Any];
+  tt "SELECT i FROM infer_nested WHERE n = @a + @b"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "a" Int; named "b" Int];
+  tt "SELECT i FROM infer_nested WHERE i = IFNULL(@a, @b + @c)"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "a" Int; named "b" Int; named "c" Int];
+  tt "CREATE TABLE infer_nested_default (n INT NULL DEFAULT 0)" [] [];
+  check_nested_params "expected column type reaches set-default body"
+    "UPDATE infer_nested_default SET n = { @a + @b }??"
+    [named_nullable "a" Int; named_nullable "b" Int];
+  check_nested_params "expected type reaches choice bodies" {|
+      SELECT i FROM infer_nested
+      WHERE i = @choice {
+        A { @a }
+      | B { @b }
+      }
+    |}
+    [named "a" Int; named "b" Int];
+  check_nested_params "expected Bool reaches option action body"
+    "SELECT i FROM infer_nested WHERE { @enabled }?"
+    [named "enabled" Bool];
+  tt "SELECT JSON_ARRAY(@scope)"
+    [attr' "" Json]
+    [named "scope" Any];
+  tt "SELECT JSON_SET(JSON_OBJECT(), '$.id', @id)"
+    [attr' "" Json]
+    [named "id" Any];
+  wrong "SELECT i FROM infer_nested WHERE i = COALESCE(@a :: Text, @b)";
+  tt "SELECT i FROM infer_nested WHERE i = COALESCE(@a :: Int Null, @b)"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named_nullable "a" Int; named_nullable "b" Int];
+  tt "SELECT i FROM infer_nested WHERE i = (SELECT @nested)"
+    [attr' "i" Int ~extra:[NotNull]]
+    [named "nested" Any];
+  ]
+
 let test_primary_strict = [
   tt "CREATE TABLE test9 (x BIGINT UNSIGNED PRIMARY KEY)" [] [];
   tt "SELECT x FROM test9 WHERE x > 100" [attr' ~extra:[PrimaryKey] ~nullability:Strict "x" UInt64;] [];
@@ -2916,6 +3001,228 @@ let test_fn_group_by_arg = [
   ];
 ]
 
+let test_relation_slot_parser =
+  let parses_from_slot =
+    "FROM named parameter" >:: fun () ->
+      match (Parser.parse_stmt "SELECT COUNT(1) FROM @source AS source").stmt with
+      | Select {
+          select_complete = {
+            select = ({ from = Some (((`RelationSlot id, Some alias), [])); _ }, []);
+            _;
+          };
+          _;
+        } ->
+        assert_equal (Some "source") id.value;
+        assert_equal "source" alias.table_name.value.tn
+      | stmt -> assert_failure (Sql.show_stmt stmt)
+  in
+  let scalar_stays_scalar =
+    "scalar parameter" >:: fun () ->
+      match (Parser.parse_stmt "SELECT @value").stmt with
+      | Select _ -> ()
+      | stmt -> assert_failure (Sql.show_stmt stmt)
+  in
+  [parses_from_slot; scalar_stays_scalar]
+
+(* run against a schema of its own, leaving the global one as it was *)
+let with_schema ddl f () =
+  let saved = Compile.snapshot () in
+  Fun.protect ~finally:(fun () -> Compile.restore saved) (fun () ->
+    Compile.reset ();
+    List.iter (fun sql -> ignore (Syntax.parse sql)) ddl;
+    f ())
+
+let reuse name sql =
+  match (Parser.parse_stmt sql).stmt with
+  | Select select -> Shared_queries.add ~name ~sql ~select ~props:[ Props.Name name; Props.Include Props.Reuse ]
+  | stmt -> assert_failure (Sql.show_stmt stmt)
+
+let builders () =
+  match Relation_candidate.all () with
+  | Ok candidates -> List.map (fun (c : Relation_candidate.t) -> c.builder) candidates
+  | Error e -> assert_failure (Relation_candidate.show_error e)
+
+let test_relation_slot_candidates = [
+  "tables then reusable queries, in declaration order" >:: with_schema
+    [ "CREATE TABLE zeta (id INT)"; "CREATE TABLE alpha (id INT)" ] (fun () ->
+      reuse "second" "SELECT id FROM zeta";
+      reuse "first" "SELECT id FROM alpha";
+      assert_equal ~printer:(String.concat ", ")
+        [ "table_zeta"; "table_alpha"; "query_second"; "query_first" ] (builders ()));
+  "a redeclared reusable query keeps its latest position" >:: with_schema
+    [ "CREATE TABLE t (id INT)" ] (fun () ->
+      reuse "a" "SELECT id FROM t";
+      reuse "b" "SELECT id FROM t";
+      reuse "a" "SELECT id, id AS id2 FROM t";
+      assert_equal ~printer:(String.concat ", ") [ "table_t"; "query_b"; "query_a" ] (builders ());
+      assert_equal "SELECT id, id AS id2 FROM t" (Shared_queries.get "a").sql);
+  "names that normalize to one builder are an error, not a suffix" >:: with_schema
+    [ "CREATE TABLE `a-b` (id INT)"; "CREATE TABLE a_b (id INT)" ] (fun () ->
+      match Relation_candidate.all () with
+      | Ok _ -> assert_failure "expected a name collision"
+      | Error (Name_collision { builder; _ }) -> assert_equal "table_a_b" builder);
+]
+
+let analysed sql =
+  match (Syntax.parse sql).relation_slots with
+  | [ slot ] -> slot
+  | slots -> assert_failure (sprintf "expected one relation slot, got %d" (List.length slots))
+
+let accepted (slot : Relation_slot.t) =
+  List.map (fun (i : Relation_slot.instance) -> i.candidate.builder) (Relation_slot.instances slot)
+
+let test_relation_slot_analysis = [
+  "COUNT(1) accepts every table and depends on nothing" >:: with_schema
+    [ "CREATE TABLE a (id INT)"; "CREATE TABLE b (x TEXT)" ] (fun () ->
+      let slot = analysed "SELECT COUNT(1) AS n FROM @s AS s" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a"; "table_b" ] (accepted slot);
+      assert_equal [] (Relation_slot.indices slot));
+  "a selected column filters by name and becomes an index when its type varies" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id INT)"; "CREATE TABLE c (x INT)" ] (fun () ->
+      let slot = analysed "SELECT s.id FROM @s AS s" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a"; "table_b" ] (accepted slot);
+      assert_equal [ Relation_slot.Column 0 ] (Relation_slot.indices slot);
+      assert_equal ~printer:(String.concat "; ")
+        [ "table_c: missing attribute : id" ]
+        (List.map (fun (r : Relation_slot.rejection) -> r.rejected.builder ^ ": " ^ r.reason) slot.rejections));
+  "a column of the same type everywhere is not an index" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id INT NOT NULL, y TEXT)" ] (fun () ->
+      let slot = analysed "SELECT s.id FROM @s AS s" in
+      assert_equal [] (Relation_slot.indices slot));
+  "a parameter compared with a varying column is an index" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id TEXT NOT NULL)" ] (fun () ->
+      let slot = analysed "SELECT COUNT(1) AS n FROM @s AS s WHERE s.id = @id" in
+      assert_equal [ Relation_slot.Parameter "id" ] (Relation_slot.indices slot));
+  "two slots joined on a column share its SQL kind" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id TEXT NOT NULL)" ] (fun () ->
+      match (Syntax.parse "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id").relation_slots with
+      | [ l; r ] ->
+        begin match Relation_slot.indices l with
+        | [ Coupling _ ] -> ()
+        | indices -> assert_failure (sprintf "expected one shared SQL kind, got %d indices" (List.length indices))
+        end;
+        assert_equal (Relation_slot.indices l) (Relation_slot.indices r)
+      | slots -> assert_failure (sprintf "expected two relation slots, got %d" (List.length slots)));
+  "what a column is compared with whatever is chosen is not shared between slots" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, created DATETIME NOT NULL)" ] (fun () ->
+      match
+        (Syntax.parse "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id WHERE l.created > '2020-01-01'").relation_slots
+      with
+      | [ l; r ] ->
+        begin match Relation_slot.indices l with
+        | [ Coupling { column = "id"; _ } ] -> ()
+        | indices -> assert_failure (sprintf "expected the SQL kind of id only, got %d indices" (List.length indices))
+        end;
+        assert_equal (Relation_slot.indices l) (Relation_slot.indices r)
+      | slots -> assert_failure (sprintf "expected two relation slots, got %d" (List.length slots)));
+  "two slots compared in the left part of a tuple list share the SQL kind as well" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, x INT NOT NULL)"; "CREATE TABLE b (id INT NOT NULL, x TEXT NOT NULL)" ] (fun () ->
+      match
+        (Syntax.parse
+          "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id \
+           WHERE (CASE WHEN l.x = r.x THEN 1 ELSE 0 END, 2) IN @pairs").relation_slots
+      with
+      | [ l; r ] ->
+        begin match Relation_slot.indices l with
+        | [ Coupling { column = "id"; _ }; Coupling { column = "x"; _ } ] -> ()
+        | indices -> assert_failure (sprintf "expected the SQL kinds of id and x, got %d indices" (List.length indices))
+        end;
+        assert_equal (Relation_slot.indices l) (Relation_slot.indices r)
+      | slots -> assert_failure (sprintf "expected two relation slots, got %d" (List.length slots)));
+  "the values of a list typed the same by every relation keep that type" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id INT NOT NULL, x TEXT)" ] (fun () ->
+      let sql = "SELECT COUNT(1) AS n FROM @s AS s WHERE s.id IN @ids" in
+      assert_equal [] (Relation_slot.indices (analysed sql));
+      assert_equal ~printer:(String.concat ", ") [ "Int" ]
+        (List.filter_map (function
+          | SingleIn (p, _) -> Some (Type.show_kind p.typ.t)
+          | Single _ | ChoiceIn _ | Choice _ | DynamicSelect _ | DynamicSelectJoin _ | TupleList _
+          | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _ -> None) (all_vars (Syntax.parse sql).typed.vars)));
+  "the values of a list over a column of another slot get the type its relations agree on" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, x INT NOT NULL)"; "CREATE TABLE b (id INT NOT NULL, x INT NOT NULL)" ] (fun () ->
+      (* the first relation of @l is evaluated with @r open and does not know the type of r.id *)
+      assert_equal ~printer:(String.concat ", ") [ "Int" ]
+        (List.filter_map (function
+          | SingleIn (p, _) -> Some (Type.show_kind p.typ.t)
+          | Single _ | ChoiceIn _ | Choice _ | DynamicSelect _ | DynamicSelectJoin _ | TupleList _
+          | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _ -> None)
+          (all_vars (Syntax.parse "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.x = r.x WHERE r.id IN @ids").typed.vars)));
+  "the values of a list typed differently by two relations are not supported" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id TEXT NOT NULL)" ] (fun () ->
+      match Syntax.parse "SELECT COUNT(1) AS n FROM @s AS s WHERE s.id IN @ids" with
+      | _ -> assert_failure "expected the list to be rejected"
+      | exception Prelude.At (_, Relation_slot.Unsupported _) -> ());
+  "a statement with several slots type-checks before any relation is chosen" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, x INT NOT NULL, y INT NOT NULL)" ] (fun () ->
+      (* (a.x, a.y) IN @pairs has no types while @a is open: @b is never reached then *)
+      let single = "SELECT a.id FROM @a AS a WHERE (a.x, a.y) IN @pairs" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a" ] (accepted (analysed single));
+      match Syntax.parse (sprintf "SELECT COUNT(1) AS n FROM (%s) t WHERE EXISTS (SELECT 1 FROM @b AS b WHERE b.id = t.id)" single) with
+      | _ -> assert_failure "expected the statement to be rejected"
+      | exception Prelude.At (_, Failure _) -> ());
+  "rejections follow the declaration order of the relations" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE z (x INT)" ] (fun () ->
+      reuse "untyped" "SELECT NULL AS id FROM a";
+      reuse "other" "SELECT x FROM z";
+      match (Syntax.parse "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id").relation_slots with
+      | [ l; _ ] ->
+        assert_equal ~printer:(String.concat ", ") [ "table_z"; "query_untyped"; "query_other" ]
+          (List.map (fun (r : Relation_slot.rejection) -> r.rejected.builder) l.rejections)
+      | slots -> assert_failure (sprintf "expected two relation slots, got %d" (List.length slots)));
+  "a slot inside a CTE is bound like any other" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)"; "CREATE TABLE b (id TEXT NOT NULL)" ] (fun () ->
+      let slot = analysed "WITH c AS (SELECT s.id FROM @s AS s) SELECT c.id FROM c" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a"; "table_b" ] (accepted slot);
+      assert_equal [ Relation_slot.Column 0 ] (Relation_slot.indices slot));
+  "a slot of a reusable query used as a CTE is not supported" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL)" ] (fun () ->
+      reuse "with_slot" "SELECT s.id FROM @s AS s";
+      (* a slot of the statement with the same name does not make it one of the statement *)
+      List.iter (fun sql ->
+        match Syntax.parse sql with
+        | _ -> assert_failure ("expected the slot of the reusable query to be rejected: " ^ sql)
+        | exception Prelude.At ((start, stop), Relation_slot.Unsupported _) ->
+          assert_equal ~printer:identity "&with_slot" (String.sub sql start (stop - start)))
+        [ "WITH c AS &with_slot SELECT c.id FROM c";
+          "WITH c AS &with_slot SELECT c.id FROM c JOIN @s AS s ON s.id = c.id" ]);
+  "a slot is found wherever a subquery can be" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, x INT NOT NULL)" ] (fun () ->
+      let sub = "(SELECT MAX(s.id) FROM @s AS s)" in
+      List.iter (fun sql -> assert_equal ~msg:sql ~printer:(String.concat ", ") [ "table_a" ] (accepted (analysed sql)))
+        [ sprintf "SELECT %s AS m FROM a" sub;
+          sprintf "SELECT a.id FROM a WHERE a.id = %s" sub;
+          sprintf "SELECT a.id FROM a WHERE a.id IN %s" sub;
+          sprintf "SELECT a.id FROM a JOIN a AS b ON b.id = %s" sub;
+          sprintf "SELECT a.x FROM a GROUP BY a.x HAVING COUNT(1) > %s" sub;
+          sprintf "SELECT a.id FROM a ORDER BY %s" sub;
+          sprintf "SELECT GROUP_CONCAT(a.x ORDER BY %s) AS xs FROM a" sub;
+          sprintf "SELECT CASE WHEN a.id = %s THEN 1 ELSE 0 END AS c FROM a" sub;
+          sprintf "SELECT COALESCE(%s, 0) AS m FROM a" sub;
+          sprintf "SELECT t.m FROM (SELECT %s AS m FROM a) t" sub;
+          sprintf "SELECT a.id FROM a UNION SELECT %s" sub;
+          sprintf "WITH c AS (SELECT %s AS m FROM a) SELECT c.m FROM c" sub;
+          sprintf "SELECT a.id FROM a WHERE (%s, a.x) IN @pairs" sub ]);
+  "a table alias of a subquery hides the slot alias" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, name TEXT)"; "CREATE TABLE b (id INT NOT NULL)" ] (fun () ->
+      let slot = analysed "SELECT s.id FROM @s AS s WHERE EXISTS (SELECT 1 FROM a AS s WHERE s.name = 'x')" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a"; "table_b" ] (accepted slot));
+  "a column used only in a subquery still filters the relations" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, name TEXT)"; "CREATE TABLE b (id INT NOT NULL)" ] (fun () ->
+      let slot = analysed "SELECT s.id FROM @s AS s WHERE EXISTS (SELECT 1 FROM b WHERE b.id = s.id AND s.name = 'x')" in
+      assert_equal ~printer:(String.concat ", ") [ "table_a" ] (accepted slot);
+      assert_equal ~printer:(String.concat "; ")
+        [ "table_b: missing attribute : name" ]
+        (List.map (fun (r : Relation_slot.rejection) -> r.rejected.builder ^ ": " ^ r.reason) slot.rejections));
+  "a reusable query owns its parameters" >:: with_schema
+    [ "CREATE TABLE a (id INT NOT NULL, st TEXT NOT NULL)" ] (fun () ->
+      reuse "active" "SELECT id FROM a WHERE st = @st";
+      let slot = analysed "SELECT s.id FROM @s AS s WHERE s.id > @min" in
+      let query = List.find (fun (i : Relation_slot.instance) -> i.candidate.builder = "query_active") (Relation_slot.instances slot) in
+      assert_equal [ "st" ] (List.map (fun (own : Relation_slot.own_param) -> own.name) query.own_params);
+      assert_equal [ "min" ]
+        (List.filter_map (function Single (p, _) -> p.id.value | _ -> None) (Syntax.parse "SELECT s.id FROM @s AS s WHERE s.id > @min").typed.vars));
+]
+
 let test_join_hole_whitespace =
   let join_var sql sub =
     let j1 = String.find sql sub in
@@ -2937,7 +3244,7 @@ let test_join_hole_whitespace =
         ~cmp:(fun a b -> List.map show_piece a = List.map show_piece b)
         ~printer:(fun l -> String.concat "; " (List.map show_piece l))
         expected
-        (fill ~spell:(fun _ bind -> bind.original) (of_sql sql (List.map (join_var sql) joins))))
+        (fill ~spell:(fun _ bind -> `Text bind.original) (of_sql sql (List.map (join_var sql) joins))))
   in
   let join text = `Cond (Dep_selected ({ value = Some "col"; pos = (0,0) }, 0), [`Text text]) in
   [
@@ -3117,6 +3424,7 @@ let run () =
     "manual_param" >::: test_manual_param;
     "test_left_join" >::: test_left_join;
     "test_coalesce" >::: test_coalesce;
+    "test_recursive_bidirectional_inference" >::: test_recursive_bidirectional_inference;
     "test_primary_strict" >::: test_primary_strict;
     "test_not_null_default_field" >::: test_not_null_default_field;
     "test_update_join" >::: test_update_join;
@@ -3155,6 +3463,9 @@ let run () =
     "test_nullability_rules" >::: test_nullability_rules;
     "test_nullability_narrowing" >::: test_nullability_narrowing;
     "test_fn_group_by_arg" >::: test_fn_group_by_arg;
+    "relation slot parser" >::: test_relation_slot_parser;
+    "relation slot candidates" >::: test_relation_slot_candidates;
+    "relation slot analysis" >::: test_relation_slot_analysis;
     "test_join_hole_whitespace" >::: test_join_hole_whitespace;
     "test_split_locates_statements" >:: test_split_locates_statements;
     "test_strip_comments_preserves_token_boundaries"

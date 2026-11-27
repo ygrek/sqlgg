@@ -74,10 +74,11 @@ module Extensions = struct
 
   and source (kind, _) =
     match kind with
-    | `Select sf -> select_full sf
-    | `Table _ -> []
-    | `Nested n -> nested n
-    | `ValueRows rv ->
+    | `RelationSlot id -> report id.pos "relation slot (FROM @name)"
+    | `Relation (`Select sf) -> select_full sf
+    | `Relation (`Table _) -> []
+    | `Relation (`Nested n) -> nested n
+    | `Relation (`ValueRows rv) ->
       let rows =
         match rv.row_constructor_list with
         | RowExprList rows -> List.concat_map (List.concat_map expr) rows

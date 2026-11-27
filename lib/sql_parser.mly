@@ -211,7 +211,7 @@ statement: CREATE ioption(temporary) TABLE ioption(if_not_exists) name=located(t
          | update_cmd tables=table_list SET ss=commas(set_column) w=where? o=loption(order) lim=loption(limit)
               {
                 match tables with
-                | (`Table table, None), [] -> Update (table,ss,w,o,lim)
+                | (`Relation (`Table table), None), [] -> Update (table,ss,w,o,lim)
                 | _ -> UpdateMulti (tables,ss,w,o,lim)
               }
          | DELETE FROM table=table_name w=where?
@@ -356,10 +356,11 @@ join_cond: ON e=expr { On e }
          | USING l=sequence(ident) { Using l }
          | %prec LOWEST { Default }
 
-source1: table_name { `Table $1 }
-       | LPAREN s=select_stmt RPAREN { `Select s }
-       | LPAREN s=table_list RPAREN { `Nested s }
-       | LPAREN s=values_stmt RPAREN { `ValueRows s }
+source1: table_name { `Relation (`Table $1) }
+       | id=PARAM { `RelationSlot id }
+       | LPAREN s=select_stmt RPAREN { `Relation (`Select s) }
+       | LPAREN s=table_list RPAREN { `Relation (`Nested s) }
+       | LPAREN s=values_stmt RPAREN { `Relation (`ValueRows s) }
 
 source: src=source1 alias=source_alias? {
   ( src, 

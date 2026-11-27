@@ -35,14 +35,20 @@ module String_set = struct
   let t_jsonschema = Jsonkit.Primitives.(list_jsonschema string_jsonschema)
 end
 
+(** the first of the elements having the same key, in order; keys are compared structurally *)
 let unique_by ~key l =
-  let (_, kept) =
-    List.fold_left (fun ((seen, kept) as acc) x ->
+  let seen = Hashtbl.create 16 in
+  List.rev
+    (List.fold_left (fun kept x ->
       let k = key x in
-      if String_set.mem k seen then acc else (String_set.add k seen, x :: kept))
-      (String_set.empty, []) l
-  in
-  List.rev kept
+      if Hashtbl.mem seen k then kept else (Hashtbl.replace seen k (); x :: kept))
+      [] l)
+
+(** the element every one of [l] is equal to *)
+let list_same l =
+  match l with
+  | [] -> None
+  | x::xs -> if List.for_all (fun y -> x = y) xs then Some x else None
 
 let fail fmt = Printf.ksprintf failwith fmt
 let failed ~at fmt = Printf.ksprintf (fun s -> raise (At (at, Failure s))) fmt

@@ -24,7 +24,7 @@ let analyze_dml ddl sql =
   let context = Test_helpers.context ddl in
   snd (Test_helpers.get_ok (Test_helpers.analyze ~context sql))
 
-let original _ (bind : bind) = bind.original
+let original _ (bind : bind) = `Text bind.original
 
 let fill_sql ?(spell = original) sql vars = fill ~spell (of_sql sql vars)
 
@@ -40,6 +40,25 @@ let test_lower_static_bind =
       `Text "SELECT 1 WHERE id = ";
       `Bind { param = p; original = "?" };
     ]
+
+let test_relation_slot =
+  "relation slot stays a fragment, its binds can be left unspelled" >:: fun () ->
+  let sql = "SELECT 1 FROM @src AS s WHERE s.id = ?" in
+  let slot = located ~value:(Some "src") (14, 18) in
+  let p = make_param ~id:(located (37, 38)) ~typ:(Type.strict Int) in
+  let vars = [ RelationSlot { id = slot; alias = { db = None; tn = "s" } }; Single (p, meta) ] in
+  let template =
+    [
+      `Text "SELECT 1 FROM ";
+      `Relation slot;
+      `Text " AS s WHERE s.id = ";
+      `Bind { param = p; original = "?" };
+    ]
+  in
+  assert_template ~msg:"of_sql" (of_sql sql vars) template;
+  assert_template ~msg:"fill keeping the bind" (fill ~spell:(fun _ bind -> `Bind bind) (of_sql sql vars)) template;
+  assert_template ~msg:"fill spelling the bind" (fill_sql sql vars)
+    [ `Text "SELECT 1 FROM "; `Relation slot; `Text " AS s WHERE s.id = ?" ]
 
 let test_lower_bind_in_choice_arm =
   "of_sql bind in Choice arm exact" >:: fun () ->
@@ -228,7 +247,7 @@ let test_dynamic_select_nested_bind_parity =
 let test_dynamic_select_subst_callback =
   "DynamicSelect subst order exact" >:: fun () ->
   let sql, name, bind_param, ctor, _, _, vars = dynamic_select_fixture () in
-  let subst index _ = sprintf "@b%u" index in
+  let subst index _ = `Text (sprintf "@b%u" index) in
   assert_template ~msg:"DynamicSelect subst in arm only"
     (fill_sql ~spell:subst sql vars)
     [
@@ -327,7 +346,7 @@ let test_option_action_bool_choices_analysis =
         (fill ~spell:original (Query.template stmt))
         (expected (`Text "@v"));
       assert_template ~msg:"filled template subst"
-        (fill ~spell:(fun _ _ -> "@bound") (Query.template stmt))
+        (fill ~spell:(fun _ _ -> `Text "@bound") (Query.template stmt))
         (expected (`Text "@bound"))
   | _ -> assert_failure "expected OptionActionChoice BoolChoices from Analysis"
 
@@ -343,7 +362,7 @@ let rec option_arm_has_nested_dynamic l =
       List.exists
         (function
           | `Choice _ | `Optional _ | `DynamicSelect _ -> true
-          | `Text _ | `SubstIn _ | `DynamicIn _ | `SubstTuple _ | `Cond _ -> false)
+          | `Text _ | `SubstIn _ | `DynamicIn _ | `SubstTuple _ | `Cond _ | `Relation _ -> false)
         some
   | _ :: tl -> option_arm_has_nested_dynamic tl
 
@@ -513,7 +532,7 @@ let test_poly_choice_subst_verbatim =
       `Text "{ x(?) | picked } AND ";
       `Bind { param = p1; original = "?" };
     ];
-  let subst_top i _ = sprintf "@p%u" i in
+  let subst_top i _ = `Text (sprintf "@p%u" i) in
   assert_template ~msg:"top-level @p0/@p1 and arm bind index"
     (fill_sql ~spell:subst_top sql vars)
     [
@@ -570,7 +589,7 @@ let test_subst_indices_around_dynamic =
       Single (p1, meta);
     ]
   in
-  let subst index _ = sprintf "@p%u" index in
+  let subst index _ = `Text (sprintf "@p%u" index) in
   let ctor_a = located ~value:(Some "a") (a1, a1 + 1) in
   let ctor_b = located ~value:(Some "b") (b1, b1 + 1) in
   assert_template ~msg:"top-level bind indices"
@@ -609,7 +628,7 @@ let test_shared_vars_group =
     let outer, var, sp, _group_id, shared_sql, select_full =
       shared_vars_fixture ()
     in
-    Shared_queries.add "sq" (shared_sql, select_full);
+    Shared_queries.add ~name:"sq" ~sql:shared_sql ~select:select_full ~props:[];
     assert_template ~msg:"SharedVarsGroup of_sql"
       (of_sql outer [ var ])
       [
@@ -660,7 +679,7 @@ let test_shared_query_with_choice =
        SELECT id FROM t WHERE { status = @s }?;\n";
     match compile_one ~dynamic_select:Props.Off "WITH f AS &frag SELECT id FROM f" with
     | { typed = { vars = [ SharedVarsGroup (shared_vars, id) ] as vars; sql; _ }; _ } ->
-        let shared_sql, (_ : Sql.select_full) = Shared_queries.get id.value in
+        let shared_sql = (Shared_queries.get id.value).sql in
         begin match of_sql shared_sql shared_vars with
         | [ `Text before; (`Optional _ as choice) ] ->
             assert_template ~msg:"reused query lowered in place"
@@ -715,7 +734,7 @@ let test_static_bind =
     make_param ~id:(located (20, 21)) ~typ:(Type.strict Int)
   in
   let subst index (bind : bind) =
-    sprintf "@p%u(%s)" index (Option.value ~default:"_" bind.param.id.value)
+    `Text (sprintf "@p%u(%s)" index (Option.value ~default:"_" bind.param.id.value))
   in
   assert_template ~msg:"named subst"
     (fill_sql ~spell:subst sql [ Single (p, meta) ])
@@ -817,6 +836,7 @@ let () =
     "query"
     >::: [
            test_lower_static_bind;
+           test_relation_slot;
            test_lower_bind_in_choice_arm;
            test_poly_choice_render_and_squash;
            test_static_bind;

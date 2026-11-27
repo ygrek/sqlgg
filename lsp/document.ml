@@ -114,7 +114,7 @@ let check ~file (stmt : Statements.t) =
   let error_pos pos = let (start, stop) = rebase pos in start, Int.max stop (start + 1) in
   let loc pos = Option.map (fun pos -> Symbol.loc ~file (rebase pos)) (Sql.Pos.nonempty pos) in
   let recover_scope exn =
-    let of_table table : Sql.nested = (`Table table, None), [] in
+    let of_table table : Sql.nested = (`Relation (`Table table), None), [] in
     let cross : Sql.source list -> Sql.nested option = function
       | [] -> None
       | src :: rest ->

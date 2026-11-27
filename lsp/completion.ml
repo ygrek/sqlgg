@@ -154,11 +154,13 @@ let make (document : Document.t) offset =
       let alias_sources =
         full.trace.sources |> List.filter_map (fun (src, (alias : Sql.source_alias option)) ->
           match src, alias with
-          | `Table (table : Sql.table_name), Some alias ->
+          | `Relation (`Table (table : Sql.table_name)), Some alias ->
             Option.map (fun (symbol : Symbol.t) ->
               { symbol with name = alias.table_name.value.tn; kind = Symbol.Alias table })
               (find_symbol table.tn)
-          | `Table _, None | (`Select _ | `Nested _ | `ValueRows _), _ -> None)
+          | `Relation (`Table _), None
+          | (`Relation (`Select _ | `Nested _ | `ValueRows _) | `RelationSlot _), _ ->
+            None)
       in
       let visible sources =
         List.filter (fun (symbol : Symbol.t) ->

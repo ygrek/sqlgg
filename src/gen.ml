@@ -41,6 +41,7 @@ let rec find_param_ids l =
       | SharedVarsGroup (vars, _) -> find_param_ids vars
       | TupleList (id, _) -> [ id ]
       | DynamicSelect (id, _) -> [ id ]
+      | RelationSlot { id; _ } -> [ id ]
       | DynamicSelectJoin _ -> [])
     l
 
@@ -53,6 +54,7 @@ let rec params_only l =
       | Sql.Single (p, _) -> [ p ]
       | OptionActionChoice _ | Choice _ -> fail "dynamic choices not supported for this host language"
       | DynamicSelect _ -> fail "dynamic selects not supported for this host language (params_only)"
+      | RelationSlot { id; _ } -> fail "relation slot @%s is supported only by the OCaml generators" (make_param_name 0 id)
       | v -> params_only (Sql.sub_vars v))
     l
 
@@ -164,15 +166,17 @@ let output_l = List.iter indent_endline
 let print fmt = ksprintf (fun s -> emit s; emit "\n") fmt
 let indented k = inc_indent (); k (); dec_indent ()
 
-let spell index ({ param; original } : Sql_template.bind) =
-  match !params_mode with
-  | None -> original
-  | Some Named -> "@" ^ show_param_name param index
-  | Some Unnamed -> "?"
-  | Some Oracle -> ":" ^ show_param_name param index
-  | Some PostgreSQL -> "$" ^ string_of_int (index + 1)
+(* numbering after a relation slot depends on the relation chosen at runtime, the bind is left for it *)
+let spell (stmt : Query.t) index ({ param; original } as bind : Sql_template.bind) =
+  match !params_mode, stmt.relation_slots with
+  | None, _ -> `Text original
+  | Some Named, _ -> `Text ("@" ^ show_param_name param index)
+  | Some Unnamed, _ -> `Text "?"
+  | Some Oracle, _ -> `Text (":" ^ show_param_name param index)
+  | Some PostgreSQL, [] -> `Text ("$" ^ string_of_int (index + 1))
+  | Some PostgreSQL, _ :: _ -> `Bind bind
 
-let get_sql (q : Query.named) = Sql_template.fill ~spell q.template
+let get_sql (q : Query.named) = Sql_template.fill ~spell:(spell q.stmt) q.template
 
 let get_sql_string_only stmt =
   match get_sql stmt with
@@ -184,8 +188,13 @@ let time_string () =
   let t = U.time () |> U.gmtime in
   sprintf "%04u-%02u-%02uT%02u:%02uZ" (1900 + t.U.tm_year) (t.U.tm_mon+1) t.U.tm_mday t.U.tm_hour t.U.tm_min
 
+type relation_slot_support =
+  | Relation_slots_supported
+  | Relation_slots_unsupported of string (** generator name for diagnostics *)
+
 module type Generator = sig
   type t
+  val relation_slots : relation_slot_support
   val generate : t -> string -> Query.named list -> unit
   val start : unit -> t
   val comment : t -> ('a,unit,string,unit) format4 -> 'a
@@ -207,6 +216,18 @@ let generate_header out mode =
   S.empty_line out
 
 let process name stmts =
+  begin match S.relation_slots with
+  | Relation_slots_supported -> ()
+  | Relation_slots_unsupported generator ->
+    List.iter (fun ({ stmt; _ } : Query.named) ->
+      match stmt.relation_slots with
+      | [] -> ()
+      | slot :: _ ->
+        fail "relation slot @%s%s is supported only by the OCaml generators, not by %s"
+          (slot.name :> string)
+          (Stdlib.Option.fold ~none:"" ~some:(fun name -> " in " ^ name) (Props.name stmt.props))
+          generator) stmts
+  end;
   let out = S.start () in
   Option.may (generate_header out) !Sqlgg_config.gen_header;
   S.generate out name stmts

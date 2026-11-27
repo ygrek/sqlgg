@@ -6,7 +6,7 @@ open Prelude
 open Jsonkit.Primitives
 
 module Pos = struct
-  type t = int * int [@@deriving show, eq, json, jsonschema]
+  type t = int * int [@@deriving show, eq, ord, json, jsonschema]
 
   let contains (start, stop) offset = offset >= start && offset < stop
   let covers (start, stop) offset = offset >= start && offset <= stop
@@ -551,7 +551,7 @@ type table_name = { db : string option; tn : string } [@@deriving eq, ord, show,
 let show_table_name { db; tn } = match db with Some db -> sprintf "%s.%s" db tn | None -> tn
 let make_table_name ?db tn = { db; tn }
 type schema = Schema.t [@@deriving show, eq, json, jsonschema]
-type table = table_name * schema [@@deriving show]
+type table = table_name * schema [@@deriving show, json, jsonschema]
 type table_alias = {
   alias : table_name located;
   target : table_name option;
@@ -643,6 +643,7 @@ and var =
 (* It differs from Choice that in this case we should generate sql "TRUE", it doesn't seem reusable *)
 | OptionActionChoice of param_id * var list * (Pos.t * Pos.t) * option_actions_kind
 | SharedVarsGroup of vars * shared_query_ref_id
+| RelationSlot of { id : param_id; alias : table_name }
 and tuple_list_kind =
   | Insertion of schema
   | Where_in of ((Type.t * Meta.t) list * in_or_not_in) located
@@ -655,11 +656,14 @@ let ctor_vars = function
   | Verbatim _ -> []
 
 let sub_vars = function
-  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ -> []
+  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ | RelationSlot _ -> []
   | ChoiceIn { vars; _ } -> vars
   | OptionActionChoice (_, vars, _, _) -> vars
   | SharedVarsGroup (vars, _) -> vars
   | Choice (_, ctors) | DynamicSelect (_, ctors) -> List.concat_map ctor_vars ctors
+
+(** every var followed by the vars nested in it *)
+let rec all_vars vars = List.concat_map (fun v -> v :: all_vars (sub_vars v)) vars
 
 let map_sub_vars f =
   let map_ctor = function
@@ -667,12 +671,20 @@ let map_sub_vars f =
     | Verbatim _ as c -> c
   in
   function
-  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ as v -> v
+  | Single _ | SingleIn _ | TupleList _ | DynamicSelectJoin _ | RelationSlot _ as v -> v
   | ChoiceIn t -> ChoiceIn { t with vars = f t.vars }
   | OptionActionChoice (p, vars, pos, kind) -> OptionActionChoice (p, f vars, pos, kind)
   | SharedVarsGroup (vars, id) -> SharedVarsGroup (f vars, id)
   | Choice (p, ctors) -> Choice (p, List.map map_ctor ctors)
   | DynamicSelect (p, ctors) -> DynamicSelect (p, List.map map_ctor ctors)
+
+(** [f] applied to every scalar parameter, nested ones included *)
+let rec map_params f =
+  List.map (function
+    | Single (p, m) -> let (p, m) = f (p, m) in Single (p, m)
+    | SingleIn (p, m) -> let (p, m) = f (p, m) in SingleIn (p, m)
+    | ChoiceIn _ | Choice _ | DynamicSelect _ | DynamicSelectJoin _ | TupleList _ | OptionActionChoice _
+    | SharedVarsGroup _ | RelationSlot _ as v -> map_sub_vars (map_params f) v)
 
 let var_pos = function
   | Single (p, _) | SingleIn (p, _) -> fst p.id.pos
@@ -680,6 +692,7 @@ let var_pos = function
   | OptionActionChoice (id, _, _, _) -> fst id.pos
   | ChoiceIn { param; _ } -> fst param.pos
   | SharedVarsGroup (_, id) -> fst id.pos
+  | RelationSlot { id; _ } -> fst id.pos
   | DynamicSelectJoin { pos = (j1, _); _ } -> j1
 
 type alter_pos = [ `After of string | `Default | `First ] [@@deriving show {with_path=false}, eq, json, jsonschema] [@@compact_variants]
@@ -711,7 +724,17 @@ end
 type select_row_locking_kind = For_update | For_share [@@compact_variants]
 and limit = Source_type.t param list * bool
 and nested = source * (source * Schema.Join.typ located * join_condition) located list
-and source_kind = [ `Select of select_full | `Table of table_name | `Nested of nested | `ValueRows of row_values ]
+(* a relation known statically *)
+and relation =
+  [ `Select of select_full
+  | `Table of table_name
+  | `Nested of nested
+  | `ValueRows of row_values
+  ]
+and source_kind =
+  [ `Relation of relation
+  | `RelationSlot of param_id (** relation chosen at runtime, see Relation_slot *)
+  ]
 and source = (source_kind * source_alias option) (* alias, position *)
 and join_condition = expr Schema.Join.condition
 and select = {

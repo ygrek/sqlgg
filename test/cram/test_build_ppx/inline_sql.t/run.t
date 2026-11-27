@@ -182,6 +182,15 @@ DDL belongs to the -schema files, not to [%sql]:
   Error: sqlgg: [%sql] accepts SELECT, INSERT, UPDATE or DELETE; put DDL in a -schema file
   [1]
 
+A relation slot needs the module sqlgg generates for it from a .sql file:
+
+  $ dune build --root . ./errors/relation_slot.exe 2>&1
+  File "errors/relation_slot.ml", line 1, characters 21-54:
+  1 | let count = [%sql {| SELECT COUNT(1) FROM @source AS s |}]
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Error: sqlgg: relation slot @source is not supported in [%sql] yet
+  [1]
+
 Exactly one statement per [%sql]:
 
   $ dune build --root . ./errors/two_statements.exe 2>&1

@@ -277,7 +277,7 @@ Test DynamicSelect with applicative combinators generates proper SQL:
   [SQL] SELECT (SELECT
   CASE
   WHEN p2.id = 2 THEN
-  CASE WHEN 1 = 1 THEN 'then_v' ELSE 'else_v' END
+  CASE WHEN 1 = 1 THEN 123 ELSE 456 END
   ELSE 0
   END
   FROM products p2
@@ -295,7 +295,7 @@ Test DynamicSelect with applicative combinators generates proper SQL:
   [SQL] SELECT id, (SELECT
   CASE
   WHEN p2.id = 2 THEN
-  CASE WHEN 1 = 1 THEN 'then_v' ELSE 'else_v' END
+  CASE WHEN 1 = 1 THEN 123 ELSE 456 END
   ELSE 0
   END
   FROM products p2

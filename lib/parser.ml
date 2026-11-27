@@ -4,6 +4,7 @@ open Jsonkit.Primitives
 type parse_result = {
   stmt : Sql.stmt;
   dialect_features : Dialect.dialect_support list;
+  relation_slots : Relation_slot.Name.t Sql.located list; [@default []] [@drop_default_if_json_equal]
 }
 [@@deriving json, jsonschema]
 
@@ -23,4 +24,10 @@ let parse_stmt sql =
         tail = Sql_lexer.ruleTail lexbuf;
       }))
   in
-  { stmt; dialect_features = Dialect.analyze stmt }
+  let (dialect_features, slots) = Dialect.analyze stmt in
+  let relation_slots =
+    List.filter_map (fun (id : Sql.param_id) ->
+      Option.map (fun name -> { id with value = name }) (Relation_slot.Name.of_param_id id)) slots
+    |> List.stable_sort (fun (a : _ Sql.located) (b : _ Sql.located) -> Sql.Pos.compare a.pos b.pos)
+  in
+  { stmt; dialect_features; relation_slots }
