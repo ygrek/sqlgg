@@ -89,6 +89,8 @@ let schema_to_values = List.map value $ schema_to_values
 
 type t = xml list ref * xml list ref
 
+let relation_slots = Gen.Relation_slots_unsupported "xml"
+
 let start () = ref [], ref []
 
 let get_sql_string q =
@@ -99,6 +101,7 @@ let get_sql_string q =
   | `DynamicIn (_p, _, sqls) -> String.concat "" @@ List.map (map 0 ) sqls
   | `Choice _ | `Optional _ | `DynamicSelect _ -> "{TODO dynamic choice}"
   | `Cond _ -> "{TODO dynamic join}"
+  | `Bind (_ : Sql_template.bind) | `Relation _ -> fail "relation slots are not supported by the xml generator"
   in
   String.concat "" @@ List.mapi map @@ Gen.get_sql q
 

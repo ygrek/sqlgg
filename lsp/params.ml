@@ -24,7 +24,7 @@ let name (id : Sql.param_id) =
 
 let token_type node =
   match node.kind with
-  | Var (Sql.Single _ | SingleIn _ | ChoiceIn _ | TupleList _ | SharedVarsGroup _) -> Parameter
+  | Var (Sql.Single _ | SingleIn _ | ChoiceIn _ | TupleList _ | SharedVarsGroup _ | RelationSlot _) -> Parameter
   | Var (Choice _ | DynamicSelect _ | DynamicSelectJoin _ | OptionActionChoice _) -> Enum
   | Branch _ -> Enum_member
 
@@ -37,6 +37,7 @@ let label node =
       | ChoiceIn { kind = `NotIn; _ } -> " — NOT IN"
       | DynamicSelect _ -> " — dynamic select"
       | DynamicSelectJoin _ -> " — dynamic join"
+      | RelationSlot _ -> " — relation"
       | TupleList _ -> " — tuple list"
       | Single _ | SingleIn _ | Choice _ | OptionActionChoice _ | SharedVarsGroup _ -> ""
     in
@@ -56,7 +57,7 @@ let of_vars ~base vars =
       Some { cursor = Option.value (sigil_pos param) ~default:param.pos;
         token = Some param.pos }
     | Var (Choice _ | ChoiceIn _ | DynamicSelectJoin _ | TupleList _
-          | OptionActionChoice _ | SharedVarsGroup _) ->
+          | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _) ->
       Some { cursor = Option.value (sigil_pos param) ~default:param.pos;
         token = sigil_pos param }
     | Branch (Sql.Simple { ctor; ctor_pos; _ }) ->
@@ -87,6 +88,7 @@ let of_vars ~base vars =
     | Sql.Choice (id, ctors) | Sql.DynamicSelect (id, ctors) ->
       [ param_node ~children:(List.map (of_ctor ~visible id) ctors) id ]
     | Sql.DynamicSelectJoin { pid; _ } -> [ param_node pid ]
+    | Sql.RelationSlot { id; _ } -> [ param_node id ]
     | Sql.TupleList (id, _) -> [ param_node id ]
     | Sql.OptionActionChoice (id, vars, _, _) ->
       [ param_node ~children:(of_list ~visible vars) id ]
@@ -113,7 +115,7 @@ let rec shape node =
   | Var (TupleList (_, ValueRows { types; _ })) -> `Row types
   | Var (TupleList (_, Insertion schema)) ->
     `Row (List.map (fun (attr : Sql.attr) -> attr.domain) schema)
-  | Var (Choice _ | DynamicSelect _ | DynamicSelectJoin _ | OptionActionChoice _ | SharedVarsGroup _)
+  | Var (Choice _ | DynamicSelect _ | DynamicSelectJoin _ | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _)
   | Branch _ -> `Compound
 
 let outline nodes =

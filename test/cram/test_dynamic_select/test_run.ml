@@ -599,7 +599,7 @@ module M (T: Sqlgg_traits.M with
           Print_ocaml_impl.mock_int 42L
         ]
       ));
-      let col = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, 10L)] in
+      let col = monster 2L 1L 123L 456L (Some 10.0) ["a"; "b"] [(1L, 10L)] in
       let _ = select connection col ~id:1L in
       printf "[TEST 17.1] Completed\n\n"
 
@@ -614,7 +614,7 @@ module M (T: Sqlgg_traits.M with
       ));
       let combined =
         let+ i = id
-        and+ m = monster 2L 1L "then_v" "else_v" (Some 10.0) ["a"; "b"] [(1L, 10L)] in
+        and+ m = monster 2L 1L 123L 456L (Some 10.0) ["a"; "b"] [(1L, 10L)] in
         (i, m)
       in
       let _ = select connection combined ~id:1L in

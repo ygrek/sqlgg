@@ -97,6 +97,8 @@ let output_params_binder params =
 
 type t = unit
 
+let relation_slots = Gen.Relation_slots_unsupported "csharp"
+
 let start () = ()
 
 let func_execute index (stmt : Query.t) =

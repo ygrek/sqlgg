@@ -20,8 +20,8 @@ let statement ~dynamic_select stmt =
     match Parser.parse_stmt stmt.text with
     | { stmt = Sql.Select select; _ } as parse_result ->
       Shared_queries.add
-        (Option.value ~default:"" (Props.name stmt.props))
-        (stmt.text, select);
+        ~name:(Option.value ~default:"" (Props.name stmt.props))
+        ~sql:stmt.text ~select ~props:stmt.props;
       begin match include_ with
       | Reuse -> Reusable parse_result
       | Execute | Reuse_and_execute ->

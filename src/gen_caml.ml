@@ -243,18 +243,24 @@ let emit_row_binder name emit_body =
   output "in";
   name
 
-let output_schema_binder_labeled _ schema =
+(* result column read through the relation chosen for a relation slot *)
+let column_value ~dependent index attr =
+  match dependent index with
+  | Some getter -> sprintf "(%s stmt %d)" getter index
+  | None -> get_column index attr
+
+let output_schema_binder_labeled ~dependent _ schema =
   let attrs = schema_to_attrs schema in
   let args = idents_of_attrs ~prefix:"r" attrs in
-  let values = List.mapi get_column attrs in
+  let values = List.mapi (column_value ~dependent) attrs in
   emit_row_binder "invoke_callback" (fun () ->
     output "callback";
     indented (fun () -> List.iter2 (fun arg value -> output "%s" (format_labeled_param arg value)) args values))
 
-let output_select1_cb _ schema =
+let output_select1_cb ~dependent _ schema =
   let attrs = schema_to_attrs schema in
   emit_row_binder "get_row" (fun () ->
-    List.mapi get_column attrs |> String.concat ", " |> indent_endline)
+    List.mapi (column_value ~dependent) attrs |> String.concat ", " |> indent_endline)
 
 let select_func_of_kind = function
 | Stmt.Select `Zero_one -> "select_one_maybe"
@@ -380,14 +386,14 @@ let emit_func ~name ~has_callback ~format_input ~module_kind (stmt : Query.t) bo
       c.c_finish ()));
   empty_line ()
 
-let gen_func ~dynamic_infos ~module_kind ({ name; stmt; _ } : Query.named) body =
+let gen_func ?name ~dynamic_infos ~module_kind ({ stmt; _ } as q : Query.named) body =
   let dynamic_map = List.map (fun di -> (di.param_name, di.module_name)) dynamic_infos in
   let format_input =
     format_func_input (List.map fst dynamic_map)
       ~dyn_annot:(fun v -> sprintf "_ %s.t" (List.assoc v dynamic_map))
   in
   emit_func
-    ~name:(String.uncapitalize_ascii name)
+    ~name:(Option.default (String.uncapitalize_ascii q.name) name)
     ~has_callback:(has_row_callback stmt || (module_kind = `Single && dynamic_infos = []))
     ~format_input ~module_kind stmt body
 
@@ -434,7 +440,7 @@ let match_variant_pattern i name args ~is_poly =
             if List.mem s seen_names
             then ((seen_wildcards, seen_names, false), None)
             else ((seen_wildcards, s :: seen_names, false), Some s)
-        | DynamicSelectJoin _ ->
+        | DynamicSelectJoin _ | RelationSlot _ ->
           ((seen_wildcards, seen_names, all_wc), None)
       ) ([], [], true) arg_list
     in
@@ -475,6 +481,7 @@ type var_class =
   | Option_group of Sql.param_id * Sql.var list
   | Choice_group of Sql.param_id * Sql.ctor list
   | Shared_group of Sql.var list
+  | Relation_occurrence of Sql.param_id
 
 let classify_var = function
   | Single (p, meta) -> Bound_param (p, meta)
@@ -485,11 +492,16 @@ let classify_var = function
   | OptionActionChoice (id, vars, _, _) -> Option_group (id, vars)
   | Choice (id, ctors) -> Choice_group (id, ctors)
   | SharedVarsGroup (vars, _) -> Shared_group vars
+  | RelationSlot { id; _ } -> Relation_occurrence id
+
+let relation_setter name = sprintf "__sqlgg_set_%s" name
+let relation_counter name = sprintf "__sqlgg_count_%s" name
+let relation_template name = sprintf "__sqlgg_relation_%s" name
 
 let rec has_set_params vars =
   List.exists (fun var ->
     match classify_var var with
-    | Bound_param _ -> true
+    | Bound_param _ | Relation_occurrence _ -> true
     | Substituted | No_params -> false
     | Where_in_group (_, vars) | Option_group (_, vars) | Shared_group vars -> has_set_params vars
     | Choice_group (_, ctors) -> has_set_params (List.concat_map Sql.ctor_vars ctors)
@@ -502,7 +514,7 @@ let set_var ~leaf index var =
   let pattern_param_id = function
     | Single ({ id; _ }, _) | SingleIn ({ id; _ }, _) | TupleList (id, _)
     | ChoiceIn { param = id; _ } | OptionActionChoice (id, _, _, _)
-    | Choice (id, _) | DynamicSelect (id, _) -> Some id
+    | Choice (id, _) | DynamicSelect (id, _) | RelationSlot { id; _ } -> Some id
     | DynamicSelectJoin _ | SharedVarsGroup _ -> None
   in
   let option_payload_names vars =
@@ -542,6 +554,9 @@ let set_var ~leaf index var =
     match classify_var var with
     | Bound_param (p, meta) ->
       Some (fun () -> leaf ~meta index p)
+    | Relation_occurrence id ->
+      let name = make_param_name index id in
+      Some (fun () -> output "%s %s p;" (relation_setter name) name)
     | Substituted | No_params ->
       None
     | Shared_group vars ->
@@ -601,21 +616,22 @@ let set_var ~leaf index var =
   Option.may (fun g -> g ()) (aux index var)
 
 let rec eval_count_params vars =
-  let (static, choices, bool_choices, choices_in) =
-    let rec group_vars (static, choices, bool_choices, choices_in) = function
-      | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in)
+  let (static, choices, bool_choices, choices_in, relations) =
+    let rec group_vars (static, choices, bool_choices, choices_in, relations) = function
+      | [] -> (List.rev static, List.rev choices, List.rev bool_choices, List.rev choices_in, List.rev relations)
       | x::xs ->
         match classify_var x with
-        | Bound_param _ | Substituted -> group_vars (true::static, choices, bool_choices, choices_in) xs
-        | No_params -> group_vars (false::static, choices, bool_choices, choices_in) xs
-        | Option_group (id, vars) -> group_vars (static, choices, (id, vars)::bool_choices, choices_in) xs
-        | Where_in_group (id, vars) -> group_vars (static, choices, bool_choices, (id, vars)::choices_in) xs
-        | Choice_group (id, ctors) -> group_vars (static, (id, ctors)::choices, bool_choices, choices_in) xs
+        | Bound_param _ | Substituted -> group_vars (true::static, choices, bool_choices, choices_in, relations) xs
+        | No_params -> group_vars (false::static, choices, bool_choices, choices_in, relations) xs
+        | Option_group (id, vars) -> group_vars (static, choices, (id, vars)::bool_choices, choices_in, relations) xs
+        | Where_in_group (id, vars) -> group_vars (static, choices, bool_choices, (id, vars)::choices_in, relations) xs
+        | Choice_group (id, ctors) -> group_vars (static, (id, ctors)::choices, bool_choices, choices_in, relations) xs
+        | Relation_occurrence id -> group_vars (static, choices, bool_choices, choices_in, id :: relations) xs
         | Shared_group vars ->
-          let static', choices', bool_choices', choices_in' = group_vars ([], [], [], []) vars in
-          group_vars (static' @ static, choices' @ choices, bool_choices' @ bool_choices, choices_in' @ choices_in) xs
+          let static', choices', bool_choices', choices_in', relations' = group_vars ([], [], [], [], []) vars in
+          group_vars (static' @ static, choices' @ choices, bool_choices' @ bool_choices, choices_in' @ choices_in, relations' @ relations) xs
     in
-    group_vars ([], [], [], []) vars
+    group_vars ([], [], [], [], []) vars
   in
   (* one shape for every dynamic contribution: " + (match X with P -> n | ...)" *)
   let count_match name arms =
@@ -641,7 +657,11 @@ let rec eval_count_params vars =
           match_variant_pattern i param.value args ~is_poly:true,
           eval_count_params (Stdlib.Option.value ~default:[] args))))
   in
-  static ^ choices_in ^ choices ^ bool_choices
+  let relations = relations |> counts (fun i id ->
+    let name = make_param_name i id in
+    sprintf " + (%s %s)" (relation_counter name) name)
+  in
+  static ^ choices_in ^ choices ^ bool_choices ^ relations
 
 let emit_set_params ~count emit_vars =
   output "let set_params stmt =";
@@ -662,10 +682,10 @@ let rec exclude_in_vars l =
       | v -> Some (Sql.map_sub_vars exclude_in_vars v))
     l
 
-let output_params_binder _ vars =
+let output_params_binder ~leaf _ vars =
   match exclude_in_vars vars with
   | [] -> "T.no_params"
-  | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri (set_var ~leaf:set_param) vars)
+  | vars -> emit_set_params ~count:(eval_count_params vars) (fun () -> List.iteri (set_var ~leaf) vars)
 
 let rec has_bound_params vars =
   List.exists (function
@@ -729,7 +749,8 @@ let guard_empty_insertion sql_pieces ~empty body =
       (function
         | `SubstTuple (id, Insertion _) -> Some (resolve_tuple_label id)
         | `SubstTuple (_, (Where_in _ | ValueRows _))
-        | `Text _ | `Choice _ | `Optional _ | `DynamicSelect _ | `DynamicIn _ | `SubstIn _ | `Cond _ -> None)
+        | `Text _ | `Choice _ | `Optional _ | `DynamicSelect _ | `DynamicIn _ | `SubstIn _ | `Cond _
+        | `Bind (_ : Sql_template.bind) | `Relation _ -> None)
       sql_pieces
   with
   | None -> body
@@ -744,7 +765,7 @@ let join_ctors_of_vars vars =
   let joins = List.filter_map (function
     | Sql.DynamicSelectJoin { pos; source; _ } -> Some (fst pos, source)
     | Sql.Single _ | SingleIn _ | ChoiceIn _ | Choice _ | DynamicSelect _
-    | TupleList _ | OptionActionChoice _ | SharedVarsGroup _ -> None) vars
+    | TupleList _ | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _ -> None) vars
   in
   let occurrences =
     List.fold_left (fun acc (_, s) ->
@@ -767,27 +788,43 @@ let join_ctor join_ctors join_id =
 let cond_test ~ctor_of ~deps_of = function
   | Sql_template.Dep_selected (pid, dep_id) -> sprintf "List.mem %s %s" (ctor_of dep_id) (deps_of pid)
 
-let render_cond ~ctor_of ~deps_of cond body =
-  sprintf {|(if %s then %s else "")|} (cond_test cond ~ctor_of ~deps_of) body
+let render_cond ~empty ~ctor_of ~deps_of cond body =
+  sprintf "(if %s then %s else %s)" (cond_test cond ~ctor_of ~deps_of) body empty
 
-let make_sql ~to_literal ~join_ctors l =
+(* what the OCaml expression rendering the SQL evaluates to *)
+type sql_target =
+  | String_expr
+  | Template_expr (** [Sqlgg_template.t], needed when a relation slot is chosen at runtime *)
+
+let make_sql ~target ~to_literal ~join_ctors l =
+  let text s =
+    match target with
+    | String_expr -> quote s
+    | Template_expr -> sprintf "Sqlgg_template.text %s" (quote s)
+  in
+  let of_string e =
+    match target with
+    | String_expr -> e
+    | Template_expr -> sprintf "Sqlgg_template.text (%s)" e
+  in
   let rec render l =
     let parts =
       match l with
-      | `Text "" :: tl -> quote "" :: List.filter_map piece tl
+      | `Text "" :: tl -> text "" :: List.filter_map piece tl
       | l -> List.filter_map piece l
     in
-    match parts with
-    | [] -> quote ""
-    | parts -> String.concat " ^ " parts
+    match target, parts with
+    | String_expr, [] -> quote ""
+    | String_expr, parts -> String.concat " ^ " parts
+    | Template_expr, parts -> sprintf "Sqlgg_template.concat [%s]" (String.concat "; " parts)
   and piece = function
     | `Text "" -> None
-    | `Text s -> Some (quote s)
-    | `SubstIn (param, m) -> Some (gen_in_substitution ~to_literal m param)
+    | `Text s -> Some (text s)
+    | `SubstIn (param, m) -> Some (of_string (gen_in_substitution ~to_literal m param))
     | `DynamicIn (name, in_or_not_in, sqls) ->
-      Some (sprintf "(match %s with [] -> \"%s\" | _ :: _ -> %s)"
+      Some (sprintf "(match %s with [] -> %s | _ :: _ -> %s)"
         (make_param_name 0 name)
-        (String.uppercase_ascii @@ string_of_bool @@ match in_or_not_in with `In -> false | `NotIn -> true)
+        (text (String.uppercase_ascii @@ string_of_bool @@ match in_or_not_in with `In -> false | `NotIn -> true))
         (render sqls))
     | `Choice (name, arms) -> Some (render_arms ~is_poly:true name arms)
     | `DynamicSelect (name, arms) -> Some (render_arms ~is_poly:false name arms)
@@ -795,18 +832,18 @@ let make_sql ~to_literal ~join_ctors l =
       Some (sprintf "(match %s with %s -> %s | %s -> %s)"
         (make_param_name 0 name)
         (match_variant_pattern 0 (Some "Some") (Some vars) ~is_poly:false) (render some)
-        (match_variant_pattern 1 (Some "None") None ~is_poly:false) (quote none))
+        (match_variant_pattern 1 (Some "None") None ~is_poly:false) (text none))
     | `Cond (cond, body) ->
-      Some (render_cond cond (render body)
+      Some (render_cond cond (render body) ~empty:(text "")
         ~ctor_of:(fun id -> join_ctor join_ctors id)
         ~deps_of:(fun pid -> make_param_name 0 pid ^ ".deps"))
     | `SubstTuple (id, Insertion schema) ->
-      Some (gen_tuple_substitution ~to_literal ~is_row:false (resolve_tuple_label id) schema)
+      Some (of_string (gen_tuple_substitution ~to_literal ~is_row:false (resolve_tuple_label id) schema))
     | `SubstTuple (id, Where_in { value = (types, _); pos = _ }) ->
       let label = resolve_tuple_label id in
       let schema = make_schema_of_tuple_types label types in
-      Some (sprintf "%s ^ %s ^ %s"
-        (quote "(") (gen_tuple_substitution ~to_literal ~is_row:false label schema) (quote ")"))
+      Some (of_string (sprintf "%s ^ %s ^ %s"
+        (quote "(") (gen_tuple_substitution ~to_literal ~is_row:false label schema) (quote ")")))
     | `SubstTuple (id, ValueRows { types; _ }) ->
       let label = resolve_tuple_label id in
       (* TODO: Implement meta for ValueRows *)
@@ -817,7 +854,17 @@ let make_sql ~to_literal ~join_ctors l =
         |> String.join ", "
         |> sprintf {|"SELECT %s WHERE FALSE"|} in
       let not_empty = gen_tuple_substitution ~to_literal ~is_row:true label schema in
-      Some (sprintf {|( if %s = [] then %s else ( "VALUES " ^ %s ) )|} label empty not_empty)
+      Some (of_string (sprintf {|( if %s = [] then %s else ( "VALUES " ^ %s ) )|} label empty not_empty))
+    | `Bind (_ : Sql_template.bind) ->
+      begin match target with
+      | Template_expr -> Some "Sqlgg_template.numbered_param"
+      | String_expr -> failwith "deferred placeholder outside of a runtime SQL template"
+      end
+    | `Relation id ->
+      begin match target with
+      | Template_expr -> let name = make_param_name 0 id in Some (sprintf "(%s %s)" (relation_template name) name)
+      | String_expr -> failwith "relation slot outside of a runtime SQL template"
+      end
   and render_arms ~is_poly name arms =
     sprintf "(match %s with %s)"
       (make_param_name 0 name)
@@ -901,13 +948,15 @@ let emit_dynamic_select_body ~c ~dynamic_infos ~in_module ~with_callback ~sql_pi
         | parts -> String.concat " ^ " parts
       in
       let expr =
-        render_cond cond body_expr
+        render_cond cond body_expr ~empty:(quote "")
           ~ctor_of:(fun dep_id -> ctor_prefix di ^ join_ctor join_ctors dep_id)
           ~deps_of:(fun _ -> deps_ref di)
       in
       build_parts (expr :: acc) pending_comma rest
+    | (`Bind _ | `Relation _) :: _ ->
+      failwith "relation slots cannot be combined with dynamic_select yet"
     | (`Choice _ | `Optional _ | `DynamicSelect _ | `SubstIn _ | `DynamicIn _ | `SubstTuple _) as piece :: rest ->
-      let expr = make_sql ~to_literal:make_to_literal ~join_ctors [piece] in
+      let expr = make_sql ~target:String_expr ~to_literal:make_to_literal ~join_ctors [piece] in
       let acc = if pending_comma then expr :: quote "," :: acc else expr :: acc in
       build_parts acc false rest
   in
@@ -991,8 +1040,217 @@ let emit_dynamic_module_select ~module_kind ~dynamic_infos ~sql_pieces ({ stmt; 
   emit_func ~name:"select" ~has_callback:with_callback ~format_input ~module_kind stmt
     (fun c -> emit_dynamic_select_body ~c ~dynamic_infos ~in_module:true ~with_callback ~sql_pieces q)
 
+(* Relation slots: [FROM @source AS alias], the relation is chosen at runtime by a
+   value of the private GADT [Source.t]. Each index of [Source.t] is the type of a
+   result column or parameter that depends on the choice, or the SQL kind of a
+   column shared with another slot. The descriptor of the chosen relation is a set of
+   functions hidden in the module of the statement, so it is never exposed. *)
+
+let relation_name (slot : Relation_slot.t) = (slot.name :> string)
+
+let relation_module slot =
+  let m = String.capitalize_ascii (relation_name slot) in
+  if List.mem m ["T"; "IO"; "Single"; "Fold"; "List"; "Sqlgg_template"; "Unsigned"; "Stdlib"] then
+    fail "relation slot @%s clashes with the generated module %s, rename the slot" (relation_name slot) m;
+  m
+
+(* parameters of a reusable query, in order of first use *)
+let relation_own_params (inst : Relation_slot.instance) =
+  unique_by ~key:(fun (own : Relation_slot.own_param) -> own.name) inst.own_params
+
+let apply_type name = function
+  | [] -> name
+  | [ x ] -> x ^ " " ^ name
+  | l -> "(" ^ String.concat ", " l ^ ") " ^ name
+
+let emit_relation_module (slot : Relation_slot.t) =
+  let builtin_ocaml_type ~what typ meta find =
+    match resolve_codec find typ meta with
+    | Builtin_codec t ->
+      let base =
+        match t.Type.t with
+        | UInt64 -> "Unsigned.UInt64.t"
+        | _ -> sprintf "T.Types.%s.t" (L.as_lang_type t)
+      in
+      if Type.is_nullable t then base ^ " option" else base
+    | Enum_codec _ -> fail "%s depends on a relation slot and is an enum, not supported yet" what
+    | Custom_codec _ -> fail "%s depends on a relation slot and has a custom codec, not supported yet" what
+  in
+  let evidence_type = function
+    | Relation_slot.Column_type (_, attr) ->
+      builtin_ocaml_type ~what:(sprintf "column %s" attr.name) attr.domain attr.meta codec_get_column
+    | Parameter_type (n, (typ, meta)) ->
+      builtin_ocaml_type ~what:(sprintf "parameter @%s" n) typ meta codec_set_param
+    | Coupling_kind (_, kind) ->
+      let tag =
+        match kind with
+        | Int_kind -> "Int"
+        | UInt64_kind -> "UInt64"
+        | Text_kind -> "Text"
+        | Blob_kind -> "Blob"
+        | Float_kind -> "Float"
+        | Decimal_kind -> "Decimal"
+        | Bool_kind -> "Bool"
+        | Datetime_kind -> "Datetime"
+        | Json_kind -> "Json"
+        | Enum_kind ctors ->
+          "Enum_" ^ String.concat "_" (List.map (String.map (function
+            | 'a'..'z' | 'A'..'Z' | '0'..'9' as c -> c
+            | _ -> '_')) ctors)
+      in
+      sprintf "[ `%s ]" tag
+  in
+  let own_param_type (own : Relation_slot.own_param) =
+    builtin_ocaml_type ~what:(sprintf "parameter @%s" own.name) own.param.typ own.meta codec_set_param
+  in
+  let instances = Relation_slot.instances slot in
+  let typ (inst : Relation_slot.instance) = apply_type "t" (List.map evidence_type inst.evidence) in
+  let type_head =
+    match List.length (Relation_slot.indices slot) with
+    | 0 -> "type t"
+    | 1 -> "type _ t"
+    | n -> sprintf "type (%s) t" (String.concat ", " (List.init n (const "_")))
+  in
+  let ctors () =
+    List.iter (fun (inst : Relation_slot.instance) ->
+      match List.map own_param_type (relation_own_params inst) with
+      | [] -> output "| %s : %s" inst.candidate.constructor (typ inst)
+      | payload -> output "| %s : %s -> %s" inst.candidate.constructor (String.concat " * " payload) (typ inst))
+      instances
+  in
+  output "module %s : sig" (relation_module slot);
+  indented (fun () ->
+    output "%s = private" type_head;
+    indented ctors;
+    List.iter (fun (inst : Relation_slot.instance) ->
+      let args =
+        List.map (fun (own : Relation_slot.own_param) -> sprintf "%s:%s -> " own.name (own_param_type own))
+          (relation_own_params inst)
+      in
+      output "val %s : %s%s" inst.candidate.builder (String.concat "" args) (typ inst))
+      instances);
+  output "end = struct";
+  indented (fun () ->
+    output "%s =" type_head;
+    indented ctors;
+    List.iter (fun (inst : Relation_slot.instance) ->
+      match List.map (fun (own : Relation_slot.own_param) -> own.name) (relation_own_params inst) with
+      | [] -> output "let %s = %s" inst.candidate.builder inst.candidate.constructor
+      | names ->
+        output "let %s %s = %s (%s)" inst.candidate.builder
+          (String.concat " " (List.map (fun n -> "~" ^ n) names))
+          inst.candidate.constructor (String.concat ", " names))
+      instances);
+  output "end"
+
+let relation_getter name i = sprintf "__sqlgg_get_%s_%d" name i
+let relation_param_setter name param = sprintf "__sqlgg_set_param_%s_%s" name param
+
+(* the first slot having the index: it reads the column or binds the parameter typed by it *)
+let relation_provider (stmt : Query.t) index =
+  List.find_opt (fun slot -> List.exists (Relation_slot.equal_index index) (Relation_slot.indices slot)) stmt.relation_slots
+
+(* functions of the relation chosen for every slot, shared by the functions of the statement
+   and hidden from its interface *)
+let emit_relation_helpers (stmt : Query.t) =
+  let relation_pattern m (inst : Relation_slot.instance) ~bind =
+    match relation_own_params inst, bind with
+    | [], _ -> sprintf "%s.%s" m inst.candidate.constructor
+    | own, `Bind ->
+      sprintf "%s.%s (%s)" m inst.candidate.constructor
+        (String.concat ", " (List.map (fun (own : Relation_slot.own_param) -> own.name) own))
+    | _ :: _, `Ignore -> sprintf "%s.%s _" m inst.candidate.constructor
+  in
+  let relation_own_vars (inst : Relation_slot.instance) =
+    List.map (fun (own : Relation_slot.own_param) -> Sql.Single (own.param, own.meta)) inst.own_params
+  in
+  (* always quoted: the name may be a reserved word of the database *)
+  let relation_sql_name (name : Sql.table_name) =
+    let ident s =
+      match !Dialect.selected with
+      | Dialect.MySQL | TiDB -> Gen_migrations.quote_id s
+      | SQLite | PostgreSQL -> sprintf {|"%s"|} (String.concat {|""|} (String.split_on_char '"' s))
+    in
+    String.concat "." (List.map ident (option_list name.db @ [ name.tn ]))
+  in
+  output "open struct";
+  indented (fun () ->
+    List.iter (fun (slot : Relation_slot.t) ->
+      let v = relation_name slot in
+      let m = relation_module slot in
+      let indices = Relation_slot.indices slot in
+      let instances = Relation_slot.instances slot in
+      (* a function of the chosen relation [v] and of [args], one arm for every relation *)
+      let helper name ~result ~args arm =
+        let annotation =
+          match List.length indices with
+          | 0 -> sprintf "%s.t -> %s" m result
+          | n ->
+            let vars = List.init n (sprintf "i%d") in
+            sprintf "type %s. %s -> %s" (String.concat " " vars) (apply_type (m ^ ".t") vars) result
+        in
+        begin match args with
+        | [] -> output "let %s : %s = function" name annotation
+        | _ :: _ -> output "let %s : %s = fun %s %s -> match %s with" name annotation v (String.concat " " args) v
+        end;
+        indented (fun () -> List.iter arm instances)
+      in
+      helper (relation_template v) ~result:"Sqlgg_template.t" ~args:[] (fun inst ->
+        let body =
+          match inst.candidate.origin with
+          | Relation_candidate.Table (name, _) -> sprintf "Sqlgg_template.text %s" (quote (relation_sql_name name))
+          | Query entry ->
+            let pieces =
+              Sql_template.fill ~spell:(Gen.spell stmt) (Sql_template.of_sql entry.sql (relation_own_vars inst))
+            in
+            sprintf {|Sqlgg_template.concat [Sqlgg_template.text "("; %s; Sqlgg_template.text ")"]|}
+              (make_sql ~target:Template_expr ~to_literal:make_to_literal ~join_ctors:[] pieces)
+        in
+        output "| %s -> %s" (relation_pattern m inst ~bind:`Ignore) body);
+      helper (relation_counter v) ~result:"int" ~args:[] (fun inst ->
+        output "| %s -> %s" (relation_pattern m inst ~bind:`Ignore) (eval_count_params (relation_own_vars inst)));
+      let owns_params = List.exists (fun (inst : Relation_slot.instance) -> inst.own_params <> []) instances in
+      helper (relation_setter v) ~result:"T.params -> unit" ~args:[ if owns_params then "p" else "_p" ] (fun inst ->
+        match inst.own_params with
+        | [] -> output "| %s -> ()" (relation_pattern m inst ~bind:`Ignore)
+        | _ :: _ ->
+          output "| %s ->" (relation_pattern m inst ~bind:`Bind);
+          indented (fun () -> List.iteri (set_var ~leaf:set_param) (relation_own_vars inst); output "()"));
+      List.iteri (fun k index ->
+        let provided =
+          Option.map_default (fun (provider : Relation_slot.t) -> Relation_slot.Name.equal provider.name slot.name) false
+            (relation_provider stmt index)
+        in
+        match index with
+        | Relation_slot.Column i when provided ->
+          helper (relation_getter v i) ~result:(sprintf "T.row -> int -> i%d" k) ~args:[ "row"; "idx" ] (fun inst ->
+            List.iter (function
+              | Relation_slot.Column_type (j, attr) when Int.equal i j ->
+                output "| %s -> %s" (relation_pattern m inst ~bind:`Ignore) (format_get_column ~row:"row" ~idx:"idx" attr)
+              | Column_type _ | Parameter_type _ | Coupling_kind _ -> ()) inst.evidence)
+        | Parameter n when provided ->
+          helper (relation_param_setter v n) ~result:(sprintf "T.params -> i%d -> unit" k) ~args:[ "p"; n ] (fun inst ->
+            List.iter (function
+              | Relation_slot.Parameter_type (n', (typ, meta)) when String.equal n n' ->
+                output "| %s ->" (relation_pattern m inst ~bind:`Ignore);
+                indented (fun () ->
+                  set_param ~meta 0 (make_param ~id:{ value = Some n; pos = (0, 0) } ~typ);
+                  output "()")
+              | Column_type _ | Parameter_type _ | Coupling_kind _ -> ()) inst.evidence)
+        | Column _ | Parameter _ | Coupling _ -> ())
+        indices)
+      stmt.relation_slots);
+  output "end"
+
 let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
-  let sql = make_sql ~to_literal:make_to_literal ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces in
+  let sql =
+    let make target =
+      make_sql ~target ~to_literal:make_to_literal ~join_ctors:(join_ctors_of_vars stmt.vars) sql_pieces
+    in
+    match stmt.relation_slots with
+    | [] -> make String_expr
+    | _ :: _ -> sprintf "(Sqlgg_template.render %s)" (make Template_expr)
+  in
   match subst with
   | [] -> sql
   | vars ->
@@ -1009,9 +1267,9 @@ let emit_sql_with_subst subst (stmt : Query.t) sql_pieces =
     output "in";
     "__sqlgg_sql"
 
-let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
+let generate_stmt ?name ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
   if not (supports_module_kind module_kind stmt) then () else
-  gen_func ~dynamic_infos:[] ~module_kind q @@ fun c ->
+  gen_func ?name ~dynamic_infos:[] ~module_kind q @@ fun c ->
   let empty_exec_result =
     sprintf {|%s { T.affected_rows = 0L; insert_id = None }|} return_expr
   in
@@ -1019,19 +1277,52 @@ let generate_stmt ~return_expr ~module_kind index ({ stmt; _ } as q : Query.name
     output "ignore db;";
     output "%s" empty_exec_result
   end else
+  (* an index shared by several slots must be the same type in all of them *)
+  let shared =
+    List.concat_map (fun slot -> List.mapi (fun k index -> index, (slot, k)) (Relation_slot.indices slot))
+      stmt.relation_slots
+  in
+  List.iteri (fun i (index, (slot, k)) ->
+    let earlier = Stdlib.List.filteri (fun j _ -> j < i) shared in
+    match List.find_opt (fun (index', _) -> Relation_slot.equal_index index index') earlier with
+    | None -> ()
+    | Some (_, (first, k0)) ->
+      let constrained slot k =
+        apply_type (relation_module slot ^ ".t")
+          (List.mapi (fun j _ -> if j = k then "x" else "_") (Relation_slot.indices slot))
+      in
+      output "let () = (fun (type x) (_ : %s) (_ : %s) -> ()) %s %s in"
+        (constrained first k0) (constrained slot k) (relation_name first) (relation_name slot))
+    shared;
   let sql_pieces = Gen.get_sql q in
   let sql = emit_sql_with_subst (Props.substs stmt.props) stmt sql_pieces in
+  let dependent i =
+    Option.map (fun slot -> sprintf "%s %s" (relation_getter (relation_name slot) i) (relation_name slot))
+      (relation_provider stmt (Relation_slot.Column i))
+  in
+  (* a parameter typed by a relation slot is bound by the relation chosen for it *)
+  let leaf ~meta index (p : Type.t param) =
+    match
+      Stdlib.Option.bind p.id.value (fun n ->
+        Option.map (fun slot -> sprintf "%s %s" (relation_param_setter (relation_name slot) n) (relation_name slot))
+          (relation_provider stmt (Relation_slot.Parameter n)))
+    with
+    | Some setter -> output "%s p %s;" setter (show_param_name p index)
+    | None -> set_param ~meta index p
+  in
   let (func, callback) =
     match stmt.schema with
     | [] -> "execute", ""
     | _ ->
       select_func_of_kind stmt.kind,
       match module_kind, stmt.kind with
-      | (`Direct | `Fold | `List), Stmt.Select (`Zero_one | `One) -> output_select1_cb index stmt.schema
-      | _ -> output_schema_binder_labeled index stmt.schema
+      | (`Direct | `Fold | `List), Stmt.Select (`Zero_one | `One) -> output_select1_cb ~dependent index stmt.schema
+      | _ -> output_schema_binder_labeled ~dependent index stmt.schema
   in
   let unprepared = can_execute_unprepared stmt in
-  let params_binder_name = if unprepared then "" else output_params_binder index stmt.vars in
+  let params_binder_name =
+    if unprepared then "" else output_params_binder ~leaf index stmt.vars
+  in
   c.c_init ();
   let callback =
     c.c_callback
@@ -1195,7 +1486,7 @@ let generate_dynamic_select_modules stmts =
           let read_body = sprintf "(fun row idx -> (%s, idx + 1))" (format_get_column ~row:"row" ~idx:"idx" field_schema.Sql.field_attr) in
           let column_body = match field_ctor with
             | Sql.Verbatim (_, v) -> quote v
-            | _ -> make_sql ~to_literal:make_to_literal ~join_ctors sql
+            | _ -> make_sql ~target:String_expr ~to_literal:make_to_literal ~join_ctors sql
           in
           let count_expr = eval_count_params field_args in
           let set_helper_name = sprintf "_set_%s" field_name in
@@ -1238,12 +1529,35 @@ let generate_dynamic_select_modules stmts =
     )
   ) stmts
 
+let generate_relation_slot_modules ~return_expr stmts =
+  List.iteri (fun index ({ name; stmt; _ } as q : Query.named) ->
+    match stmt.relation_slots with
+    | [] -> ()
+    | _ :: _ as slots ->
+      begin match get_all_dynamic_select_infos q with
+      | [] -> ()
+      | _ :: _ -> fail "%s: relation slots cannot be combined with dynamic_select yet" name
+      end;
+      empty_line ();
+      emit_module (String.capitalize_ascii name) (fun () ->
+        List.iter emit_relation_module slots;
+        empty_line ();
+        emit_relation_helpers stmt;
+        empty_line ();
+        generate_stmt ~name:"select" ~return_expr ~module_kind:`Direct index q;
+        [`Single; `Fold; `List] |> List.iter (fun module_kind ->
+          if supports_module_kind module_kind stmt then
+            emit_module_annotated (module_kind_name module_kind) (fun () ->
+              generate_stmt ~name:"select" ~return_expr ~module_kind index q))))
+    stmts
+
 let generate_stmt_wrapper ~return_expr ~module_kind index ({ stmt; _ } as q : Query.named) =
   let dynamic_infos = get_all_dynamic_select_infos q in
-  match dynamic_infos with
-  | [] -> generate_stmt ~return_expr ~module_kind index q
-  | [_] -> ()
-  | _ :: _ :: _ ->
+  match stmt.relation_slots, dynamic_infos with
+  | _ :: _, _ -> ()
+  | [], [] -> generate_stmt ~return_expr ~module_kind index q
+  | [], [_] -> ()
+  | [], _ :: _ :: _ ->
     if supports_module_kind module_kind stmt then
       gen_func ~dynamic_infos ~module_kind q (fun c ->
         emit_dynamic_select_body ~c ~dynamic_infos ~in_module:false ~with_callback:true
@@ -1257,6 +1571,7 @@ let generate_direct_body ~io stmts =
   in
   generate_enum_modules stmts;
   generate_dynamic_select_modules stmts;
+  generate_relation_slot_modules ~return_expr stmts;
   empty_line ();
   List.iteri (generate_stmt_wrapper ~return_expr ~module_kind:`Direct) stmts
 
@@ -1291,7 +1606,10 @@ let generate ~gen_io ~migrations name stmts =
     stmts;
   [`Single; `Fold; `List]
   |> List.filter (fun module_kind ->
-    List.exists (fun (q : Query.named) -> supports_module_kind module_kind q.stmt) stmts)
+    List.exists (fun ({ stmt; _ } : Query.named) ->
+      match stmt.relation_slots with
+      | [] -> supports_module_kind module_kind stmt
+      | _ :: _ -> false) stmts)
   |> List.iteri (fun i module_kind ->
     if i > 0 then output "";
     emit_module_annotated (module_kind_name module_kind) (fun () ->
@@ -1356,6 +1674,8 @@ let generate ~gen_io ~migrations name stmts =
 module Generator_base = struct
 
   type t = unit
+
+  let relation_slots = Gen.Relation_slots_supported
 
   let start () = ()
 

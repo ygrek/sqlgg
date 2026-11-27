@@ -1,6 +1,7 @@
 (executables
  (names unknown_table unknown_column syntax_error type_error ddl_rejected
-   two_statements not_a_literal missing_traits plain_string escaped_string)
+   two_statements not_a_literal missing_traits plain_string escaped_string
+   relation_slot)
  (modules :standard \ schema_order schema_dialect params_none)
  (libraries sqlgg.traits)
  (preprocess

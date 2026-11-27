@@ -1,12 +1,27 @@
-type  t = (string, string * Sql.select_full) Hashtbl.t
-let shared_queries: t = Hashtbl.create 15
+open Jsonkit.Primitives
 
-let add = Hashtbl.add shared_queries
+type entry = {
+  name : string;
+  sql : string;
+  select : Sql.select_full;
+  props : Props.t list;
+}
+[@@deriving json, jsonschema]
 
-let get name = try Hashtbl.find shared_queries name with Not_found -> 
-  Prelude.fail "Shared query %s not found" name
+(* latest declaration first *)
+type t = entry list
 
-let mem name = Hashtbl.mem shared_queries name
+let store : t ref = ref []
 
-let snapshot () = Hashtbl.copy shared_queries
-let restore = Prelude.hashtbl_restore shared_queries
+let add ~name ~sql ~select ~props =
+  store := { name; sql; select; props } :: List.filter (fun e -> not (String.equal e.name name)) !store
+
+let get name =
+  match List.find_opt (fun e -> String.equal e.name name) !store with
+  | Some entry -> entry
+  | None -> Prelude.fail "Shared query %s not found" name
+
+let entries () = List.rev !store
+
+let snapshot () = !store
+let restore s = store := s

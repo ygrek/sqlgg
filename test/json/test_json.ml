@@ -49,6 +49,7 @@ let test_corpus_roundtrip _ =
       "SELECT 1 WHERE { 1 = 1 }?";
       "SELECT 1 WHERE id IN @ids";
       "SELECT 1 WHERE (1, 2) IN @pairs";
+      "SELECT COUNT(1) FROM @source AS s JOIN t ON t.id = s.id";
     ]
 
 let test_syntax_signature_roundtrip _ =
@@ -130,6 +131,7 @@ let test_allow_extensions_rejected _ =
       "WITH t AS &some_query SELECT * FROM t";
       "CREATE TABLE t (x INT DEFAULT (@p))";
       "SELECT 1 WHERE (1, 2) IN @pairs";
+      "SELECT COUNT(1) FROM @source AS s JOIN t ON t.id = s.id";
     ]
 
 let test_allow_extensions_accepted _ =

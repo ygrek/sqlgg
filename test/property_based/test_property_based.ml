@@ -637,6 +637,7 @@ module Template_model = struct
     | `SubstIn ((param : _ Sql.param), _) -> [ "@" ^ name param.id ]
     | `SubstTuple (id, _) -> [ "@" ^ name id ]
     | `DynamicSelect _ | `Cond _ -> QCheck2.Test.fail_report "the model does not generate dynamic selects"
+    | `Relation _ -> QCheck2.Test.fail_report "the model does not generate relation slots"
 
   let context = Test_helpers.context "CREATE TABLE t (id INT NOT NULL, a INT NOT NULL, b INT NOT NULL)"
 
@@ -653,7 +654,7 @@ module Template_model = struct
         Stdlib.List.sort String.compare
           (alternatives
              (Sql_template.fill
-                ~spell:(fun _ (bind : Sql_template.bind) -> bind.original)
+                ~spell:(fun _ (bind : Sql_template.bind) -> `Text bind.original)
                 (Sql_template.of_sql sql vars)))
       in
       if Stdlib.List.equal String.equal expected got then true
@@ -677,12 +678,171 @@ let test_narrowing_laws = [
     Narrowing_model.any_strict_conjunction Narrowing_model.marks_every_non_null);
 ]
 
+(* Relation slots are checked one slot at a time with the other slots open; the oracle
+   substitutes every combination of tables textually and compiles the plain query. *)
+module Relation_slot_oracle = struct
+  type column = { cname : string; kind : string; nullable : bool }
+  type case = { tables : (string * column list) list; query : string; slots : string list; exact : bool }
+
+  (* [exact]: the analysis accepts exactly the valid combinations; otherwise only soundness holds *)
+  let queries = [
+    "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id", ["l"; "r"], true;
+    "SELECT l.a FROM @l AS l JOIN @r AS r ON l.a = r.b", ["l"; "r"], true;
+    "SELECT l.id, r.a FROM @l AS l, @r AS r WHERE l.a = r.a AND r.id = @p", ["l"; "r"], true;
+    "SELECT s.a FROM @s AS s WHERE s.id = @p", ["s"], true;
+    "SELECT c.id FROM @s AS c JOIN @s AS p ON c.a = p.id", ["s"], true;
+    "SELECT COUNT(1) AS n FROM @l AS l JOIN @r AS r ON l.id = r.id WHERE l.a = 1.5", ["l"; "r"], true;
+    "SELECT l.a + r.b AS x FROM @l AS l, @r AS r", ["l"; "r"], false;
+    "SELECT COALESCE(l.a, r.a) AS x FROM @l AS l, @r AS r WHERE l.id = r.id", ["l"; "r"], false;
+  ]
+
+  let show { tables; query; _ } =
+    String.concat "\n" (List.map (fun (name, cols) ->
+      sprintf "%s(%s)" name (String.concat ", " (List.map (fun c ->
+        sprintf "%s %s%s" c.cname c.kind (if c.nullable then " NULL" else " NOT NULL")) cols))) tables)
+    ^ "\n" ^ query
+
+  let gen =
+    let open QCheck2.Gen in
+    let column cname = map2 (fun kind nullable -> { cname; kind; nullable }) (oneof_list ["INT"; "TEXT"]) bool in
+    let table i =
+      map (fun cols -> sprintf "t%d" i, List.filter_map identity cols)
+        (flatten_list (List.map (fun c -> map2 (fun keep col -> if keep then Some col else None) bool (column c)) ["id"; "a"; "b"]))
+    in
+    int_range 1 3 >>= fun n ->
+    flatten_list (List.init n table) >>= fun tables ->
+    oneof_list queries >|= fun (query, slots, exact) ->
+    { tables = List.filter (fun (_, cols) -> cols <> []) tables; query; slots; exact }
+
+  let load tables =
+    Compile.reset ();
+    List.iter (fun (name, cols) ->
+      ignore (Syntax.parse (sprintf "CREATE TABLE %s (%s)" name (String.concat ", " (List.map (fun c ->
+        sprintf "%s %s%s" c.cname c.kind (if c.nullable then "" else " NOT NULL")) cols)))))
+      tables
+
+  let substitute query combo =
+    List.fold_left (fun q (slot, tname) ->
+      let rec go q =
+        match String.replace ~str:q ~sub:("@" ^ slot ^ " ") ~by:(tname ^ " ") with
+        | true, q -> go q
+        | false, q -> q
+      in
+      go q) query combo
+
+  (* the errors of a query that does not type-check; anything else is a bug of the analysis *)
+  let compiled sql =
+    match Syntax.parse sql with
+    | r -> Some r
+    | exception (Failure _ | Schema.Error _ | Prelude.At (_, (Failure _ | Schema.Error _))) -> None
+
+  let named_params vars =
+    List.filter_map (function
+      | Single (p, _) -> Option.map (fun n -> n, p.typ) p.id.value
+      | SingleIn _ | ChoiceIn _ | Choice _ | DynamicSelect _ | DynamicSelectJoin _ | TupleList _
+      | OptionActionChoice _ | SharedVarsGroup _ | RelationSlot _ -> None) (all_vars vars)
+
+  (* types the generated code uses for this combination: evidence of a chosen relation,
+     otherwise the type resolved for every relation *)
+  let predicted_types (analysed : Syntax.result) chosen =
+    let evidence = List.concat_map (fun (inst : Relation_slot.instance) -> inst.evidence) chosen in
+    let columns =
+      List.mapi (fun i c ->
+        let dependent =
+          List.find_map (function
+            | Relation_slot.Column_type (j, (a : attr)) when Int.equal i j -> Some a.domain
+            | Column_type _ | Parameter_type _ | Coupling_kind _ -> None) evidence
+        in
+        match dependent, c with
+        | Some domain, _ -> domain
+        | None, Attr a -> a.domain
+        | None, Dynamic _ -> Type.depends Any) analysed.typed.schema
+    in
+    let params =
+      List.map (fun (n, t) ->
+        n,
+        Option.default t
+          (List.find_map (function
+            | Relation_slot.Parameter_type (n', (t, _)) when String.equal n n' -> Some t
+            | Column_type _ | Parameter_type _ | Coupling_kind _ -> None) evidence))
+        (named_params analysed.typed.vars)
+    in
+    columns, params
+
+  (* the combination type-checks in the generated OCaml: every chosen relation is accepted
+     and indices shared by several slots agree *)
+  let chosen slots combo =
+    let agree a b =
+      not (Relation_slot.equal_index (Relation_slot.index a) (Relation_slot.index b))
+      ||
+      match a, b with
+      | Relation_slot.Column_type (_, (a : attr)), Relation_slot.Column_type (_, (b : attr)) -> Type.equal a.domain b.domain
+      | Parameter_type (_, (t1, _)), Parameter_type (_, (t2, _)) -> Type.equal t1 t2
+      | Coupling_kind (_, k1), Coupling_kind (_, k2) -> Relation_slot.equal_kind_class k1 k2
+      | (Column_type _ | Parameter_type _ | Coupling_kind _), _ -> false
+    in
+    let accepted =
+      List.fold_right (fun (slot, tname) rest ->
+        let instance =
+          List.find_map (fun (s : Relation_slot.t) ->
+            if String.equal (s.name :> string) slot then
+              List.find_opt (fun (inst : Relation_slot.instance) ->
+                match inst.candidate.origin with
+                | Relation_candidate.Table (t, _) -> t.tn = tname
+                | Query _ -> false) (Relation_slot.instances s)
+            else None) slots
+        in
+        Stdlib.Option.bind instance (fun instance -> Option.map (fun rest -> instance :: rest) rest))
+        combo (Some [])
+    in
+    Stdlib.Option.bind accepted (fun chosen ->
+      let evidence = List.concat_map (fun (inst : Relation_slot.instance) -> inst.evidence) chosen in
+      if List.for_all (fun a -> List.for_all (agree a) evidence) evidence then Some chosen else None)
+
+  let check case =
+    load case.tables;
+    let analysed = compiled case.query in
+    let combos =
+      List.fold_left (fun acc slot ->
+        List.concat_map (fun combo -> List.map (fun (t, _) -> combo @ [ slot, t ]) case.tables) acc)
+        [ [] ] case.slots
+    in
+    List.for_all (fun combo ->
+      let show_combo () = String.concat ", " (List.map (fun (s, t) -> s ^ "=" ^ t) combo) in
+      let accepted =
+        Stdlib.Option.bind analysed (fun (r : Syntax.result) ->
+          Option.map (fun c -> r, c) (chosen r.relation_slots combo))
+      in
+      match accepted, compiled (substitute case.query combo) with
+      | Some _, None -> QCheck2.Test.fail_reportf "unsound: %s accepted but does not compile" (show_combo ())
+      | None, Some _ when case.exact -> QCheck2.Test.fail_reportf "incomplete: %s compiles but is rejected" (show_combo ())
+      | None, (Some _ | None) -> true
+      | Some (r, chosen), Some full ->
+        let (columns, params) = predicted_types r chosen in
+        let full_columns = List.map (function Attr a -> a.domain | Dynamic _ -> Type.depends Any) full.typed.schema in
+        let full_params = named_params full.typed.vars in
+        if not (List.length columns = List.length full_columns && List.for_all2 Type.equal columns full_columns) then
+          QCheck2.Test.fail_reportf "%s: result types %s, the query has %s" (show_combo ())
+            (String.concat ", " (List.map Type.show columns)) (String.concat ", " (List.map Type.show full_columns))
+        else if not (List.for_all (fun (n, t) -> List.for_all (fun (n', t') -> n <> n' || Type.equal t t') full_params) params) then
+          QCheck2.Test.fail_reportf "%s: parameter types differ from the query" (show_combo ())
+        else true)
+      combos
+end
+
+let test_relation_slot_oracle = [
+  qcheck (QCheck2.Test.make ~count:300 ~print:Relation_slot_oracle.show
+    ~name:"relation slots agree with substituting every combination of tables"
+    Relation_slot_oracle.gen Relation_slot_oracle.check);
+]
+
 let () =
   let suite = "qcheck laws" >::: [
     "test_type_laws" >::: test_type_laws;
     "test_meta_laws" >::: test_meta_laws;
     "test_narrowing_laws" >::: test_narrowing_laws;
     "test_template_laws" >::: test_template_laws;
+    "test_relation_slot_oracle" >::: test_relation_slot_oracle;
   ] in
   let results = run_test_tt suite in
   exit @@ if List.exists (function RFailure _ | RError _ -> true | _ -> false) results then 1 else 0

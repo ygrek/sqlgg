@@ -21,6 +21,7 @@ type stmt_annotations = {
   expr_types : Type.t located list;
   result_aliases : attr located list;
   select_scopes : select_scope list;
+  relation_uses : Relation_slot.use list; (** columns of open relation slots, see Relation_analysis *)
 }
 
 type signature = {
@@ -35,6 +36,7 @@ type result = {
   typed : signature;
   dialect_features : Dialect.dialect_support list;
   annotations : stmt_annotations;
+  relation_slots : Relation_slot.t list;
 }
 
 val no_stmt_annotations : stmt_annotations

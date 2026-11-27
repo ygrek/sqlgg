@@ -160,6 +160,8 @@ let output_params_binder index params =
 
 type t = unit
 
+let relation_slots = Gen.Relation_slots_unsupported "cxx"
+
 let start () = ()
 
 let make_stmt index ({ name; stmt; _ } as q : Query.named) =

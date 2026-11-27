@@ -6,6 +6,7 @@ type resolution =
   | Analyzed of {
       parsed : Parser.parse_result;
       typed : Syntax.signature;
+      relation_slots : Relation_slot.t list; [@default []] [@drop_default_if_json_equal]
     }
   | Invalid of {
       diagnostics : Analysis.diagnostic list;
@@ -43,6 +44,7 @@ let analyze ?allow_extensions ~context sql =
   statements
     (fun statement ->
       Result.map
-        (fun (parsed, (result : Syntax.result)) -> Analyzed { parsed; typed = result.typed })
+        (fun (parsed, (result : Syntax.result)) ->
+          Analyzed { parsed; typed = result.typed; relation_slots = result.relation_slots })
         (Analysis.analyze ?allow_extensions ~context statement))
     sql
